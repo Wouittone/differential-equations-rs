@@ -6,11 +6,13 @@
 
 #![forbid(unsafe_code)]
 
+mod explicit_rk;
 mod problem;
 mod solution;
 mod solver;
 mod tsit5;
 
+pub use explicit_rk::{Bs3, Dp5, Euler, Heun, Midpoint, Ralston, Rk4};
 pub use problem::OdeProblem;
 pub use solution::{Solution, SolverStats};
 pub use solver::{OdeAlgorithm, SaveMode, SolveError, SolveOptions, solve};

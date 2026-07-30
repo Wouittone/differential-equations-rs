@@ -23,10 +23,10 @@ The working goals are:
 - preserve a small, idiomatic Rust API without hiding allocation costs;
 - record discrepancies instead of silently weakening tolerances.
 
-The initial target is not feature parity with the full SciML ecosystem.
-Events, dense interpolation, automatic stiffness switching, arbitrary numeric
-types, DAEs, sensitivities, and the long tail of solver algorithms will be
-added only after the core performance and memory hypothesis has evidence.
+The solver target is native OrdinaryDiffEq.jl **ODE algorithm parity**.
+SDEs, RODEs, DDEs, DAEs, and external solver wrappers are explicitly out of
+scope. Events, dense interpolation, arbitrary numeric types, and sensitivities
+are separate API features and are not implied by algorithm parity.
 
 ## Method
 
@@ -53,6 +53,9 @@ julia --project=tests/julia tests/julia/runtests.jl
 - [x] Define the ODE problem, solver options, solution, and statistics API.
 - [x] Implement adaptive `Tsit5` with reusable stage storage.
 - [x] Validate `Tsit5` against OrdinaryDiffEq.jl on scalar and vector problems.
+- [x] Implement the shared explicit Runge–Kutta kernel plus Euler, midpoint,
+      Heun, Ralston, RK4, BS3, and DP5.
+- [ ] Port all remaining native OrdinaryDiffEq.jl ODE algorithm families.
 - [ ] Establish matched runtime and peak-memory benchmarks.
 - [ ] Add dense output and save-at behavior.
 - [ ] Select a stiff solver based on benchmark coverage, likely

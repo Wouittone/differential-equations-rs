@@ -22,6 +22,11 @@ pub struct SolveOptions {
     pub relative_tolerance: f64,
     /// Initial step-size magnitude. The solver estimates it when absent.
     pub initial_step: Option<f64>,
+    /// Whether an algorithm should use adaptive step-size control.
+    ///
+    /// Fixed-step-only algorithms require this to be `false` and
+    /// [`initial_step`](Self::initial_step) to be present.
+    pub adaptive: bool,
     /// Maximum allowed step-size magnitude.
     pub max_step: f64,
     /// Maximum number of attempted steps.
@@ -36,6 +41,7 @@ impl Default for SolveOptions {
             absolute_tolerance: 1.0e-6,
             relative_tolerance: 1.0e-3,
             initial_step: None,
+            adaptive: true,
             max_step: f64::INFINITY,
             max_steps: 100_000,
             save: SaveMode::EveryStep,
@@ -51,6 +57,8 @@ pub enum SolveError {
     InvalidTimeSpan,
     InvalidTolerance,
     InvalidInitialStep,
+    InitialStepRequired,
+    AdaptiveStepUnsupported,
     InvalidMaxStep,
     InvalidMaxSteps,
     NonFiniteDerivative,
@@ -68,6 +76,10 @@ impl Display for SolveError {
                 "absolute and relative tolerances must be finite and positive"
             }
             Self::InvalidInitialStep => "the initial step must be finite and positive",
+            Self::InitialStepRequired => "fixed-step integration requires an initial step",
+            Self::AdaptiveStepUnsupported => {
+                "the selected algorithm does not support adaptive stepping"
+            }
             Self::InvalidMaxStep => "the maximum step must be positive and not NaN",
             Self::InvalidMaxSteps => "the maximum step count must be positive",
             Self::NonFiniteDerivative => "the right-hand side produced a non-finite derivative",
@@ -186,6 +198,7 @@ mod tests {
 
         assert_eq!(options.absolute_tolerance, 1.0e-6);
         assert_eq!(options.relative_tolerance, 1.0e-3);
+        assert!(options.adaptive);
         assert_eq!(options.save, SaveMode::EveryStep);
     }
 

@@ -1,8 +1,10 @@
 [deps]
+OrdinaryDiffEqLowOrderRK = "1344f307-1e59-4825-a18e-ace9aa3fa4c6"
 OrdinaryDiffEqTsit5 = "b1df2697-797e-41e3-8120-5422d3b24e4a"
 SciMLBase = "0bca4576-84f4-4d90-8ffe-ffa030f20462"
 
 [compat]
-julia = "1.10"
 OrdinaryDiffEqTsit5 = "2"
+OrdinaryDiffEqLowOrderRK = "2"
 SciMLBase = "3"
+julia = "1.10"

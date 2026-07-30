@@ -87,6 +87,7 @@ impl OdeAlgorithm for Tsit5 {
 
         let step_magnitude = match options.initial_step {
             Some(step) => step.min(maximum_step),
+            None if !options.adaptive => return Err(SolveError::InitialStepRequired),
             None => estimate_initial_step(
                 problem,
                 options,
@@ -116,13 +117,17 @@ impl OdeAlgorithm for Tsit5 {
             }
 
             perform_step(problem, &state, time, step, &mut workspace, &mut stats)?;
-            let error = error_norm(
-                &workspace.stages,
-                &state,
-                &workspace.candidate,
-                step,
-                options,
-            );
+            let error = if options.adaptive {
+                error_norm(
+                    &workspace.stages,
+                    &state,
+                    &workspace.candidate,
+                    step,
+                    options,
+                )
+            } else {
+                0.0
+            };
 
             if error <= 1.0 {
                 time += step;
@@ -138,11 +143,13 @@ impl OdeAlgorithm for Tsit5 {
                     values.extend_from_slice(&state);
                 }
 
-                let mut factor = step_factor(error);
-                if previous_step_rejected {
-                    factor = factor.min(1.0);
+                if options.adaptive {
+                    let mut factor = step_factor(error);
+                    if previous_step_rejected {
+                        factor = factor.min(1.0);
+                    }
+                    step = direction * (step.abs() * factor).min(maximum_step);
                 }
-                step = direction * (step.abs() * factor).min(maximum_step);
                 previous_step_rejected = false;
             } else {
                 stats.rejected_steps += 1;

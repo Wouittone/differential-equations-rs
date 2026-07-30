@@ -1,0 +1,54 @@
+use differential_equations::{
+    Bs3, Dp5, Euler, Heun, Midpoint, OdeProblem, Ralston, Rk4, SaveMode, SolveOptions, solve,
+};
+
+type TestRhs = fn(&mut [f64], &[f64], &(), f64);
+
+fn problem() -> OdeProblem<TestRhs, ()> {
+    fn rhs(du: &mut [f64], u: &[f64], _: &(), _: f64) {
+        du[0] = u[0];
+    }
+
+    OdeProblem::new(rhs, vec![1.0], (0.0, 1.0), ())
+}
+
+fn adaptive_options() -> SolveOptions {
+    SolveOptions {
+        absolute_tolerance: 1.0e-9,
+        relative_tolerance: 1.0e-9,
+        save: SaveMode::Endpoints,
+        ..SolveOptions::default()
+    }
+}
+
+fn fixed_options(step: f64) -> SolveOptions {
+    SolveOptions {
+        adaptive: false,
+        initial_step: Some(step),
+        save: SaveMode::Endpoints,
+        ..SolveOptions::default()
+    }
+}
+
+fn main() {
+    let euler = solve(&problem(), Euler, &fixed_options(0.001)).unwrap();
+    println!("euler,{:.17e}", euler.last_state()[0]);
+
+    let rk4 = solve(&problem(), Rk4, &fixed_options(0.01)).unwrap();
+    println!("rk4,{:.17e}", rk4.last_state()[0]);
+
+    let midpoint = solve(&problem(), Midpoint, &adaptive_options()).unwrap();
+    println!("midpoint,{:.17e}", midpoint.last_state()[0]);
+
+    let heun = solve(&problem(), Heun, &adaptive_options()).unwrap();
+    println!("heun,{:.17e}", heun.last_state()[0]);
+
+    let ralston = solve(&problem(), Ralston, &adaptive_options()).unwrap();
+    println!("ralston,{:.17e}", ralston.last_state()[0]);
+
+    let bs3 = solve(&problem(), Bs3, &adaptive_options()).unwrap();
+    println!("bs3,{:.17e}", bs3.last_state()[0]);
+
+    let dp5 = solve(&problem(), Dp5, &adaptive_options()).unwrap();
+    println!("dp5,{:.17e}", dp5.last_state()[0]);
+}
