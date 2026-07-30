@@ -18,28 +18,35 @@ Ratios are Rust divided by Julia, so values below one favor Rust.
 
 | Algorithm | Rust µs | Julia µs | Time ratio | Rust KiB | Julia KiB | Allocation ratio |
 |---|---:|---:|---:|---:|---:|---:|
-| Tsit5 | 16.3 | 9.0 | 1.82 | 12.0 | 23.1 | 0.52 |
-| Midpoint | 860.6 | 436.0 | 1.97 | 7.1 | 16.4 | 0.43 |
-| Heun | 854.1 | 486.2 | 1.76 | 7.1 | 16.4 | 0.43 |
-| Ralston | 954.8 | 475.9 | 2.01 | 7.1 | 16.4 | 0.43 |
-| BS3 | 57.1 | 22.5 | 2.54 | 9.1 | 19.9 | 0.46 |
-| DP5 | 26.0 | 6.7 | 3.86 | 12.2 | 19.9 | 0.61 |
-| Euler | 41.8 | 40.5 | 1.03 | 6.1 | 12.1 | 0.50 |
-| RK4 | 286.2 | 66.1 | 4.33 | 9.1 | 16.4 | 0.56 |
-| AB3 | 85.9 | 40.0 | 2.15 | 12.2 | 15.4 | 0.79 |
-| AB4 | 118.0 | 62.0 | 1.90 | 13.2 | 19.8 | 0.67 |
-| AB5 | 121.6 | 73.9 | 1.65 | 14.3 | 19.8 | 0.72 |
-| SSPRK22 | 108.2 | 47.9 | 2.26 | 7.1 | 9.9 | 0.72 |
-| SSPRK33 | 173.5 | 53.9 | 3.22 | 8.1 | 9.9 | 0.82 |
-| SSPRK43 | 74.2 | 27.6 | 2.69 | 9.1 | 16.5 | 0.55 |
-| Implicit Euler | 59.2 | 154.1 | 0.38 | 1.2 | 14.1 | 0.09 |
-| Implicit Midpoint | 68.9 | 167.1 | 0.41 | 1.2 | 14.1 | 0.09 |
-| Trapezoid | 60.6 | 146.1 | 0.42 | 1.2 | 14.5 | 0.08 |
-| Rosenbrock23 | 314.0 | 524.9 | 0.60 | 2.0 | 23.2 | 0.09 |
+| Tsit5 | 20.4 | 8.9 | 2.29 | 12.0 | 23.1 | 0.52 |
+| Midpoint | 889.5 | 442.0 | 2.01 | 7.1 | 16.4 | 0.43 |
+| Heun | 814.3 | 436.6 | 1.87 | 7.1 | 16.4 | 0.43 |
+| Ralston | 869.8 | 437.4 | 1.99 | 7.1 | 16.4 | 0.43 |
+| BS3 | 73.2 | 25.0 | 2.92 | 9.1 | 19.9 | 0.46 |
+| DP5 | 24.2 | 7.5 | 3.24 | 12.2 | 19.9 | 0.61 |
+| Euler | 55.4 | 33.5 | 1.65 | 6.1 | 12.1 | 0.50 |
+| RK4 | 251.2 | 66.6 | 3.77 | 9.1 | 16.4 | 0.56 |
+| RKM | 471.3 | 115.6 | 4.08 | 11.2 | 20.1 | 0.56 |
+| Ralston4 | 257.6 | 66.7 | 3.86 | 9.1 | 15.6 | 0.59 |
+| Alshina2 | 107.0 | 69.1 | 1.55 | 7.1 | 14.2 | 0.50 |
+| Alshina3 | 180.8 | 57.5 | 3.14 | 8.1 | 15.4 | 0.53 |
+| AB3 | 91.0 | 47.7 | 1.91 | 13.2 | 15.4 | 0.86 |
+| AB4 | 100.6 | 51.6 | 1.95 | 14.2 | 19.8 | 0.72 |
+| AB5 | 118.3 | 52.2 | 2.27 | 15.3 | 19.8 | 0.77 |
+| ABM32 | 157.1 | 79.5 | 1.98 | 13.2 | 248.6 | 0.05 |
+| ABM43 | 269.1 | 104.3 | 2.58 | 14.2 | 44.7 | 0.32 |
+| ABM54 | 260.1 | 104.1 | 2.50 | 15.3 | 45.7 | 0.33 |
+| SSPRK22 | 109.6 | 44.2 | 2.48 | 7.1 | 9.9 | 0.72 |
+| SSPRK33 | 195.8 | 57.6 | 3.40 | 8.1 | 9.9 | 0.82 |
+| SSPRK43 | 114.7 | 34.9 | 3.28 | 9.1 | 16.5 | 0.55 |
+| Implicit Euler | 103.7 | 135.0 | 0.77 | 1.2 | 14.1 | 0.09 |
+| Implicit Midpoint | 62.1 | 177.7 | 0.35 | 1.2 | 14.1 | 0.09 |
+| Trapezoid | 64.8 | 150.2 | 0.43 | 1.2 | 14.5 | 0.08 |
+| Rosenbrock23 | 306.0 | 540.9 | 0.57 | 2.0 | 23.2 | 0.09 |
 
-Across the explicit methods, the geometric-mean Rust/Julia ratios are 2.22×
-for runtime and 0.57× for allocated bytes. Across the four implicit methods,
-they are 0.45× for runtime and 0.086× for allocated bytes.
+Across the explicit methods, the geometric-mean Rust/Julia ratios are 2.50×
+for runtime and 0.48× for allocated bytes. Across the four implicit methods,
+they are 0.51× for runtime and 0.086× for allocated bytes.
 
 These results are directional, not publication-quality:
 

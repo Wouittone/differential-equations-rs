@@ -1,6 +1,7 @@
 using SciMLBase: ODEProblem, solve
-using OrdinaryDiffEqAdamsBashforthMoulton: AB3, AB4, AB5
-using OrdinaryDiffEqLowOrderRK: Euler, Midpoint, Heun, Ralston, RK4, BS3, DP5
+using OrdinaryDiffEqAdamsBashforthMoulton: AB3, AB4, AB5, ABM32, ABM43, ABM54
+using OrdinaryDiffEqLowOrderRK:
+    Alshina2, Alshina3, Euler, Midpoint, Heun, Ralston, Ralston4, RK4, RKM, BS3, DP5
 using OrdinaryDiffEqRosenbrock: Rosenbrock23
 using OrdinaryDiffEqSDIRK: ImplicitEuler, ImplicitMidpoint, Trapezoid
 using OrdinaryDiffEqSSPRK: SSPRK22, SSPRK33, SSPRK43
@@ -59,9 +60,16 @@ function main()
     benchmark("DP5", nonstiff, DP5(), repetitions; adaptive = true)
     benchmark("Euler", nonstiff, Euler(), repetitions; adaptive = false)
     benchmark("RK4", nonstiff, RK4(), repetitions; adaptive = false)
+    benchmark("RKM", nonstiff, RKM(), repetitions; adaptive = false)
+    benchmark("Ralston4", nonstiff, Ralston4(), repetitions; adaptive = false)
+    benchmark("Alshina2", nonstiff, Alshina2(), repetitions; adaptive = false)
+    benchmark("Alshina3", nonstiff, Alshina3(), repetitions; adaptive = false)
     benchmark("AB3", nonstiff, AB3(), repetitions; adaptive = false)
     benchmark("AB4", nonstiff, AB4(), repetitions; adaptive = false)
     benchmark("AB5", nonstiff, AB5(), repetitions; adaptive = false)
+    benchmark("ABM32", nonstiff, ABM32(), repetitions; adaptive = false)
+    benchmark("ABM43", nonstiff, ABM43(), repetitions; adaptive = false)
+    benchmark("ABM54", nonstiff, ABM54(), repetitions; adaptive = false)
     benchmark("SSPRK22", nonstiff, SSPRK22(), repetitions; adaptive = false)
     benchmark("SSPRK33", nonstiff, SSPRK33(), repetitions; adaptive = false)
     benchmark("SSPRK43", nonstiff, SSPRK43(), repetitions; adaptive = true)

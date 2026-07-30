@@ -3,9 +3,9 @@ use std::hint::black_box;
 use std::time::Instant;
 
 use differential_equations::{
-    Ab3, Ab4, Ab5, Bs3, Dp5, Euler, Heun, ImplicitEuler, ImplicitMidpoint, Midpoint, OdeAlgorithm,
-    OdeProblem, Ralston, Rk4, Rosenbrock23, SaveMode, SolveOptions, SspRk22, SspRk33, SspRk43,
-    Trapezoid, Tsit5, solve,
+    Ab3, Ab4, Ab5, Abm32, Abm43, Abm54, Alshina2, Alshina3, Bs3, Dp5, Euler, Heun, ImplicitEuler,
+    ImplicitMidpoint, Midpoint, OdeAlgorithm, OdeProblem, Ralston, Ralston4, Rk4, Rkm,
+    Rosenbrock23, SaveMode, SolveOptions, SspRk22, SspRk33, SspRk43, Trapezoid, Tsit5, solve,
 };
 use stats_alloc::{INSTRUMENTED_SYSTEM, Region, StatsAlloc};
 
@@ -101,9 +101,16 @@ fn main() {
     benchmark("DP5", &nonstiff, Dp5, &adaptive, repetitions);
     benchmark("Euler", &nonstiff, Euler, &fixed, repetitions);
     benchmark("RK4", &nonstiff, Rk4, &fixed, repetitions);
+    benchmark("RKM", &nonstiff, Rkm, &fixed, repetitions);
+    benchmark("Ralston4", &nonstiff, Ralston4, &fixed, repetitions);
+    benchmark("Alshina2", &nonstiff, Alshina2, &fixed, repetitions);
+    benchmark("Alshina3", &nonstiff, Alshina3, &fixed, repetitions);
     benchmark("AB3", &nonstiff, Ab3, &fixed, repetitions);
     benchmark("AB4", &nonstiff, Ab4, &fixed, repetitions);
     benchmark("AB5", &nonstiff, Ab5, &fixed, repetitions);
+    benchmark("ABM32", &nonstiff, Abm32, &fixed, repetitions);
+    benchmark("ABM43", &nonstiff, Abm43, &fixed, repetitions);
+    benchmark("ABM54", &nonstiff, Abm54, &fixed, repetitions);
     benchmark("SSPRK22", &nonstiff, SspRk22, &fixed, repetitions);
     benchmark("SSPRK33", &nonstiff, SspRk33, &fixed, repetitions);
     benchmark("SSPRK43", &nonstiff, SspRk43, &adaptive, repetitions);
