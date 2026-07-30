@@ -1,6 +1,7 @@
 using SciMLBase: ODEProblem, solve
 using OrdinaryDiffEqAdamsBashforthMoulton: AB3, AB4, AB5
 using OrdinaryDiffEqLowOrderRK: Euler, Midpoint, Heun, Ralston, RK4, BS3, DP5
+using OrdinaryDiffEqRosenbrock: Rosenbrock23
 using OrdinaryDiffEqSDIRK: ImplicitEuler, ImplicitMidpoint, Trapezoid
 using OrdinaryDiffEqSSPRK: SSPRK22, SSPRK33, SSPRK43
 using OrdinaryDiffEqTsit5: Tsit5
@@ -67,6 +68,7 @@ function main()
     benchmark("ImplicitEuler", stiff, ImplicitEuler(), repetitions; adaptive = false)
     benchmark("ImplicitMidpoint", stiff, ImplicitMidpoint(), repetitions; adaptive = false)
     benchmark("Trapezoid", stiff, Trapezoid(), repetitions; adaptive = false)
+    benchmark("Rosenbrock23", stiff, Rosenbrock23(), repetitions; adaptive = true)
 end
 
 main()

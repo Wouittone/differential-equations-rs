@@ -4,8 +4,8 @@ use std::time::Instant;
 
 use differential_equations::{
     Ab3, Ab4, Ab5, Bs3, Dp5, Euler, Heun, ImplicitEuler, ImplicitMidpoint, Midpoint, OdeAlgorithm,
-    OdeProblem, Ralston, Rk4, SaveMode, SolveOptions, SspRk22, SspRk33, SspRk43, Trapezoid, Tsit5,
-    solve,
+    OdeProblem, Ralston, Rk4, Rosenbrock23, SaveMode, SolveOptions, SspRk22, SspRk33, SspRk43,
+    Trapezoid, Tsit5, solve,
 };
 use stats_alloc::{INSTRUMENTED_SYSTEM, Region, StatsAlloc};
 
@@ -116,4 +116,5 @@ fn main() {
         repetitions,
     );
     benchmark("Trapezoid", &stiff, Trapezoid, &fixed, repetitions);
+    benchmark("Rosenbrock23", &stiff, Rosenbrock23, &adaptive, repetitions);
 }
