@@ -55,6 +55,7 @@ julia --project=tests/julia tests/julia/runtests.jl
 - [x] Validate `Tsit5` against OrdinaryDiffEq.jl on scalar and vector problems.
 - [x] Implement the shared explicit Runge–Kutta kernel plus Euler, midpoint,
       Heun, Ralston, RK4, BS3, and DP5.
+- [x] Implement fixed-step Adams–Bashforth methods AB3, AB4, and AB5.
 - [ ] Port all remaining native OrdinaryDiffEq.jl ODE algorithm families.
 - [ ] Establish matched runtime and peak-memory benchmarks.
 - [ ] Add dense output and save-at behavior.

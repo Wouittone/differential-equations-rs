@@ -6,12 +6,14 @@
 
 #![forbid(unsafe_code)]
 
+mod adams;
 mod explicit_rk;
 mod problem;
 mod solution;
 mod solver;
 mod tsit5;
 
+pub use adams::{Ab3, Ab4, Ab5};
 pub use explicit_rk::{Bs3, Dp5, Euler, Heun, Midpoint, Ralston, Rk4};
 pub use problem::OdeProblem;
 pub use solution::{Solution, SolverStats};
