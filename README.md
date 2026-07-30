@@ -58,6 +58,7 @@ julia --project=tests/julia tests/julia/runtests.jl
 - [x] Implement fixed-step Adams–Bashforth methods AB3, AB4, and AB5.
 - [x] Establish dense Newton/Jacobian/linear-solve infrastructure and fixed
       Implicit Euler, Implicit Midpoint, and Trapezoid methods.
+- [x] Implement SSPRK22, SSPRK33, and adaptive SSPRK43.
 - [ ] Port all remaining native OrdinaryDiffEq.jl ODE algorithm families.
 - [ ] Establish matched runtime and peak-memory benchmarks.
 - [ ] Add dense output and save-at behavior.

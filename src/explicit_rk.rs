@@ -96,6 +96,24 @@ const DP5_E: &[f64] = &[
 ];
 const DP5_C: &[f64] = &[0.0, 1.0 / 5.0, 3.0 / 10.0, 4.0 / 5.0, 8.0 / 9.0, 1.0, 1.0];
 
+const SSPRK22_A: &[&[f64]] = &[EMPTY, HEUN_A2];
+const SSPRK22_B: &[f64] = HEUN_B;
+const SSPRK22_C: &[f64] = HEUN_C;
+
+const SSPRK33_A2: &[f64] = &[1.0];
+const SSPRK33_A3: &[f64] = &[0.25, 0.25];
+const SSPRK33_A: &[&[f64]] = &[EMPTY, SSPRK33_A2, SSPRK33_A3];
+const SSPRK33_B: &[f64] = &[1.0 / 6.0, 1.0 / 6.0, 2.0 / 3.0];
+const SSPRK33_C: &[f64] = &[0.0, 1.0, 0.5];
+
+const SSPRK43_A2: &[f64] = &[0.5];
+const SSPRK43_A3: &[f64] = &[0.5, 0.5];
+const SSPRK43_A4: &[f64] = &[1.0 / 6.0, 1.0 / 6.0, 1.0 / 6.0];
+const SSPRK43_A: &[&[f64]] = &[EMPTY, SSPRK43_A2, SSPRK43_A3, SSPRK43_A4];
+const SSPRK43_B: &[f64] = &[1.0 / 6.0, 1.0 / 6.0, 1.0 / 6.0, 0.5];
+const SSPRK43_E: &[f64] = &[-1.0 / 12.0, -1.0 / 12.0, -1.0 / 12.0, 0.25];
+const SSPRK43_C: &[f64] = &[0.0, 0.5, 1.0, 0.5];
+
 const EULER_TABLEAU: Tableau = Tableau {
     nodes: EULER_C,
     coefficients: EULER_A,
@@ -152,6 +170,30 @@ const DP5_TABLEAU: Tableau = Tableau {
     order: 5,
     fsal: true,
 };
+const SSPRK22_TABLEAU: Tableau = Tableau {
+    nodes: SSPRK22_C,
+    coefficients: SSPRK22_A,
+    weights: SSPRK22_B,
+    error_weights: None,
+    order: 2,
+    fsal: false,
+};
+const SSPRK33_TABLEAU: Tableau = Tableau {
+    nodes: SSPRK33_C,
+    coefficients: SSPRK33_A,
+    weights: SSPRK33_B,
+    error_weights: None,
+    order: 3,
+    fsal: false,
+};
+const SSPRK43_TABLEAU: Tableau = Tableau {
+    nodes: SSPRK43_C,
+    coefficients: SSPRK43_A,
+    weights: SSPRK43_B,
+    error_weights: Some(SSPRK43_E),
+    order: 3,
+    fsal: false,
+};
 
 macro_rules! algorithm {
     ($name:ident, $documentation:literal, $tableau:ident) => {
@@ -201,6 +243,21 @@ algorithm!(
     BS3_TABLEAU
 );
 algorithm!(Dp5, "The adaptive Dormand–Prince 5/4 method.", DP5_TABLEAU);
+algorithm!(
+    SspRk22,
+    "The fixed-step two-stage, second-order SSP Runge–Kutta method.",
+    SSPRK22_TABLEAU
+);
+algorithm!(
+    SspRk33,
+    "The fixed-step three-stage, third-order SSP Runge–Kutta method.",
+    SSPRK33_TABLEAU
+);
+algorithm!(
+    SspRk43,
+    "The adaptive four-stage, third-order SSP Runge–Kutta method.",
+    SSPRK43_TABLEAU
+);
 
 struct Workspace {
     stages: Vec<Vec<f64>>,
@@ -514,7 +571,7 @@ mod tests {
 
     use crate::{
         Bs3, Dp5, Euler, Heun, Midpoint, OdeProblem, Ralston, Rk4, SaveMode, SolveError,
-        SolveOptions, solve,
+        SolveOptions, SspRk22, SspRk33, SspRk43, solve,
     };
 
     type TestRhs = fn(&mut [f64], &[f64], &(), f64);
@@ -585,5 +642,27 @@ mod tests {
             solve(&exponential(), Rk4, &SolveOptions::default()),
             Err(SolveError::AdaptiveStepUnsupported)
         );
+    }
+
+    #[test]
+    fn ssp_methods_solve_exponential_growth() {
+        let fixed = SolveOptions {
+            adaptive: false,
+            initial_step: Some(0.001),
+            save: SaveMode::Endpoints,
+            ..SolveOptions::default()
+        };
+
+        let endpoints = [
+            solve(&exponential(), SspRk22, &fixed).unwrap().last_state()[0],
+            solve(&exponential(), SspRk33, &fixed).unwrap().last_state()[0],
+            solve(&exponential(), SspRk43, &adaptive_options())
+                .unwrap()
+                .last_state()[0],
+        ];
+
+        assert!((endpoints[0] - E).abs() < 1.0e-6);
+        assert!((endpoints[1] - E).abs() < 1.0e-9);
+        assert!((endpoints[2] - E).abs() < 2.0e-7);
     }
 }

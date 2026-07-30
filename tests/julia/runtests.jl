@@ -82,3 +82,4 @@ end
 include("low_order_rk.jl")
 include("adams.jl")
 include("implicit.jl")
+include("ssprk.jl")
