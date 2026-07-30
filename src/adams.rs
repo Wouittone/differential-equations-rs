@@ -41,10 +41,10 @@ const AB5_METHOD: AdamsBashforth = AdamsBashforth {
 macro_rules! algorithm {
     ($name:ident, $order:literal, $method:ident) => {
         #[doc = concat!(
-                                            "The fixed-step, order-",
-                                            stringify!($order),
-                                            " Adams–Bashforth method."
-                                        )]
+                                                            "The fixed-step, order-",
+                                                            stringify!($order),
+                                                            " Adams–Bashforth method."
+                                                        )]
         #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
         pub struct $name;
 

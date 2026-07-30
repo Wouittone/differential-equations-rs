@@ -8,6 +8,7 @@
 
 mod adams;
 mod explicit_rk;
+mod implicit;
 mod problem;
 mod solution;
 mod solver;
@@ -15,6 +16,7 @@ mod tsit5;
 
 pub use adams::{Ab3, Ab4, Ab5};
 pub use explicit_rk::{Bs3, Dp5, Euler, Heun, Midpoint, Ralston, Rk4};
+pub use implicit::{ImplicitEuler, ImplicitMidpoint, Trapezoid};
 pub use problem::OdeProblem;
 pub use solution::{Solution, SolverStats};
 pub use solver::{OdeAlgorithm, SaveMode, SolveError, SolveOptions, solve};

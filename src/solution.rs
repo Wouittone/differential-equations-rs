@@ -7,6 +7,12 @@ pub struct SolverStats {
     pub accepted_steps: usize,
     /// Number of rejected time steps.
     pub rejected_steps: usize,
+    /// Number of nonlinear iterations performed by implicit methods.
+    pub nonlinear_iterations: usize,
+    /// Number of Jacobian evaluations.
+    pub jacobian_evaluations: usize,
+    /// Number of linear systems solved.
+    pub linear_solves: usize,
 }
 
 /// A saved ODE trajectory.

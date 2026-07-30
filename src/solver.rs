@@ -62,6 +62,8 @@ pub enum SolveError {
     InvalidMaxStep,
     InvalidMaxSteps,
     NonFiniteDerivative,
+    NonlinearSolveFailed,
+    SingularLinearSystem,
     StepSizeUnderflow,
     MaxStepsExceeded,
 }
@@ -83,6 +85,8 @@ impl Display for SolveError {
             Self::InvalidMaxStep => "the maximum step must be positive and not NaN",
             Self::InvalidMaxSteps => "the maximum step count must be positive",
             Self::NonFiniteDerivative => "the right-hand side produced a non-finite derivative",
+            Self::NonlinearSolveFailed => "the implicit nonlinear solve did not converge",
+            Self::SingularLinearSystem => "the implicit linear system is singular",
             Self::StepSizeUnderflow => "the adaptive step size underflowed",
             Self::MaxStepsExceeded => "the solver exceeded its maximum attempted step count",
         })
