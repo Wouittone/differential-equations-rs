@@ -9,11 +9,23 @@ const AB5_WEIGHTS: &[f64] = &[
     -1_274.0 / 720.0,
     251.0 / 720.0,
 ];
+const AM3_WEIGHTS: &[f64] = &[5.0 / 12.0, 8.0 / 12.0, -1.0 / 12.0];
+const AM4_WEIGHTS: &[f64] = &[9.0 / 24.0, 19.0 / 24.0, -5.0 / 24.0, 1.0 / 24.0];
+const AM5_WEIGHTS: &[f64] = &[
+    251.0 / 720.0,
+    646.0 / 720.0,
+    -264.0 / 720.0,
+    106.0 / 720.0,
+    -19.0 / 720.0,
+];
 
-struct AdamsBashforth {
+#[derive(Clone, Copy)]
+struct AdamsMethod {
     order: usize,
     weights: &'static [f64],
     bootstrap: Bootstrap,
+    corrector_weights: Option<&'static [f64]>,
+    repeating_bootstrap_predictor: bool,
 }
 
 #[derive(Clone, Copy)]
@@ -22,29 +34,53 @@ enum Bootstrap {
     Rk4,
 }
 
-const AB3_METHOD: AdamsBashforth = AdamsBashforth {
+const AB3_METHOD: AdamsMethod = AdamsMethod {
     order: 3,
     weights: AB3_WEIGHTS,
     bootstrap: Bootstrap::Ralston,
+    corrector_weights: None,
+    repeating_bootstrap_predictor: false,
 };
-const AB4_METHOD: AdamsBashforth = AdamsBashforth {
+const AB4_METHOD: AdamsMethod = AdamsMethod {
     order: 4,
     weights: AB4_WEIGHTS,
     bootstrap: Bootstrap::Rk4,
+    corrector_weights: None,
+    repeating_bootstrap_predictor: false,
 };
-const AB5_METHOD: AdamsBashforth = AdamsBashforth {
+const AB5_METHOD: AdamsMethod = AdamsMethod {
     order: 5,
     weights: AB5_WEIGHTS,
     bootstrap: Bootstrap::Rk4,
+    corrector_weights: None,
+    repeating_bootstrap_predictor: false,
+};
+const ABM32_METHOD: AdamsMethod = AdamsMethod {
+    corrector_weights: Some(AM3_WEIGHTS),
+    // OrdinaryDiffEq passes step counter 2 into a fresh AB3 predictor cache.
+    repeating_bootstrap_predictor: true,
+    ..AB3_METHOD
+};
+const ABM43_METHOD: AdamsMethod = AdamsMethod {
+    corrector_weights: Some(AM4_WEIGHTS),
+    // OrdinaryDiffEq likewise keeps its fresh AB4 predictor at startup step 3.
+    repeating_bootstrap_predictor: true,
+    ..AB4_METHOD
+};
+const ABM54_METHOD: AdamsMethod = AdamsMethod {
+    corrector_weights: Some(AM5_WEIGHTS),
+    ..AB5_METHOD
 };
 
 macro_rules! algorithm {
-    ($name:ident, $order:literal, $method:ident) => {
+    ($name:ident, $order:literal, $kind:literal, $method:ident) => {
         #[doc = concat!(
-                                                                    "The fixed-step, order-",
-                                                                    stringify!($order),
-                                                                    " Adams–Bashforth method."
-                                                                )]
+                                    "The fixed-step, order-",
+                                    stringify!($order),
+                                    " Adams–",
+                                    $kind,
+                                    " method."
+                                )]
         #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
         pub struct $name;
 
@@ -63,9 +99,27 @@ macro_rules! algorithm {
     };
 }
 
-algorithm!(Ab3, 3, AB3_METHOD);
-algorithm!(Ab4, 4, AB4_METHOD);
-algorithm!(Ab5, 5, AB5_METHOD);
+algorithm!(Ab3, 3, "Bashforth", AB3_METHOD);
+algorithm!(Ab4, 4, "Bashforth", AB4_METHOD);
+algorithm!(Ab5, 5, "Bashforth", AB5_METHOD);
+algorithm!(
+    Abm32,
+    3,
+    "Bashforth–Moulton predictor/corrector",
+    ABM32_METHOD
+);
+algorithm!(
+    Abm43,
+    4,
+    "Bashforth–Moulton predictor/corrector",
+    ABM43_METHOD
+);
+algorithm!(
+    Abm54,
+    5,
+    "Bashforth–Moulton predictor/corrector",
+    ABM54_METHOD
+);
 
 struct Workspace {
     history: Vec<Vec<f64>>,
@@ -74,6 +128,7 @@ struct Workspace {
     stage2: Vec<f64>,
     stage3: Vec<f64>,
     stage4: Vec<f64>,
+    predicted_derivative: Vec<f64>,
     next_derivative: Vec<f64>,
 }
 
@@ -88,6 +143,7 @@ impl Workspace {
             stage2: vec![0.0; dimension],
             stage3: vec![0.0; dimension],
             stage4: vec![0.0; dimension],
+            predicted_derivative: vec![0.0; dimension],
             next_derivative: vec![0.0; dimension],
         }
     }
@@ -96,7 +152,7 @@ impl Workspace {
 fn integrate<F, P>(
     problem: &OdeProblem<F, P>,
     options: &SolveOptions,
-    method: &AdamsBashforth,
+    method: &AdamsMethod,
 ) -> Result<Solution, SolveError>
 where
     F: Fn(&mut [f64], &[f64], &P, f64),
@@ -133,7 +189,7 @@ where
             return Err(SolveError::StepSizeUnderflow);
         }
 
-        if workspace.history.len() < method.order {
+        if workspace.history.len() < method.order || method.repeating_bootstrap_predictor {
             bootstrap_step(
                 problem,
                 &state,
@@ -155,10 +211,35 @@ where
             }
         }
 
-        time += step;
-        if direction * (end - time) <= 0.0 {
-            time = end;
+        let mut next_time = time + step;
+        if direction * (end - next_time) <= 0.0 {
+            next_time = end;
         }
+        if let Some(corrector_weights) = method.corrector_weights
+            && workspace.history.len() >= method.order - 1
+        {
+            evaluate(
+                problem,
+                &mut workspace.predicted_derivative,
+                &workspace.candidate,
+                next_time,
+                &mut stats,
+            )?;
+            for index in 0..dimension {
+                let history_increment = workspace
+                    .history
+                    .iter()
+                    .zip(&corrector_weights[1..])
+                    .map(|(derivative, weight)| weight * derivative[index])
+                    .sum::<f64>();
+                workspace.candidate[index] = state[index]
+                    + step
+                        * (corrector_weights[0] * workspace.predicted_derivative[index]
+                            + history_increment);
+            }
+        }
+
+        time = next_time;
         evaluate(
             problem,
             &mut workspace.next_derivative,
@@ -286,7 +367,7 @@ where
 mod tests {
     use std::f64::consts::E;
 
-    use crate::{Ab3, Ab4, Ab5, OdeProblem, SaveMode, SolveOptions, solve};
+    use crate::{Ab3, Ab4, Ab5, Abm32, Abm43, Abm54, OdeProblem, SaveMode, SolveOptions, solve};
 
     type TestRhs = fn(&mut [f64], &[f64], &(), f64);
 
@@ -298,7 +379,7 @@ mod tests {
     }
 
     #[test]
-    fn fixed_adams_bashforth_methods_converge() {
+    fn fixed_adams_methods_converge() {
         let options = SolveOptions {
             adaptive: false,
             initial_step: Some(0.001),
@@ -310,10 +391,16 @@ mod tests {
             (solve(&exponential(), Ab3, &options).unwrap().last_state()[0] - E).abs(),
             (solve(&exponential(), Ab4, &options).unwrap().last_state()[0] - E).abs(),
             (solve(&exponential(), Ab5, &options).unwrap().last_state()[0] - E).abs(),
+            (solve(&exponential(), Abm32, &options).unwrap().last_state()[0] - E).abs(),
+            (solve(&exponential(), Abm43, &options).unwrap().last_state()[0] - E).abs(),
+            (solve(&exponential(), Abm54, &options).unwrap().last_state()[0] - E).abs(),
         ];
 
         assert!(errors[0] < 1.0e-8);
         assert!(errors[1] < 1.0e-11);
         assert!(errors[2] < 1.0e-12);
+        assert!(errors[3] < 1.0e-8);
+        assert!(errors[4] < 1.0e-11);
+        assert!(errors[5] < 1.0e-12);
     }
 }

@@ -64,7 +64,8 @@ Raw Rust and Julia measurements plus a ratio table are written beneath
 - [x] Validate `Tsit5` against OrdinaryDiffEq.jl on scalar and vector problems.
 - [x] Implement the shared explicit Runge–Kutta kernel plus Euler, midpoint,
       Heun, Ralston, RK4, BS3, and DP5.
-- [x] Implement fixed-step Adams–Bashforth methods AB3, AB4, and AB5.
+- [x] Implement fixed-step Adams–Bashforth methods AB3/4/5 and
+      Adams–Bashforth–Moulton methods ABM32/43/54.
 - [x] Establish dense Newton/Jacobian/linear-solve infrastructure and fixed
       Implicit Euler, Implicit Midpoint, and Trapezoid methods.
 - [x] Implement SSPRK22, SSPRK33, and adaptive SSPRK43.

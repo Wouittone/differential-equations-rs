@@ -1,4 +1,6 @@
-use differential_equations::{Ab3, Ab4, Ab5, OdeProblem, SaveMode, SolveOptions, solve};
+use differential_equations::{
+    Ab3, Ab4, Ab5, Abm32, Abm43, Abm54, OdeProblem, SaveMode, SolveOptions, solve,
+};
 
 type TestRhs = fn(&mut [f64], &[f64], &(), f64);
 
@@ -27,4 +29,13 @@ fn main() {
 
     let ab5 = solve(&problem(), Ab5, &options()).unwrap();
     println!("ab5,{:.17e}", ab5.last_state()[0]);
+
+    let abm32 = solve(&problem(), Abm32, &options()).unwrap();
+    println!("abm32,{:.17e}", abm32.last_state()[0]);
+
+    let abm43 = solve(&problem(), Abm43, &options()).unwrap();
+    println!("abm43,{:.17e}", abm43.last_state()[0]);
+
+    let abm54 = solve(&problem(), Abm54, &options()).unwrap();
+    println!("abm54,{:.17e}", abm54.last_state()[0]);
 }

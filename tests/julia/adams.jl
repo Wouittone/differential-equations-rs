@@ -1,4 +1,4 @@
-using OrdinaryDiffEqAdamsBashforthMoulton: AB3, AB4, AB5
+using OrdinaryDiffEqAdamsBashforthMoulton: AB3, AB4, AB5, ABM32, ABM43, ABM54
 
 function rust_adams_endpoints()
     manifest = joinpath(REPOSITORY_ROOT, "Cargo.toml")
@@ -25,12 +25,15 @@ function adams_reference(algorithm)
     only(solution.u[end])
 end
 
-@testset "Fixed Adams–Bashforth compliance" begin
+@testset "Fixed Adams compliance" begin
     rust = rust_adams_endpoints()
     julia = Dict(
         "ab3" => adams_reference(AB3()),
         "ab4" => adams_reference(AB4()),
         "ab5" => adams_reference(AB5()),
+        "abm32" => adams_reference(ABM32()),
+        "abm43" => adams_reference(ABM43()),
+        "abm54" => adams_reference(ABM54()),
     )
 
     @test Set(keys(rust)) == Set(keys(julia))
