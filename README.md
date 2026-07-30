@@ -68,6 +68,7 @@ Raw Rust and Julia measurements plus a ratio table are written beneath
 - [x] Establish dense Newton/Jacobian/linear-solve infrastructure and fixed
       Implicit Euler, Implicit Midpoint, and Trapezoid methods.
 - [x] Implement SSPRK22, SSPRK33, and adaptive SSPRK43.
+- [x] Implement adaptive Rosenbrock23 with one reused LU factorization per step.
 - [ ] Port all remaining native OrdinaryDiffEq.jl ODE algorithm families.
 - [ ] Establish matched runtime and peak-memory benchmarks.
 - [ ] Add dense output and save-at behavior.
