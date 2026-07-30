@@ -6,3 +6,6 @@ description = "A proof-of-concept port of Julia SciML ODE solvers to Rust"
 publish = false
 
 [dependencies]
+
+[dev-dependencies]
+stats_alloc = "0.1.10"

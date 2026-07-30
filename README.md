@@ -48,6 +48,15 @@ cargo test
 julia --project=tests/julia tests/julia/runtests.jl
 ```
 
+Run the matched steady-state benchmark matrix with:
+
+```powershell
+./benchmarks/run.ps1 -Repetitions 20
+```
+
+Raw Rust and Julia measurements plus a ratio table are written beneath
+`benchmarks/results/`. Allocation totals exclude compilation and warm-up.
+
 ## Roadmap
 
 - [x] Define the ODE problem, solver options, solution, and statistics API.
