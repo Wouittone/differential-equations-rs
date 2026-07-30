@@ -56,6 +56,8 @@ Run the matched steady-state benchmark matrix with:
 
 Raw Rust and Julia measurements plus a ratio table are written beneath
 `benchmarks/results/`. Allocation totals exclude compilation and warm-up.
+The exact implemented/remaining algorithm inventory is maintained in
+[`docs/ALGORITHM_COVERAGE.md`](docs/ALGORITHM_COVERAGE.md).
 
 ## Roadmap
 

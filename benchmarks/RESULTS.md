@@ -1,4 +1,4 @@
-# Preliminary benchmark results
+# Preliminary 25-solver benchmark results
 
 Measured on 2026-07-30 with:
 
