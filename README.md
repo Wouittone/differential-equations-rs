@@ -41,11 +41,18 @@ Julia tests use an isolated project under `tests/julia`. Rust tests remain
 usable without Julia; cross-language compliance tests are explicit so normal
 `cargo test` runs stay fast and deterministic.
 
+Run both test layers with:
+
+```console
+cargo test
+julia --project=tests/julia tests/julia/runtests.jl
+```
+
 ## Roadmap
 
-- [ ] Define the ODE problem, solver options, solution, and statistics API.
-- [ ] Implement adaptive `Tsit5` with reusable stage storage.
-- [ ] Validate `Tsit5` against OrdinaryDiffEq.jl on scalar and vector problems.
+- [x] Define the ODE problem, solver options, solution, and statistics API.
+- [x] Implement adaptive `Tsit5` with reusable stage storage.
+- [x] Validate `Tsit5` against OrdinaryDiffEq.jl on scalar and vector problems.
 - [ ] Establish matched runtime and peak-memory benchmarks.
 - [ ] Add dense output and save-at behavior.
 - [ ] Select a stiff solver based on benchmark coverage, likely
