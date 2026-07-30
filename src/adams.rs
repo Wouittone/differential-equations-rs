@@ -73,14 +73,8 @@ const ABM54_METHOD: AdamsMethod = AdamsMethod {
 };
 
 macro_rules! algorithm {
-    ($name:ident, $order:literal, $kind:literal, $method:ident) => {
-        #[doc = concat!(
-                                    "The fixed-step, order-",
-                                    stringify!($order),
-                                    " Adams–",
-                                    $kind,
-                                    " method."
-                                )]
+    ($name:ident, $documentation:literal, $method:ident) => {
+        #[doc = $documentation]
         #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
         pub struct $name;
 
@@ -99,25 +93,34 @@ macro_rules! algorithm {
     };
 }
 
-algorithm!(Ab3, 3, "Bashforth", AB3_METHOD);
-algorithm!(Ab4, 4, "Bashforth", AB4_METHOD);
-algorithm!(Ab5, 5, "Bashforth", AB5_METHOD);
+algorithm!(
+    Ab3,
+    "The fixed-step, order-3 Adams–Bashforth method.",
+    AB3_METHOD
+);
+algorithm!(
+    Ab4,
+    "The fixed-step, order-4 Adams–Bashforth method.",
+    AB4_METHOD
+);
+algorithm!(
+    Ab5,
+    "The fixed-step, order-5 Adams–Bashforth method.",
+    AB5_METHOD
+);
 algorithm!(
     Abm32,
-    3,
-    "Bashforth–Moulton predictor/corrector",
+    "The fixed-step, order-3 Adams–Bashforth–Moulton predictor/corrector method.",
     ABM32_METHOD
 );
 algorithm!(
     Abm43,
-    4,
-    "Bashforth–Moulton predictor/corrector",
+    "The fixed-step, order-4 Adams–Bashforth–Moulton predictor/corrector method.",
     ABM43_METHOD
 );
 algorithm!(
     Abm54,
-    5,
-    "Bashforth–Moulton predictor/corrector",
+    "The fixed-step, order-5 Adams–Bashforth–Moulton predictor/corrector method.",
     ABM54_METHOD
 );
 

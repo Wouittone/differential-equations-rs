@@ -16,7 +16,10 @@ mod solver;
 mod tsit5;
 
 pub use adams::{Ab3, Ab4, Ab5, Abm32, Abm43, Abm54};
-pub use explicit_rk::{Bs3, Dp5, Euler, Heun, Midpoint, Ralston, Rk4, SspRk22, SspRk33, SspRk43};
+pub use explicit_rk::{
+    Alshina2, Alshina3, Bs3, Dp5, Euler, Heun, Midpoint, Ralston, Ralston4, Rk4, Rkm, SspRk22,
+    SspRk33, SspRk43,
+};
 pub use implicit::{ImplicitEuler, ImplicitMidpoint, Trapezoid};
 pub use problem::OdeProblem;
 pub use rosenbrock::Rosenbrock23;

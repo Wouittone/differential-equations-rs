@@ -43,6 +43,52 @@ const RK4_A: &[&[f64]] = &[EMPTY, RK4_A2, RK4_A3, RK4_A4];
 const RK4_B: &[f64] = &[1.0 / 6.0, 1.0 / 3.0, 1.0 / 3.0, 1.0 / 6.0];
 const RK4_C: &[f64] = &[0.0, 0.5, 0.5, 1.0];
 
+const RKM_A2: &[f64] = &[0.167_266_187_050_662];
+const RKM_A3: &[f64] = &[0.0, 0.484_574_582_244_783];
+const RKM_A4: &[f64] = &[0.0, 0.0, 0.536_909_403_373_491];
+const RKM_A5: &[f64] = &[0.0, 0.0, 0.0, 0.082_069_535_961_948];
+const RKM_A6: &[f64] = &[0.0, 0.0, 0.0, 0.0, 0.853_923_000_035_347];
+const RKM_A: &[&[f64]] = &[EMPTY, RKM_A2, RKM_A3, RKM_A4, RKM_A5, RKM_A6];
+const RKM_B: &[f64] = &[
+    -0.028_289_441_132_839,
+    0.463_968_918_564_71,
+    -0.434_414_348_751_899,
+    0.693_796_229_087_598,
+    0.0,
+    0.304_938_642_232_43,
+];
+const RKM_C: &[f64] = &[
+    0.0,
+    0.167_266_187_050_662,
+    0.484_574_582_244_783,
+    0.536_909_403_373_491,
+    0.082_069_535_961_948,
+    0.853_923_000_035_347,
+];
+
+const RALSTON4_A2: &[f64] = &[0.4];
+const RALSTON4_A3: &[f64] = &[0.296_977_609_247_753_57, 0.158_759_644_971_035_84];
+const RALSTON4_A4: &[f64] = &[
+    0.218_100_388_225_920_04,
+    -3.050_965_148_692_930_6,
+    3.832_864_760_467_010_5,
+];
+const RALSTON4_A: &[&[f64]] = &[EMPTY, RALSTON4_A2, RALSTON4_A3, RALSTON4_A4];
+const RALSTON4_B: &[f64] = &[
+    0.174_760_282_262_690_4,
+    -0.551_480_662_878_733,
+    1.205_535_599_396_523_5,
+    0.171_184_781_219_519_02,
+];
+const RALSTON4_C: &[f64] = &[0.0, 0.4, 0.455_737_254_218_789_4, 1.0];
+
+const ALSHINA2_E: &[f64] = &[1.0, 0.0];
+const ALSHINA3_A3: &[f64] = &[0.0, 0.75];
+const ALSHINA3_A: &[&[f64]] = &[EMPTY, MIDPOINT_A2, ALSHINA3_A3];
+const ALSHINA3_B: &[f64] = &[2.0 / 9.0, 1.0 / 3.0, 4.0 / 9.0];
+const ALSHINA3_E: &[f64] = &[0.0, 4.0 / 9.0, 0.0];
+const ALSHINA3_C: &[f64] = &[0.0, 0.5, 0.75];
+
 const BS3_A2: &[f64] = &[0.5];
 const BS3_A3: &[f64] = &[0.0, 0.75];
 const BS3_A4: &[f64] = &[2.0 / 9.0, 1.0 / 3.0, 4.0 / 9.0];
@@ -154,6 +200,38 @@ const RK4_TABLEAU: Tableau = Tableau {
     order: 4,
     fsal: false,
 };
+const RKM_TABLEAU: Tableau = Tableau {
+    nodes: RKM_C,
+    coefficients: RKM_A,
+    weights: RKM_B,
+    error_weights: None,
+    order: 4,
+    fsal: false,
+};
+const RALSTON4_TABLEAU: Tableau = Tableau {
+    nodes: RALSTON4_C,
+    coefficients: RALSTON4_A,
+    weights: RALSTON4_B,
+    error_weights: None,
+    order: 4,
+    fsal: false,
+};
+const ALSHINA2_TABLEAU: Tableau = Tableau {
+    nodes: RALSTON_C,
+    coefficients: RALSTON_A,
+    weights: RALSTON_B,
+    error_weights: Some(ALSHINA2_E),
+    order: 2,
+    fsal: false,
+};
+const ALSHINA3_TABLEAU: Tableau = Tableau {
+    nodes: ALSHINA3_C,
+    coefficients: ALSHINA3_A,
+    weights: ALSHINA3_B,
+    error_weights: Some(ALSHINA3_E),
+    order: 3,
+    fsal: false,
+};
 const BS3_TABLEAU: Tableau = Tableau {
     nodes: BS3_C,
     coefficients: BS3_A,
@@ -236,6 +314,26 @@ algorithm!(
     Rk4,
     "The fixed-step classical fourth-order Runge–Kutta method.",
     RK4_TABLEAU
+);
+algorithm!(
+    Rkm,
+    "The fixed-step six-stage, fourth-order Mead–Renaut Runge–Kutta method.",
+    RKM_TABLEAU
+);
+algorithm!(
+    Ralston4,
+    "Ralston's fixed-step four-stage, fourth-order Runge–Kutta method.",
+    RALSTON4_TABLEAU
+);
+algorithm!(
+    Alshina2,
+    "The adaptive optimal two-stage, second-order Alshina method.",
+    ALSHINA2_TABLEAU
+);
+algorithm!(
+    Alshina3,
+    "The adaptive optimal three-stage, third-order Alshina method.",
+    ALSHINA3_TABLEAU
 );
 algorithm!(
     Bs3,
@@ -570,8 +668,8 @@ mod tests {
     use std::f64::consts::E;
 
     use crate::{
-        Bs3, Dp5, Euler, Heun, Midpoint, OdeProblem, Ralston, Rk4, SaveMode, SolveError,
-        SolveOptions, SspRk22, SspRk33, SspRk43, solve,
+        Alshina2, Alshina3, Bs3, Dp5, Euler, Heun, Midpoint, OdeProblem, Ralston, Ralston4, Rk4,
+        Rkm, SaveMode, SolveError, SolveOptions, SspRk22, SspRk33, SspRk43, solve,
     };
 
     type TestRhs = fn(&mut [f64], &[f64], &(), f64);
@@ -627,9 +725,29 @@ mod tests {
         let euler_error =
             (solve(&exponential(), Euler, &options).unwrap().last_state()[0] - E).abs();
         let rk4_error = (solve(&exponential(), Rk4, &options).unwrap().last_state()[0] - E).abs();
+        let rkm_error = (solve(&exponential(), Rkm, &options).unwrap().last_state()[0] - E).abs();
+        let ralston4_error = (solve(&exponential(), Ralston4, &options)
+            .unwrap()
+            .last_state()[0]
+            - E)
+            .abs();
+        let alshina2_error = (solve(&exponential(), Alshina2, &options)
+            .unwrap()
+            .last_state()[0]
+            - E)
+            .abs();
+        let alshina3_error = (solve(&exponential(), Alshina3, &options)
+            .unwrap()
+            .last_state()[0]
+            - E)
+            .abs();
 
         assert!(euler_error < 0.002);
         assert!(rk4_error < 1.0e-12);
+        assert!(rkm_error < 1.0e-12);
+        assert!(ralston4_error < 1.0e-12);
+        assert!(alshina2_error < 1.0e-6);
+        assert!(alshina3_error < 1.0e-9);
     }
 
     #[test]

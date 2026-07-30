@@ -1,5 +1,5 @@
 using OrdinaryDiffEqLowOrderRK:
-    Euler, Midpoint, Heun, Ralston, RK4, BS3, DP5
+    Alshina2, Alshina3, Euler, Midpoint, Heun, Ralston, Ralston4, RK4, RKM, BS3, DP5
 
 function rust_low_order_endpoints()
     manifest = joinpath(REPOSITORY_ROOT, "Cargo.toml")
@@ -41,6 +41,10 @@ end
     julia = Dict(
         "euler" => exponential_reference(Euler(); adaptive = false, dt = 0.001),
         "rk4" => exponential_reference(RK4(); adaptive = false, dt = 0.01),
+        "rkm" => exponential_reference(RKM(); adaptive = false, dt = 0.01),
+        "ralston4" => exponential_reference(Ralston4(); adaptive = false, dt = 0.01),
+        "alshina2" => exponential_reference(Alshina2(); adaptive = false, dt = 0.01),
+        "alshina3" => exponential_reference(Alshina3(); adaptive = false, dt = 0.01),
         "midpoint" => exponential_reference(Midpoint()),
         "heun" => exponential_reference(Heun()),
         "ralston" => exponential_reference(Ralston()),
