@@ -172,10 +172,7 @@ mod tests {
         }
     }
 
-    fn problem(
-        initial_state: Vec<f64>,
-        time_span: (f64, f64),
-    ) -> OdeProblem<TestRhs, ()> {
+    fn problem(initial_state: Vec<f64>, time_span: (f64, f64)) -> OdeProblem<TestRhs, ()> {
         fn rhs(du: &mut [f64], u: &[f64], _: &(), _: f64) {
             du.copy_from_slice(u);
         }

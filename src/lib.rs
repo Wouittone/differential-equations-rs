@@ -9,7 +9,9 @@
 mod problem;
 mod solution;
 mod solver;
+mod tsit5;
 
 pub use problem::OdeProblem;
 pub use solution::{Solution, SolverStats};
 pub use solver::{OdeAlgorithm, SaveMode, SolveError, SolveOptions, solve};
+pub use tsit5::Tsit5;
