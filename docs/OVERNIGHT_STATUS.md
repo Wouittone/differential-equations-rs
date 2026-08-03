@@ -1,10 +1,10 @@
 # Overnight execution status
 
-Coordinator: `<fill in>`
+Coordinator: `/root`
 
-Started: `<UTC timestamp>`
+Started: `2026-08-03T23:32:13Z`
 
-Current phase: `not started`
+Current phase: `Phase 1 - soundness and exact upstream inventory`
 
 Pinned upstream revision:
 
@@ -14,7 +14,7 @@ Pinned upstream revision:
 
 ## Current gates
 
-- [ ] Soundness gate
+- [x] Soundness gate
 - [ ] Upstream inventory
 - [ ] Shared integrator driver
 - [ ] Vector/matrix interfaces
@@ -28,31 +28,33 @@ Pinned upstream revision:
 
 | Agent | Task | Branch/worktree | Status | Last update |
 | --- | --- | --- | --- | --- |
-|  |  |  |  |  |
+| `/root/soundness_gate` | Simplifier/soundness gate | `codex/overnight-soundness`; `differential-equations-rs-worktrees/soundness-gate` | completed and merged as `408991c` | 2026-08-03T23:41:39Z |
+| `/root/inventory_audit` | Exact pinned regular-ODE inventory audit | `codex/overnight-inventory`; `differential-equations-rs-worktrees/inventory-audit` | active | 2026-08-03T23:32:13Z |
+| `/root/julia_manifest_repro` | Make pinned Julia gate reproducible in fresh worktrees | `codex/overnight-julia-manifest`; `differential-equations-rs-worktrees/julia-manifest` | active | 2026-08-03T23:38:30Z |
+| `/root/driver_explicit_wave` | Driver foundation and generic explicit-RK migration | `codex/overnight-driver-explicit`; `differential-equations-rs-worktrees/driver-explicit` | active | 2026-08-03T23:41:39Z |
 
 ## Completed waves
 
 | Wave | Files/algorithms | Rust tests | Julia tests | Review status |
 | --- | --- | ---: | ---: | --- |
-|  |  |  |  |  |
+| Soundness | Custom `ButcherTableau` validation and one-stage adaptive scratch use | 70 pass | 202 pass | reviewed and merged as `408991c` |
 
 ## Validation snapshot
 
 ```text
-cargo fmt -- --check: not run
-cargo test --all-targets: not run
-cargo clippy --all-targets -- -D warnings: not run
-git diff --check: not run
-pinned Julia environment: not run
-Julia compliance: not run
+cargo fmt -- --check: pass
+cargo test --all-targets: pass (70 tests)
+cargo clippy --all-targets -- -D warnings: pass
+git diff --check: pass
+pinned Julia environment: pass in coordinator worktree (13 packages at pinned revision); reproducibility fix active
+Julia compliance: pass (202 tests)
 inventory regeneration: not run
 ```
 
 ## Next dependency-ready task
 
-`<fill in>`
+Freeze the shared first-order integrator driver interface with mock-kernel coverage and migrate generic explicit RK while the exact inventory finishes.
 
 ## Last decision
 
-`<fill in>`
-
+Soundness passed and merged. Started the first driver wave; inventory regeneration remains concurrent under the execution-plan exception.
