@@ -7,7 +7,7 @@ method is not enough.
 
 ## Current status
 
-The generated pinned-revision inventory currently detects **65 of 346**
+The generated pinned-revision inventory currently detects **65 of 345**
 in-scope public ODE names as both implemented and Julia-tested. The complete
 per-name and per-family ledger is generated in
 [`ODE_PARITY_INVENTORY.md`](ODE_PARITY_INVENTORY.md), with JSON and CSV forms

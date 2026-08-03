@@ -9,18 +9,19 @@ revision `211142263781255a9aa2f910f6760b9f18ec29c8` under the scope in
 ```
 
 The full machine-readable records, including upstream definition paths and line
-numbers, problem representations, required shared features, aliases, exclusions,
-and current Rust status, are in [ode_algorithm_inventory.json](ode_algorithm_inventory.json)
+numbers, problem representations, fixed/adaptive behavior, Jacobian, linear-solver,
+dense-output and controller requirements, aliases, exclusions, and current Rust and
+Julia status, are in [ode_algorithm_inventory.json](ode_algorithm_inventory.json)
 and [ode_algorithm_inventory.csv](ode_algorithm_inventory.csv).
 
 ## Totals
 
-- Public solver names inspected: **350**.
-- In-scope regular ODE names: **346**
-  (342 canonical/composite constructors and
-  4 public aliases).
+- Public solver names inspected: **349**.
+- In-scope regular ODE names: **345**
+  (333 canonical/composite constructors and
+  12 public aliases).
 - Implemented and detected in matched Julia tests: **65**.
-- Missing in-scope public names: **281**.
+- Missing in-scope public names: **280**.
 - Explicitly excluded public names: **4**.
 
 Aliases are public parity obligations but do not require a second numerical kernel.
@@ -50,7 +51,7 @@ Aliases are public parity obligations but do not require a second numerical kern
 | Rosenbrock and Rosenbrock-W | 40 | 4 | 36 |
 | Runge-Kutta interval prediction | 1 | 0 | 1 |
 | Runge-Kutta-Nystrom | 17 | 0 | 17 |
-| SDIRK, ESDIRK, and additive IMEX RK | 40 | 4 | 36 |
+| SDIRK, ESDIRK, and additive IMEX RK | 39 | 4 | 35 |
 | second-order structural dynamics | 2 | 0 | 2 |
 | SIMD explicit Runge-Kutta | 3 | 0 | 3 |
 | stabilized explicit Runge-Kutta | 13 | 0 | 13 |
@@ -329,7 +330,7 @@ the JSON/CSV records.
 - `Nystrom5VelocityIndependent` — OrdinaryDiffEqRKN; SecondOrderODEProblem or DynamicalODEProblem
 - `RKN4` — OrdinaryDiffEqRKN; SecondOrderODEProblem or DynamicalODEProblem
 
-### SDIRK, ESDIRK, and additive IMEX RK (36)
+### SDIRK, ESDIRK, and additive IMEX RK (35)
 
 - `ARS222` — OrdinaryDiffEqSDIRK; ODEProblem or SplitODEProblem
 - `ARS232` — OrdinaryDiffEqSDIRK; ODEProblem or SplitODEProblem
@@ -358,7 +359,6 @@ the JSON/CSV records.
 - `Kvaerno3` — OrdinaryDiffEqSDIRK; ODEProblem
 - `Kvaerno4` — OrdinaryDiffEqSDIRK; ODEProblem
 - `Kvaerno5` — OrdinaryDiffEqSDIRK; ODEProblem
-- `Predictor` — OrdinaryDiffEqSDIRK; ODEProblem
 - `SDIRK2` — OrdinaryDiffEqSDIRK; ODEProblem
 - `SDIRK22` — OrdinaryDiffEqSDIRK; ODEProblem
 - `SFSDIRK4` — OrdinaryDiffEqSDIRK; ODEProblem
@@ -443,9 +443,17 @@ the JSON/CSV records.
 | Public name | Kind | Canonical target | Package |
 | --- | --- | --- | --- |
 | `ETD1` | exact-alias | `NorsettEuler` | OrdinaryDiffEqExponentialRK |
+| `IMEXEuler` | configured-alias | `SBDF(order=1)` | OrdinaryDiffEqBDF |
+| `IMEXEulerARK` | configured-alias | `SBDF(order=1, ark=true)` | OrdinaryDiffEqBDF |
+| `JVODE_Adams` | configured-alias | `JVODE(:Adams)` | OrdinaryDiffEqNordsieck |
+| `JVODE_BDF` | configured-alias | `JVODE(:BDF)` | OrdinaryDiffEqNordsieck |
 | `QBDF` | configured-alias | `QNDF(kappa=(0,0,0,0,0))` | OrdinaryDiffEqBDF |
 | `QBDF1` | configured-alias | `QNDF1(kappa=0)` | OrdinaryDiffEqBDF |
 | `QBDF2` | configured-alias | `QNDF2(kappa=0)` | OrdinaryDiffEqBDF |
+| `SBDF2` | configured-alias | `SBDF(order=2)` | OrdinaryDiffEqBDF |
+| `SBDF3` | configured-alias | `SBDF(order=3)` | OrdinaryDiffEqBDF |
+| `SBDF4` | configured-alias | `SBDF(order=4)` | OrdinaryDiffEqBDF |
+| `Tsit5DA` | configured-alias | `HybridExplicitImplicitRK(Tsit5DATableau, order=5)` | OrdinaryDiffEqRosenbrock |
 
 ## Explicit exclusions
 
@@ -472,10 +480,16 @@ the OrdinaryDiffEq native ODE solver export surface.
 | `OrdinaryDiffEqNonlinearSolve` | Nonlinear-solver and DAE-initialization support, not time-integration algorithms. |
 | `OrdinaryDiffEqRosenbrockTableaus` | Rosenbrock tableau data and constructors, not solver algorithms. |
 
+## Audited non-algorithm exports
+
+| Export | Package | Why it has no solver row |
+| --- | --- | --- |
+| `Predictor` | `OrdinaryDiffEqSDIRK` | Nonlinear-stage predictor enum namespace, not an ODE algorithm constructor. |
+
 ## Interpretation notes and uncertainties
 
 - The inventory treats package exports as the public algorithm surface; internal, unexported experimental types are not parity targets.
-- ETD1 is the only exact exported type alias found at the pinned revision. QBDF/QBDF1/QBDF2 are configured aliases as stated by their upstream documentation. Auto* and Default* names are composite constructors.
+- ETD1 is the only exact exported type alias found at the pinned revision. Named functions that return a configured canonical algorithm are recorded as configured aliases. Auto* and Default* names are composite constructors.
 - AMF is counted as a native wrapper constructor because it dispatches back into OrdinaryDiffEq with native Rosenbrock-W methods.
 - Rust status is detected by normalized public Rust type name plus a corresponding OrdinaryDiffEq import in tests/julia; numerical test quality remains a review concern.
 - Implemented status measures public algorithm-name coverage only. It does not establish parity for every upstream problem representation or shared feature; consult problem_representation, required_features, and FEATURE_COVERAGE.md separately.
