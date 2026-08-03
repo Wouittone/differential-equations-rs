@@ -1,0 +1,547 @@
+use crate::solution::TrajectoryRecorder;
+use crate::{OdeProblem, Solution, SolveError, SolveOptions, SolverStats};
+
+const SAFETY: f64 = 0.9;
+const MIN_FACTOR: f64 = 0.2;
+const MAX_FACTOR: f64 = 10.0;
+
+/// Properties the common driver needs without knowing a kernel's internals.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct KernelCapabilities {
+    adaptive: bool,
+    controller_order: usize,
+}
+
+impl KernelCapabilities {
+    pub(crate) const fn new(adaptive: bool, controller_order: usize) -> Self {
+        Self {
+            adaptive,
+            controller_order,
+        }
+    }
+}
+
+/// The result of one numerical attempt. The candidate state is written into
+/// the driver-owned buffer passed to [`StepKernel::attempt_step`].
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct StepEstimate {
+    pub(crate) error_norm: f64,
+}
+
+impl StepEstimate {
+    pub(crate) const fn new(error_norm: f64) -> Self {
+        Self { error_norm }
+    }
+}
+
+/// Static-dispatch boundary between integration lifecycle and numerical work.
+///
+/// Kernels own numerical caches. The driver owns time/state progression,
+/// callbacks, saving, attempt accounting, controller policy, and termination.
+#[allow(clippy::too_many_arguments)]
+pub(crate) trait StepKernel<F, P>
+where
+    F: Fn(&mut [f64], &[f64], &P, f64),
+{
+    fn capabilities(&self) -> KernelCapabilities;
+
+    fn initialize(
+        &mut self,
+        problem: &OdeProblem<F, P>,
+        state: &[f64],
+        time: f64,
+        stats: &mut SolverStats,
+    ) -> Result<(), SolveError>;
+
+    fn estimate_initial_step(
+        &mut self,
+        problem: &OdeProblem<F, P>,
+        state: &[f64],
+        time: f64,
+        direction: f64,
+        maximum_step: f64,
+        candidate: &mut [f64],
+        options: &SolveOptions,
+        stats: &mut SolverStats,
+    ) -> Result<f64, SolveError>;
+
+    fn attempt_step(
+        &mut self,
+        problem: &OdeProblem<F, P>,
+        state: &[f64],
+        time: f64,
+        step: f64,
+        candidate: &mut [f64],
+        options: &SolveOptions,
+        stats: &mut SolverStats,
+    ) -> Result<StepEstimate, SolveError>;
+
+    fn accept_step(
+        &mut self,
+        problem: &OdeProblem<F, P>,
+        previous_state: &[f64],
+        state: &[f64],
+        time: f64,
+        accepted_step: f64,
+        callback_applied: bool,
+        stats: &mut SolverStats,
+    ) -> Result<(), SolveError>;
+
+    fn reject_step(&mut self);
+}
+
+pub(crate) fn integrate<F, P, K>(
+    problem: &OdeProblem<F, P>,
+    options: &SolveOptions,
+    mut kernel: K,
+) -> Result<Solution, SolveError>
+where
+    F: Fn(&mut [f64], &[f64], &P, f64),
+    K: StepKernel<F, P>,
+{
+    let capabilities = kernel.capabilities();
+    if options.adaptive && !capabilities.adaptive {
+        return Err(SolveError::AdaptiveStepUnsupported);
+    }
+    if !options.adaptive && options.initial_step.is_none() {
+        return Err(SolveError::InitialStepRequired);
+    }
+
+    let dimension = problem.initial_state().len();
+    let (start, end) = problem.time_span();
+    let direction = (end - start).signum();
+    let maximum_step = options.max_step.min((end - start).abs());
+    let mut state = problem.initial_state().to_vec();
+    let mut candidate = vec![0.0; dimension];
+    let mut state_before_effect = if problem.has_callbacks() {
+        vec![0.0; dimension]
+    } else {
+        Vec::new()
+    };
+    let mut stats = SolverStats::default();
+
+    let initial_callbacks = problem.apply_initial_callbacks(&mut state, start)?;
+    stats.callback_invocations += initial_callbacks.invocations;
+    let mut recorder = TrajectoryRecorder::new(&state, start, options);
+    if initial_callbacks.terminate {
+        recorder.force_state(start, &state);
+        return Ok(recorder.finish(stats));
+    }
+
+    kernel.initialize(problem, &state, start, &mut stats)?;
+    let step_magnitude = match options.initial_step {
+        Some(step) => step.min(maximum_step),
+        None => kernel.estimate_initial_step(
+            problem,
+            &state,
+            start,
+            direction,
+            maximum_step,
+            &mut candidate,
+            options,
+            &mut stats,
+        )?,
+    };
+    let mut step = direction * step_magnitude;
+    let mut time = start;
+    let mut attempted_steps = 0;
+    let mut previous_step_rejected = false;
+
+    while direction * (end - time) > 0.0 {
+        if attempted_steps == options.max_steps {
+            return Err(SolveError::MaxStepsExceeded);
+        }
+        attempted_steps += 1;
+
+        if direction * (time + step - end) > 0.0 {
+            step = end - time;
+        }
+        if time + step == time {
+            return Err(SolveError::StepSizeUnderflow);
+        }
+
+        let estimate = kernel.attempt_step(
+            problem,
+            &state,
+            time,
+            step,
+            &mut candidate,
+            options,
+            &mut stats,
+        )?;
+        if !candidate.iter().all(|value| value.is_finite()) {
+            return Err(SolveError::NonFiniteDerivative);
+        }
+
+        if estimate.error_norm <= 1.0 {
+            let previous_time = time;
+            let mut next_time = time + step;
+            if direction * (end - next_time) <= 0.0 {
+                next_time = end;
+            }
+            let callbacks = problem.apply_step_callbacks(
+                &state,
+                previous_time,
+                &mut candidate,
+                &mut next_time,
+                &mut state_before_effect,
+            )?;
+            stats.callback_invocations += callbacks.invocations;
+            stats.accepted_steps += 1;
+
+            recorder.record_step(
+                &state,
+                previous_time,
+                if callbacks.invocations == 0 {
+                    &candidate
+                } else {
+                    &state_before_effect
+                },
+                next_time,
+                next_time == end,
+            );
+            if callbacks.invocations > 0 {
+                recorder.force_state(next_time, &candidate);
+            }
+            if callbacks.terminate {
+                return Ok(recorder.finish(stats));
+            }
+
+            time = next_time;
+            std::mem::swap(&mut state, &mut candidate);
+            kernel.accept_step(
+                problem,
+                &candidate,
+                &state,
+                time,
+                time - previous_time,
+                callbacks.invocations > 0,
+                &mut stats,
+            )?;
+
+            if options.adaptive {
+                let mut factor = step_factor(estimate.error_norm, capabilities.controller_order);
+                if previous_step_rejected {
+                    factor = factor.min(1.0);
+                }
+                step = direction * (step.abs() * factor).min(maximum_step);
+            }
+            previous_step_rejected = false;
+        } else {
+            stats.rejected_steps += 1;
+            kernel.reject_step();
+            step *= step_factor(estimate.error_norm, capabilities.controller_order).min(1.0);
+            previous_step_rejected = true;
+        }
+    }
+
+    Ok(recorder.finish(stats))
+}
+
+fn step_factor(error: f64, order: usize) -> f64 {
+    if error == 0.0 {
+        MAX_FACTOR
+    } else if error.is_finite() {
+        (SAFETY * error.powf(-1.0 / order as f64)).clamp(MIN_FACTOR, MAX_FACTOR)
+    } else {
+        MIN_FACTOR
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::cell::Cell;
+    use std::rc::Rc;
+
+    use super::{KernelCapabilities, StepEstimate, StepKernel, integrate};
+    use crate::{CallbackAction, OdeProblem, SaveMode, SolveError, SolveOptions, SolverStats};
+
+    struct MockKernel {
+        errors: Vec<f64>,
+        attempts: usize,
+        initialize_calls: usize,
+        accept_calls: usize,
+        reject_calls: usize,
+        first_candidate: Option<*const f64>,
+        second_candidate: Option<*const f64>,
+        unexpected_candidate: bool,
+    }
+
+    impl MockKernel {
+        fn fixed() -> Self {
+            Self::with_errors(vec![0.0])
+        }
+
+        fn with_errors(errors: Vec<f64>) -> Self {
+            Self {
+                errors,
+                attempts: 0,
+                initialize_calls: 0,
+                accept_calls: 0,
+                reject_calls: 0,
+                first_candidate: None,
+                second_candidate: None,
+                unexpected_candidate: false,
+            }
+        }
+
+        fn observe_candidate(&mut self, pointer: *const f64) {
+            if self.first_candidate.is_none() {
+                self.first_candidate = Some(pointer);
+            } else if self.first_candidate != Some(pointer) && self.second_candidate.is_none() {
+                self.second_candidate = Some(pointer);
+            } else if self.first_candidate != Some(pointer)
+                && self.second_candidate != Some(pointer)
+            {
+                self.unexpected_candidate = true;
+            }
+        }
+    }
+
+    impl<F, P> StepKernel<F, P> for &mut MockKernel
+    where
+        F: Fn(&mut [f64], &[f64], &P, f64),
+    {
+        fn capabilities(&self) -> KernelCapabilities {
+            KernelCapabilities::new(true, 1)
+        }
+
+        fn initialize(
+            &mut self,
+            _: &OdeProblem<F, P>,
+            _: &[f64],
+            _: f64,
+            _: &mut SolverStats,
+        ) -> Result<(), SolveError> {
+            self.initialize_calls += 1;
+            Ok(())
+        }
+
+        fn estimate_initial_step(
+            &mut self,
+            _: &OdeProblem<F, P>,
+            _: &[f64],
+            _: f64,
+            _: f64,
+            maximum_step: f64,
+            _: &mut [f64],
+            _: &SolveOptions,
+            _: &mut SolverStats,
+        ) -> Result<f64, SolveError> {
+            Ok(maximum_step.min(0.25))
+        }
+
+        fn attempt_step(
+            &mut self,
+            _: &OdeProblem<F, P>,
+            state: &[f64],
+            _: f64,
+            step: f64,
+            candidate: &mut [f64],
+            _: &SolveOptions,
+            _: &mut SolverStats,
+        ) -> Result<StepEstimate, SolveError> {
+            self.observe_candidate(candidate.as_ptr());
+            for (candidate, state) in candidate.iter_mut().zip(state) {
+                *candidate = state + step;
+            }
+            let error = self
+                .errors
+                .get(self.attempts)
+                .copied()
+                .unwrap_or_else(|| *self.errors.last().unwrap());
+            self.attempts += 1;
+            Ok(StepEstimate::new(error))
+        }
+
+        fn accept_step(
+            &mut self,
+            _: &OdeProblem<F, P>,
+            _: &[f64],
+            _: &[f64],
+            _: f64,
+            _: f64,
+            _: bool,
+            _: &mut SolverStats,
+        ) -> Result<(), SolveError> {
+            self.accept_calls += 1;
+            Ok(())
+        }
+
+        fn reject_step(&mut self) {
+            self.reject_calls += 1;
+        }
+    }
+
+    type TestRhs = fn(&mut [f64], &[f64], &(), f64);
+
+    fn unit_problem(span: (f64, f64), initial: f64) -> OdeProblem<TestRhs, ()> {
+        fn unit_rate(du: &mut [f64], _: &[f64], _: &(), _: f64) {
+            du[0] = 1.0;
+        }
+        OdeProblem::new(unit_rate, vec![initial], span, ())
+    }
+
+    fn fixed_options(step: f64) -> SolveOptions {
+        SolveOptions {
+            adaptive: false,
+            initial_step: Some(step),
+            save: SaveMode::EveryStep,
+            ..SolveOptions::default()
+        }
+    }
+
+    #[test]
+    fn rejection_has_no_callback_or_save_side_effects() {
+        let effects = Rc::new(Cell::new(0));
+        let effect_count = Rc::clone(&effects);
+        let problem = unit_problem((0.0, 0.5), 0.0).with_discrete_callback(
+            |_, _, time| time > 0.0,
+            move |_, _, _| {
+                effect_count.set(effect_count.get() + 1);
+                CallbackAction::Continue
+            },
+        );
+        let mut kernel = MockKernel::with_errors(vec![4.0, 0.0]);
+        let options = SolveOptions {
+            initial_step: Some(0.5),
+            save: SaveMode::EveryStep,
+            ..SolveOptions::default()
+        };
+
+        let solution = integrate(&problem, &options, &mut kernel).unwrap();
+
+        assert_eq!(kernel.reject_calls, 1);
+        assert_eq!(effects.get(), solution.stats().accepted_steps);
+        assert_eq!(solution.times().len(), solution.stats().accepted_steps + 1);
+        assert_eq!(solution.stats().rejected_steps, 1);
+    }
+
+    #[test]
+    fn integrates_backward_and_clips_the_endpoint() {
+        let problem = unit_problem((1.0, 0.0), 1.0);
+        let mut kernel = MockKernel::fixed();
+        let solution = integrate(&problem, &fixed_options(0.3), &mut kernel).unwrap();
+
+        assert_eq!(solution.times().last(), Some(&0.0));
+        assert!((solution.last_state()[0]).abs() < 1.0e-15);
+        assert_eq!(solution.stats().accepted_steps, 4);
+    }
+
+    #[test]
+    fn callbacks_record_pre_effect_samples_and_force_the_effect_state() {
+        let problem = unit_problem((0.0, 1.0), 0.0).with_discrete_callback(
+            |_, _, time| time >= 0.6,
+            |state, _, _| {
+                state[0] = 10.0;
+                CallbackAction::Continue
+            },
+        );
+        let options = SolveOptions {
+            adaptive: false,
+            initial_step: Some(0.6),
+            save: SaveMode::Endpoints,
+            save_at: vec![0.2, 0.5],
+            ..SolveOptions::default()
+        };
+        let mut kernel = MockKernel::fixed();
+
+        let solution = integrate(&problem, &options, &mut kernel).unwrap();
+
+        assert_eq!(solution.times()[..3], [0.2, 0.5, 0.6]);
+        assert!((solution.state(0).unwrap()[0] - 0.2).abs() < 1.0e-15);
+        assert!((solution.state(1).unwrap()[0] - 0.5).abs() < 1.0e-15);
+        assert_eq!(solution.state(2), Some([10.0].as_slice()));
+    }
+
+    #[test]
+    fn terminating_effect_returns_before_the_kernel_accept_hook() {
+        let problem = unit_problem((0.0, 1.0), 0.0).with_continuous_callback(
+            |state, _, _| state[0] - 0.5,
+            |state, _, _| {
+                state[0] = 42.0;
+                CallbackAction::Terminate
+            },
+        );
+        let mut kernel = MockKernel::fixed();
+
+        let solution = integrate(&problem, &fixed_options(1.0), &mut kernel).unwrap();
+
+        assert_eq!(solution.last_state(), &[42.0]);
+        assert_eq!(kernel.accept_calls, 0);
+        assert_eq!(kernel.attempts, 1);
+    }
+
+    #[test]
+    fn initial_termination_never_initializes_the_kernel() {
+        let problem = unit_problem((0.0, 1.0), 0.0).with_discrete_callback(
+            |_, _, time| time == 0.0,
+            |state, _, _| {
+                state[0] = 7.0;
+                CallbackAction::Terminate
+            },
+        );
+        let mut kernel = MockKernel::fixed();
+
+        let solution = integrate(&problem, &fixed_options(0.25), &mut kernel).unwrap();
+
+        assert_eq!(solution.last_state(), &[7.0]);
+        assert_eq!(kernel.initialize_calls, 0);
+        assert_eq!(kernel.attempts, 0);
+    }
+
+    #[test]
+    fn save_at_uses_the_accepted_segment() {
+        let problem = unit_problem((0.0, 1.0), 0.0);
+        let options = SolveOptions {
+            adaptive: false,
+            initial_step: Some(0.4),
+            save_at: vec![0.1, 0.7, 1.0],
+            ..SolveOptions::default()
+        };
+        let mut kernel = MockKernel::fixed();
+        let solution = integrate(&problem, &options, &mut kernel).unwrap();
+
+        assert_eq!(solution.times(), &[0.1, 0.7, 1.0]);
+        assert_eq!(solution.values(), &[0.1, 0.7, 1.0]);
+    }
+
+    #[test]
+    fn reports_step_underflow_before_attempting_the_kernel() {
+        let problem = unit_problem((1.0, 2.0), 0.0);
+        let mut kernel = MockKernel::fixed();
+        let result = integrate(&problem, &fixed_options(f64::MIN_POSITIVE), &mut kernel);
+
+        assert_eq!(result, Err(SolveError::StepSizeUnderflow));
+        assert_eq!(kernel.attempts, 0);
+    }
+
+    #[test]
+    fn max_steps_counts_rejected_and_accepted_attempts() {
+        let problem = unit_problem((0.0, 1.0), 0.0);
+        let options = SolveOptions {
+            initial_step: Some(0.5),
+            max_steps: 2,
+            ..SolveOptions::default()
+        };
+        let mut kernel = MockKernel::with_errors(vec![4.0, 0.0]);
+
+        assert_eq!(
+            integrate(&problem, &options, &mut kernel),
+            Err(SolveError::MaxStepsExceeded)
+        );
+        assert_eq!(kernel.attempts, 2);
+    }
+
+    #[test]
+    fn reuses_exactly_two_driver_state_buffers_across_steps() {
+        let problem = unit_problem((0.0, 1.0), 0.0);
+        let mut kernel = MockKernel::fixed();
+        let solution = integrate(&problem, &fixed_options(0.01), &mut kernel).unwrap();
+
+        assert_eq!(solution.stats().accepted_steps, 100);
+        assert!(kernel.first_candidate.is_some());
+        assert!(kernel.second_candidate.is_some());
+        assert!(!kernel.unexpected_candidate);
+    }
+}

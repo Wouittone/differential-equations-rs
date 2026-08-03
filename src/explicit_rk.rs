@@ -1,10 +1,8 @@
-use crate::solution::TrajectoryRecorder;
+use crate::integrator::{
+    KernelCapabilities, StepEstimate, StepKernel, integrate as drive_integration,
+};
 use crate::{OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions, SolverStats};
 use std::marker::PhantomData;
-
-const SAFETY: f64 = 0.9;
-const MIN_FACTOR: f64 = 0.2;
-const MAX_FACTOR: f64 = 10.0;
 
 /// Coefficients and method properties for an explicit Runge–Kutta method.
 ///
@@ -655,7 +653,6 @@ struct Workspace {
     stage_count: usize,
     dimension: usize,
     temporary: Vec<f64>,
-    candidate: Vec<f64>,
 }
 
 impl Workspace {
@@ -665,7 +662,6 @@ impl Workspace {
             stage_count,
             dimension,
             temporary: vec![0.0; dimension],
-            candidate: vec![0.0; dimension],
         }
     }
 
@@ -732,168 +728,162 @@ where
     T: ButcherTableau,
 {
     validate_tableau::<T>()?;
-    let adaptive = options.adaptive;
-    if adaptive && T::ERROR_WEIGHTS.is_none() {
-        return Err(SolveError::AdaptiveStepUnsupported);
-    }
-    if !adaptive && options.initial_step.is_none() {
-        return Err(SolveError::InitialStepRequired);
-    }
-
-    let dimension = problem.initial_state().len();
-    let (start, end) = problem.time_span();
-    let direction = (end - start).signum();
-    let interval = (end - start).abs();
-    let maximum_step = options.max_step.min(interval);
-    let mut state = problem.initial_state().to_vec();
-    let mut state_before_effect = if problem.has_callbacks() {
-        vec![0.0; dimension]
-    } else {
-        Vec::new()
-    };
-    let mut workspace = Workspace::new(T::WEIGHTS.len(), dimension);
-    let mut stats = SolverStats::default();
-    let initial_callbacks = problem.apply_initial_callbacks(&mut state, start)?;
-    stats.callback_invocations += initial_callbacks.invocations;
-    let mut recorder = TrajectoryRecorder::new(&state, start, options);
-    if initial_callbacks.terminate {
-        recorder.force_state(start, &state);
-        return Ok(recorder.finish(stats));
-    }
-    evaluate(
+    drive_integration(
         problem,
-        &mut workspace.stages[..dimension],
-        &state,
-        start,
-        &mut stats,
-    );
-    ensure_finite(&workspace.stages[..dimension])?;
+        options,
+        ExplicitKernel::<T>::new(problem.initial_state().len()),
+    )
+}
 
-    let step_magnitude = match options.initial_step {
-        Some(step) => step.min(maximum_step),
-        None => estimate_initial_step(
+struct ExplicitKernel<T> {
+    workspace: Workspace,
+    stage_zero_is_current: bool,
+    marker: PhantomData<fn() -> T>,
+}
+
+impl<T> ExplicitKernel<T> {
+    fn new(dimension: usize) -> Self
+    where
+        T: ButcherTableau,
+    {
+        Self {
+            workspace: Workspace::new(T::WEIGHTS.len(), dimension),
+            stage_zero_is_current: false,
+            marker: PhantomData,
+        }
+    }
+}
+
+impl<F, P, T> StepKernel<F, P> for ExplicitKernel<T>
+where
+    F: Fn(&mut [f64], &[f64], &P, f64),
+    T: ButcherTableau,
+{
+    fn capabilities(&self) -> KernelCapabilities {
+        KernelCapabilities::new(T::ERROR_WEIGHTS.is_some(), T::ORDER)
+    }
+
+    fn initialize(
+        &mut self,
+        problem: &OdeProblem<F, P>,
+        state: &[f64],
+        time: f64,
+        stats: &mut SolverStats,
+    ) -> Result<(), SolveError> {
+        evaluate(
+            problem,
+            &mut self.workspace.stages[..self.workspace.dimension],
+            state,
+            time,
+            stats,
+        );
+        ensure_finite(&self.workspace.stages[..self.workspace.dimension])?;
+        self.stage_zero_is_current = true;
+        Ok(())
+    }
+
+    fn estimate_initial_step(
+        &mut self,
+        problem: &OdeProblem<F, P>,
+        state: &[f64],
+        time: f64,
+        direction: f64,
+        maximum_step: f64,
+        candidate: &mut [f64],
+        options: &SolveOptions,
+        stats: &mut SolverStats,
+    ) -> Result<f64, SolveError> {
+        estimate_initial_step(
             problem,
             options,
-            &state,
-            (start, direction, maximum_step),
+            (state, candidate),
+            (time, direction, maximum_step),
             T::ORDER,
-            &mut workspace,
-            &mut stats,
-        )?,
-    };
-    let mut step = direction * step_magnitude;
-    let mut time = start;
-    let mut attempted_steps = 0;
-    let mut previous_step_rejected = false;
-    let mut stage_zero_is_current = true;
+            &mut self.workspace,
+            stats,
+        )
+    }
 
-    while direction * (end - time) > 0.0 {
-        if attempted_steps == options.max_steps {
-            return Err(SolveError::MaxStepsExceeded);
-        }
-        attempted_steps += 1;
-
-        if direction * (time + step - end) > 0.0 {
-            step = end - time;
-        }
-        if time + step == time {
-            return Err(SolveError::StepSizeUnderflow);
-        }
-        if !stage_zero_is_current {
+    fn attempt_step(
+        &mut self,
+        problem: &OdeProblem<F, P>,
+        state: &[f64],
+        time: f64,
+        step: f64,
+        candidate: &mut [f64],
+        options: &SolveOptions,
+        stats: &mut SolverStats,
+    ) -> Result<StepEstimate, SolveError> {
+        if !self.stage_zero_is_current {
             evaluate(
                 problem,
-                &mut workspace.stages[..dimension],
-                &state,
+                &mut self.workspace.stages[..self.workspace.dimension],
+                state,
                 time,
-                &mut stats,
+                stats,
             );
+            ensure_finite(&self.workspace.stages[..self.workspace.dimension])?;
         }
-
-        perform_step::<F, P, T>(problem, &state, time, step, &mut workspace, &mut stats);
-        ensure_finite(&workspace.candidate)?;
-        let error = if adaptive {
+        perform_step::<F, P, T>(
+            problem,
+            state,
+            time,
+            step,
+            candidate,
+            &mut self.workspace,
+            stats,
+        );
+        ensure_finite(candidate)?;
+        let error = if options.adaptive {
             let primary_error = error_norm(
-                &workspace.stages,
-                dimension,
-                (&state, &workspace.candidate),
+                &self.workspace.stages,
+                self.workspace.dimension,
+                (state, candidate),
                 step,
                 options,
-                T::ERROR_WEIGHTS.expect("checked above"),
-                &mut workspace.temporary,
+                T::ERROR_WEIGHTS.expect("driver checked adaptive capability"),
+                &mut self.workspace.temporary,
             );
             T::SECOND_ERROR_WEIGHTS.map_or(primary_error, |weights| {
                 primary_error.max(error_norm(
-                    &workspace.stages,
-                    dimension,
-                    (&state, &workspace.candidate),
+                    &self.workspace.stages,
+                    self.workspace.dimension,
+                    (state, candidate),
                     step,
                     options,
                     weights,
-                    &mut workspace.temporary,
+                    &mut self.workspace.temporary,
                 ))
             })
         } else {
             0.0
         };
-
-        if error <= 1.0 {
-            let previous_time = time;
-            let mut next_time = time + step;
-            if direction * (end - next_time) <= 0.0 {
-                next_time = end;
-            }
-            let callbacks = problem.apply_step_callbacks(
-                &state,
-                previous_time,
-                &mut workspace.candidate,
-                &mut next_time,
-                &mut state_before_effect,
-            )?;
-            stats.callback_invocations += callbacks.invocations;
-            time = next_time;
-            std::mem::swap(&mut state, &mut workspace.candidate);
-            if T::FSAL && callbacks.invocations == 0 {
-                workspace.swap_stages(0, workspace.stage_count - 1);
-                stage_zero_is_current = true;
-            } else {
-                stage_zero_is_current = false;
-            }
-            stats.accepted_steps += 1;
-            recorder.record_step(
-                &workspace.candidate,
-                previous_time,
-                if callbacks.invocations == 0 {
-                    &state
-                } else {
-                    &state_before_effect
-                },
-                time,
-                time == end,
-            );
-            if callbacks.invocations > 0 {
-                recorder.force_state(time, &state);
-            }
-            if callbacks.terminate {
-                return Ok(recorder.finish(stats));
-            }
-
-            if adaptive {
-                let mut factor = step_factor(error, T::ORDER);
-                if previous_step_rejected {
-                    factor = factor.min(1.0);
-                }
-                step = direction * (step.abs() * factor).min(maximum_step);
-            }
-            previous_step_rejected = false;
-        } else {
-            stats.rejected_steps += 1;
-            step *= step_factor(error, T::ORDER).min(1.0);
-            previous_step_rejected = true;
-            stage_zero_is_current = true;
-        }
+        Ok(StepEstimate::new(error))
     }
 
-    Ok(recorder.finish(stats))
+    fn accept_step(
+        &mut self,
+        _: &OdeProblem<F, P>,
+        _: &[f64],
+        _: &[f64],
+        _: f64,
+        _: f64,
+        callback_applied: bool,
+        _: &mut SolverStats,
+    ) -> Result<(), SolveError> {
+        if T::FSAL && !callback_applied {
+            self.workspace
+                .swap_stages(0, self.workspace.stage_count - 1);
+            self.stage_zero_is_current = true;
+        } else {
+            self.stage_zero_is_current = false;
+        }
+        Ok(())
+    }
+
+    fn reject_step(&mut self) {
+        self.stage_zero_is_current = true;
+    }
 }
 
 fn evaluate<F, P>(
@@ -920,7 +910,7 @@ fn ensure_finite(values: &[f64]) -> Result<(), SolveError> {
 fn estimate_initial_step<F, P>(
     problem: &OdeProblem<F, P>,
     options: &SolveOptions,
-    state: &[f64],
+    states: (&[f64], &mut [f64]),
     integration: (f64, f64, f64),
     order: usize,
     workspace: &mut Workspace,
@@ -929,6 +919,7 @@ fn estimate_initial_step<F, P>(
 where
     F: Fn(&mut [f64], &[f64], &P, f64),
 {
+    let (state, scratch) = states;
     let (time, direction, maximum_step) = integration;
     let dimension = state.len() as f64;
     let mut state_norm = 0.0;
@@ -957,16 +948,15 @@ where
     }
     evaluate(
         problem,
-        &mut workspace.candidate,
+        scratch,
         &workspace.temporary,
         time + direction * trial_step,
         stats,
     );
-    ensure_finite(&workspace.candidate)?;
+    ensure_finite(scratch)?;
 
     let mut curvature_norm = 0.0;
-    for ((next, initial), value) in workspace
-        .candidate
+    for ((next, initial), value) in scratch
         .iter()
         .zip(&workspace.stages[..workspace.dimension])
         .zip(state)
@@ -989,6 +979,7 @@ fn perform_step<F, P, T>(
     state: &[f64],
     time: f64,
     step: f64,
+    candidate: &mut [f64],
     workspace: &mut Workspace,
     stats: &mut SolverStats,
 ) where
@@ -1015,7 +1006,7 @@ fn perform_step<F, P, T>(
         );
     }
     combine(
-        &mut workspace.candidate,
+        candidate,
         state,
         step,
         &workspace.stages,
@@ -1073,16 +1064,6 @@ fn error_norm(
         squared_norm += (error / scale).powi(2);
     }
     (squared_norm / state.len() as f64).sqrt()
-}
-
-fn step_factor(error: f64, order: usize) -> f64 {
-    if error == 0.0 {
-        MAX_FACTOR
-    } else if error.is_finite() {
-        (SAFETY * error.powf(-1.0 / order as f64)).clamp(MIN_FACTOR, MAX_FACTOR)
-    } else {
-        MIN_FACTOR
-    }
 }
 
 #[cfg(test)]

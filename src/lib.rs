@@ -10,6 +10,7 @@ mod adams;
 mod callback;
 mod explicit_rk;
 mod implicit;
+mod integrator;
 mod linear;
 mod low_storage_rk;
 mod problem;
