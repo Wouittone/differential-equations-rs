@@ -707,7 +707,8 @@ fn validate_tableau<T: ButcherTableau>() -> Result<(), SolveError> {
     let second_error_estimator_finite =
         T::SECOND_ERROR_WEIGHTS.is_none_or(|weights| weights.iter().all(|value| value.is_finite()));
     let fsal_valid = !T::FSAL
-        || (T::NODES.last() == Some(&1.0)
+        || (stage_count > 0
+            && T::NODES.last() == Some(&1.0)
             && T::WEIGHTS.last() == Some(&0.0)
             && T::COEFFICIENTS
                 .last()
@@ -956,15 +957,16 @@ where
     }
     evaluate(
         problem,
-        &mut workspace.stages[workspace.dimension..2 * workspace.dimension],
+        &mut workspace.candidate,
         &workspace.temporary,
         time + direction * trial_step,
         stats,
     );
-    ensure_finite(&workspace.stages[workspace.dimension..2 * workspace.dimension])?;
+    ensure_finite(&workspace.candidate)?;
 
     let mut curvature_norm = 0.0;
-    for ((next, initial), value) in workspace.stages[workspace.dimension..2 * workspace.dimension]
+    for ((next, initial), value) in workspace
+        .candidate
         .iter()
         .zip(&workspace.stages[..workspace.dimension])
         .zip(state)
@@ -1113,6 +1115,28 @@ mod tests {
         const COEFFICIENTS: &'static [&'static [f64]] = &[&[]];
         const WEIGHTS: &'static [f64] = &[1.0];
         const ERROR_WEIGHTS: Option<&'static [f64]> = None;
+        const ORDER: usize = 1;
+        const FSAL: bool = false;
+    }
+
+    struct EmptyFsalTableau;
+
+    impl ButcherTableau for EmptyFsalTableau {
+        const NODES: &'static [f64] = &[];
+        const COEFFICIENTS: &'static [&'static [f64]] = &[];
+        const WEIGHTS: &'static [f64] = &[];
+        const ERROR_WEIGHTS: Option<&'static [f64]> = None;
+        const ORDER: usize = 1;
+        const FSAL: bool = true;
+    }
+
+    struct SingleStageAdaptiveTableau;
+
+    impl ButcherTableau for SingleStageAdaptiveTableau {
+        const NODES: &'static [f64] = &[0.0];
+        const COEFFICIENTS: &'static [&'static [f64]] = &[&[]];
+        const WEIGHTS: &'static [f64] = &[1.0];
+        const ERROR_WEIGHTS: Option<&'static [f64]> = Some(&[0.0]);
         const ORDER: usize = 1;
         const FSAL: bool = false;
     }
@@ -1329,10 +1353,26 @@ mod tests {
         assert_eq!(
             solve(
                 &problem,
+                ExplicitRungeKutta::<EmptyFsalTableau>::new(),
+                &options,
+            ),
+            Err(SolveError::InvalidTableau)
+        );
+        assert_eq!(
+            solve(
+                &problem,
                 ExplicitRungeKutta::<MalformedSecondEstimator>::new(),
                 &adaptive_options(),
             ),
             Err(SolveError::InvalidTableau)
+        );
+        assert!(
+            solve(
+                &problem,
+                ExplicitRungeKutta::<SingleStageAdaptiveTableau>::new(),
+                &adaptive_options(),
+            )
+            .is_ok()
         );
     }
 
