@@ -79,3 +79,58 @@ Follow-up dependencies:
 Recommended next task:
 
 - Use the 280 missing in-scope rows to seed dependency-ordered solver-family task cards after the shared integrator and representation gates pass, starting with remaining explicit/high-order RK constructors.
+
+## Cross-worktree byte-stability addendum
+
+Summary:
+
+- Corrected generated-artifact byte stability under Windows `core.autocrlf=true` checkouts without weakening strict SHA-256 comparison.
+- The generator now writes LF-only, UTF-8-without-BOM bytes for all three generated artifacts, independent of the line endings used to check out the PowerShell script.
+- Added explicit `text eol=lf` attributes for the JSON, CSV, and Markdown inventory artifacts.
+- Check-mode temporary output is now removed in a `finally` block on success and failure.
+
+Files changed:
+
+- `.gitattributes`
+- `scripts/generate_ode_inventory.ps1`
+- `docs/handoffs/inventory_audit.md`
+
+The three generated artifacts were regenerated and verified; their canonical Git
+blob contents were already LF-normalized, so they have no logical content diff.
+
+Public APIs added:
+
+- None.
+
+Upstream source and revision:
+
+- Unchanged: `D:/Source/_review/OrdinaryDiffEq.jl` at `211142263781255a9aa2f910f6760b9f18ec29c8`.
+
+Tests/commands:
+
+- Normal inventory generation passed.
+- Inventory `-Check` passed twice in the implementation worktree.
+- An intentionally stale Markdown fixture failed strict SHA-256 checking as expected; no generated temporary directory remained afterward.
+- A fresh detached worktree created with Windows `core.autocrlf=true` passed `-Check` twice with a clean status.
+- Fresh-worktree hashes exactly matched the implementation worktree: Markdown `0F9BDA08AF0AB4E4A6658166DE7A89A2861E9F0C1A2CBCA8BA0E2583B03DF6BD`, JSON `D295A492E7DFFDC1BD36A39F0BCC56EA7E15763D66894DF521ABB84B5FCAB36B`, CSV `0DF7A2914CBD7F5BDCDA659E149EB28CFC879B41D16C882AD6AE81E9F54A3E83`.
+- `git diff --check` passed.
+
+Numerical differences:
+
+- None. Inventory content, schema, counts, and solver code are unchanged.
+
+Allocation/performance impact:
+
+- None in solver code. Offline generation replaces pipeline file writers with deterministic in-memory serialization followed by one file write per artifact.
+
+Known limitations:
+
+- The LF policy is intentionally limited to the three deterministic inventory artifacts; unrelated repository files retain their existing checkout behavior.
+
+Follow-up dependencies:
+
+- Cherry-pick this additive commit after `1aceeb0` (or coordinator cherry-pick `0579ff4`).
+
+Recommended next task:
+
+- Re-run strict inventory `-Check` after the fix is integrated, then continue the architecture-gated parity queue.

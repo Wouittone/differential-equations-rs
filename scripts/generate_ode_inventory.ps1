@@ -23,6 +23,7 @@ if ($Check) {
     $temporaryOutputDirectory = Join-Path ([System.IO.Path]::GetTempPath()) ("ode-inventory-" + [guid]::NewGuid())
     $OutputDirectory = $temporaryOutputDirectory
 }
+try {
 $actualRevision = (& git -C $resolvedUpstream rev-parse HEAD).Trim()
 if ($LASTEXITCODE -ne 0 -or $actualRevision -ne $expectedRevision) {
     throw "Expected OrdinaryDiffEq.jl revision $expectedRevision, found $actualRevision"
@@ -567,6 +568,18 @@ foreach ($packageEntry in $packageMetadata.GetEnumerator()) {
     }
 }
 
+function Write-CanonicalUtf8Text {
+    param(
+        [string] $Path,
+        [string] $Content
+    )
+
+    $normalized = ($Content -replace "`r`n", "`n") -replace "`r", "`n"
+    if (-not $normalized.EndsWith("`n")) { $normalized += "`n" }
+    $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
+    [System.IO.File]::WriteAllText($Path, $normalized, $utf8NoBom)
+}
+
 
 $unseenNonAlgorithmExports = @($nonAlgorithmExports.Keys | Where-Object { -not $seenNonAlgorithmExports.Contains($_) })
 if ($unseenNonAlgorithmExports.Count -gt 0) {
@@ -649,13 +662,15 @@ $jsonPath = Join-Path $OutputDirectory 'ode_algorithm_inventory.json'
 $csvPath = Join-Path $OutputDirectory 'ode_algorithm_inventory.csv'
 $markdownPath = Join-Path $OutputDirectory 'ODE_PARITY_INVENTORY.md'
 
-$summary | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $jsonPath -Encoding utf8
-$inventory | Select-Object name, kind, alias_of, upstream_package, family, scope, exclusion_reason,
+$jsonText = $summary | ConvertTo-Json -Depth 8
+Write-CanonicalUtf8Text -Path $jsonPath -Content $jsonText
+$csvLines = $inventory | Select-Object name, kind, alias_of, upstream_package, family, scope, exclusion_reason,
     problem_representation, fixed_adaptive_behavior, jacobian_requirement, linear_solver_requirement,
     dense_output_requirement, controller_requirement,
     @{ n = 'required_features'; e = { $_.required_features -join '; ' } },
     rust_status, rust_name, julia_status, julia_compliance_detected, upstream_source, upstream_line |
-    Export-Csv -LiteralPath $csvPath -NoTypeInformation -Encoding utf8
+    ConvertTo-Csv -NoTypeInformation
+Write-CanonicalUtf8Text -Path $csvPath -Content ($csvLines -join "`n")
 
 $familyRows = $included | Group-Object family | Sort-Object Name | ForEach-Object {
     $familyEntries = @($_.Group)
@@ -759,7 +774,7 @@ $($nonAlgorithmExportRows -join "`n")
 
 $($uncertaintyRows -join "`n")
 "@
-$markdown | Set-Content -LiteralPath $markdownPath -Encoding utf8
+Write-CanonicalUtf8Text -Path $markdownPath -Content $markdown
 
 if ($Check) {
     $mismatches = [System.Collections.Generic.List[string]]::new()
@@ -776,7 +791,6 @@ if ($Check) {
             $mismatches.Add("stale artifact $expectedPath (expected generated SHA256 $generatedHash, found $expectedHash)")
         }
     }
-    [System.IO.Directory]::Delete($temporaryOutputDirectory, $true)
     if ($mismatches.Count -gt 0) {
         throw "ODE inventory check failed: $($mismatches -join '; ')"
     }
@@ -788,3 +802,8 @@ if ($Check) {
     Write-Output "Wrote $markdownPath"
 }
 Write-Output ($summary.counts | ConvertTo-Json -Compress)
+} finally {
+    if ($null -ne $temporaryOutputDirectory -and (Test-Path -LiteralPath $temporaryOutputDirectory)) {
+        [System.IO.Directory]::Delete($temporaryOutputDirectory, $true)
+    }
+}
