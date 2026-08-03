@@ -173,7 +173,8 @@ where
     let mut state = problem.initial_state().to_vec();
     let mut stats = SolverStats::default();
     let mut initial_derivative = vec![0.0; dimension];
-    evaluate(problem, &mut initial_derivative, &state, start, &mut stats)?;
+    evaluate(problem, &mut initial_derivative, &state, start, &mut stats);
+    ensure_finite(&initial_derivative)?;
     let mut workspace = Workspace::new(initial_derivative, dimension, method.order);
 
     let mut time = start;
@@ -192,7 +193,9 @@ where
             return Err(SolveError::StepSizeUnderflow);
         }
 
-        if workspace.history.len() < method.order || method.repeating_bootstrap_predictor {
+        let used_bootstrap =
+            workspace.history.len() < method.order || method.repeating_bootstrap_predictor;
+        if used_bootstrap {
             bootstrap_step(
                 problem,
                 &state,
@@ -201,24 +204,23 @@ where
                 method.bootstrap,
                 &mut workspace,
                 &mut stats,
-            )?;
+            );
         } else {
-            for index in 0..dimension {
-                let increment = workspace
-                    .history
-                    .iter()
-                    .zip(method.weights)
-                    .map(|(derivative, weight)| weight * derivative[index])
-                    .sum::<f64>();
-                workspace.candidate[index] = state[index] + step * increment;
-            }
+            weighted_update(
+                &mut workspace.candidate,
+                &state,
+                step,
+                None,
+                &workspace.history,
+                method.weights,
+            );
         }
 
         let mut next_time = time + step;
         if direction * (end - next_time) <= 0.0 {
             next_time = end;
         }
-        if let Some(corrector_weights) = method.corrector_weights
+        let used_corrector = if let Some(corrector_weights) = method.corrector_weights
             && workspace.history.len() >= method.order - 1
         {
             evaluate(
@@ -227,19 +229,21 @@ where
                 &workspace.candidate,
                 next_time,
                 &mut stats,
-            )?;
-            for index in 0..dimension {
-                let history_increment = workspace
-                    .history
-                    .iter()
-                    .zip(&corrector_weights[1..])
-                    .map(|(derivative, weight)| weight * derivative[index])
-                    .sum::<f64>();
-                workspace.candidate[index] = state[index]
-                    + step
-                        * (corrector_weights[0] * workspace.predicted_derivative[index]
-                            + history_increment);
-            }
+            );
+            weighted_update(
+                &mut workspace.candidate,
+                &state,
+                step,
+                Some((&workspace.predicted_derivative, corrector_weights[0])),
+                &workspace.history,
+                &corrector_weights[1..],
+            );
+            true
+        } else {
+            false
+        };
+        if used_bootstrap || used_corrector {
+            ensure_finite(&workspace.candidate)?;
         }
 
         time = next_time;
@@ -249,7 +253,8 @@ where
             &workspace.candidate,
             time,
             &mut stats,
-        )?;
+        );
+        ensure_finite(&workspace.next_derivative)?;
         std::mem::swap(&mut state, &mut workspace.candidate);
         workspace
             .history
@@ -281,8 +286,7 @@ fn bootstrap_step<F, P>(
     method: Bootstrap,
     workspace: &mut Workspace,
     stats: &mut SolverStats,
-) -> Result<(), SolveError>
-where
+) where
     F: Fn(&mut [f64], &[f64], &P, f64),
 {
     match method {
@@ -297,7 +301,7 @@ where
                 &workspace.temporary,
                 time + (2.0 / 3.0) * step,
                 stats,
-            )?;
+            );
             for (index, &value) in state.iter().enumerate() {
                 workspace.candidate[index] = value
                     + (step / 4.0) * (workspace.history[0][index] + 3.0 * workspace.stage2[index]);
@@ -313,7 +317,7 @@ where
                 &workspace.temporary,
                 time + 0.5 * step,
                 stats,
-            )?;
+            );
             for (index, &value) in state.iter().enumerate() {
                 workspace.temporary[index] = value + 0.5 * step * workspace.stage2[index];
             }
@@ -323,7 +327,7 @@ where
                 &workspace.temporary,
                 time + 0.5 * step,
                 stats,
-            )?;
+            );
             for (index, &value) in state.iter().enumerate() {
                 workspace.temporary[index] = value + step * workspace.stage3[index];
             }
@@ -333,7 +337,7 @@ where
                 &workspace.temporary,
                 time + step,
                 stats,
-            )?;
+            );
             for (index, &value) in state.iter().enumerate() {
                 workspace.candidate[index] = value
                     + (step / 6.0)
@@ -344,7 +348,30 @@ where
             }
         }
     }
-    Ok(())
+}
+
+fn weighted_update(
+    output: &mut [f64],
+    state: &[f64],
+    step: f64,
+    leading_term: Option<(&[f64], f64)>,
+    history: &[Vec<f64>],
+    weights: &[f64],
+) {
+    output.fill(0.0);
+    if let Some((derivative, weight)) = leading_term {
+        for (increment, derivative) in output.iter_mut().zip(derivative) {
+            *increment += weight * derivative;
+        }
+    }
+    for (derivative, weight) in history.iter().zip(weights) {
+        for (increment, derivative) in output.iter_mut().zip(derivative) {
+            *increment += weight * derivative;
+        }
+    }
+    for (output_value, state_value) in output.iter_mut().zip(state) {
+        *output_value = state_value + step * *output_value;
+    }
 }
 
 fn evaluate<F, P>(
@@ -353,13 +380,15 @@ fn evaluate<F, P>(
     state: &[f64],
     time: f64,
     stats: &mut SolverStats,
-) -> Result<(), SolveError>
-where
+) where
     F: Fn(&mut [f64], &[f64], &P, f64),
 {
     (problem.rhs)(derivative, state, problem.parameters(), time);
     stats.rhs_evaluations += 1;
-    derivative
+}
+
+fn ensure_finite(values: &[f64]) -> Result<(), SolveError> {
+    values
         .iter()
         .all(|value| value.is_finite())
         .then_some(())
@@ -368,9 +397,12 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::cell::Cell;
     use std::f64::consts::E;
 
-    use crate::{Ab3, Ab4, Ab5, Abm32, Abm43, Abm54, OdeProblem, SaveMode, SolveOptions, solve};
+    use crate::{
+        Ab3, Ab4, Ab5, Abm32, Abm43, Abm54, OdeProblem, SaveMode, SolveError, SolveOptions, solve,
+    };
 
     type TestRhs = fn(&mut [f64], &[f64], &(), f64);
 
@@ -405,5 +437,31 @@ mod tests {
         assert!(errors[3] < 1.0e-8);
         assert!(errors[4] < 1.0e-11);
         assert!(errors[5] < 1.0e-12);
+    }
+
+    #[test]
+    fn reports_non_finite_bootstrap_derivatives() {
+        let calls = Cell::new(0);
+        let problem = OdeProblem::new(
+            |du: &mut [f64], _: &[f64], _: &(), _: f64| {
+                let call = calls.get();
+                calls.set(call + 1);
+                du[0] = if call == 1 { f64::NAN } else { 1.0 };
+            },
+            vec![1.0],
+            (0.0, 1.0),
+            (),
+        );
+        let options = SolveOptions {
+            adaptive: false,
+            initial_step: Some(1.0),
+            save: SaveMode::Endpoints,
+            ..SolveOptions::default()
+        };
+
+        assert_eq!(
+            solve(&problem, Ab3, &options),
+            Err(SolveError::NonFiniteDerivative)
+        );
     }
 }
