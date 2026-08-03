@@ -1,5 +1,4 @@
 /target/
 **/*.rs.bk
 *.profraw
-tests/julia/Manifest.toml
 /benchmarks/results/
