@@ -4,7 +4,7 @@ Coordinator: `/root`
 
 Started: `2026-08-03T23:32:13Z`
 
-Current phase: `Phase 1 - soundness and exact upstream inventory`
+Current phase: `Phase 2 - shared first-order integrator driver migration`
 
 Pinned upstream revision:
 
@@ -29,9 +29,11 @@ Pinned upstream revision:
 | Agent | Task | Branch/worktree | Status | Last update |
 | --- | --- | --- | --- | --- |
 | `/root/soundness_gate` | Simplifier/soundness gate | `codex/overnight-soundness`; `differential-equations-rs-worktrees/soundness-gate` | completed and merged as `408991c` | 2026-08-03T23:41:39Z |
-| `/root/inventory_audit` | Exact pinned regular-ODE inventory audit | `codex/overnight-inventory`; `differential-equations-rs-worktrees/inventory-audit` | active | 2026-08-03T23:32:13Z |
+| `/root/inventory_audit` | Exact pinned regular-ODE inventory audit | `codex/overnight-inventory`; `differential-equations-rs-worktrees/inventory-audit` | schema/source audit merged as `0579ff4`; cross-checkout byte-stability correction active | 2026-08-03T23:55:11Z |
 | `/root/julia_manifest_repro` | Make pinned Julia gate reproducible in fresh worktrees | `codex/overnight-julia-manifest`; `differential-equations-rs-worktrees/julia-manifest` | completed and merged as `57ea0f8` | 2026-08-03T23:45:00Z |
-| `/root/driver_explicit_wave` | Driver foundation and generic explicit-RK migration | `codex/overnight-driver-explicit`; `differential-equations-rs-worktrees/driver-explicit` | active | 2026-08-03T23:41:39Z |
+| `/root/driver_explicit_wave` | Driver foundation and generic explicit-RK migration | `codex/overnight-driver-explicit`; `differential-equations-rs-worktrees/driver-explicit` | completed and merged as `47c8ae5` | 2026-08-03T23:55:11Z |
+| `/root/explicit_upstream_audit` | Pinned explicit-RK dense/controller source audit | `codex/overnight-explicit-upstream-audit`; `differential-equations-rs-worktrees/explicit-upstream-audit` | active | 2026-08-03T23:55:11Z |
+| `/root/driver_implicit_wave` | Driver contract completion and implicit/TRBDF2 migration | `codex/overnight-driver-implicit`; `differential-equations-rs-worktrees/driver-implicit` | active | 2026-08-03T23:55:11Z |
 
 ## Completed waves
 
@@ -39,23 +41,24 @@ Pinned upstream revision:
 | --- | --- | ---: | ---: | --- |
 | Soundness | Custom `ButcherTableau` validation and one-stage adaptive scratch use | 70 pass | 202 pass | reviewed and merged as `408991c` |
 | Julia reproducibility | Track portable pinned manifest for 13 OrdinaryDiffEq packages | not applicable | pinned check plus 202 pass | reviewed and merged as `57ea0f8`; fresh-worktree check passed |
+| Driver foundation | Static `StepKernel`, lifecycle mocks, and generic fixed/adaptive explicit RK | 80 pass | 202 pass | reviewed and merged as `47c8ae5`; fixed solve remains 6 allocations |
 
 ## Validation snapshot
 
 ```text
 cargo fmt -- --check: pass
-cargo test --all-targets: pass (70 tests)
+cargo test --all-targets: pass (80 tests)
 cargo clippy --all-targets -- -D warnings: pass
 git diff --check: pass
 pinned Julia environment: pass and reproducible from tracked manifest (13 packages at pinned revision)
 Julia compliance: pass (202 tests)
-inventory regeneration: not run
+inventory regeneration: source/schema audit pass; coordinator byte check failed on CRLF checkout and corrective wave is active
 ```
 
 ## Next dependency-ready task
 
-Freeze the shared first-order integrator driver interface with mock-kernel coverage and migrate generic explicit RK while the exact inventory finishes.
+Extend the driver for recoverable implicit attempt failures and per-family controller metadata, then migrate one-step implicit/TRBDF2 before parallel family migrations.
 
 ## Last decision
 
-Soundness passed and merged. The pinned Julia gate is now fresh-worktree reproducible. The first driver wave and inventory regeneration remain active.
+The generic explicit driver wave passed and merged. The inventory wave remains unclosed because coordinator integration exposed a cross-checkout byte-stability defect; correction is active without blocking Phase 2.
