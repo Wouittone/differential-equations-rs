@@ -5,32 +5,36 @@ Coverage is measured against SciML/OrdinaryDiffEq.jl revision
 it has a Julia differential-compliance test; sharing a kernel with another
 method is not enough.
 
-## Implemented and benchmarked
+## Current status
 
-The current crate exposes 25 ODE algorithms:
+The generated pinned-revision inventory currently detects **65 of 346**
+in-scope public ODE names as both implemented and Julia-tested. The complete
+per-name and per-family ledger is generated in
+[`ODE_PARITY_INVENTORY.md`](ODE_PARITY_INVENTORY.md), with JSON and CSV forms
+alongside it.
 
-- adaptive explicit: `Tsit5`, `Midpoint`, `Heun`, `Ralston`, `BS3`, `DP5`,
-  `Alshina2`, `Alshina3`, and `SSPRK43`;
-- fixed explicit: `Euler`, `RK4`, `RKM`, `Ralston4`, `SSPRK22`, and `SSPRK33`;
-- fixed multistep: `AB3`, `AB4`, `AB5`, `ABM32`, `ABM43`, and `ABM54`;
-- fixed implicit: `ImplicitEuler`, `ImplicitMidpoint`, and `Trapezoid`;
-- adaptive linearly implicit: `Rosenbrock23`.
+Coverage now includes low/high-order and low-storage explicit Runge–Kutta,
+fixed and variable-step Adams, SSPRK, fixed implicit, TRBDF2, Rosenbrock/Rodas,
+and an initial `q' = v` symplectic family. The original 25 methods appear in
+the matched benchmark matrix; newly added methods have differential-compliance
+tests but have not yet been added to that benchmark.
 
-All 25 appear in the matched Rust/Julia benchmark matrix. This is algorithm
-name coverage, not full feature parity: dense output, event handling,
-arbitrary scalar types, limiters, and every upstream controller option remain
-separate work.
+This is algorithm-name coverage, not full feature parity. Basic discrete and
+scalar continuous callbacks plus `save_at` sampling are shared by implemented
+first-order methods; dense high-order output, arbitrary scalar types, limiters,
+and every upstream controller and callback option remain separate work. See
+[`FEATURE_COVERAGE.md`](FEATURE_COVERAGE.md).
 
 ## Remaining ODE work
 
 The port is not yet at OrdinaryDiffEq ODE algorithm parity. Major remaining
 groups include:
 
-- the rest of the low-, medium-, and high-order explicit Runge–Kutta catalog,
-  including Owren–Zen, BS5, Vern, Feagin, TanYam, and stabilized methods;
-- variable-step and variable-order Adams methods;
-- the remaining Rosenbrock, Rosenbrock–W, Rodas, SDIRK, ESDIRK, TRBDF2,
-  KenCarp, FIRK, BDF, and QNDF methods;
+- the rest of the low-, medium-, high-order, low-storage, and stabilized
+  explicit Runge–Kutta catalog, including Feagin and TanYam methods;
+- variable-order Adams and Nordsieck methods;
+- the remaining Rosenbrock, Rosenbrock–W, Rodas, SDIRK, ESDIRK, KenCarp,
+  FIRK, BDF, and QNDF methods;
 - IMEX, split, partitioned, and multirate ODE methods;
 - Runge–Kutta–Nyström, second-order, and symplectic ODE methods;
 - extrapolation, exponential, and automatic stiffness-switching methods.
@@ -42,5 +46,6 @@ algorithms. Dense analytic state-Jacobian callbacks are already supported by
 the current implicit and Rosenbrock kernels. DAE-only behavior remains out of
 scope even when an in-scope ODE algorithm also supports mass matrices upstream.
 
-Benchmark results must therefore be described as covering every *currently
-implemented* Rust solver, not every OrdinaryDiffEq ODE solver.
+Benchmark results must therefore be described as covering the original
+25-solver benchmark slice, not every currently implemented Rust solver or every
+OrdinaryDiffEq ODE solver.

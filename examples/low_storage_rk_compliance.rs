@@ -1,0 +1,38 @@
+use differential_equations::{
+    CarpenterKennedy2N54, Dglddrk73C, Dglddrk84C, Dglddrk84F, Ndblsrk124, Ndblsrk134, Ndblsrk144,
+    OdeAlgorithm, OdeProblem, Ork256, SaveMode, Shlddrk64, SolveOptions, solve,
+};
+
+type TestRhs = fn(&mut [f64], &[f64], &(), f64);
+
+fn problem() -> OdeProblem<TestRhs, ()> {
+    fn rhs(du: &mut [f64], u: &[f64], _: &(), time: f64) {
+        du[0] = u[0] + time;
+    }
+    OdeProblem::new(rhs, vec![1.0], (0.0, 1.0), ())
+}
+
+fn endpoint<A: OdeAlgorithm>(algorithm: A) -> f64 {
+    let options = SolveOptions {
+        adaptive: false,
+        initial_step: Some(0.01),
+        save: SaveMode::Endpoints,
+        ..SolveOptions::default()
+    };
+    solve(&problem(), algorithm, &options).unwrap().last_state()[0]
+}
+
+fn main() {
+    println!("ork256,{:.17e}", endpoint(Ork256));
+    println!(
+        "carpenter_kennedy_2n54,{:.17e}",
+        endpoint(CarpenterKennedy2N54)
+    );
+    println!("shlddrk64,{:.17e}", endpoint(Shlddrk64));
+    println!("dglddrk73_c,{:.17e}", endpoint(Dglddrk73C));
+    println!("dglddrk84_c,{:.17e}", endpoint(Dglddrk84C));
+    println!("dglddrk84_f,{:.17e}", endpoint(Dglddrk84F));
+    println!("ndblsrk124,{:.17e}", endpoint(Ndblsrk124));
+    println!("ndblsrk134,{:.17e}", endpoint(Ndblsrk134));
+    println!("ndblsrk144,{:.17e}", endpoint(Ndblsrk144));
+}

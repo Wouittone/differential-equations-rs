@@ -13,6 +13,104 @@ pub struct SolverStats {
     pub jacobian_evaluations: usize,
     /// Number of linear systems solved.
     pub linear_solves: usize,
+    /// Number of discrete or continuous callback effects applied.
+    pub callback_invocations: usize,
+}
+
+use crate::{SaveMode, SolveOptions};
+
+pub(crate) struct TrajectoryRecorder<'a> {
+    times: Vec<f64>,
+    values: Vec<f64>,
+    dimension: usize,
+    save_at: &'a [f64],
+    next_save: usize,
+    save_mode: SaveMode,
+    interpolation: Vec<f64>,
+}
+
+impl<'a> TrajectoryRecorder<'a> {
+    pub(crate) fn new(state: &[f64], time: f64, options: &'a SolveOptions) -> Self {
+        let save_initial = options.save_at.is_empty() || options.save_at.first() == Some(&time);
+        let capacity = if options.save_at.is_empty() {
+            2
+        } else {
+            options.save_at.len()
+        };
+        let mut times = Vec::with_capacity(capacity);
+        let mut values = Vec::with_capacity(capacity * state.len());
+        if save_initial {
+            times.push(time);
+            values.extend_from_slice(state);
+        }
+        Self {
+            times,
+            values,
+            dimension: state.len(),
+            save_at: &options.save_at,
+            next_save: usize::from(!options.save_at.is_empty() && save_initial),
+            save_mode: options.save,
+            interpolation: if options.save_at.is_empty() {
+                Vec::new()
+            } else {
+                vec![0.0; state.len()]
+            },
+        }
+    }
+
+    pub(crate) fn record_step(
+        &mut self,
+        previous_state: &[f64],
+        previous_time: f64,
+        state: &[f64],
+        time: f64,
+        final_time: bool,
+    ) {
+        if self.save_at.is_empty() {
+            if self.save_mode == SaveMode::EveryStep || final_time {
+                self.push_unique(time, state);
+            }
+            return;
+        }
+
+        let direction = (time - previous_time).signum();
+        while let Some(&target) = self.save_at.get(self.next_save) {
+            if direction * (target - previous_time) <= 0.0 {
+                self.next_save += 1;
+                continue;
+            }
+            if direction * (time - target) < 0.0 {
+                break;
+            }
+            let fraction = (target - previous_time) / (time - previous_time);
+            for ((output, previous), current) in
+                self.interpolation.iter_mut().zip(previous_state).zip(state)
+            {
+                *output = previous + fraction * (current - previous);
+            }
+            self.times.push(target);
+            self.values.extend_from_slice(&self.interpolation);
+            self.next_save += 1;
+        }
+    }
+
+    pub(crate) fn finish(self, stats: SolverStats) -> Solution {
+        Solution::new(self.times, self.values, self.dimension, stats)
+    }
+
+    pub(crate) fn force_state(&mut self, time: f64, state: &[f64]) {
+        self.push_unique(time, state);
+    }
+
+    fn push_unique(&mut self, time: f64, state: &[f64]) {
+        if self.times.last() == Some(&time) {
+            let start = self.values.len() - self.dimension;
+            self.values[start..].copy_from_slice(state);
+        } else {
+            self.times.push(time);
+            self.values.extend_from_slice(state);
+        }
+    }
 }
 
 /// A saved ODE trajectory.

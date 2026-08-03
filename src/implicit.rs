@@ -1,5 +1,6 @@
 use crate::linear::{factorize, solve_factorized};
-use crate::{OdeAlgorithm, OdeProblem, SaveMode, Solution, SolveError, SolveOptions, SolverStats};
+use crate::solution::TrajectoryRecorder;
+use crate::{OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions, SolverStats};
 
 const MAX_NEWTON_ITERATIONS: usize = 12;
 const NEWTON_TOLERANCE: f64 = 1.0e-12;
@@ -99,8 +100,20 @@ where
     let direction = (end - start).signum();
     let maximum_step = options.max_step.min(fixed_step);
     let mut state = problem.initial_state().to_vec();
+    let mut state_before_effect = if problem.has_callbacks() {
+        vec![0.0; dimension]
+    } else {
+        Vec::new()
+    };
     let mut workspace = Workspace::new(dimension);
     let mut stats = SolverStats::default();
+    let initial_callbacks = problem.apply_initial_callbacks(&mut state, start)?;
+    stats.callback_invocations += initial_callbacks.invocations;
+    let mut recorder = TrajectoryRecorder::new(&state, start, options);
+    if initial_callbacks.terminate {
+        recorder.force_state(start, &state);
+        return Ok(recorder.finish(stats));
+    }
     evaluate_checked(
         problem,
         &mut workspace.current_derivative,
@@ -110,9 +123,6 @@ where
     )?;
 
     let mut time = start;
-    let mut times = vec![start];
-    let mut values = Vec::with_capacity(2 * dimension);
-    values.extend_from_slice(&state);
     let mut steps = 0;
 
     while direction * (end - time) > 0.0 {
@@ -143,11 +153,42 @@ where
             &mut stats,
         )?;
 
-        time += step;
-        if direction * (end - time) <= 0.0 {
-            time = end;
+        let previous_time = time;
+        let mut next_time = time + step;
+        if direction * (end - next_time) <= 0.0 {
+            next_time = end;
         }
+        let callbacks = problem.apply_step_callbacks(
+            &state,
+            previous_time,
+            &mut workspace.candidate,
+            &mut next_time,
+            &mut state_before_effect,
+        )?;
+        stats.callback_invocations += callbacks.invocations;
+        time = next_time;
         std::mem::swap(&mut state, &mut workspace.candidate);
+        if callbacks.invocations > 0 {
+            workspace.factorization_scale = None;
+        }
+        stats.accepted_steps += 1;
+        recorder.record_step(
+            &workspace.candidate,
+            previous_time,
+            if callbacks.invocations == 0 {
+                &state
+            } else {
+                &state_before_effect
+            },
+            time,
+            time == end,
+        );
+        if callbacks.invocations > 0 {
+            recorder.force_state(time, &state);
+        }
+        if callbacks.terminate {
+            return Ok(recorder.finish(stats));
+        }
         evaluate_checked(
             problem,
             &mut workspace.current_derivative,
@@ -155,15 +196,9 @@ where
             time,
             &mut stats,
         )?;
-        stats.accepted_steps += 1;
-
-        if options.save == SaveMode::EveryStep || time == end {
-            times.push(time);
-            values.extend_from_slice(&state);
-        }
     }
 
-    Ok(Solution::new(times, values, dimension, stats))
+    Ok(recorder.finish(stats))
 }
 
 fn newton_step<F, P>(

@@ -1,5 +1,6 @@
 use crate::linear::{factorize, solve_factorized};
-use crate::{OdeAlgorithm, OdeProblem, SaveMode, Solution, SolveError, SolveOptions, SolverStats};
+use crate::solution::TrajectoryRecorder;
+use crate::{OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions, SolverStats};
 
 const GAMMA: f64 = 1.0 / (2.0 + std::f64::consts::SQRT_2);
 const C32: f64 = 6.0 + std::f64::consts::SQRT_2;
@@ -79,8 +80,20 @@ where
     let interval = (end - start).abs();
     let maximum_step = options.max_step.min(interval);
     let mut state = problem.initial_state().to_vec();
+    let mut state_before_effect = if problem.has_callbacks() {
+        vec![0.0; dimension]
+    } else {
+        Vec::new()
+    };
     let mut workspace = Workspace::new(dimension);
     let mut stats = SolverStats::default();
+    let initial_callbacks = problem.apply_initial_callbacks(&mut state, start)?;
+    stats.callback_invocations += initial_callbacks.invocations;
+    let mut recorder = TrajectoryRecorder::new(&state, start, options);
+    if initial_callbacks.terminate {
+        recorder.force_state(start, &state);
+        return Ok(recorder.finish(stats));
+    }
     evaluate(
         problem,
         &mut workspace.current_derivative,
@@ -96,9 +109,6 @@ where
     };
     let mut step = direction * initial_step;
     let mut time = start;
-    let mut times = vec![start];
-    let mut values = Vec::with_capacity(2 * dimension);
-    values.extend_from_slice(&state);
     let mut attempts = 0;
     let mut previous_rejected = false;
 
@@ -124,12 +134,41 @@ where
             &mut stats,
         )?;
         if error <= 1.0 {
-            time += step;
-            if direction * (end - time) <= 0.0 {
-                time = end;
+            let previous_time = time;
+            let mut next_time = time + step;
+            if direction * (end - next_time) <= 0.0 {
+                next_time = end;
             }
+            let callbacks = problem.apply_step_callbacks(
+                &state,
+                previous_time,
+                &mut workspace.candidate,
+                &mut next_time,
+                &mut state_before_effect,
+            )?;
+            stats.callback_invocations += callbacks.invocations;
+            time = next_time;
             std::mem::swap(&mut state, &mut workspace.candidate);
-            if options.adaptive {
+            stats.accepted_steps += 1;
+            workspace.differentiation_valid = false;
+            recorder.record_step(
+                &workspace.candidate,
+                previous_time,
+                if callbacks.invocations == 0 {
+                    &state
+                } else {
+                    &state_before_effect
+                },
+                time,
+                time == end,
+            );
+            if callbacks.invocations > 0 {
+                recorder.force_state(time, &state);
+            }
+            if callbacks.terminate {
+                return Ok(recorder.finish(stats));
+            }
+            if options.adaptive && callbacks.invocations == 0 {
                 std::mem::swap(
                     &mut workspace.current_derivative,
                     &mut workspace.candidate_derivative,
@@ -142,13 +181,6 @@ where
                     time,
                     &mut stats,
                 )?;
-            }
-            stats.accepted_steps += 1;
-            workspace.differentiation_valid = false;
-
-            if options.save == SaveMode::EveryStep || time == end {
-                times.push(time);
-                values.extend_from_slice(&state);
             }
             if options.adaptive {
                 let mut factor = step_factor(error);
@@ -165,7 +197,7 @@ where
         }
     }
 
-    Ok(Solution::new(times, values, dimension, stats))
+    Ok(recorder.finish(stats))
 }
 
 fn perform_step<F, P>(

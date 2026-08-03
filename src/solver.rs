@@ -14,7 +14,7 @@ pub enum SaveMode {
 }
 
 /// Common options for adaptive ODE solvers.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct SolveOptions {
     /// Absolute local-error tolerance.
     pub absolute_tolerance: f64,
@@ -33,6 +33,12 @@ pub struct SolveOptions {
     pub max_steps: usize,
     /// Accepted states retained in the solution.
     pub save: SaveMode,
+    /// Requested output times. Empty means to follow [`save`](Self::save).
+    ///
+    /// Values must be finite, lie inside the time span, and be ordered in the
+    /// integration direction. As in SciML, supplying values overrides the
+    /// ordinary start/end/every-step saving controlled by [`save`](Self::save).
+    pub save_at: Vec<f64>,
 }
 
 impl Default for SolveOptions {
@@ -45,6 +51,7 @@ impl Default for SolveOptions {
             max_step: f64::INFINITY,
             max_steps: 100_000,
             save: SaveMode::EveryStep,
+            save_at: Vec::new(),
         }
     }
 }
@@ -63,6 +70,9 @@ pub enum SolveError {
     InvalidMaxSteps,
     InvalidTableau,
     NonFiniteDerivative,
+    InvalidSaveAt,
+    NonFiniteCallbackCondition,
+    NonFiniteCallbackState,
     NonlinearSolveFailed,
     SingularLinearSystem,
     StepSizeUnderflow,
@@ -87,6 +97,13 @@ impl Display for SolveError {
             Self::InvalidMaxSteps => "the maximum step count must be positive",
             Self::InvalidTableau => "the explicit Runge–Kutta tableau is malformed",
             Self::NonFiniteDerivative => "the right-hand side produced a non-finite derivative",
+            Self::InvalidSaveAt => {
+                "save-at times must be finite, ordered, and inside the time span"
+            }
+            Self::NonFiniteCallbackCondition => {
+                "a continuous callback condition produced a non-finite value"
+            }
+            Self::NonFiniteCallbackState => "a callback produced a non-finite state",
             Self::NonlinearSolveFailed => "the implicit nonlinear solve did not converge",
             Self::SingularLinearSystem => "the implicit linear system is singular",
             Self::StepSizeUnderflow => "the adaptive step size underflowed",
@@ -157,6 +174,16 @@ fn validate<F, P>(problem: &OdeProblem<F, P>, options: &SolveOptions) -> Result<
     }
     if options.max_steps == 0 {
         return Err(SolveError::InvalidMaxSteps);
+    }
+    let direction = (end - start).signum();
+    if !options.save_at.iter().all(|time| {
+        time.is_finite() && direction * (*time - start) >= 0.0 && direction * (end - *time) >= 0.0
+    }) || options
+        .save_at
+        .windows(2)
+        .any(|pair| direction * (pair[1] - pair[0]) <= 0.0)
+    {
+        return Err(SolveError::InvalidSaveAt);
     }
 
     Ok(())

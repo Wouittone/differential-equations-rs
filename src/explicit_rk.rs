@@ -1,4 +1,5 @@
-use crate::{OdeAlgorithm, OdeProblem, SaveMode, Solution, SolveError, SolveOptions, SolverStats};
+use crate::solution::TrajectoryRecorder;
+use crate::{OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions, SolverStats};
 use std::marker::PhantomData;
 
 const SAFETY: f64 = 0.9;
@@ -16,6 +17,9 @@ pub trait ButcherTableau {
     const COEFFICIENTS: &'static [&'static [f64]];
     const WEIGHTS: &'static [f64];
     const ERROR_WEIGHTS: Option<&'static [f64]>;
+    /// A second embedded error estimator, combined with the first by taking
+    /// the larger scaled norm. Most methods use only [`Self::ERROR_WEIGHTS`].
+    const SECOND_ERROR_WEIGHTS: Option<&'static [f64]> = None;
     const ORDER: usize;
     const FSAL: bool;
 }
@@ -188,6 +192,202 @@ const DP5_E: &[f64] = &[
 ];
 const DP5_C: &[f64] = &[0.0, 1.0 / 5.0, 3.0 / 10.0, 4.0 / 5.0, 8.0 / 9.0, 1.0, 1.0];
 
+// Owren-Zennaro 3/2 pair.
+const OWREN_ZEN3_A2: &[f64] = &[12.0 / 23.0];
+const OWREN_ZEN3_A3: &[f64] = &[-68.0 / 375.0, 368.0 / 375.0];
+const OWREN_ZEN3_A4: &[f64] = &[31.0 / 144.0, 529.0 / 1_152.0, 125.0 / 384.0];
+const OWREN_ZEN3_A: &[&[f64]] = &[EMPTY, OWREN_ZEN3_A2, OWREN_ZEN3_A3, OWREN_ZEN3_A4];
+const OWREN_ZEN3_B: &[f64] = &[31.0 / 144.0, 529.0 / 1_152.0, 125.0 / 384.0, 0.0];
+const OWREN_ZEN3_E: &[f64] = &[-25.0 / 144.0, 575.0 / 1_152.0, -125.0 / 384.0, 0.0];
+const OWREN_ZEN3_C: &[f64] = &[0.0, 12.0 / 23.0, 4.0 / 5.0, 1.0];
+
+// Owren-Zennaro 4/3 pair.
+const OWREN_ZEN4_A2: &[f64] = &[1.0 / 6.0];
+const OWREN_ZEN4_A3: &[f64] = &[44.0 / 1_369.0, 363.0 / 1_369.0];
+const OWREN_ZEN4_A4: &[f64] = &[3_388.0 / 4_913.0, -8_349.0 / 4_913.0, 8_140.0 / 4_913.0];
+const OWREN_ZEN4_A5: &[f64] = &[
+    -36_764.0 / 408_375.0,
+    767.0 / 1_125.0,
+    -32_708.0 / 136_125.0,
+    210_392.0 / 408_375.0,
+];
+const OWREN_ZEN4_A6: &[f64] = &[
+    1_697.0 / 18_876.0,
+    0.0,
+    50_653.0 / 116_160.0,
+    299_693.0 / 1_626_240.0,
+    3_375.0 / 11_648.0,
+];
+const OWREN_ZEN4_A: &[&[f64]] = &[
+    EMPTY,
+    OWREN_ZEN4_A2,
+    OWREN_ZEN4_A3,
+    OWREN_ZEN4_A4,
+    OWREN_ZEN4_A5,
+    OWREN_ZEN4_A6,
+];
+const OWREN_ZEN4_B: &[f64] = &[
+    1_697.0 / 18_876.0,
+    0.0,
+    50_653.0 / 116_160.0,
+    299_693.0 / 1_626_240.0,
+    3_375.0 / 11_648.0,
+    0.0,
+];
+const OWREN_ZEN4_E: &[f64] = &[
+    1_185.0 / 6_292.0,
+    0.0,
+    -4_107.0 / 7_744.0,
+    68_493.0 / 108_416.0,
+    -3_375.0 / 11_648.0,
+    0.0,
+];
+const OWREN_ZEN4_C: &[f64] = &[0.0, 1.0 / 6.0, 11.0 / 37.0, 11.0 / 17.0, 13.0 / 15.0, 1.0];
+
+// Owren-Zennaro 5/4 pair.
+const OWREN_ZEN5_A2: &[f64] = &[1.0 / 6.0];
+const OWREN_ZEN5_A3: &[f64] = &[1.0 / 16.0, 3.0 / 16.0];
+const OWREN_ZEN5_A4: &[f64] = &[1.0 / 4.0, -3.0 / 4.0, 1.0];
+const OWREN_ZEN5_A5: &[f64] = &[-3.0 / 4.0, 15.0 / 4.0, -3.0, 1.0 / 2.0];
+const OWREN_ZEN5_A6: &[f64] = &[
+    369.0 / 1_372.0,
+    -243.0 / 343.0,
+    297.0 / 343.0,
+    1_485.0 / 9_604.0,
+    297.0 / 4_802.0,
+];
+const OWREN_ZEN5_A7: &[f64] = &[
+    -133.0 / 4_512.0,
+    1_113.0 / 6_016.0,
+    7_945.0 / 16_544.0,
+    -12_845.0 / 24_064.0,
+    -315.0 / 24_064.0,
+    156_065.0 / 198_528.0,
+];
+const OWREN_ZEN5_A8: &[f64] = &[
+    83.0 / 945.0,
+    0.0,
+    248.0 / 825.0,
+    41.0 / 180.0,
+    1.0 / 36.0,
+    2_401.0 / 38_610.0,
+    6_016.0 / 20_475.0,
+];
+const OWREN_ZEN5_A: &[&[f64]] = &[
+    EMPTY,
+    OWREN_ZEN5_A2,
+    OWREN_ZEN5_A3,
+    OWREN_ZEN5_A4,
+    OWREN_ZEN5_A5,
+    OWREN_ZEN5_A6,
+    OWREN_ZEN5_A7,
+    OWREN_ZEN5_A8,
+];
+const OWREN_ZEN5_B: &[f64] = &[
+    83.0 / 945.0,
+    0.0,
+    248.0 / 825.0,
+    41.0 / 180.0,
+    1.0 / 36.0,
+    2_401.0 / 38_610.0,
+    6_016.0 / 20_475.0,
+    0.0,
+];
+const OWREN_ZEN5_E: &[f64] = &[
+    -188.0 / 945.0,
+    0.0,
+    752.0 / 825.0,
+    -89.0 / 45.0,
+    -1.0 / 9.0,
+    32_242.0 / 19_305.0,
+    -6_016.0 / 20_475.0,
+    0.0,
+];
+const OWREN_ZEN5_C: &[f64] = &[
+    0.0,
+    1.0 / 6.0,
+    1.0 / 4.0,
+    1.0 / 2.0,
+    1.0 / 2.0,
+    9.0 / 14.0,
+    7.0 / 8.0,
+    1.0,
+];
+
+// Bogacki-Shampine 5/4 pair. Its controller uses the maximum of two embedded
+// estimators, represented by ERROR_WEIGHTS and SECOND_ERROR_WEIGHTS.
+const BS5_A2: &[f64] = &[1.0 / 6.0];
+const BS5_A3: &[f64] = &[2.0 / 27.0, 4.0 / 27.0];
+const BS5_A4: &[f64] = &[183.0 / 1_372.0, -162.0 / 343.0, 1_053.0 / 1_372.0];
+const BS5_A5: &[f64] = &[68.0 / 297.0, -4.0 / 11.0, 42.0 / 143.0, 1_960.0 / 3_861.0];
+const BS5_A6: &[f64] = &[
+    597.0 / 22_528.0,
+    81.0 / 352.0,
+    63_099.0 / 585_728.0,
+    58_653.0 / 366_080.0,
+    4_617.0 / 20_480.0,
+];
+const BS5_A7: &[f64] = &[
+    174_197.0 / 959_244.0,
+    -30_942.0 / 79_937.0,
+    8_152_137.0 / 19_744_439.0,
+    666_106.0 / 1_039_181.0,
+    -29_421.0 / 29_068.0,
+    482_048.0 / 414_219.0,
+];
+const BS5_A8: &[f64] = &[
+    587.0 / 8_064.0,
+    0.0,
+    4_440_339.0 / 15_491_840.0,
+    24_353.0 / 124_800.0,
+    387.0 / 44_800.0,
+    2_152.0 / 5_985.0,
+    7_267.0 / 94_080.0,
+];
+const BS5_A: &[&[f64]] = &[
+    EMPTY, BS5_A2, BS5_A3, BS5_A4, BS5_A5, BS5_A6, BS5_A7, BS5_A8,
+];
+const BS5_B: &[f64] = &[
+    587.0 / 8_064.0,
+    0.0,
+    4_440_339.0 / 15_491_840.0,
+    24_353.0 / 124_800.0,
+    387.0 / 44_800.0,
+    2_152.0 / 5_985.0,
+    7_267.0 / 94_080.0,
+    0.0,
+];
+const BS5_E1: &[f64] = &[
+    -3.0 / 1_280.0,
+    0.0,
+    6_561.0 / 632_320.0,
+    -343.0 / 20_800.0,
+    243.0 / 12_800.0,
+    -1.0 / 95.0,
+    0.0,
+    0.0,
+];
+const BS5_E2: &[f64] = &[
+    -3_817.0 / 1_959_552.0,
+    0.0,
+    140_181.0 / 15_491_840.0,
+    -4_224_731.0 / 272_937_600.0,
+    8_557.0 / 403_200.0,
+    -57_928.0 / 4_363_065.0,
+    -23_930_231.0 / 4_366_535_040.0,
+    3_293.0 / 556_956.0,
+];
+const BS5_C: &[f64] = &[
+    0.0,
+    1.0 / 6.0,
+    2.0 / 9.0,
+    3.0 / 7.0,
+    2.0 / 3.0,
+    3.0 / 4.0,
+    1.0,
+    1.0,
+];
+
 const SSPRK22_A: &[&[f64]] = &[EMPTY, HEUN_A2];
 const SSPRK22_B: &[f64] = HEUN_B;
 const SSPRK22_C: &[f64] = HEUN_C;
@@ -356,6 +556,67 @@ algorithm!(
     fsal = true
 );
 algorithm!(
+    OwrenZen3,
+    "The adaptive Owren-Zennaro 3/2 method with a free third-order interpolant upstream.",
+    nodes = OWREN_ZEN3_C,
+    coefficients = OWREN_ZEN3_A,
+    weights = OWREN_ZEN3_B,
+    error_weights = Some(OWREN_ZEN3_E),
+    order = 3,
+    fsal = true
+);
+algorithm!(
+    OwrenZen4,
+    "The adaptive Owren-Zennaro 4/3 method with a free fourth-order interpolant upstream.",
+    nodes = OWREN_ZEN4_C,
+    coefficients = OWREN_ZEN4_A,
+    weights = OWREN_ZEN4_B,
+    error_weights = Some(OWREN_ZEN4_E),
+    order = 4,
+    fsal = true
+);
+algorithm!(
+    OwrenZen5,
+    "The adaptive Owren-Zennaro 5/4 method with a free fifth-order interpolant upstream.",
+    nodes = OWREN_ZEN5_C,
+    coefficients = OWREN_ZEN5_A,
+    weights = OWREN_ZEN5_B,
+    error_weights = Some(OWREN_ZEN5_E),
+    order = 5,
+    fsal = true
+);
+
+/// The adaptive Bogacki-Shampine 5/4 method.
+///
+/// OrdinaryDiffEq uses the maximum of two embedded estimators for this method;
+/// both are retained here. Its optional extra stages are used only by the
+/// upstream dense interpolant and are therefore outside the shared step kernel.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct Bs5;
+
+impl ButcherTableau for Bs5 {
+    const NODES: &'static [f64] = BS5_C;
+    const COEFFICIENTS: &'static [&'static [f64]] = BS5_A;
+    const WEIGHTS: &'static [f64] = BS5_B;
+    const ERROR_WEIGHTS: Option<&'static [f64]> = Some(BS5_E1);
+    const SECOND_ERROR_WEIGHTS: Option<&'static [f64]> = Some(BS5_E2);
+    const ORDER: usize = 5;
+    const FSAL: bool = true;
+}
+
+impl OdeAlgorithm for Bs5 {
+    fn solve<F, P>(
+        &self,
+        problem: &OdeProblem<F, P>,
+        options: &SolveOptions,
+    ) -> Result<Solution, SolveError>
+    where
+        F: Fn(&mut [f64], &[f64], &P, f64),
+    {
+        ExplicitRungeKutta::<Self>::new().solve(problem, options)
+    }
+}
+algorithm!(
     SspRk22,
     "The fixed-step two-stage, second-order SSP Runge–Kutta method.",
     nodes = SSPRK22_C,
@@ -434,6 +695,8 @@ fn validate_tableau<T: ButcherTableau>() -> Result<(), SolveError> {
             .enumerate()
             .all(|(stage, row)| row.len() == stage)
         && T::ERROR_WEIGHTS.is_none_or(|weights| weights.len() == stage_count);
+    let error_estimators_valid = T::SECOND_ERROR_WEIGHTS
+        .is_none_or(|weights| T::ERROR_WEIGHTS.is_some() && weights.len() == stage_count);
     let coefficients_finite = T::NODES.iter().all(|value| value.is_finite())
         && T::WEIGHTS.iter().all(|value| value.is_finite())
         && T::COEFFICIENTS
@@ -441,6 +704,8 @@ fn validate_tableau<T: ButcherTableau>() -> Result<(), SolveError> {
             .flat_map(|row| row.iter())
             .all(|value| value.is_finite())
         && T::ERROR_WEIGHTS.is_none_or(|weights| weights.iter().all(|value| value.is_finite()));
+    let second_error_estimator_finite =
+        T::SECOND_ERROR_WEIGHTS.is_none_or(|weights| weights.iter().all(|value| value.is_finite()));
     let fsal_valid = !T::FSAL
         || (T::NODES.last() == Some(&1.0)
             && T::WEIGHTS.last() == Some(&0.0)
@@ -448,7 +713,11 @@ fn validate_tableau<T: ButcherTableau>() -> Result<(), SolveError> {
                 .last()
                 .is_some_and(|last_row| *last_row == &T::WEIGHTS[..stage_count - 1]));
 
-    (structurally_valid && coefficients_finite && fsal_valid)
+    (structurally_valid
+        && error_estimators_valid
+        && coefficients_finite
+        && second_error_estimator_finite
+        && fsal_valid)
         .then_some(())
         .ok_or(SolveError::InvalidTableau)
 }
@@ -476,8 +745,20 @@ where
     let interval = (end - start).abs();
     let maximum_step = options.max_step.min(interval);
     let mut state = problem.initial_state().to_vec();
+    let mut state_before_effect = if problem.has_callbacks() {
+        vec![0.0; dimension]
+    } else {
+        Vec::new()
+    };
     let mut workspace = Workspace::new(T::WEIGHTS.len(), dimension);
     let mut stats = SolverStats::default();
+    let initial_callbacks = problem.apply_initial_callbacks(&mut state, start)?;
+    stats.callback_invocations += initial_callbacks.invocations;
+    let mut recorder = TrajectoryRecorder::new(&state, start, options);
+    if initial_callbacks.terminate {
+        recorder.force_state(start, &state);
+        return Ok(recorder.finish(stats));
+    }
     evaluate(
         problem,
         &mut workspace.stages[..dimension],
@@ -501,9 +782,6 @@ where
     };
     let mut step = direction * step_magnitude;
     let mut time = start;
-    let mut times = vec![start];
-    let mut values = Vec::with_capacity(2 * dimension);
-    values.extend_from_slice(&state);
     let mut attempted_steps = 0;
     let mut previous_step_rejected = false;
     let mut stage_zero_is_current = true;
@@ -533,7 +811,7 @@ where
         perform_step::<F, P, T>(problem, &state, time, step, &mut workspace, &mut stats);
         ensure_finite(&workspace.candidate)?;
         let error = if adaptive {
-            error_norm(
+            let primary_error = error_norm(
                 &workspace.stages,
                 dimension,
                 (&state, &workspace.candidate),
@@ -541,28 +819,61 @@ where
                 options,
                 T::ERROR_WEIGHTS.expect("checked above"),
                 &mut workspace.temporary,
-            )
+            );
+            T::SECOND_ERROR_WEIGHTS.map_or(primary_error, |weights| {
+                primary_error.max(error_norm(
+                    &workspace.stages,
+                    dimension,
+                    (&state, &workspace.candidate),
+                    step,
+                    options,
+                    weights,
+                    &mut workspace.temporary,
+                ))
+            })
         } else {
             0.0
         };
 
         if error <= 1.0 {
-            time += step;
-            if direction * (end - time) <= 0.0 {
-                time = end;
+            let previous_time = time;
+            let mut next_time = time + step;
+            if direction * (end - next_time) <= 0.0 {
+                next_time = end;
             }
+            let callbacks = problem.apply_step_callbacks(
+                &state,
+                previous_time,
+                &mut workspace.candidate,
+                &mut next_time,
+                &mut state_before_effect,
+            )?;
+            stats.callback_invocations += callbacks.invocations;
+            time = next_time;
             std::mem::swap(&mut state, &mut workspace.candidate);
-            if T::FSAL {
+            if T::FSAL && callbacks.invocations == 0 {
                 workspace.swap_stages(0, workspace.stage_count - 1);
                 stage_zero_is_current = true;
             } else {
                 stage_zero_is_current = false;
             }
             stats.accepted_steps += 1;
-
-            if options.save == SaveMode::EveryStep || time == end {
-                times.push(time);
-                values.extend_from_slice(&state);
+            recorder.record_step(
+                &workspace.candidate,
+                previous_time,
+                if callbacks.invocations == 0 {
+                    &state
+                } else {
+                    &state_before_effect
+                },
+                time,
+                time == end,
+            );
+            if callbacks.invocations > 0 {
+                recorder.force_state(time, &state);
+            }
+            if callbacks.terminate {
+                return Ok(recorder.finish(stats));
             }
 
             if adaptive {
@@ -581,7 +892,7 @@ where
         }
     }
 
-    Ok(Solution::new(times, values, dimension, stats))
+    Ok(recorder.finish(stats))
 }
 
 fn evaluate<F, P>(
@@ -776,7 +1087,7 @@ fn step_factor(error: f64, order: usize) -> f64 {
 mod tests {
     use std::f64::consts::E;
 
-    use super::{ButcherTableau, ExplicitRungeKutta};
+    use super::{Bs5, ButcherTableau, ExplicitRungeKutta, OwrenZen3, OwrenZen4, OwrenZen5};
     use crate::{
         Alshina2, Alshina3, Bs3, Dp5, Euler, Heun, Midpoint, OdeProblem, Ralston, Ralston4, Rk4,
         Rkm, SaveMode, SolveError, SolveOptions, SspRk22, SspRk33, SspRk43, solve,
@@ -802,6 +1113,30 @@ mod tests {
         const COEFFICIENTS: &'static [&'static [f64]] = &[&[]];
         const WEIGHTS: &'static [f64] = &[1.0];
         const ERROR_WEIGHTS: Option<&'static [f64]> = None;
+        const ORDER: usize = 1;
+        const FSAL: bool = false;
+    }
+
+    struct DualEstimatorHeun;
+
+    impl ButcherTableau for DualEstimatorHeun {
+        const NODES: &'static [f64] = &[0.0, 1.0];
+        const COEFFICIENTS: &'static [&'static [f64]] = &[&[], &[1.0]];
+        const WEIGHTS: &'static [f64] = &[0.5, 0.5];
+        const ERROR_WEIGHTS: Option<&'static [f64]> = Some(&[0.0, 0.0]);
+        const SECOND_ERROR_WEIGHTS: Option<&'static [f64]> = Some(&[-0.5, 0.5]);
+        const ORDER: usize = 2;
+        const FSAL: bool = false;
+    }
+
+    struct MalformedSecondEstimator;
+
+    impl ButcherTableau for MalformedSecondEstimator {
+        const NODES: &'static [f64] = &[0.0];
+        const COEFFICIENTS: &'static [&'static [f64]] = &[&[]];
+        const WEIGHTS: &'static [f64] = &[1.0];
+        const ERROR_WEIGHTS: Option<&'static [f64]> = Some(&[0.0]);
+        const SECOND_ERROR_WEIGHTS: Option<&'static [f64]> = Some(&[]);
         const ORDER: usize = 1;
         const FSAL: bool = false;
     }
@@ -844,6 +1179,65 @@ mod tests {
         ] {
             assert!((endpoint - E).abs() < 2.0e-7);
         }
+    }
+
+    fn fixed_endpoint<T: crate::OdeAlgorithm>(algorithm: T, step: f64) -> f64 {
+        let options = SolveOptions {
+            adaptive: false,
+            initial_step: Some(step),
+            save: SaveMode::Endpoints,
+            ..SolveOptions::default()
+        };
+        solve(&exponential(), algorithm, &options)
+            .unwrap()
+            .last_state()[0]
+    }
+
+    fn convergence_ratio<T: crate::OdeAlgorithm + Copy>(algorithm: T, step: f64) -> f64 {
+        let coarse = (fixed_endpoint(algorithm, step) - E).abs();
+        let fine = (fixed_endpoint(algorithm, step / 2.0) - E).abs();
+        coarse / fine
+    }
+
+    #[test]
+    fn owren_zen_and_bs5_have_their_expected_orders() {
+        let ratios = [
+            convergence_ratio(OwrenZen3, 0.1),
+            convergence_ratio(OwrenZen4, 0.1),
+            convergence_ratio(OwrenZen5, 0.1),
+            convergence_ratio(Bs5, 0.1),
+        ];
+        assert!(ratios[0] > 7.0);
+        assert!(ratios[1] > 14.0);
+        assert!(ratios[2] > 25.0);
+        assert!(ratios[3] > 25.0);
+    }
+
+    #[test]
+    fn owren_zen_and_bs5_adaptive_solvers_reach_tight_tolerance() {
+        for endpoint in [
+            solve(&exponential(), OwrenZen3, &adaptive_options())
+                .unwrap()
+                .last_state()[0],
+            solve(&exponential(), OwrenZen4, &adaptive_options())
+                .unwrap()
+                .last_state()[0],
+            solve(&exponential(), OwrenZen5, &adaptive_options())
+                .unwrap()
+                .last_state()[0],
+            solve(&exponential(), Bs5, &adaptive_options())
+                .unwrap()
+                .last_state()[0],
+        ] {
+            assert!((endpoint - E).abs() < 2.0e-7);
+        }
+    }
+
+    #[test]
+    fn bs5_retains_both_upstream_error_estimators() {
+        assert!(Bs5::ERROR_WEIGHTS.is_some());
+        assert!(Bs5::SECOND_ERROR_WEIGHTS.is_some());
+        assert_ne!(Bs5::ERROR_WEIGHTS, Bs5::SECOND_ERROR_WEIGHTS);
     }
 
     #[test]
@@ -932,6 +1326,34 @@ mod tests {
             ),
             Err(SolveError::InvalidTableau)
         );
+        assert_eq!(
+            solve(
+                &problem,
+                ExplicitRungeKutta::<MalformedSecondEstimator>::new(),
+                &adaptive_options(),
+            ),
+            Err(SolveError::InvalidTableau)
+        );
+    }
+
+    #[test]
+    fn combines_two_error_estimators_by_their_maximum_norm() {
+        let options = SolveOptions {
+            absolute_tolerance: 1.0e-9,
+            relative_tolerance: 1.0e-9,
+            initial_step: Some(1.0),
+            save: SaveMode::Endpoints,
+            ..SolveOptions::default()
+        };
+
+        let solution = solve(
+            &exponential(),
+            ExplicitRungeKutta::<DualEstimatorHeun>::new(),
+            &options,
+        )
+        .unwrap();
+
+        assert!(solution.stats().rejected_steps > 0);
     }
 
     #[test]

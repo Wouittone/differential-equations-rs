@@ -24,9 +24,11 @@ The working goals are:
 - record discrepancies instead of silently weakening tolerances.
 
 The solver target is native OrdinaryDiffEq.jl **ODE algorithm parity**.
-SDEs, RODEs, DDEs, DAEs, and external solver wrappers are explicitly out of
-scope. Events, dense interpolation, arbitrary numeric types, and sensitivities
-are separate API features and are not implied by algorithm parity.
+SDEs, RODEs, DDEs, DAEs, boundary-value problems, and external solver wrappers
+are explicitly out of scope. Basic discrete and continuous event callbacks and
+`save_at` sampling are implemented; dense high-order interpolation, arbitrary
+numeric types, and sensitivities remain separate API features and are not
+implied by algorithm parity.
 
 ## Method
 
@@ -53,6 +55,28 @@ let problem = OdeProblem::new(rhs, initial_state, time_span, parameters)
     });
 ```
 
+Discrete and scalar zero-crossing callbacks can change the state, continue the
+solve, or terminate it. Solver caches are invalidated automatically after an
+effect:
+
+```rust
+use differential_equations::{CallbackAction, OdeProblem};
+
+let problem = OdeProblem::new(rhs, initial_state, time_span, parameters)
+    .with_continuous_callback(
+        |state, _parameters, _time| state[0],
+        |state, _parameters, _time| {
+            state[0] = -state[0];
+            CallbackAction::Continue
+        },
+    );
+```
+
+Set `SolveOptions::save_at` to ordered output times. Like SciML's `saveat`, a
+non-empty list replaces ordinary `SaveMode` output. The precise feature matrix
+and known callback/interpolation limits are in
+[`docs/FEATURE_COVERAGE.md`](docs/FEATURE_COVERAGE.md).
+
 Tableau-defined explicit Runge–Kutta methods share one generic kernel. The
 named algorithms (`Rk4`, `Tsit5`, `Dp5`, and others) are zero-sized facades over
 `ExplicitRungeKutta<T>`. New methods can provide their coefficients by
@@ -65,8 +89,13 @@ Run both test layers with:
 
 ```console
 cargo test
+julia --project=tests/julia tests/julia/pinned_environment.jl --check
 julia --project=tests/julia tests/julia/runtests.jl
 ```
+
+If the pin check fails after cloning or changing Julia dependencies, run the
+same `pinned_environment.jl` command without `--check` once to bind the full
+OrdinaryDiffEq subpackage closure to the reference Git revision.
 
 Run the matched steady-state benchmark matrix with:
 
@@ -76,7 +105,9 @@ Run the matched steady-state benchmark matrix with:
 
 Raw Rust and Julia measurements plus a ratio table are written beneath
 `benchmarks/results/`. Allocation totals exclude compilation and warm-up.
-The exact implemented/remaining algorithm inventory is maintained in
+The exact generated implemented/remaining algorithm inventory is maintained in
+[`docs/ODE_PARITY_INVENTORY.md`](docs/ODE_PARITY_INVENTORY.md); the coverage
+policy and interpretation are in
 [`docs/ALGORITHM_COVERAGE.md`](docs/ALGORITHM_COVERAGE.md).
 
 ## Roadmap
@@ -92,9 +123,14 @@ The exact implemented/remaining algorithm inventory is maintained in
       Implicit Euler, Implicit Midpoint, and Trapezoid methods.
 - [x] Implement SSPRK22, SSPRK33, and adaptive SSPRK43.
 - [x] Implement adaptive Rosenbrock23 with one reused LU factorization per step.
+- [x] Add a reproducible pinned-upstream inventory and exact-commit Julia
+      compliance environment.
+- [x] Expand to variable Adams, Verner, low-storage/SSP RK, TRBDF2,
+      Rosenbrock/Rodas, and initial second-order symplectic families.
 - [ ] Port all remaining native OrdinaryDiffEq.jl ODE algorithm families.
 - [ ] Establish matched runtime and peak-memory benchmarks.
-- [ ] Add dense output and save-at behavior.
+- [x] Add basic discrete/continuous callbacks and save-at behavior.
+- [ ] Add method-specific high-order dense output.
 - [ ] Select a stiff solver based on benchmark coverage, likely
       `Rosenbrock23` or `Rodas5P`.
 

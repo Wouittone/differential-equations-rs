@@ -1,3 +1,8 @@
+use crate::SolveError;
+use crate::callback::{
+    Callback, CallbackAction, CallbackOutcome, ContinuousCallback, DiscreteCallback, EventDirection,
+};
+
 /// An initial-value ordinary differential equation problem.
 ///
 /// The right-hand side uses the in-place SciML calling convention
@@ -9,6 +14,7 @@ pub struct OdeProblem<F, P> {
     time_span: (f64, f64),
     parameters: P,
     jacobian: Option<Box<JacobianFunction<P>>>,
+    callbacks: Vec<Callback<P>>,
 }
 
 type JacobianFunction<P> = dyn Fn(&mut [f64], &[f64], &P, f64);
@@ -27,6 +33,7 @@ impl<F, P> OdeProblem<F, P> {
             time_span,
             parameters,
             jacobian: None,
+            callbacks: Vec::new(),
         }
     }
 
@@ -40,6 +47,54 @@ impl<F, P> OdeProblem<F, P> {
         J: Fn(&mut [f64], &[f64], &P, f64) + 'static,
     {
         self.jacobian = Some(Box::new(jacobian));
+        self
+    }
+
+    /// Adds a callback evaluated after every accepted step (and at the initial state).
+    ///
+    /// When `condition(state, parameters, time)` is true, `affect` may modify the
+    /// state and may request termination. Multiple callbacks run in insertion order.
+    pub fn with_discrete_callback<C, A>(mut self, condition: C, affect: A) -> Self
+    where
+        C: Fn(&[f64], &P, f64) -> bool + 'static,
+        A: Fn(&mut [f64], &P, f64) -> CallbackAction + 'static,
+    {
+        self.callbacks.push(Callback::Discrete(DiscreteCallback {
+            condition: Box::new(condition),
+            affect: Box::new(affect),
+        }));
+        self
+    }
+
+    /// Adds a zero-crossing callback that triggers in either direction.
+    pub fn with_continuous_callback<C, A>(self, condition: C, affect: A) -> Self
+    where
+        C: Fn(&[f64], &P, f64) -> f64 + 'static,
+        A: Fn(&mut [f64], &P, f64) -> CallbackAction + 'static,
+    {
+        self.with_continuous_callback_direction(EventDirection::Any, condition, affect)
+    }
+
+    /// Adds a direction-filtered zero-crossing callback.
+    ///
+    /// A root is localized by bisection over the accepted step's state segment.
+    /// The callback receives the localized time and interpolated state.
+    pub fn with_continuous_callback_direction<C, A>(
+        mut self,
+        direction: EventDirection,
+        condition: C,
+        affect: A,
+    ) -> Self
+    where
+        C: Fn(&[f64], &P, f64) -> f64 + 'static,
+        A: Fn(&mut [f64], &P, f64) -> CallbackAction + 'static,
+    {
+        self.callbacks
+            .push(Callback::Continuous(ContinuousCallback {
+                condition: Box::new(condition),
+                affect: Box::new(affect),
+                direction,
+            }));
         self
     }
 
@@ -58,6 +113,11 @@ impl<F, P> OdeProblem<F, P> {
         self.jacobian.is_some()
     }
 
+    /// Returns whether event callbacks were supplied.
+    pub fn has_callbacks(&self) -> bool {
+        !self.callbacks.is_empty()
+    }
+
     /// Returns the problem parameters.
     pub fn parameters(&self) -> &P {
         &self.parameters
@@ -70,4 +130,157 @@ impl<F, P> OdeProblem<F, P> {
         function(jacobian, state, &self.parameters, time);
         true
     }
+
+    pub(crate) fn apply_initial_callbacks(
+        &self,
+        state: &mut [f64],
+        time: f64,
+    ) -> Result<CallbackOutcome, SolveError> {
+        let mut outcome = CallbackOutcome::default();
+        for callback in &self.callbacks {
+            let Callback::Discrete(callback) = callback else {
+                continue;
+            };
+            if (callback.condition)(state, &self.parameters, time) {
+                outcome.invocations += 1;
+                outcome.terminate =
+                    (callback.affect)(state, &self.parameters, time) == CallbackAction::Terminate;
+                ensure_finite_callback_state(state)?;
+                if outcome.terminate {
+                    break;
+                }
+            }
+        }
+        Ok(outcome)
+    }
+
+    pub(crate) fn apply_step_callbacks(
+        &self,
+        previous_state: &[f64],
+        previous_time: f64,
+        state: &mut [f64],
+        time: &mut f64,
+        state_before_effect: &mut [f64],
+    ) -> Result<CallbackOutcome, SolveError> {
+        if self.callbacks.is_empty() {
+            return Ok(CallbackOutcome::default());
+        }
+        let mut outcome = CallbackOutcome::default();
+        let mut root = None;
+
+        for (index, callback) in self.callbacks.iter().enumerate() {
+            let Callback::Continuous(callback) = callback else {
+                continue;
+            };
+            let before = (callback.condition)(previous_state, &self.parameters, previous_time);
+            let after = (callback.condition)(state, &self.parameters, *time);
+            if !before.is_finite() || !after.is_finite() {
+                return Err(SolveError::NonFiniteCallbackCondition);
+            }
+            if callback.direction.accepts(before, after) {
+                let fraction = locate_root(
+                    callback,
+                    RootSegment {
+                        previous_state,
+                        previous_time,
+                        state,
+                        time: *time,
+                    },
+                    before,
+                    state_before_effect,
+                    &self.parameters,
+                )?;
+                if root.is_none_or(|(_, earliest)| fraction < earliest) {
+                    root = Some((index, fraction));
+                }
+            }
+        }
+
+        if let Some((index, fraction)) = root {
+            let end_time = *time;
+            interpolate(state, previous_state, fraction, state_before_effect);
+            state.copy_from_slice(state_before_effect);
+            *time = previous_time + fraction * (end_time - previous_time);
+            let Callback::Continuous(callback) = &self.callbacks[index] else {
+                unreachable!();
+            };
+            outcome.invocations += 1;
+            outcome.terminate =
+                (callback.affect)(state, &self.parameters, *time) == CallbackAction::Terminate;
+            ensure_finite_callback_state(state)?;
+        }
+
+        if !outcome.terminate {
+            for callback in &self.callbacks {
+                let Callback::Discrete(callback) = callback else {
+                    continue;
+                };
+                if (callback.condition)(state, &self.parameters, *time) {
+                    if outcome.invocations == 0 {
+                        state_before_effect.copy_from_slice(state);
+                    }
+                    outcome.invocations += 1;
+                    outcome.terminate = (callback.affect)(state, &self.parameters, *time)
+                        == CallbackAction::Terminate;
+                    ensure_finite_callback_state(state)?;
+                    if outcome.terminate {
+                        break;
+                    }
+                }
+            }
+        }
+        Ok(outcome)
+    }
+}
+
+struct RootSegment<'a> {
+    previous_state: &'a [f64],
+    previous_time: f64,
+    state: &'a [f64],
+    time: f64,
+}
+
+fn locate_root<P>(
+    callback: &ContinuousCallback<P>,
+    segment: RootSegment<'_>,
+    before: f64,
+    interpolation: &mut [f64],
+    parameters: &P,
+) -> Result<f64, SolveError> {
+    let mut left = 0.0;
+    let mut right = 1.0;
+    let mut left_value = before;
+    for _ in 0..52 {
+        let middle = 0.5 * (left + right);
+        interpolate(segment.state, segment.previous_state, middle, interpolation);
+        let middle_time = segment.previous_time + middle * (segment.time - segment.previous_time);
+        let value = (callback.condition)(interpolation, parameters, middle_time);
+        if !value.is_finite() {
+            return Err(SolveError::NonFiniteCallbackCondition);
+        }
+        if value == 0.0 {
+            return Ok(middle);
+        }
+        if left_value.signum() == value.signum() {
+            left = middle;
+            left_value = value;
+        } else {
+            right = middle;
+        }
+    }
+    Ok(0.5 * (left + right))
+}
+
+fn interpolate(state: &[f64], previous_state: &[f64], fraction: f64, output: &mut [f64]) {
+    for ((output, previous), current) in output.iter_mut().zip(previous_state).zip(state) {
+        *output = previous + fraction * (current - previous);
+    }
+}
+
+fn ensure_finite_callback_state(state: &[f64]) -> Result<(), SolveError> {
+    state
+        .iter()
+        .all(|value| value.is_finite())
+        .then_some(())
+        .ok_or(SolveError::NonFiniteCallbackState)
 }
