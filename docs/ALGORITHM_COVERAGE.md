@@ -37,9 +37,10 @@ groups include:
 
 Some of those groups require new problem representations before their kernels
 can be ported faithfully: split right-hand sides, partitioned and second-order
-state, Jacobian callbacks, and composite algorithms. DAE-only behavior remains
-out of scope even when an in-scope ODE algorithm also supports mass matrices
-upstream.
+state, Jacobian sparsity/coloring metadata, mass matrices, and composite
+algorithms. Dense analytic state-Jacobian callbacks are already supported by
+the current implicit and Rosenbrock kernels. DAE-only behavior remains out of
+scope even when an in-scope ODE algorithm also supports mass matrices upstream.
 
 Benchmark results must therefore be described as covering every *currently
 implemented* Rust solver, not every OrdinaryDiffEq ODE solver.

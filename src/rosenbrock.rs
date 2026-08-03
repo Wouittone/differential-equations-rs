@@ -1,3 +1,4 @@
+use crate::linear::{factorize, solve_factorized};
 use crate::{OdeAlgorithm, OdeProblem, SaveMode, Solution, SolveError, SolveOptions, SolverStats};
 
 const GAMMA: f64 = 1.0 / (2.0 + std::f64::consts::SQRT_2);
@@ -26,6 +27,7 @@ struct Workspace {
     jacobian: Vec<f64>,
     factorization: Vec<f64>,
     pivots: Vec<usize>,
+    differentiation_valid: bool,
 }
 
 impl Workspace {
@@ -46,6 +48,7 @@ impl Workspace {
             jacobian: vec![0.0; dimension * dimension],
             factorization: vec![0.0; dimension * dimension],
             pivots: vec![0; dimension],
+            differentiation_valid: false,
         }
     }
 }
@@ -141,6 +144,7 @@ where
                 )?;
             }
             stats.accepted_steps += 1;
+            workspace.differentiation_valid = false;
 
             if options.save == SaveMode::EveryStep || time == end {
                 times.push(time);
@@ -177,7 +181,10 @@ where
     F: Fn(&mut [f64], &[f64], &P, f64),
 {
     let dimension = state.len();
-    numerical_differentiation(problem, state, time, workspace, stats)?;
+    if !workspace.differentiation_valid {
+        differentiate(problem, state, time, workspace, stats)?;
+        workspace.differentiation_valid = true;
+    }
     for row in 0..dimension {
         for column in 0..dimension {
             workspace.factorization[row * dimension + column] = f64::from(row == column)
@@ -189,7 +196,6 @@ where
         &mut workspace.pivots,
         dimension,
     )?;
-    stats.jacobian_evaluations += 1;
 
     for index in 0..dimension {
         workspace.right_hand_side[index] =
@@ -267,7 +273,7 @@ where
     Ok((squared_norm / dimension as f64).sqrt())
 }
 
-fn numerical_differentiation<F, P>(
+fn differentiate<F, P>(
     problem: &OdeProblem<F, P>,
     state: &[f64],
     time: f64,
@@ -278,38 +284,66 @@ where
     F: Fn(&mut [f64], &[f64], &P, f64),
 {
     let dimension = state.len();
-    for column in 0..dimension {
-        workspace.perturbed_state.copy_from_slice(state);
-        let perturbation = f64::EPSILON.sqrt() * state[column].abs().max(1.0);
-        workspace.perturbed_state[column] += perturbation;
-        evaluate(
-            problem,
-            &mut workspace.perturbed_derivative,
-            &workspace.perturbed_state,
-            time,
-            stats,
-        )?;
-        for row in 0..dimension {
-            workspace.jacobian[row * dimension + column] = (workspace.perturbed_derivative[row]
-                - workspace.current_derivative[row])
-                / perturbation;
+    if problem.evaluate_jacobian(&mut workspace.jacobian, state, time) {
+        if workspace.jacobian.iter().any(|value| !value.is_finite()) {
+            return Err(SolveError::NonFiniteDerivative);
+        }
+    } else {
+        for column in 0..dimension {
+            workspace.perturbed_state.copy_from_slice(state);
+            let perturbation = f64::EPSILON.sqrt() * state[column].abs().max(1.0);
+            workspace.perturbed_state[column] += perturbation;
+            evaluate_unchecked(
+                problem,
+                &mut workspace.perturbed_derivative,
+                &workspace.perturbed_state,
+                time,
+                stats,
+            );
+            for row in 0..dimension {
+                let derivative = (workspace.perturbed_derivative[row]
+                    - workspace.current_derivative[row])
+                    / perturbation;
+                if !derivative.is_finite() {
+                    return Err(SolveError::NonFiniteDerivative);
+                }
+                workspace.jacobian[row * dimension + column] = derivative;
+            }
         }
     }
 
     let time_perturbation = f64::EPSILON.sqrt() * time.abs().max(1.0);
-    evaluate(
+    evaluate_unchecked(
         problem,
         &mut workspace.perturbed_derivative,
         state,
         time + time_perturbation,
         stats,
-    )?;
+    );
     for index in 0..dimension {
-        workspace.time_derivative[index] = (workspace.perturbed_derivative[index]
+        let derivative = (workspace.perturbed_derivative[index]
             - workspace.current_derivative[index])
             / time_perturbation;
+        if !derivative.is_finite() {
+            return Err(SolveError::NonFiniteDerivative);
+        }
+        workspace.time_derivative[index] = derivative;
     }
+    stats.jacobian_evaluations += 1;
     Ok(())
+}
+
+fn evaluate_unchecked<F, P>(
+    problem: &OdeProblem<F, P>,
+    derivative: &mut [f64],
+    state: &[f64],
+    time: f64,
+    stats: &mut SolverStats,
+) where
+    F: Fn(&mut [f64], &[f64], &P, f64),
+{
+    (problem.rhs)(derivative, state, problem.parameters(), time);
+    stats.rhs_evaluations += 1;
 }
 
 fn evaluate<F, P>(
@@ -322,8 +356,7 @@ fn evaluate<F, P>(
 where
     F: Fn(&mut [f64], &[f64], &P, f64),
 {
-    (problem.rhs)(derivative, state, problem.parameters(), time);
-    stats.rhs_evaluations += 1;
+    evaluate_unchecked(problem, derivative, state, time, stats);
     derivative
         .iter()
         .all(|value| value.is_finite())
@@ -364,68 +397,6 @@ fn step_factor(error: f64) -> f64 {
     }
 }
 
-fn factorize(matrix: &mut [f64], pivots: &mut [usize], dimension: usize) -> Result<(), SolveError> {
-    for pivot_column in 0..dimension {
-        let mut pivot_row = pivot_column;
-        let mut pivot_magnitude = matrix[pivot_column * dimension + pivot_column].abs();
-        for row in (pivot_column + 1)..dimension {
-            let magnitude = matrix[row * dimension + pivot_column].abs();
-            if magnitude > pivot_magnitude {
-                pivot_magnitude = magnitude;
-                pivot_row = row;
-            }
-        }
-        if pivot_magnitude <= f64::EPSILON {
-            return Err(SolveError::SingularLinearSystem);
-        }
-        pivots[pivot_column] = pivot_row;
-        if pivot_row != pivot_column {
-            for column in 0..dimension {
-                matrix.swap(
-                    pivot_column * dimension + column,
-                    pivot_row * dimension + column,
-                );
-            }
-        }
-        let pivot = matrix[pivot_column * dimension + pivot_column];
-        for row in (pivot_column + 1)..dimension {
-            let factor = matrix[row * dimension + pivot_column] / pivot;
-            matrix[row * dimension + pivot_column] = factor;
-            for column in (pivot_column + 1)..dimension {
-                matrix[row * dimension + column] -=
-                    factor * matrix[pivot_column * dimension + column];
-            }
-        }
-    }
-    Ok(())
-}
-
-fn solve_factorized(
-    factorization: &[f64],
-    pivots: &[usize],
-    right_hand_side: &mut [f64],
-    dimension: usize,
-) {
-    for (row, &pivot) in pivots.iter().enumerate() {
-        if pivot != row {
-            right_hand_side.swap(row, pivot);
-        }
-    }
-    for row in 0..dimension {
-        for column in 0..row {
-            right_hand_side[row] -=
-                factorization[row * dimension + column] * right_hand_side[column];
-        }
-    }
-    for row in (0..dimension).rev() {
-        for column in (row + 1)..dimension {
-            right_hand_side[row] -=
-                factorization[row * dimension + column] * right_hand_side[column];
-        }
-        right_hand_side[row] /= factorization[row * dimension + row];
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use crate::{OdeProblem, Rosenbrock23, SaveMode, SolveOptions, solve};
@@ -452,5 +423,56 @@ mod tests {
         assert!((solution.last_state()[0] - 1.0_f64.cos()).abs() < 2.0e-6);
         assert!(solution.stats().linear_solves > 0);
         assert!(solution.stats().jacobian_evaluations > 0);
+    }
+
+    #[test]
+    fn reuses_differentiation_after_a_rejected_step() {
+        let problem = OdeProblem::new(
+            |du: &mut [f64], u: &[f64], _: &(), time: f64| {
+                du[0] = -1000.0 * (u[0] - time.cos()) - time.sin();
+            },
+            vec![1.0],
+            (0.0, 1.0),
+            (),
+        );
+        let options = SolveOptions {
+            absolute_tolerance: 1.0e-7,
+            relative_tolerance: 1.0e-7,
+            initial_step: Some(1.0),
+            save: SaveMode::Endpoints,
+            ..SolveOptions::default()
+        };
+
+        let solution = solve(&problem, Rosenbrock23, &options).unwrap();
+        let stats = solution.stats();
+
+        assert!(stats.rejected_steps > 0);
+        assert!(stats.jacobian_evaluations < stats.accepted_steps + stats.rejected_steps);
+    }
+
+    #[test]
+    fn analytic_jacobian_avoids_state_differencing() {
+        fn rhs(du: &mut [f64], u: &[f64], _: &(), time: f64) {
+            du[0] = -1000.0 * (u[0] - time.cos()) - time.sin();
+        }
+        type TestRhs = fn(&mut [f64], &[f64], &(), f64);
+        let numeric = OdeProblem::new(rhs as TestRhs, vec![1.0], (0.0, 0.1), ());
+        let analytic = OdeProblem::new(rhs as TestRhs, vec![1.0], (0.0, 0.1), ()).with_jacobian(
+            |jacobian: &mut [f64], _: &[f64], _: &(), _: f64| {
+                jacobian[0] = -1000.0;
+            },
+        );
+        let options = SolveOptions {
+            absolute_tolerance: 1.0e-7,
+            relative_tolerance: 1.0e-7,
+            save: SaveMode::Endpoints,
+            ..SolveOptions::default()
+        };
+
+        let numeric = solve(&numeric, Rosenbrock23, &options).unwrap();
+        let analytic = solve(&analytic, Rosenbrock23, &options).unwrap();
+
+        assert!((numeric.last_state()[0] - analytic.last_state()[0]).abs() < 1.0e-12);
+        assert!(analytic.stats().rhs_evaluations < numeric.stats().rhs_evaluations);
     }
 }

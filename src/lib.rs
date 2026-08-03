@@ -9,6 +9,7 @@
 mod adams;
 mod explicit_rk;
 mod implicit;
+mod linear;
 mod problem;
 mod rosenbrock;
 mod solution;

@@ -41,6 +41,18 @@ Julia tests use an isolated project under `tests/julia`. Rust tests remain
 usable without Julia; cross-language compliance tests are explicit so normal
 `cargo test` runs stay fast and deterministic.
 
+Stiff problems may optionally provide an analytic state Jacobian. Implicit and
+Rosenbrock methods use it directly; otherwise they fall back to finite
+differences. The callback must fill a row-major `dimension × dimension`
+matrix:
+
+```rust
+let problem = OdeProblem::new(rhs, initial_state, time_span, parameters)
+    .with_jacobian(|jacobian, state, parameters, time| {
+        // jacobian[i * state.len() + j] = ∂fᵢ/∂uⱼ
+    });
+```
+
 Tableau-defined explicit Runge–Kutta methods share one generic kernel. The
 named algorithms (`Rk4`, `Tsit5`, `Dp5`, and others) are zero-sized facades over
 `ExplicitRungeKutta<T>`. New methods can provide their coefficients by

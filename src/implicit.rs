@@ -1,3 +1,4 @@
+use crate::linear::{factorize, solve_factorized};
 use crate::{OdeAlgorithm, OdeProblem, SaveMode, Solution, SolveError, SolveOptions, SolverStats};
 
 const MAX_NEWTON_ITERATIONS: usize = 12;
@@ -56,7 +57,9 @@ struct Workspace {
     perturbed_derivative: Vec<f64>,
     residual: Vec<f64>,
     matrix: Vec<f64>,
+    pivots: Vec<usize>,
     correction: Vec<f64>,
+    factorization_scale: Option<f64>,
 }
 
 impl Workspace {
@@ -70,7 +73,9 @@ impl Workspace {
             perturbed_derivative: vec![0.0; dimension],
             residual: vec![0.0; dimension],
             matrix: vec![0.0; dimension * dimension],
+            pivots: vec![0; dimension],
             correction: vec![0.0; dimension],
+            factorization_scale: None,
         }
     }
 }
@@ -96,7 +101,7 @@ where
     let mut state = problem.initial_state().to_vec();
     let mut workspace = Workspace::new(dimension);
     let mut stats = SolverStats::default();
-    evaluate(
+    evaluate_checked(
         problem,
         &mut workspace.current_derivative,
         &state,
@@ -143,7 +148,7 @@ where
             time = end;
         }
         std::mem::swap(&mut state, &mut workspace.candidate);
-        evaluate(
+        evaluate_checked(
             problem,
             &mut workspace.current_derivative,
             &state,
@@ -173,7 +178,11 @@ fn newton_step<F, P>(
 where
     F: Fn(&mut [f64], &[f64], &P, f64),
 {
-    let dimension = previous.len();
+    let derivative_scale = match method {
+        ImplicitMethod::Euler => step,
+        ImplicitMethod::Midpoint | ImplicitMethod::Trapezoid => 0.5 * step,
+    };
+    let mut refresh_factorization = workspace.factorization_scale != Some(derivative_scale);
     for _ in 0..MAX_NEWTON_ITERATIONS {
         stats.nonlinear_iterations += 1;
         set_evaluation_state(
@@ -186,14 +195,14 @@ where
             ImplicitMethod::Midpoint => time + 0.5 * step,
             ImplicitMethod::Euler | ImplicitMethod::Trapezoid => time + step,
         };
-        evaluate(
+        evaluate_unchecked(
             problem,
             &mut workspace.base_derivative,
             &workspace.evaluation_state,
             evaluation_time,
             stats,
-        )?;
-        set_residual(
+        );
+        set_residual_checked(
             &mut workspace.residual,
             previous,
             &workspace.candidate,
@@ -201,59 +210,34 @@ where
             &workspace.base_derivative,
             step,
             method,
-        );
+        )?;
         let residual_norm = infinity_norm(&workspace.residual);
         let state_scale = 1.0 + infinity_norm(&workspace.candidate);
         if residual_norm <= NEWTON_TOLERANCE * state_scale {
             return Ok(());
         }
 
-        for column in 0..dimension {
-            workspace
-                .perturbed_state
-                .copy_from_slice(&workspace.candidate);
-            let perturbation = f64::EPSILON.sqrt() * workspace.candidate[column].abs().max(1.0);
-            workspace.perturbed_state[column] += perturbation;
-            set_evaluation_state(
-                &mut workspace.evaluation_state,
-                previous,
-                &workspace.perturbed_state,
-                method,
-            );
-            evaluate(
-                problem,
-                &mut workspace.perturbed_derivative,
-                &workspace.evaluation_state,
-                evaluation_time,
-                stats,
-            )?;
-
-            let derivative_factor = match method {
-                ImplicitMethod::Euler | ImplicitMethod::Midpoint => step,
-                ImplicitMethod::Trapezoid => 0.5 * step,
-            };
-            for row in 0..dimension {
-                let derivative = (workspace.perturbed_derivative[row]
-                    - workspace.base_derivative[row])
-                    / perturbation;
-                workspace.matrix[row * dimension + column] =
-                    f64::from(row == column) - derivative_factor * derivative;
-            }
+        if refresh_factorization {
+            build_factorization(problem, evaluation_time, derivative_scale, workspace, stats)?;
         }
-        stats.jacobian_evaluations += 1;
 
         for (correction, residual) in workspace.correction.iter_mut().zip(&workspace.residual) {
             *correction = -*residual;
         }
-        solve_linear_system(&mut workspace.matrix, &mut workspace.correction, dimension)?;
+        solve_factorized(
+            &workspace.matrix,
+            &workspace.pivots,
+            &mut workspace.correction,
+            previous.len(),
+        );
         stats.linear_solves += 1;
 
         for (candidate, correction) in workspace.candidate.iter_mut().zip(&workspace.correction) {
             *candidate += correction;
         }
-        if infinity_norm(&workspace.correction) <= NEWTON_TOLERANCE * state_scale {
-            return Ok(());
-        }
+        // A factorization reused from the previous step gets one chord-Newton
+        // correction. If that is not enough, refresh it at the new state.
+        refresh_factorization = true;
     }
     Err(SolveError::NonlinearSolveFailed)
 }
@@ -276,7 +260,7 @@ fn set_evaluation_state(
     }
 }
 
-fn set_residual(
+fn set_residual_checked(
     residual: &mut [f64],
     previous: &[f64],
     candidate: &[f64],
@@ -284,8 +268,11 @@ fn set_residual(
     implicit_derivative: &[f64],
     step: f64,
     method: ImplicitMethod,
-) {
+) -> Result<(), SolveError> {
     for index in 0..residual.len() {
+        if !implicit_derivative[index].is_finite() {
+            return Err(SolveError::NonFiniteDerivative);
+        }
         let increment = match method {
             ImplicitMethod::Euler | ImplicitMethod::Midpoint => step * implicit_derivative[index],
             ImplicitMethod::Trapezoid => {
@@ -293,10 +280,87 @@ fn set_residual(
             }
         };
         residual[index] = candidate[index] - previous[index] - increment;
+        if !residual[index].is_finite() {
+            return Err(SolveError::NonFiniteDerivative);
+        }
     }
+    Ok(())
 }
 
-fn evaluate<F, P>(
+fn build_factorization<F, P>(
+    problem: &OdeProblem<F, P>,
+    evaluation_time: f64,
+    derivative_scale: f64,
+    workspace: &mut Workspace,
+    stats: &mut SolverStats,
+) -> Result<(), SolveError>
+where
+    F: Fn(&mut [f64], &[f64], &P, f64),
+{
+    let dimension = workspace.evaluation_state.len();
+    workspace.factorization_scale = None;
+    if problem.evaluate_jacobian(
+        &mut workspace.matrix,
+        &workspace.evaluation_state,
+        evaluation_time,
+    ) {
+        for row in 0..dimension {
+            for column in 0..dimension {
+                let index = row * dimension + column;
+                let derivative = workspace.matrix[index];
+                if !derivative.is_finite() {
+                    return Err(SolveError::NonFiniteDerivative);
+                }
+                workspace.matrix[index] = f64::from(row == column) - derivative_scale * derivative;
+            }
+        }
+    } else {
+        for column in 0..dimension {
+            workspace
+                .perturbed_state
+                .copy_from_slice(&workspace.evaluation_state);
+            let perturbation =
+                f64::EPSILON.sqrt() * workspace.evaluation_state[column].abs().max(1.0);
+            workspace.perturbed_state[column] += perturbation;
+            evaluate_unchecked(
+                problem,
+                &mut workspace.perturbed_derivative,
+                &workspace.perturbed_state,
+                evaluation_time,
+                stats,
+            );
+            for row in 0..dimension {
+                let derivative = (workspace.perturbed_derivative[row]
+                    - workspace.base_derivative[row])
+                    / perturbation;
+                if !derivative.is_finite() {
+                    return Err(SolveError::NonFiniteDerivative);
+                }
+                workspace.matrix[row * dimension + column] =
+                    f64::from(row == column) - derivative_scale * derivative;
+            }
+        }
+    }
+    stats.jacobian_evaluations += 1;
+    factorize(&mut workspace.matrix, &mut workspace.pivots, dimension)?;
+    workspace.factorization_scale = Some(derivative_scale);
+    Ok(())
+}
+
+fn evaluate_unchecked<F, P>(
+    problem: &OdeProblem<F, P>,
+    derivative: &mut [f64],
+    state: &[f64],
+    time: f64,
+    stats: &mut SolverStats,
+) where
+    F: Fn(&mut [f64], &[f64], &P, f64),
+{
+    (problem.rhs)(derivative, state, problem.parameters(), time);
+    stats.rhs_evaluations += 1;
+}
+
+fn evaluate_checked<F, P>(
     problem: &OdeProblem<F, P>,
     derivative: &mut [f64],
     state: &[f64],
@@ -306,8 +370,7 @@ fn evaluate<F, P>(
 where
     F: Fn(&mut [f64], &[f64], &P, f64),
 {
-    (problem.rhs)(derivative, state, problem.parameters(), time);
-    stats.rhs_evaluations += 1;
+    evaluate_unchecked(problem, derivative, state, time, stats);
     derivative
         .iter()
         .all(|value| value.is_finite())
@@ -317,56 +380,6 @@ where
 
 fn infinity_norm(values: &[f64]) -> f64 {
     values.iter().map(|value| value.abs()).fold(0.0, f64::max)
-}
-
-fn solve_linear_system(
-    matrix: &mut [f64],
-    right_hand_side: &mut [f64],
-    dimension: usize,
-) -> Result<(), SolveError> {
-    for pivot_column in 0..dimension {
-        let mut pivot_row = pivot_column;
-        let mut pivot_magnitude = matrix[pivot_column * dimension + pivot_column].abs();
-        for row in (pivot_column + 1)..dimension {
-            let magnitude = matrix[row * dimension + pivot_column].abs();
-            if magnitude > pivot_magnitude {
-                pivot_magnitude = magnitude;
-                pivot_row = row;
-            }
-        }
-        if pivot_magnitude <= f64::EPSILON {
-            return Err(SolveError::SingularLinearSystem);
-        }
-        if pivot_row != pivot_column {
-            for column in 0..dimension {
-                matrix.swap(
-                    pivot_column * dimension + column,
-                    pivot_row * dimension + column,
-                );
-            }
-            right_hand_side.swap(pivot_column, pivot_row);
-        }
-
-        let pivot = matrix[pivot_column * dimension + pivot_column];
-        for row in (pivot_column + 1)..dimension {
-            let factor = matrix[row * dimension + pivot_column] / pivot;
-            matrix[row * dimension + pivot_column] = 0.0;
-            for column in (pivot_column + 1)..dimension {
-                matrix[row * dimension + column] -=
-                    factor * matrix[pivot_column * dimension + column];
-            }
-            right_hand_side[row] -= factor * right_hand_side[pivot_column];
-        }
-    }
-
-    for row in (0..dimension).rev() {
-        let mut value = right_hand_side[row];
-        for column in (row + 1)..dimension {
-            value -= matrix[row * dimension + column] * right_hand_side[column];
-        }
-        right_hand_side[row] = value / matrix[row * dimension + row];
-    }
-    Ok(())
 }
 
 #[cfg(test)]
@@ -401,16 +414,35 @@ mod tests {
         assert!(midpoint.last_state()[0].abs() < 1.0e-7);
         assert!(trapezoid.last_state()[0].abs() < 1.0e-7);
         assert!(euler.stats().linear_solves > 0);
+        assert!(euler.stats().jacobian_evaluations < euler.stats().accepted_steps);
+        assert!(midpoint.stats().jacobian_evaluations < midpoint.stats().accepted_steps);
+        assert!(trapezoid.stats().jacobian_evaluations < trapezoid.stats().accepted_steps);
     }
 
     #[test]
-    fn pivoted_linear_solver_handles_row_exchange() {
-        let mut matrix = vec![0.0, 2.0, 1.0, 1.0];
-        let mut rhs = vec![4.0, 3.0];
+    fn analytic_jacobians_match_numerical_differentiation() {
+        fn rhs(du: &mut [f64], u: &[f64], _: &(), _: f64) {
+            du[0] = -u[0] * u[0];
+        }
+        let numeric = OdeProblem::new(rhs as TestRhs, vec![1.0], (0.0, 1.0), ());
+        let analytic = OdeProblem::new(rhs as TestRhs, vec![1.0], (0.0, 1.0), ()).with_jacobian(
+            |jacobian: &mut [f64], state: &[f64], _: &(), _: f64| {
+                jacobian[0] = -2.0 * state[0];
+            },
+        );
+        assert!(!numeric.has_jacobian());
+        assert!(analytic.has_jacobian());
+        let options = SolveOptions {
+            adaptive: false,
+            initial_step: Some(0.01),
+            save: SaveMode::Endpoints,
+            ..SolveOptions::default()
+        };
 
-        super::solve_linear_system(&mut matrix, &mut rhs, 2).unwrap();
+        let numeric = solve(&numeric, ImplicitMidpoint, &options).unwrap();
+        let analytic = solve(&analytic, ImplicitMidpoint, &options).unwrap();
 
-        assert!((rhs[0] - 1.0).abs() < 1.0e-14);
-        assert!((rhs[1] - 2.0).abs() < 1.0e-14);
+        assert!((numeric.last_state()[0] - analytic.last_state()[0]).abs() < 1.0e-12);
+        assert!(analytic.stats().rhs_evaluations < numeric.stats().rhs_evaluations);
     }
 }
