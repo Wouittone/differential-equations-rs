@@ -1,16 +1,62 @@
 use crate::{OdeAlgorithm, OdeProblem, SaveMode, Solution, SolveError, SolveOptions, SolverStats};
+use std::marker::PhantomData;
 
 const SAFETY: f64 = 0.9;
 const MIN_FACTOR: f64 = 0.2;
 const MAX_FACTOR: f64 = 10.0;
 
-struct Tableau {
-    nodes: &'static [f64],
-    coefficients: &'static [&'static [f64]],
-    weights: &'static [f64],
-    error_weights: Option<&'static [f64]>,
-    order: usize,
-    fsal: bool,
+/// Coefficients and method properties for an explicit Runge–Kutta method.
+///
+/// `COEFFICIENTS[i]` is the strictly lower-triangular row for stage `i`, so it
+/// must contain exactly `i` entries. All other coefficient arrays must contain
+/// one entry per stage. [`ExplicitRungeKutta`] validates these invariants before
+/// solving.
+pub trait ButcherTableau {
+    const NODES: &'static [f64];
+    const COEFFICIENTS: &'static [&'static [f64]];
+    const WEIGHTS: &'static [f64];
+    const ERROR_WEIGHTS: Option<&'static [f64]>;
+    const ORDER: usize;
+    const FSAL: bool;
+}
+
+/// The centralized explicit Runge–Kutta solver for a [`ButcherTableau`].
+///
+/// Named algorithms such as [`Rk4`](crate::Rk4) are lightweight facades over
+/// this type. It can also be instantiated with a user-defined tableau marker.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ExplicitRungeKutta<T> {
+    marker: PhantomData<fn() -> T>,
+}
+
+impl<T> ExplicitRungeKutta<T> {
+    pub const fn new() -> Self {
+        Self {
+            marker: PhantomData,
+        }
+    }
+}
+
+impl<T> Default for ExplicitRungeKutta<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<T> OdeAlgorithm for ExplicitRungeKutta<T>
+where
+    T: ButcherTableau,
+{
+    fn solve<F, P>(
+        &self,
+        problem: &OdeProblem<F, P>,
+        options: &SolveOptions,
+    ) -> Result<Solution, SolveError>
+    where
+        F: Fn(&mut [f64], &[f64], &P, f64),
+    {
+        integrate::<F, P, T>(problem, options)
+    }
 }
 
 const EMPTY: &[f64] = &[];
@@ -160,124 +206,29 @@ const SSPRK43_B: &[f64] = &[1.0 / 6.0, 1.0 / 6.0, 1.0 / 6.0, 0.5];
 const SSPRK43_E: &[f64] = &[-1.0 / 12.0, -1.0 / 12.0, -1.0 / 12.0, 0.25];
 const SSPRK43_C: &[f64] = &[0.0, 0.5, 1.0, 0.5];
 
-const EULER_TABLEAU: Tableau = Tableau {
-    nodes: EULER_C,
-    coefficients: EULER_A,
-    weights: EULER_B,
-    error_weights: None,
-    order: 1,
-    fsal: false,
-};
-const MIDPOINT_TABLEAU: Tableau = Tableau {
-    nodes: MIDPOINT_C,
-    coefficients: MIDPOINT_A,
-    weights: MIDPOINT_B,
-    error_weights: Some(MIDPOINT_E),
-    order: 2,
-    fsal: false,
-};
-const HEUN_TABLEAU: Tableau = Tableau {
-    nodes: HEUN_C,
-    coefficients: HEUN_A,
-    weights: HEUN_B,
-    error_weights: Some(HEUN_E),
-    order: 2,
-    fsal: false,
-};
-const RALSTON_TABLEAU: Tableau = Tableau {
-    nodes: RALSTON_C,
-    coefficients: RALSTON_A,
-    weights: RALSTON_B,
-    error_weights: Some(RALSTON_E),
-    order: 2,
-    fsal: false,
-};
-const RK4_TABLEAU: Tableau = Tableau {
-    nodes: RK4_C,
-    coefficients: RK4_A,
-    weights: RK4_B,
-    error_weights: None,
-    order: 4,
-    fsal: false,
-};
-const RKM_TABLEAU: Tableau = Tableau {
-    nodes: RKM_C,
-    coefficients: RKM_A,
-    weights: RKM_B,
-    error_weights: None,
-    order: 4,
-    fsal: false,
-};
-const RALSTON4_TABLEAU: Tableau = Tableau {
-    nodes: RALSTON4_C,
-    coefficients: RALSTON4_A,
-    weights: RALSTON4_B,
-    error_weights: None,
-    order: 4,
-    fsal: false,
-};
-const ALSHINA2_TABLEAU: Tableau = Tableau {
-    nodes: RALSTON_C,
-    coefficients: RALSTON_A,
-    weights: RALSTON_B,
-    error_weights: Some(ALSHINA2_E),
-    order: 2,
-    fsal: false,
-};
-const ALSHINA3_TABLEAU: Tableau = Tableau {
-    nodes: ALSHINA3_C,
-    coefficients: ALSHINA3_A,
-    weights: ALSHINA3_B,
-    error_weights: Some(ALSHINA3_E),
-    order: 3,
-    fsal: false,
-};
-const BS3_TABLEAU: Tableau = Tableau {
-    nodes: BS3_C,
-    coefficients: BS3_A,
-    weights: BS3_B,
-    error_weights: Some(BS3_E),
-    order: 3,
-    fsal: true,
-};
-const DP5_TABLEAU: Tableau = Tableau {
-    nodes: DP5_C,
-    coefficients: DP5_A,
-    weights: DP5_B,
-    error_weights: Some(DP5_E),
-    order: 5,
-    fsal: true,
-};
-const SSPRK22_TABLEAU: Tableau = Tableau {
-    nodes: SSPRK22_C,
-    coefficients: SSPRK22_A,
-    weights: SSPRK22_B,
-    error_weights: None,
-    order: 2,
-    fsal: false,
-};
-const SSPRK33_TABLEAU: Tableau = Tableau {
-    nodes: SSPRK33_C,
-    coefficients: SSPRK33_A,
-    weights: SSPRK33_B,
-    error_weights: None,
-    order: 3,
-    fsal: false,
-};
-const SSPRK43_TABLEAU: Tableau = Tableau {
-    nodes: SSPRK43_C,
-    coefficients: SSPRK43_A,
-    weights: SSPRK43_B,
-    error_weights: Some(SSPRK43_E),
-    order: 3,
-    fsal: false,
-};
-
 macro_rules! algorithm {
-    ($name:ident, $documentation:literal, $tableau:ident) => {
+    (
+        $name:ident,
+        $documentation:literal,
+        nodes = $nodes:ident,
+        coefficients = $coefficients:ident,
+        weights = $weights:ident,
+        error_weights = $error_weights:expr,
+        order = $order:literal,
+        fsal = $fsal:literal
+    ) => {
         #[doc = $documentation]
         #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
         pub struct $name;
+
+        impl ButcherTableau for $name {
+            const NODES: &'static [f64] = $nodes;
+            const COEFFICIENTS: &'static [&'static [f64]] = $coefficients;
+            const WEIGHTS: &'static [f64] = $weights;
+            const ERROR_WEIGHTS: Option<&'static [f64]> = $error_weights;
+            const ORDER: usize = $order;
+            const FSAL: bool = $fsal;
+        }
 
         impl OdeAlgorithm for $name {
             fn solve<F, P>(
@@ -288,77 +239,160 @@ macro_rules! algorithm {
             where
                 F: Fn(&mut [f64], &[f64], &P, f64),
             {
-                integrate(problem, options, &$tableau)
+                ExplicitRungeKutta::<Self>::new().solve(problem, options)
             }
         }
     };
 }
 
-algorithm!(Euler, "The fixed-step forward Euler method.", EULER_TABLEAU);
+algorithm!(
+    Euler,
+    "The fixed-step forward Euler method.",
+    nodes = EULER_C,
+    coefficients = EULER_A,
+    weights = EULER_B,
+    error_weights = None,
+    order = 1,
+    fsal = false
+);
 algorithm!(
     Midpoint,
     "The adaptive second-order explicit midpoint method with an embedded Euler estimate.",
-    MIDPOINT_TABLEAU
+    nodes = MIDPOINT_C,
+    coefficients = MIDPOINT_A,
+    weights = MIDPOINT_B,
+    error_weights = Some(MIDPOINT_E),
+    order = 2,
+    fsal = false
 );
 algorithm!(
     Heun,
     "The adaptive second-order explicit trapezoid (Heun) method.",
-    HEUN_TABLEAU
+    nodes = HEUN_C,
+    coefficients = HEUN_A,
+    weights = HEUN_B,
+    error_weights = Some(HEUN_E),
+    order = 2,
+    fsal = false
 );
 algorithm!(
     Ralston,
     "Ralston's adaptive second-order explicit Runge–Kutta method.",
-    RALSTON_TABLEAU
+    nodes = RALSTON_C,
+    coefficients = RALSTON_A,
+    weights = RALSTON_B,
+    error_weights = Some(RALSTON_E),
+    order = 2,
+    fsal = false
 );
 algorithm!(
     Rk4,
     "The fixed-step classical fourth-order Runge–Kutta method.",
-    RK4_TABLEAU
+    nodes = RK4_C,
+    coefficients = RK4_A,
+    weights = RK4_B,
+    error_weights = None,
+    order = 4,
+    fsal = false
 );
 algorithm!(
     Rkm,
     "The fixed-step six-stage, fourth-order Mead–Renaut Runge–Kutta method.",
-    RKM_TABLEAU
+    nodes = RKM_C,
+    coefficients = RKM_A,
+    weights = RKM_B,
+    error_weights = None,
+    order = 4,
+    fsal = false
 );
 algorithm!(
     Ralston4,
     "Ralston's fixed-step four-stage, fourth-order Runge–Kutta method.",
-    RALSTON4_TABLEAU
+    nodes = RALSTON4_C,
+    coefficients = RALSTON4_A,
+    weights = RALSTON4_B,
+    error_weights = None,
+    order = 4,
+    fsal = false
 );
 algorithm!(
     Alshina2,
     "The adaptive optimal two-stage, second-order Alshina method.",
-    ALSHINA2_TABLEAU
+    nodes = RALSTON_C,
+    coefficients = RALSTON_A,
+    weights = RALSTON_B,
+    error_weights = Some(ALSHINA2_E),
+    order = 2,
+    fsal = false
 );
 algorithm!(
     Alshina3,
     "The adaptive optimal three-stage, third-order Alshina method.",
-    ALSHINA3_TABLEAU
+    nodes = ALSHINA3_C,
+    coefficients = ALSHINA3_A,
+    weights = ALSHINA3_B,
+    error_weights = Some(ALSHINA3_E),
+    order = 3,
+    fsal = false
 );
 algorithm!(
     Bs3,
     "The adaptive Bogacki–Shampine 3/2 method.",
-    BS3_TABLEAU
+    nodes = BS3_C,
+    coefficients = BS3_A,
+    weights = BS3_B,
+    error_weights = Some(BS3_E),
+    order = 3,
+    fsal = true
 );
-algorithm!(Dp5, "The adaptive Dormand–Prince 5/4 method.", DP5_TABLEAU);
+algorithm!(
+    Dp5,
+    "The adaptive Dormand–Prince 5/4 method.",
+    nodes = DP5_C,
+    coefficients = DP5_A,
+    weights = DP5_B,
+    error_weights = Some(DP5_E),
+    order = 5,
+    fsal = true
+);
 algorithm!(
     SspRk22,
     "The fixed-step two-stage, second-order SSP Runge–Kutta method.",
-    SSPRK22_TABLEAU
+    nodes = SSPRK22_C,
+    coefficients = SSPRK22_A,
+    weights = SSPRK22_B,
+    error_weights = None,
+    order = 2,
+    fsal = false
 );
 algorithm!(
     SspRk33,
     "The fixed-step three-stage, third-order SSP Runge–Kutta method.",
-    SSPRK33_TABLEAU
+    nodes = SSPRK33_C,
+    coefficients = SSPRK33_A,
+    weights = SSPRK33_B,
+    error_weights = None,
+    order = 3,
+    fsal = false
 );
 algorithm!(
     SspRk43,
     "The adaptive four-stage, third-order SSP Runge–Kutta method.",
-    SSPRK43_TABLEAU
+    nodes = SSPRK43_C,
+    coefficients = SSPRK43_A,
+    weights = SSPRK43_B,
+    error_weights = Some(SSPRK43_E),
+    order = 3,
+    fsal = false
 );
 
 struct Workspace {
-    stages: Vec<Vec<f64>>,
+    // Flat stage-major storage: every stage is one contiguous component array.
+    // The other work vectors remain separate arrays rather than per-component
+    // structs, keeping the hot saxpy-style loops friendly to SIMD.
+    stages: Vec<f64>,
+    stage_count: usize,
+    dimension: usize,
     temporary: Vec<f64>,
     candidate: Vec<f64>,
 }
@@ -366,23 +400,70 @@ struct Workspace {
 impl Workspace {
     fn new(stage_count: usize, dimension: usize) -> Self {
         Self {
-            stages: (0..stage_count).map(|_| vec![0.0; dimension]).collect(),
+            stages: vec![0.0; stage_count * dimension],
+            stage_count,
+            dimension,
             temporary: vec![0.0; dimension],
             candidate: vec![0.0; dimension],
         }
     }
+
+    fn stage(&self, index: usize) -> &[f64] {
+        let start = index * self.dimension;
+        &self.stages[start..start + self.dimension]
+    }
+
+    fn swap_stages(&mut self, left: usize, right: usize) {
+        let left_start = left * self.dimension;
+        let right_start = right * self.dimension;
+        for offset in 0..self.dimension {
+            self.stages.swap(left_start + offset, right_start + offset);
+        }
+    }
 }
 
-fn integrate<F, P>(
+fn validate_tableau<T: ButcherTableau>() -> Result<(), SolveError> {
+    let stage_count = T::WEIGHTS.len();
+    let structurally_valid = stage_count > 0
+        && T::ORDER > 0
+        && T::NODES.first() == Some(&0.0)
+        && T::NODES.len() == stage_count
+        && T::COEFFICIENTS.len() == stage_count
+        && T::COEFFICIENTS
+            .iter()
+            .enumerate()
+            .all(|(stage, row)| row.len() == stage)
+        && T::ERROR_WEIGHTS.is_none_or(|weights| weights.len() == stage_count);
+    let coefficients_finite = T::NODES.iter().all(|value| value.is_finite())
+        && T::WEIGHTS.iter().all(|value| value.is_finite())
+        && T::COEFFICIENTS
+            .iter()
+            .flat_map(|row| row.iter())
+            .all(|value| value.is_finite())
+        && T::ERROR_WEIGHTS.is_none_or(|weights| weights.iter().all(|value| value.is_finite()));
+    let fsal_valid = !T::FSAL
+        || (T::NODES.last() == Some(&1.0)
+            && T::WEIGHTS.last() == Some(&0.0)
+            && T::COEFFICIENTS
+                .last()
+                .is_some_and(|last_row| *last_row == &T::WEIGHTS[..stage_count - 1]));
+
+    (structurally_valid && coefficients_finite && fsal_valid)
+        .then_some(())
+        .ok_or(SolveError::InvalidTableau)
+}
+
+fn integrate<F, P, T>(
     problem: &OdeProblem<F, P>,
     options: &SolveOptions,
-    tableau: &Tableau,
 ) -> Result<Solution, SolveError>
 where
     F: Fn(&mut [f64], &[f64], &P, f64),
+    T: ButcherTableau,
 {
+    validate_tableau::<T>()?;
     let adaptive = options.adaptive;
-    if adaptive && tableau.error_weights.is_none() {
+    if adaptive && T::ERROR_WEIGHTS.is_none() {
         return Err(SolveError::AdaptiveStepUnsupported);
     }
     if !adaptive && options.initial_step.is_none() {
@@ -395,9 +476,16 @@ where
     let interval = (end - start).abs();
     let maximum_step = options.max_step.min(interval);
     let mut state = problem.initial_state().to_vec();
-    let mut workspace = Workspace::new(tableau.weights.len(), dimension);
+    let mut workspace = Workspace::new(T::WEIGHTS.len(), dimension);
     let mut stats = SolverStats::default();
-    evaluate(problem, &mut workspace.stages[0], &state, start, &mut stats)?;
+    evaluate(
+        problem,
+        &mut workspace.stages[..dimension],
+        &state,
+        start,
+        &mut stats,
+    );
+    ensure_finite(&workspace.stages[..dimension])?;
 
     let step_magnitude = match options.initial_step {
         Some(step) => step.min(maximum_step),
@@ -406,7 +494,7 @@ where
             options,
             &state,
             (start, direction, maximum_step),
-            tableau.order,
+            T::ORDER,
             &mut workspace,
             &mut stats,
         )?,
@@ -433,26 +521,26 @@ where
             return Err(SolveError::StepSizeUnderflow);
         }
         if !stage_zero_is_current {
-            evaluate(problem, &mut workspace.stages[0], &state, time, &mut stats)?;
+            evaluate(
+                problem,
+                &mut workspace.stages[..dimension],
+                &state,
+                time,
+                &mut stats,
+            );
         }
 
-        perform_step(
-            problem,
-            &state,
-            time,
-            step,
-            tableau,
-            &mut workspace,
-            &mut stats,
-        )?;
+        perform_step::<F, P, T>(problem, &state, time, step, &mut workspace, &mut stats);
+        ensure_finite(&workspace.candidate)?;
         let error = if adaptive {
             error_norm(
                 &workspace.stages,
-                &state,
-                &workspace.candidate,
+                dimension,
+                (&state, &workspace.candidate),
                 step,
                 options,
-                tableau.error_weights.expect("checked above"),
+                T::ERROR_WEIGHTS.expect("checked above"),
+                &mut workspace.temporary,
             )
         } else {
             0.0
@@ -464,9 +552,8 @@ where
                 time = end;
             }
             std::mem::swap(&mut state, &mut workspace.candidate);
-            if tableau.fsal {
-                let last = workspace.stages.len() - 1;
-                workspace.stages.swap(0, last);
+            if T::FSAL {
+                workspace.swap_stages(0, workspace.stage_count - 1);
                 stage_zero_is_current = true;
             } else {
                 stage_zero_is_current = false;
@@ -479,7 +566,7 @@ where
             }
 
             if adaptive {
-                let mut factor = step_factor(error, tableau.order);
+                let mut factor = step_factor(error, T::ORDER);
                 if previous_step_rejected {
                     factor = factor.min(1.0);
                 }
@@ -488,7 +575,7 @@ where
             previous_step_rejected = false;
         } else {
             stats.rejected_steps += 1;
-            step *= step_factor(error, tableau.order).min(1.0);
+            step *= step_factor(error, T::ORDER).min(1.0);
             previous_step_rejected = true;
             stage_zero_is_current = true;
         }
@@ -503,13 +590,15 @@ fn evaluate<F, P>(
     state: &[f64],
     time: f64,
     stats: &mut SolverStats,
-) -> Result<(), SolveError>
-where
+) where
     F: Fn(&mut [f64], &[f64], &P, f64),
 {
     (problem.rhs)(derivative, state, problem.parameters(), time);
     stats.rhs_evaluations += 1;
-    derivative
+}
+
+fn ensure_finite(values: &[f64]) -> Result<(), SolveError> {
+    values
         .iter()
         .all(|value| value.is_finite())
         .then_some(())
@@ -532,7 +621,7 @@ where
     let dimension = state.len() as f64;
     let mut state_norm = 0.0;
     let mut derivative_norm = 0.0;
-    for (value, derivative) in state.iter().zip(&workspace.stages[0]) {
+    for (value, derivative) in state.iter().zip(workspace.stage(0)) {
         let scale = options.absolute_tolerance + options.relative_tolerance * value.abs();
         state_norm += (value / scale).powi(2);
         derivative_norm += (derivative / scale).powi(2);
@@ -550,22 +639,23 @@ where
         .temporary
         .iter_mut()
         .zip(state)
-        .zip(&workspace.stages[0])
+        .zip(&workspace.stages[..workspace.dimension])
     {
         *trial = value + direction * trial_step * derivative;
     }
     evaluate(
         problem,
-        &mut workspace.stages[1],
+        &mut workspace.stages[workspace.dimension..2 * workspace.dimension],
         &workspace.temporary,
         time + direction * trial_step,
         stats,
-    )?;
+    );
+    ensure_finite(&workspace.stages[workspace.dimension..2 * workspace.dimension])?;
 
     let mut curvature_norm = 0.0;
-    for ((next, initial), value) in workspace.stages[1]
+    for ((next, initial), value) in workspace.stages[workspace.dimension..2 * workspace.dimension]
         .iter()
-        .zip(&workspace.stages[0])
+        .zip(&workspace.stages[..workspace.dimension])
         .zip(state)
     {
         let scale = options.absolute_tolerance + options.relative_tolerance * value.abs();
@@ -581,73 +671,92 @@ where
     Ok((100.0 * trial_step).min(accuracy_step).min(maximum_step))
 }
 
-fn perform_step<F, P>(
+fn perform_step<F, P, T>(
     problem: &OdeProblem<F, P>,
     state: &[f64],
     time: f64,
     step: f64,
-    tableau: &Tableau,
     workspace: &mut Workspace,
     stats: &mut SolverStats,
-) -> Result<(), SolveError>
-where
+) where
     F: Fn(&mut [f64], &[f64], &P, f64),
+    T: ButcherTableau,
 {
-    for stage_index in 1..workspace.stages.len() {
+    for stage_index in 1..workspace.stage_count {
         combine(
             &mut workspace.temporary,
             state,
             step,
-            &workspace.stages[..stage_index],
-            tableau.coefficients[stage_index],
+            &workspace.stages,
+            workspace.dimension,
+            stage_index,
+            T::COEFFICIENTS[stage_index],
         );
+        let start = stage_index * workspace.dimension;
         evaluate(
             problem,
-            &mut workspace.stages[stage_index],
+            &mut workspace.stages[start..start + workspace.dimension],
             &workspace.temporary,
-            time + tableau.nodes[stage_index] * step,
+            time + T::NODES[stage_index] * step,
             stats,
-        )?;
+        );
     }
     combine(
         &mut workspace.candidate,
         state,
         step,
         &workspace.stages,
-        tableau.weights,
+        workspace.dimension,
+        workspace.stage_count,
+        T::WEIGHTS,
     );
-    Ok(())
 }
 
-fn combine(output: &mut [f64], state: &[f64], step: f64, stages: &[Vec<f64>], weights: &[f64]) {
-    for (index, output_value) in output.iter_mut().enumerate() {
-        let increment = stages
-            .iter()
-            .zip(weights)
-            .map(|(stage, weight)| weight * stage[index])
-            .sum::<f64>();
-        *output_value = state[index] + step * increment;
+fn combine(
+    output: &mut [f64],
+    state: &[f64],
+    step: f64,
+    stages: &[f64],
+    dimension: usize,
+    stage_count: usize,
+    weights: &[f64],
+) {
+    output.fill(0.0);
+    for (stage_index, weight) in weights.iter().take(stage_count).enumerate() {
+        let start = stage_index * dimension;
+        let stage = &stages[start..start + dimension];
+        for (increment, stage_value) in output.iter_mut().zip(stage) {
+            *increment += weight * stage_value;
+        }
+    }
+    for (output_value, state_value) in output.iter_mut().zip(state) {
+        *output_value = state_value + step * *output_value;
     }
 }
 
 fn error_norm(
-    stages: &[Vec<f64>],
-    state: &[f64],
-    candidate: &[f64],
+    stages: &[f64],
+    dimension: usize,
+    states: (&[f64], &[f64]),
     step: f64,
     options: &SolveOptions,
     error_weights: &[f64],
+    error_buffer: &mut [f64],
 ) -> f64 {
+    let (state, candidate) = states;
+    error_buffer.fill(0.0);
+    for (stage_index, weight) in error_weights.iter().enumerate() {
+        let start = stage_index * dimension;
+        let stage = &stages[start..start + dimension];
+        for (error, stage_value) in error_buffer.iter_mut().zip(stage) {
+            *error += weight * stage_value;
+        }
+    }
     let mut squared_norm = 0.0;
-    for index in 0..state.len() {
-        let error = step
-            * stages
-                .iter()
-                .zip(error_weights)
-                .map(|(stage, weight)| weight * stage[index])
-                .sum::<f64>();
+    for ((error, state), candidate) in error_buffer.iter().zip(state).zip(candidate) {
+        let error = step * error;
         let scale = options.absolute_tolerance
-            + options.relative_tolerance * state[index].abs().max(candidate[index].abs());
+            + options.relative_tolerance * state.abs().max(candidate.abs());
         squared_norm += (error / scale).powi(2);
     }
     (squared_norm / state.len() as f64).sqrt()
@@ -667,12 +776,35 @@ fn step_factor(error: f64, order: usize) -> f64 {
 mod tests {
     use std::f64::consts::E;
 
+    use super::{ButcherTableau, ExplicitRungeKutta};
     use crate::{
         Alshina2, Alshina3, Bs3, Dp5, Euler, Heun, Midpoint, OdeProblem, Ralston, Ralston4, Rk4,
         Rkm, SaveMode, SolveError, SolveOptions, SspRk22, SspRk33, SspRk43, solve,
     };
 
     type TestRhs = fn(&mut [f64], &[f64], &(), f64);
+
+    struct CustomEuler;
+
+    impl ButcherTableau for CustomEuler {
+        const NODES: &'static [f64] = &[0.0];
+        const COEFFICIENTS: &'static [&'static [f64]] = &[&[]];
+        const WEIGHTS: &'static [f64] = &[1.0];
+        const ERROR_WEIGHTS: Option<&'static [f64]> = None;
+        const ORDER: usize = 1;
+        const FSAL: bool = false;
+    }
+
+    struct MalformedTableau;
+
+    impl ButcherTableau for MalformedTableau {
+        const NODES: &'static [f64] = &[0.0, 1.0];
+        const COEFFICIENTS: &'static [&'static [f64]] = &[&[]];
+        const WEIGHTS: &'static [f64] = &[1.0];
+        const ERROR_WEIGHTS: Option<&'static [f64]> = None;
+        const ORDER: usize = 1;
+        const FSAL: bool = false;
+    }
 
     fn exponential() -> OdeProblem<TestRhs, ()> {
         fn rhs(du: &mut [f64], u: &[f64], _: &(), _: f64) {
@@ -759,6 +891,69 @@ mod tests {
         assert_eq!(
             solve(&exponential(), Rk4, &SolveOptions::default()),
             Err(SolveError::AdaptiveStepUnsupported)
+        );
+    }
+
+    #[test]
+    fn named_solver_is_a_facade_over_the_generic_kernel() {
+        let problem = exponential();
+        let options = SolveOptions {
+            adaptive: false,
+            initial_step: Some(0.01),
+            save: SaveMode::Endpoints,
+            ..SolveOptions::default()
+        };
+
+        let named = solve(&problem, Rk4, &options).unwrap();
+        let generic = solve(&problem, ExplicitRungeKutta::<Rk4>::new(), &options).unwrap();
+
+        assert_eq!(named, generic);
+    }
+
+    #[test]
+    fn supports_custom_tableaus_and_rejects_malformed_ones() {
+        let problem = exponential();
+        let options = SolveOptions {
+            adaptive: false,
+            initial_step: Some(0.01),
+            save: SaveMode::Endpoints,
+            ..SolveOptions::default()
+        };
+
+        let custom = solve(&problem, ExplicitRungeKutta::<CustomEuler>::new(), &options).unwrap();
+        let named = solve(&problem, Euler, &options).unwrap();
+
+        assert_eq!(custom, named);
+        assert_eq!(
+            solve(
+                &problem,
+                ExplicitRungeKutta::<MalformedTableau>::new(),
+                &options,
+            ),
+            Err(SolveError::InvalidTableau)
+        );
+    }
+
+    #[test]
+    fn reports_non_finite_stage_derivatives() {
+        let problem = OdeProblem::new(
+            |du: &mut [f64], _: &[f64], _: &(), time: f64| {
+                du[0] = if time == 0.0 { 1.0 } else { f64::NAN };
+            },
+            vec![1.0],
+            (0.0, 1.0),
+            (),
+        );
+        let options = SolveOptions {
+            adaptive: false,
+            initial_step: Some(1.0),
+            save: SaveMode::Endpoints,
+            ..SolveOptions::default()
+        };
+
+        assert_eq!(
+            solve(&problem, Rk4, &options),
+            Err(SolveError::NonFiniteDerivative)
         );
     }
 

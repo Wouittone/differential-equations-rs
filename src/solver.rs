@@ -61,6 +61,7 @@ pub enum SolveError {
     AdaptiveStepUnsupported,
     InvalidMaxStep,
     InvalidMaxSteps,
+    InvalidTableau,
     NonFiniteDerivative,
     NonlinearSolveFailed,
     SingularLinearSystem,
@@ -84,6 +85,7 @@ impl Display for SolveError {
             }
             Self::InvalidMaxStep => "the maximum step must be positive and not NaN",
             Self::InvalidMaxSteps => "the maximum step count must be positive",
+            Self::InvalidTableau => "the explicit Runge–Kutta tableau is malformed",
             Self::NonFiniteDerivative => "the right-hand side produced a non-finite derivative",
             Self::NonlinearSolveFailed => "the implicit nonlinear solve did not converge",
             Self::SingularLinearSystem => "the implicit linear system is singular",

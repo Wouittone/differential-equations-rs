@@ -41,6 +41,14 @@ Julia tests use an isolated project under `tests/julia`. Rust tests remain
 usable without Julia; cross-language compliance tests are explicit so normal
 `cargo test` runs stay fast and deterministic.
 
+Tableau-defined explicit Runge–Kutta methods share one generic kernel. The
+named algorithms (`Rk4`, `Tsit5`, `Dp5`, and others) are zero-sized facades over
+`ExplicitRungeKutta<T>`. New methods can provide their coefficients by
+implementing `ButcherTableau`; malformed dimensions, non-finite coefficients,
+and invalid FSAL layouts are rejected before integration. Solver workspaces use
+flat stage-major storage with separate candidate, error, and temporary arrays
+so component loops remain contiguous and SIMD-friendly.
+
 Run both test layers with:
 
 ```console
