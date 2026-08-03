@@ -134,6 +134,13 @@ policy and interpretation are in
 - [ ] Select a stiff solver based on benchmark coverage, likely
       `Rosenbrock23` or `Rodas5P`.
 
+The unattended implementation runbook is in
+[`docs/OVERNIGHT_EXECUTION_PLAN.md`](docs/OVERNIGHT_EXECUTION_PLAN.md). Agent
+delegation rules are in
+[`docs/AGENT_OPERATING_RULES.md`](docs/AGENT_OPERATING_RULES.md), and the
+copy/paste runner prompt is in
+[`docs/OVERNIGHT_RUN_PROMPT.md`](docs/OVERNIGHT_RUN_PROMPT.md).
+
 ## Status
 
 Pre-alpha. The crate is not yet suitable for scientific or production use.
