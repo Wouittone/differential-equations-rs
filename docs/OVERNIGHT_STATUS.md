@@ -35,7 +35,7 @@ Pinned upstream revision:
 | `/root/explicit_upstream_audit` | Pinned explicit-RK dense/controller source audit | `codex/overnight-explicit-upstream-audit`; `differential-equations-rs-worktrees/explicit-upstream-audit` | completed and merged as `fc0d556` | 2026-08-04T00:05:00Z |
 | `/root/driver_implicit_wave` | Driver contract completion and implicit/TRBDF2 migration | `codex/overnight-driver-implicit`; `differential-equations-rs-worktrees/driver-implicit` | completed and merged as `a288382` | 2026-08-04T00:08:00Z |
 | `/root/linear_interface_audit` | Phase 3 vector/matrix/Jacobian/linear-solver source audit | `codex/overnight-linear-interface-audit`; `differential-equations-rs-worktrees/linear-interface-audit` | completed and merged as `8e76510` | 2026-08-04T00:12:00Z |
-| `/root/driver_rosenbrock_wave` | Rosenbrock/Rodas shared-driver migration | `codex/overnight-driver-rosenbrock`; `differential-equations-rs-worktrees/driver-rosenbrock` | active | 2026-08-04T00:08:00Z |
+| `/root/driver_rosenbrock_wave` | Rosenbrock/Rodas shared-driver migration | `codex/overnight-driver-rosenbrock`; `differential-equations-rs-worktrees/driver-rosenbrock` | completed and merged as `f5df68b` | 2026-08-04T00:16:00Z |
 | `/root/driver_adams_wave` | Fixed/variable Adams shared-driver migration | `codex/overnight-driver-adams`; `differential-equations-rs-worktrees/driver-adams` | active | 2026-08-04T00:08:00Z |
 | `/root/driver_low_storage_wave` | Low-storage RK shared-driver migration | `codex/overnight-driver-low-storage`; `differential-equations-rs-worktrees/driver-low-storage` | active | 2026-08-04T00:12:00Z |
 
@@ -50,12 +50,13 @@ Pinned upstream revision:
 | Explicit upstream audit | 22 current explicit/Tsit5/Verner methods; 134 verified source references | not applicable | not applicable | report reviewed and merged as `fc0d556` |
 | Driver implicit | ImplicitEuler/Midpoint/Trapezoid and TRBDF2; recoverable attempt policy | 85 pass | 202 pass | reviewed and merged as `a288382`; compliance output byte-identical |
 | Linear-interface audit | Dense views/LU/Jacobian/Jv/mass-operator Phase 3 design and caller map | not applicable | not applicable | report reviewed and merged as `8e76510` |
+| Driver Rosenbrock | Rosenbrock23/32 and Rodas4/5P shared-driver migration | 90 pass | 202 pass | reviewed and merged as `f5df68b`; compliance output byte-identical |
 
 ## Validation snapshot
 
 ```text
 cargo fmt -- --check: pass
-cargo test --all-targets: pass (85 tests)
+cargo test --all-targets: pass (90 tests)
 cargo clippy --all-targets -- -D warnings: pass
 git diff --check: pass
 pinned Julia environment: pass and reproducible from tracked manifest (13 packages at pinned revision)
