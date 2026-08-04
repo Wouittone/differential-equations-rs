@@ -34,6 +34,7 @@ Pinned upstream revision:
 | `/root/driver_explicit_wave` | Driver foundation and generic explicit-RK migration | `codex/overnight-driver-explicit`; `differential-equations-rs-worktrees/driver-explicit` | completed and merged as `47c8ae5` | 2026-08-03T23:55:11Z |
 | `/root/explicit_upstream_audit` | Pinned explicit-RK dense/controller source audit | `codex/overnight-explicit-upstream-audit`; `differential-equations-rs-worktrees/explicit-upstream-audit` | active | 2026-08-03T23:55:11Z |
 | `/root/driver_implicit_wave` | Driver contract completion and implicit/TRBDF2 migration | `codex/overnight-driver-implicit`; `differential-equations-rs-worktrees/driver-implicit` | active | 2026-08-03T23:55:11Z |
+| `/root/linear_interface_audit` | Phase 3 vector/matrix/Jacobian/linear-solver source audit | `codex/overnight-linear-interface-audit`; `differential-equations-rs-worktrees/linear-interface-audit` | active | 2026-08-04T00:03:00Z |
 
 ## Completed waves
 
