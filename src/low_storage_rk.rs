@@ -8,7 +8,11 @@
 // Preserve the pinned source's decimal coefficient literals exactly.
 #![allow(clippy::excessive_precision)]
 
-use crate::solution::TrajectoryRecorder;
+use std::marker::PhantomData;
+
+use crate::integrator::{
+    KernelCapabilities, StepEstimate, StepKernel, integrate as drive_integration,
+};
 use crate::{OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions, SolverStats};
 
 trait LowStorage2N {
@@ -343,57 +347,88 @@ where
     F: Fn(&mut [f64], &[f64], &P, f64),
     T: LowStorage2N,
 {
-    if options.adaptive {
-        return Err(SolveError::AdaptiveStepUnsupported);
-    }
-    let Some(initial_step) = options.initial_step else {
-        return Err(SolveError::InitialStepRequired);
-    };
+    validate_recurrence::<T>()?;
+    drive_integration(
+        problem,
+        options,
+        LowStorageKernel::<T>::new(problem.initial_state().len()),
+    )
+}
+
+fn validate_recurrence<T: LowStorage2N>() -> Result<(), SolveError> {
     if T::A.len() + 1 != T::B.len() || T::A.len() != T::C.len() {
         return Err(SolveError::InvalidTableau);
     }
+    Ok(())
+}
 
-    let dimension = problem.initial_state().len();
-    let (start, end) = problem.time_span();
-    let direction = (end - start).signum();
-    let maximum_step = options.max_step.min((end - start).abs());
-    let mut step = direction * initial_step.min(maximum_step);
-    let mut time = start;
-    let mut state = problem.initial_state().to_vec();
-    let mut candidate = vec![0.0; dimension];
-    let mut derivative = vec![0.0; dimension];
-    let mut residual = vec![0.0; dimension];
-    let mut state_before_effect = if problem.has_callbacks() {
-        vec![0.0; dimension]
-    } else {
-        Vec::new()
-    };
-    let mut stats = SolverStats::default();
-    let initial_callbacks = problem.apply_initial_callbacks(&mut state, start)?;
-    stats.callback_invocations += initial_callbacks.invocations;
-    let mut recorder = TrajectoryRecorder::new(&state, start, options);
-    if initial_callbacks.terminate {
-        recorder.force_state(start, &state);
-        return Ok(recorder.finish(stats));
+struct LowStorageKernel<T> {
+    derivative: Vec<f64>,
+    residual: Vec<f64>,
+    marker: PhantomData<fn() -> T>,
+}
+
+impl<T> LowStorageKernel<T> {
+    fn new(dimension: usize) -> Self {
+        Self {
+            derivative: vec![0.0; dimension],
+            residual: vec![0.0; dimension],
+            marker: PhantomData,
+        }
+    }
+}
+
+impl<F, P, T> StepKernel<F, P> for LowStorageKernel<T>
+where
+    F: Fn(&mut [f64], &[f64], &P, f64),
+    T: LowStorage2N,
+{
+    fn capabilities(&self) -> KernelCapabilities {
+        KernelCapabilities::new(false, 1)
     }
 
-    let mut attempted_steps = 0;
-    while direction * (end - time) > 0.0 {
-        if attempted_steps == options.max_steps {
-            return Err(SolveError::MaxStepsExceeded);
-        }
-        attempted_steps += 1;
-        if direction * (time + step - end) > 0.0 {
-            step = end - time;
-        }
-        if time + step == time {
-            return Err(SolveError::StepSizeUnderflow);
-        }
+    fn initialize(
+        &mut self,
+        _: &OdeProblem<F, P>,
+        _: &[f64],
+        _: f64,
+        _: &mut SolverStats,
+    ) -> Result<(), SolveError> {
+        // Stage zero evaluates the current derivative on every attempt.
+        Ok(())
+    }
 
-        candidate.copy_from_slice(&state);
-        evaluate(problem, &mut derivative, &state, time, &mut stats)?;
-        for ((residual, candidate), derivative) in
-            residual.iter_mut().zip(&mut candidate).zip(&derivative)
+    fn estimate_initial_step(
+        &mut self,
+        _: &OdeProblem<F, P>,
+        _: &[f64],
+        _: f64,
+        _: f64,
+        _: f64,
+        _: &mut [f64],
+        _: &SolveOptions,
+        _: &mut SolverStats,
+    ) -> Result<f64, SolveError> {
+        Err(SolveError::InitialStepRequired)
+    }
+
+    fn attempt_step(
+        &mut self,
+        problem: &OdeProblem<F, P>,
+        state: &[f64],
+        time: f64,
+        step: f64,
+        candidate: &mut [f64],
+        _: &SolveOptions,
+        stats: &mut SolverStats,
+    ) -> Result<StepEstimate, SolveError> {
+        candidate.copy_from_slice(state);
+        evaluate(problem, &mut self.derivative, state, time, stats)?;
+        for ((residual, candidate), derivative) in self
+            .residual
+            .iter_mut()
+            .zip(&mut *candidate)
+            .zip(&self.derivative)
         {
             *residual = step * derivative;
             *candidate += T::B[0] * *residual;
@@ -401,55 +436,39 @@ where
         for stage in 0..T::A.len() {
             evaluate(
                 problem,
-                &mut derivative,
-                &candidate,
+                &mut self.derivative,
+                candidate,
                 time + T::C[stage] * step,
-                &mut stats,
+                stats,
             )?;
-            for ((residual, candidate), derivative) in
-                residual.iter_mut().zip(&mut candidate).zip(&derivative)
+            for ((residual, candidate), derivative) in self
+                .residual
+                .iter_mut()
+                .zip(&mut *candidate)
+                .zip(&self.derivative)
             {
                 *residual = T::A[stage] * *residual + step * derivative;
                 *candidate += T::B[stage + 1] * *residual;
             }
         }
-        ensure_finite(&candidate)?;
-
-        let previous_time = time;
-        let mut next_time = time + step;
-        if direction * (end - next_time) <= 0.0 {
-            next_time = end;
-        }
-        let callbacks = problem.apply_step_callbacks(
-            &state,
-            previous_time,
-            &mut candidate,
-            &mut next_time,
-            &mut state_before_effect,
-        )?;
-        stats.callback_invocations += callbacks.invocations;
-        time = next_time;
-        std::mem::swap(&mut state, &mut candidate);
-        stats.accepted_steps += 1;
-        recorder.record_step(
-            &candidate,
-            previous_time,
-            if callbacks.invocations == 0 {
-                &state
-            } else {
-                &state_before_effect
-            },
-            time,
-            time == end,
-        );
-        if callbacks.invocations > 0 {
-            recorder.force_state(time, &state);
-        }
-        if callbacks.terminate {
-            return Ok(recorder.finish(stats));
-        }
+        ensure_finite(candidate)?;
+        Ok(StepEstimate::new(0.0))
     }
-    Ok(recorder.finish(stats))
+
+    fn accept_step(
+        &mut self,
+        _: &OdeProblem<F, P>,
+        _: &[f64],
+        _: &[f64],
+        _: f64,
+        _: f64,
+        _: bool,
+        _: &mut SolverStats,
+    ) -> Result<(), SolveError> {
+        Ok(())
+    }
+
+    fn reject_step(&mut self) {}
 }
 
 fn evaluate<F, P>(
@@ -477,11 +496,16 @@ fn ensure_finite(values: &[f64]) -> Result<(), SolveError> {
 
 #[cfg(test)]
 mod tests {
+    use std::cell::Cell;
+    use std::rc::Rc;
+
     use super::{
         CarpenterKennedy2N54, Dglddrk73C, Dglddrk84C, Dglddrk84F, Ndblsrk124, Ndblsrk134,
-        Ndblsrk144, Ork256, Shlddrk64,
+        Ndblsrk144, Ork256, Shlddrk64, integrate,
     };
-    use crate::{CallbackAction, OdeAlgorithm, OdeProblem, SaveMode, SolveOptions, solve};
+    use crate::{
+        CallbackAction, OdeAlgorithm, OdeProblem, SaveMode, SolveError, SolveOptions, solve,
+    };
 
     type TestRhs = fn(&mut [f64], &[f64], &(), f64);
 
@@ -553,5 +577,60 @@ mod tests {
         let solution = solve(&terminating, Dglddrk73C, &options(0.1)).unwrap();
         assert!((solution.times().last().unwrap() - 0.5).abs() < 1.0e-14);
         assert_eq!(solution.stats().callback_invocations, 1);
+    }
+
+    #[test]
+    fn malformed_recurrence_is_rejected_before_driver_dispatch() {
+        struct MalformedRecurrence;
+
+        impl super::LowStorage2N for MalformedRecurrence {
+            const A: &'static [f64] = &[0.0];
+            const B: &'static [f64] = &[1.0];
+            const C: &'static [f64] = &[0.0];
+        }
+
+        assert_eq!(
+            integrate::<_, _, MalformedRecurrence>(&problem((0.0, 1.0), 1.0), &options(0.1))
+                .unwrap_err(),
+            SolveError::InvalidTableau
+        );
+    }
+
+    #[test]
+    fn terminating_callbacks_do_not_trigger_post_effect_rhs_work() {
+        let rhs_calls = Rc::new(Cell::new(0));
+        let rhs_counter = Rc::clone(&rhs_calls);
+        let problem = OdeProblem::new(
+            move |derivative: &mut [f64], state: &[f64], _: &(), _: f64| {
+                rhs_counter.set(rhs_counter.get() + 1);
+                derivative[0] = state[0];
+            },
+            vec![1.0],
+            (0.0, 1.0),
+            (),
+        )
+        .with_discrete_callback(
+            |_, _, time| time >= 0.25,
+            |_, _, _| CallbackAction::Terminate,
+        );
+        let solution = solve(&problem, Dglddrk73C, &options(0.25)).unwrap();
+        assert_eq!(solution.stats().rhs_evaluations, 7);
+        assert_eq!(rhs_calls.get(), 7);
+
+        let initial_rhs_calls = Rc::new(Cell::new(0));
+        let initial_rhs_counter = Rc::clone(&initial_rhs_calls);
+        let initially_terminating = OdeProblem::new(
+            move |derivative: &mut [f64], state: &[f64], _: &(), _: f64| {
+                initial_rhs_counter.set(initial_rhs_counter.get() + 1);
+                derivative[0] = state[0];
+            },
+            vec![1.0],
+            (0.0, 1.0),
+            (),
+        )
+        .with_discrete_callback(|_, _, _| true, |_, _, _| CallbackAction::Terminate);
+        let solution = solve(&initially_terminating, Ork256, &options(0.25)).unwrap();
+        assert_eq!(solution.stats().rhs_evaluations, 0);
+        assert_eq!(initial_rhs_calls.get(), 0);
     }
 }
