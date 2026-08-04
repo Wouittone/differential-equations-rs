@@ -32,7 +32,7 @@ Pinned upstream revision:
 | `/root/inventory_audit` | Exact pinned regular-ODE inventory audit | `codex/overnight-inventory`; `differential-equations-rs-worktrees/inventory-audit` | completed via `0579ff4` and `b4ff329` | 2026-08-04T00:00:00Z |
 | `/root/julia_manifest_repro` | Make pinned Julia gate reproducible in fresh worktrees | `codex/overnight-julia-manifest`; `differential-equations-rs-worktrees/julia-manifest` | completed and merged as `57ea0f8` | 2026-08-03T23:45:00Z |
 | `/root/driver_explicit_wave` | Driver foundation and generic explicit-RK migration | `codex/overnight-driver-explicit`; `differential-equations-rs-worktrees/driver-explicit` | completed and merged as `47c8ae5` | 2026-08-03T23:55:11Z |
-| `/root/explicit_upstream_audit` | Pinned explicit-RK dense/controller source audit | `codex/overnight-explicit-upstream-audit`; `differential-equations-rs-worktrees/explicit-upstream-audit` | active | 2026-08-03T23:55:11Z |
+| `/root/explicit_upstream_audit` | Pinned explicit-RK dense/controller source audit | `codex/overnight-explicit-upstream-audit`; `differential-equations-rs-worktrees/explicit-upstream-audit` | completed and merged as `fc0d556` | 2026-08-04T00:05:00Z |
 | `/root/driver_implicit_wave` | Driver contract completion and implicit/TRBDF2 migration | `codex/overnight-driver-implicit`; `differential-equations-rs-worktrees/driver-implicit` | active | 2026-08-03T23:55:11Z |
 | `/root/linear_interface_audit` | Phase 3 vector/matrix/Jacobian/linear-solver source audit | `codex/overnight-linear-interface-audit`; `differential-equations-rs-worktrees/linear-interface-audit` | active | 2026-08-04T00:03:00Z |
 
@@ -44,6 +44,7 @@ Pinned upstream revision:
 | Julia reproducibility | Track portable pinned manifest for 13 OrdinaryDiffEq packages | not applicable | pinned check plus 202 pass | reviewed and merged as `57ea0f8`; fresh-worktree check passed |
 | Driver foundation | Static `StepKernel`, lifecycle mocks, and generic fixed/adaptive explicit RK | 80 pass | 202 pass | reviewed and merged as `47c8ae5`; fixed solve remains 6 allocations |
 | Exact inventory | 349 source-resolved exports; schema v2; 345 in scope, 280 missing | 80 pass | 202 pass | strict coordinator and fresh-worktree byte checks pass via `0579ff4` + `b4ff329` |
+| Explicit upstream audit | 22 current explicit/Tsit5/Verner methods; 134 verified source references | not applicable | not applicable | report reviewed and merged as `fc0d556` |
 
 ## Validation snapshot
 
@@ -63,4 +64,4 @@ Extend the driver for recoverable implicit attempt failures and per-family contr
 
 ## Last decision
 
-The inventory byte-stability defect was corrected without weakening strict hashes; Phase 1 is fully closed. Phase 2 continues with implicit/TRBDF2 migration.
+The explicit audit identified missing adaptive RK4, method-specific/lazy dense output, and upstream PI-controller semantics. These are queued behind the current Phase 2 driver migrations and Phase 4 schema gate.
