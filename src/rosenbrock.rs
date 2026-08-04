@@ -1,5 +1,7 @@
+use crate::integrator::{
+    ControllerConfig, KernelCapabilities, StepEstimate, StepKernel, integrate as drive_integration,
+};
 use crate::linear::{factorize, solve_factorized};
-use crate::solution::TrajectoryRecorder;
 use crate::{OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions, SolverStats};
 
 const GAMMA: f64 = 1.0 / (2.0 + std::f64::consts::SQRT_2);
@@ -19,7 +21,6 @@ struct Workspace {
     time_derivative: Vec<f64>,
     midpoint_state: Vec<f64>,
     midpoint_derivative: Vec<f64>,
-    candidate: Vec<f64>,
     candidate_derivative: Vec<f64>,
     k1: Vec<f64>,
     k2: Vec<f64>,
@@ -40,7 +41,6 @@ impl Workspace {
             time_derivative: vec![0.0; dimension],
             midpoint_state: vec![0.0; dimension],
             midpoint_derivative: vec![0.0; dimension],
-            candidate: vec![0.0; dimension],
             candidate_derivative: vec![0.0; dimension],
             k1: vec![0.0; dimension],
             k2: vec![0.0; dimension],
@@ -63,148 +63,136 @@ impl OdeAlgorithm for Rosenbrock23 {
     where
         F: Fn(&mut [f64], &[f64], &P, f64),
     {
-        integrate(problem, options)
+        drive_integration(
+            problem,
+            options,
+            Rosenbrock23Kernel::new(problem.initial_state().len()),
+        )
     }
 }
 
-fn integrate<F, P>(
-    problem: &OdeProblem<F, P>,
-    options: &SolveOptions,
-) -> Result<Solution, SolveError>
+struct Rosenbrock23Kernel {
+    workspace: Workspace,
+    candidate_derivative_valid: bool,
+}
+
+impl Rosenbrock23Kernel {
+    fn new(dimension: usize) -> Self {
+        Self {
+            workspace: Workspace::new(dimension),
+            candidate_derivative_valid: false,
+        }
+    }
+}
+
+impl<F, P> StepKernel<F, P> for Rosenbrock23Kernel
 where
     F: Fn(&mut [f64], &[f64], &P, f64),
 {
-    let dimension = problem.initial_state().len();
-    let (start, end) = problem.time_span();
-    let direction = (end - start).signum();
-    let interval = (end - start).abs();
-    let maximum_step = options.max_step.min(interval);
-    let mut state = problem.initial_state().to_vec();
-    let mut state_before_effect = if problem.has_callbacks() {
-        vec![0.0; dimension]
-    } else {
-        Vec::new()
-    };
-    let mut workspace = Workspace::new(dimension);
-    let mut stats = SolverStats::default();
-    let initial_callbacks = problem.apply_initial_callbacks(&mut state, start)?;
-    stats.callback_invocations += initial_callbacks.invocations;
-    let mut recorder = TrajectoryRecorder::new(&state, start, options);
-    if initial_callbacks.terminate {
-        recorder.force_state(start, &state);
-        return Ok(recorder.finish(stats));
+    fn capabilities(&self) -> KernelCapabilities {
+        KernelCapabilities::with_controller(
+            true,
+            ControllerConfig::proportional(3, SAFETY, MIN_FACTOR, MAX_FACTOR, MIN_FACTOR),
+        )
     }
-    evaluate(
-        problem,
-        &mut workspace.current_derivative,
-        &state,
-        start,
-        &mut stats,
-    )?;
 
-    let initial_step = match options.initial_step {
-        Some(step) => step.min(maximum_step),
-        None if !options.adaptive => return Err(SolveError::InitialStepRequired),
-        None => estimate_initial_step(&state, &workspace.current_derivative, options, maximum_step),
-    };
-    let mut step = direction * initial_step;
-    let mut time = start;
-    let mut attempts = 0;
-    let mut previous_rejected = false;
+    fn initialize(
+        &mut self,
+        problem: &OdeProblem<F, P>,
+        state: &[f64],
+        time: f64,
+        stats: &mut SolverStats,
+    ) -> Result<(), SolveError> {
+        evaluate(
+            problem,
+            &mut self.workspace.current_derivative,
+            state,
+            time,
+            stats,
+        )
+    }
 
-    while direction * (end - time) > 0.0 {
-        if attempts == options.max_steps {
-            return Err(SolveError::MaxStepsExceeded);
-        }
-        attempts += 1;
-        if direction * (time + step - end) > 0.0 {
-            step = end - time;
-        }
-        if time + step == time {
-            return Err(SolveError::StepSizeUnderflow);
-        }
+    fn estimate_initial_step(
+        &mut self,
+        _: &OdeProblem<F, P>,
+        state: &[f64],
+        _: f64,
+        _: f64,
+        maximum_step: f64,
+        _: &mut [f64],
+        options: &SolveOptions,
+        _: &mut SolverStats,
+    ) -> Result<f64, SolveError> {
+        Ok(estimate_initial_step(
+            state,
+            &self.workspace.current_derivative,
+            options,
+            maximum_step,
+        ))
+    }
 
+    fn attempt_step(
+        &mut self,
+        problem: &OdeProblem<F, P>,
+        state: &[f64],
+        time: f64,
+        step: f64,
+        candidate: &mut [f64],
+        options: &SolveOptions,
+        stats: &mut SolverStats,
+    ) -> Result<StepEstimate, SolveError> {
         let error = perform_step(
             problem,
-            &state,
+            state,
             time,
             step,
+            candidate,
             options,
-            &mut workspace,
-            &mut stats,
+            &mut self.workspace,
+            stats,
         )?;
-        if error <= 1.0 {
-            let previous_time = time;
-            let mut next_time = time + step;
-            if direction * (end - next_time) <= 0.0 {
-                next_time = end;
-            }
-            let callbacks = problem.apply_step_callbacks(
-                &state,
-                previous_time,
-                &mut workspace.candidate,
-                &mut next_time,
-                &mut state_before_effect,
-            )?;
-            stats.callback_invocations += callbacks.invocations;
-            time = next_time;
-            std::mem::swap(&mut state, &mut workspace.candidate);
-            stats.accepted_steps += 1;
-            workspace.differentiation_valid = false;
-            recorder.record_step(
-                &workspace.candidate,
-                previous_time,
-                if callbacks.invocations == 0 {
-                    &state
-                } else {
-                    &state_before_effect
-                },
-                time,
-                time == end,
+        self.candidate_derivative_valid = options.adaptive;
+        Ok(StepEstimate::new(error))
+    }
+
+    fn accept_step(
+        &mut self,
+        problem: &OdeProblem<F, P>,
+        _: &[f64],
+        state: &[f64],
+        time: f64,
+        _: f64,
+        callback_applied: bool,
+        stats: &mut SolverStats,
+    ) -> Result<(), SolveError> {
+        self.workspace.differentiation_valid = false;
+        if self.candidate_derivative_valid && !callback_applied {
+            std::mem::swap(
+                &mut self.workspace.current_derivative,
+                &mut self.workspace.candidate_derivative,
             );
-            if callbacks.invocations > 0 {
-                recorder.force_state(time, &state);
-            }
-            if callbacks.terminate {
-                return Ok(recorder.finish(stats));
-            }
-            if options.adaptive && callbacks.invocations == 0 {
-                std::mem::swap(
-                    &mut workspace.current_derivative,
-                    &mut workspace.candidate_derivative,
-                );
-            } else {
-                evaluate(
-                    problem,
-                    &mut workspace.current_derivative,
-                    &state,
-                    time,
-                    &mut stats,
-                )?;
-            }
-            if options.adaptive {
-                let mut factor = step_factor(error);
-                if previous_rejected {
-                    factor = factor.min(1.0);
-                }
-                step = direction * (step.abs() * factor).min(maximum_step);
-            }
-            previous_rejected = false;
+            Ok(())
         } else {
-            stats.rejected_steps += 1;
-            step *= step_factor(error).min(1.0);
-            previous_rejected = true;
+            evaluate(
+                problem,
+                &mut self.workspace.current_derivative,
+                state,
+                time,
+                stats,
+            )
         }
     }
 
-    Ok(recorder.finish(stats))
+    fn reject_step(&mut self) {}
 }
 
+#[allow(clippy::too_many_arguments)]
 fn perform_step<F, P>(
     problem: &OdeProblem<F, P>,
     state: &[f64],
     time: f64,
     step: f64,
+    candidate: &mut [f64],
     options: &SolveOptions,
     workspace: &mut Workspace,
     stats: &mut SolverStats,
@@ -265,7 +253,7 @@ where
     );
     for (index, &value) in state.iter().enumerate() {
         workspace.k2[index] = workspace.right_hand_side[index] + workspace.k1[index];
-        workspace.candidate[index] = value + step * workspace.k2[index];
+        candidate[index] = value + step * workspace.k2[index];
     }
     stats.linear_solves += 1;
 
@@ -275,7 +263,7 @@ where
     evaluate(
         problem,
         &mut workspace.candidate_derivative,
-        &workspace.candidate,
+        candidate,
         time + step,
         stats,
     )?;
@@ -299,7 +287,7 @@ where
         let local_error =
             (step / 6.0) * (workspace.k1[index] - 2.0 * workspace.k2[index] + workspace.k3[index]);
         let scale = options.absolute_tolerance
-            + options.relative_tolerance * value.abs().max(workspace.candidate[index].abs());
+            + options.relative_tolerance * value.abs().max(candidate[index].abs());
         squared_norm += (local_error / scale).powi(2);
     }
     Ok((squared_norm / dimension as f64).sqrt())
@@ -419,19 +407,12 @@ fn estimate_initial_step(
     }
 }
 
-fn step_factor(error: f64) -> f64 {
-    if error == 0.0 {
-        MAX_FACTOR
-    } else if error.is_finite() {
-        (SAFETY * error.powf(-1.0 / 3.0)).clamp(MIN_FACTOR, MAX_FACTOR)
-    } else {
-        MIN_FACTOR
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use crate::{OdeProblem, Rosenbrock23, SaveMode, SolveOptions, solve};
+    use std::cell::Cell;
+    use std::rc::Rc;
+
+    use crate::{CallbackAction, OdeProblem, Rosenbrock23, SaveMode, SolveOptions, solve};
 
     #[test]
     fn solves_a_stiff_nonautonomous_problem() {
@@ -506,5 +487,40 @@ mod tests {
 
         assert!((numeric.last_state()[0] - analytic.last_state()[0]).abs() < 1.0e-12);
         assert!(analytic.stats().rhs_evaluations < numeric.stats().rhs_evaluations);
+    }
+
+    #[test]
+    fn terminating_callback_skips_post_effect_rosenbrock_work() {
+        let rhs_calls = Rc::new(Cell::new(0));
+        let observed_calls = Rc::clone(&rhs_calls);
+        let problem = OdeProblem::new(
+            move |du: &mut [f64], u: &[f64], _: &(), _: f64| {
+                observed_calls.set(observed_calls.get() + 1);
+                du[0] = if u[0] == 12_345.0 { f64::NAN } else { -u[0] };
+            },
+            vec![1.0],
+            (0.0, 1.0),
+            (),
+        )
+        .with_discrete_callback(
+            |_, _, time| time > 0.0,
+            |state, _, _| {
+                state[0] = 12_345.0;
+                CallbackAction::Terminate
+            },
+        );
+        let options = SolveOptions {
+            adaptive: false,
+            initial_step: Some(0.25),
+            save: SaveMode::Endpoints,
+            ..SolveOptions::default()
+        };
+
+        let solution = solve(&problem, Rosenbrock23, &options).unwrap();
+
+        assert_eq!(solution.last_state()[0], 12_345.0);
+        assert_eq!(rhs_calls.get(), solution.stats().rhs_evaluations);
+        assert_eq!(solution.stats().accepted_steps, 1);
+        assert_eq!(solution.stats().jacobian_evaluations, 1);
     }
 }
