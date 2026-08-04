@@ -1,23 +1,101 @@
 use crate::solution::TrajectoryRecorder;
 use crate::{OdeProblem, Solution, SolveError, SolveOptions, SolverStats};
 
-const SAFETY: f64 = 0.9;
-const MIN_FACTOR: f64 = 0.2;
-const MAX_FACTOR: f64 = 10.0;
+const DEFAULT_SAFETY: f64 = 0.9;
+const DEFAULT_MIN_FACTOR: f64 = 0.2;
+const DEFAULT_MAX_FACTOR: f64 = 10.0;
+
+/// Per-family metadata for the proportional step-size controller.
+///
+/// Keeping the complete policy on the kernel capability lets solver families
+/// preserve their existing constants while sharing the integration lifecycle.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct ControllerConfig {
+    error_order: usize,
+    safety: f64,
+    minimum_factor: f64,
+    maximum_factor: f64,
+    rejected_acceptance_maximum: f64,
+    rejection_maximum: f64,
+    failed_attempt_factor: f64,
+}
+
+impl ControllerConfig {
+    pub(crate) const fn proportional(
+        error_order: usize,
+        safety: f64,
+        minimum_factor: f64,
+        maximum_factor: f64,
+        failed_attempt_factor: f64,
+    ) -> Self {
+        Self {
+            error_order,
+            safety,
+            minimum_factor,
+            maximum_factor,
+            rejected_acceptance_maximum: 1.0,
+            rejection_maximum: 1.0,
+            failed_attempt_factor,
+        }
+    }
+
+    const fn default_for_order(error_order: usize) -> Self {
+        Self::proportional(
+            error_order,
+            DEFAULT_SAFETY,
+            DEFAULT_MIN_FACTOR,
+            DEFAULT_MAX_FACTOR,
+            DEFAULT_MIN_FACTOR,
+        )
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum AttemptFailurePolicy {
+    Terminal,
+    NonlinearOrSingular,
+}
+
+impl AttemptFailurePolicy {
+    const fn is_recoverable(self, error: SolveError) -> bool {
+        matches!(
+            (self, error),
+            (
+                Self::NonlinearOrSingular,
+                SolveError::NonlinearSolveFailed | SolveError::SingularLinearSystem
+            )
+        )
+    }
+}
 
 /// Properties the common driver needs without knowing a kernel's internals.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct KernelCapabilities {
     adaptive: bool,
-    controller_order: usize,
+    controller: ControllerConfig,
+    attempt_failure_policy: AttemptFailurePolicy,
 }
 
 impl KernelCapabilities {
     pub(crate) const fn new(adaptive: bool, controller_order: usize) -> Self {
         Self {
             adaptive,
-            controller_order,
+            controller: ControllerConfig::default_for_order(controller_order),
+            attempt_failure_policy: AttemptFailurePolicy::Terminal,
         }
+    }
+
+    pub(crate) const fn with_controller(adaptive: bool, controller: ControllerConfig) -> Self {
+        Self {
+            adaptive,
+            controller,
+            attempt_failure_policy: AttemptFailurePolicy::Terminal,
+        }
+    }
+
+    pub(crate) const fn recover_nonlinear_and_singular_failures(mut self) -> Self {
+        self.attempt_failure_policy = AttemptFailurePolicy::NonlinearOrSingular;
+        self
     }
 }
 
@@ -160,7 +238,7 @@ where
             return Err(SolveError::StepSizeUnderflow);
         }
 
-        let estimate = kernel.attempt_step(
+        let estimate = match kernel.attempt_step(
             problem,
             &state,
             time,
@@ -168,7 +246,20 @@ where
             &mut candidate,
             options,
             &mut stats,
-        )?;
+        ) {
+            Ok(estimate) => estimate,
+            Err(error)
+                if options.adaptive
+                    && capabilities.attempt_failure_policy.is_recoverable(error) =>
+            {
+                stats.rejected_steps += 1;
+                kernel.reject_step();
+                step *= capabilities.controller.failed_attempt_factor;
+                previous_step_rejected = true;
+                continue;
+            }
+            Err(error) => return Err(error),
+        };
         if !candidate.iter().all(|value| value.is_finite()) {
             return Err(SolveError::NonFiniteDerivative);
         }
@@ -220,9 +311,9 @@ where
             )?;
 
             if options.adaptive {
-                let mut factor = step_factor(estimate.error_norm, capabilities.controller_order);
+                let mut factor = step_factor(estimate.error_norm, capabilities.controller);
                 if previous_step_rejected {
-                    factor = factor.min(1.0);
+                    factor = factor.min(capabilities.controller.rejected_acceptance_maximum);
                 }
                 step = direction * (step.abs() * factor).min(maximum_step);
             }
@@ -230,7 +321,8 @@ where
         } else {
             stats.rejected_steps += 1;
             kernel.reject_step();
-            step *= step_factor(estimate.error_norm, capabilities.controller_order).min(1.0);
+            step *= step_factor(estimate.error_norm, capabilities.controller)
+                .min(capabilities.controller.rejection_maximum);
             previous_step_rejected = true;
         }
     }
@@ -238,13 +330,14 @@ where
     Ok(recorder.finish(stats))
 }
 
-fn step_factor(error: f64, order: usize) -> f64 {
+fn step_factor(error: f64, controller: ControllerConfig) -> f64 {
     if error == 0.0 {
-        MAX_FACTOR
+        controller.maximum_factor
     } else if error.is_finite() {
-        (SAFETY * error.powf(-1.0 / order as f64)).clamp(MIN_FACTOR, MAX_FACTOR)
+        (controller.safety * error.powf(-1.0 / controller.error_order as f64))
+            .clamp(controller.minimum_factor, controller.maximum_factor)
     } else {
-        MIN_FACTOR
+        controller.minimum_factor
     }
 }
 
@@ -253,11 +346,14 @@ mod tests {
     use std::cell::Cell;
     use std::rc::Rc;
 
-    use super::{KernelCapabilities, StepEstimate, StepKernel, integrate};
+    use super::{ControllerConfig, KernelCapabilities, StepEstimate, StepKernel, integrate};
     use crate::{CallbackAction, OdeProblem, SaveMode, SolveError, SolveOptions, SolverStats};
 
     struct MockKernel {
         errors: Vec<f64>,
+        failures: Vec<Option<SolveError>>,
+        recover_failures: bool,
+        failed_attempt_factor: f64,
         attempts: usize,
         initialize_calls: usize,
         accept_calls: usize,
@@ -275,6 +371,9 @@ mod tests {
         fn with_errors(errors: Vec<f64>) -> Self {
             Self {
                 errors,
+                failures: Vec::new(),
+                recover_failures: false,
+                failed_attempt_factor: 0.2,
                 attempts: 0,
                 initialize_calls: 0,
                 accept_calls: 0,
@@ -283,6 +382,13 @@ mod tests {
                 second_candidate: None,
                 unexpected_candidate: false,
             }
+        }
+
+        fn with_failures(failures: Vec<Option<SolveError>>) -> Self {
+            let mut kernel = Self::with_errors(vec![0.0]);
+            kernel.failures = failures;
+            kernel.recover_failures = true;
+            kernel
         }
 
         fn observe_candidate(&mut self, pointer: *const f64) {
@@ -303,7 +409,15 @@ mod tests {
         F: Fn(&mut [f64], &[f64], &P, f64),
     {
         fn capabilities(&self) -> KernelCapabilities {
-            KernelCapabilities::new(true, 1)
+            let capabilities = KernelCapabilities::with_controller(
+                true,
+                ControllerConfig::proportional(1, 0.9, 0.2, 10.0, self.failed_attempt_factor),
+            );
+            if self.recover_failures {
+                capabilities.recover_nonlinear_and_singular_failures()
+            } else {
+                capabilities
+            }
         }
 
         fn initialize(
@@ -342,15 +456,20 @@ mod tests {
             _: &mut SolverStats,
         ) -> Result<StepEstimate, SolveError> {
             self.observe_candidate(candidate.as_ptr());
+            let attempt = self.attempts;
+            self.attempts += 1;
+            if let Some(error) = self.failures.get(attempt).copied().flatten() {
+                candidate.fill(f64::NAN);
+                return Err(error);
+            }
             for (candidate, state) in candidate.iter_mut().zip(state) {
                 *candidate = state + step;
             }
             let error = self
                 .errors
-                .get(self.attempts)
+                .get(attempt)
                 .copied()
                 .unwrap_or_else(|| *self.errors.last().unwrap());
-            self.attempts += 1;
             Ok(StepEstimate::new(error))
         }
 
@@ -531,6 +650,69 @@ mod tests {
             Err(SolveError::MaxStepsExceeded)
         );
         assert_eq!(kernel.attempts, 2);
+    }
+
+    #[test]
+    fn recoverable_attempt_failures_reject_without_using_the_candidate() {
+        let effects = Rc::new(Cell::new(0));
+        let effect_count = Rc::clone(&effects);
+        let problem = unit_problem((0.0, 0.5), 0.0).with_discrete_callback(
+            |_, _, time| time > 0.0,
+            move |_, _, _| {
+                effect_count.set(effect_count.get() + 1);
+                CallbackAction::Continue
+            },
+        );
+        let options = SolveOptions {
+            initial_step: Some(0.5),
+            save: SaveMode::EveryStep,
+            ..SolveOptions::default()
+        };
+        let mut kernel = MockKernel::with_failures(vec![
+            Some(SolveError::NonlinearSolveFailed),
+            Some(SolveError::SingularLinearSystem),
+            None,
+        ]);
+
+        let solution = integrate(&problem, &options, &mut kernel).unwrap();
+
+        assert_eq!(kernel.reject_calls, 2);
+        assert_eq!(solution.stats().rejected_steps, 2);
+        assert_eq!(effects.get(), solution.stats().accepted_steps);
+        assert_eq!(solution.times().len(), solution.stats().accepted_steps + 1);
+        assert_eq!(solution.last_state(), &[0.5]);
+    }
+
+    #[test]
+    fn failed_attempt_shrink_is_checked_for_underflow_before_retry() {
+        let problem = unit_problem((1.0, 2.0), 0.0);
+        let options = SolveOptions {
+            initial_step: Some(f64::EPSILON),
+            ..SolveOptions::default()
+        };
+        let mut kernel = MockKernel::with_failures(vec![Some(SolveError::NonlinearSolveFailed)]);
+
+        assert_eq!(
+            integrate(&problem, &options, &mut kernel),
+            Err(SolveError::StepSizeUnderflow)
+        );
+        assert_eq!(kernel.attempts, 1);
+        assert_eq!(kernel.reject_calls, 1);
+        assert_eq!(kernel.accept_calls, 0);
+    }
+
+    #[test]
+    fn recoverable_failure_policy_is_terminal_in_fixed_step_mode() {
+        let problem = unit_problem((0.0, 1.0), 0.0);
+        let mut kernel = MockKernel::with_failures(vec![Some(SolveError::SingularLinearSystem)]);
+
+        assert_eq!(
+            integrate(&problem, &fixed_options(0.25), &mut kernel),
+            Err(SolveError::SingularLinearSystem)
+        );
+        assert_eq!(kernel.attempts, 1);
+        assert_eq!(kernel.reject_calls, 0);
+        assert_eq!(kernel.accept_calls, 0);
     }
 
     #[test]
