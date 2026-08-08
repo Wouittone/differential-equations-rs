@@ -39,6 +39,7 @@ Pinned upstream revision:
 | `/root/driver_adams_wave` | Fixed/variable Adams shared-driver migration | `codex/overnight-driver-adams`; `differential-equations-rs-worktrees/driver-adams` | completed and merged as `e747d0b` | 2026-08-08T20:28:34Z |
 | `/root/driver_low_storage_wave` | Low-storage RK shared-driver migration | `codex/overnight-driver-low-storage`; `differential-equations-rs-worktrees/driver-low-storage` | completed and merged as `962c89a` | 2026-08-04T00:21:00Z |
 | `/root/phase2_lifecycle_audit` | Repository-wide first-order lifecycle audit | `codex/phase2-lifecycle-audit`; `differential-equations-rs-worktrees/phase2-lifecycle-audit` | completed and merged as `5383420` | 2026-08-08T20:34:35Z |
+| `/root/linear_caller_migration` | Checked DenseLu/StateLayout migration of implicit caller | `codex/linear-caller-migration`; `differential-equations-rs-worktrees/linear-caller` | completed and merged as `335d162` | 2026-08-08T21:02:30Z |
 
 ## Completed waves
 
@@ -57,6 +58,7 @@ Pinned upstream revision:
 | Phase 2 lifecycle audit | Centralized first-order loop and complete StepKernel coverage; second-order loop explicitly excluded | 77 Rust tests | 202 pass | reviewed and merged as `5383420` |
 | Phase 3 checked linear interface | State/matrix views and revisioned dense LU cache; caller migration pending | 80 Rust tests | 202 pass | reviewed and merged as `a1bb8fa` |
 | Phase 4 schema foundation | Tagged coefficient metadata, structural validation, and deterministic manifest check | 82 Rust tests | pending caller-wave rerun | reviewed and merged as `c20da11` |
+| Phase 3 caller proof | Implicit Euler/Midpoint/Trapezoid checked first factorization with allocation-invariant refresh path | 82 Rust tests plus migration integration | 202 pass | reviewed and merged as `335d162`; implicit compliance byte-identical |
 
 ## Validation snapshot
 
@@ -72,8 +74,8 @@ inventory regeneration: pass; 349 source references and strict cross-checkout by
 
 ## Next dependency-ready task
 
-Implement the checked vector/matrix/LU interfaces from the Phase 3 linear-interface audit, then migrate one native implicit caller as a compatibility proof.
+Complete the remaining Phase 3 Jacobian/operator and nonsingular-mass seams, then switch the coefficient schema from manifest-only to generated compile-time fixtures.
 
 ## Last decision
 
-The shared first-order driver is frozen and all queued first-order families (explicit, implicit/TRBDF2, Rosenbrock/Rodas, low-storage, and Adams) pass. The Phase 2 audit found only `src/integrator.rs:228` as the first-order lifecycle loop; `src/second_order.rs:440` is an explicit exclusion. Phase 3 checked views and revisioned dense LU are merged; one implicit caller migration remains as the compatibility proof. The Phase 4 tagged schema and deterministic manifest foundation is also merged without runtime coefficient changes.
+The shared first-order driver is frozen and all queued first-order families (explicit, implicit/TRBDF2, Rosenbrock/Rodas, low-storage, and Adams) pass. The Phase 2 audit found only `src/integrator.rs:228` as the first-order lifecycle loop; `src/second_order.rs:440` is an explicit exclusion. Phase 3 checked views, revisioned dense LU, and one implicit caller proof are merged with unchanged compliance and allocations; Jacobian/operator and mass seams remain. The Phase 4 tagged schema and deterministic manifest foundation is also merged without runtime coefficient changes.
