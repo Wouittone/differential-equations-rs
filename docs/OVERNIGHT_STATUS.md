@@ -63,6 +63,7 @@ Pinned upstream revision:
 | Phase 5 representation foundation | Typed split/IMEX and regular nonsingular mass-matrix problem containers (preparatory; solver migration gated on Phase 4) | 86 Rust tests | pending split/mass solver wave | reviewed and merged as `20fe376` |
 | Phase 6 dense foundation | Checked Hermite `DenseSegment` seam with endpoint derivative data | 87 Rust tests | 202 pass before foundation | reviewed and merged as `27287cc` |
 | Phase 6 controller metadata | PI history metadata seam, default proportional behavior unchanged | 88 Rust tests | pending integrated rerun | reviewed and merged as `883c11d` |
+| Phase 6 dense/controller audit | Exact pinned service/controller gaps and two vertical implementation slices | not applicable | not applicable | reviewed and merged as `85c0d2e` |
 | Solver statistics | Linear factorization counter across implicit/Rosenbrock/TRBDF2 paths | 87 Rust tests | 202 pass | reviewed and merged as `01a0884` |
 | BDF/SDIRK feasibility audit | Exact pinned source map and dependency assessment; recommends SDIRK2 then ABDF2 | not applicable | not applicable | reviewed and merged as `0f5948d` |
 | Phase 3 caller proof | Implicit Euler/Midpoint/Trapezoid checked first factorization with allocation-invariant refresh path | 82 Rust tests plus migration integration | 202 pass | reviewed and merged as `335d162`; implicit compliance byte-identical |
