@@ -4,7 +4,7 @@ Coordinator: `/root`
 
 Started: `2026-08-03T23:32:13Z`
 
-Current phase: `Phase 3 - checked vector/matrix/linear interfaces`
+Current phase: `Phase 4 - coefficient schema and deterministic code generation`
 
 Pinned upstream revision:
 
@@ -17,7 +17,7 @@ Pinned upstream revision:
 - [x] Soundness gate
 - [x] Upstream inventory
 - [x] Shared integrator driver
-- [ ] Vector/matrix interfaces (in progress)
+- [x] Vector/matrix interfaces
 - [ ] Coefficient schema/code generation
 - [ ] General problem representations
 - [ ] Dense output/controller parity
@@ -59,6 +59,7 @@ Pinned upstream revision:
 | Phase 3 checked linear interface | State/matrix views and revisioned dense LU cache; caller migration pending | 80 Rust tests | 202 pass | reviewed and merged as `a1bb8fa` |
 | Phase 4 schema foundation | Tagged coefficient metadata, structural validation, and deterministic manifest check | 82 Rust tests | pending caller-wave rerun | reviewed and merged as `c20da11` |
 | Phase 3 caller proof | Implicit Euler/Midpoint/Trapezoid checked first factorization with allocation-invariant refresh path | 82 Rust tests plus migration integration | 202 pass | reviewed and merged as `335d162`; implicit compliance byte-identical |
+| Phase 3 operator/mass seams | JacobianProvider, checked LinearOperator, dense/identity operators, and nonsingular mass operator | 84 Rust tests | pending integrated Julia rerun | reviewed and merged as `052cef3` + `c64dda1` |
 
 ## Validation snapshot
 
@@ -74,8 +75,8 @@ inventory regeneration: pass; 349 source references and strict cross-checkout by
 
 ## Next dependency-ready task
 
-Complete the remaining Phase 3 Jacobian/operator and nonsingular-mass seams, then switch the coefficient schema from manifest-only to generated compile-time fixtures.
+Extend deterministic coefficient generation from the three fixture manifest to generated compile-time records, then begin general split/IMEX and mass-matrix problem representations.
 
 ## Last decision
 
-The shared first-order driver is frozen and all queued first-order families (explicit, implicit/TRBDF2, Rosenbrock/Rodas, low-storage, and Adams) pass. The Phase 2 audit found only `src/integrator.rs:228` as the first-order lifecycle loop; `src/second_order.rs:440` is an explicit exclusion. Phase 3 checked views, revisioned dense LU, and one implicit caller proof are merged with unchanged compliance and allocations; Jacobian/operator and mass seams remain. The Phase 4 tagged schema and deterministic manifest foundation is also merged without runtime coefficient changes.
+The shared first-order driver is frozen and all queued first-order families (explicit, implicit/TRBDF2, Rosenbrock/Rodas, low-storage, and Adams) pass. The Phase 2 audit found only `src/integrator.rs:228` as the first-order lifecycle loop; `src/second_order.rs:440` is an explicit exclusion. Phase 3 checked views, revisioned dense LU, Jacobian/operator seams, nonsingular mass operators, and one implicit caller proof are merged with unchanged compliance and allocations. Phase 4 now advances from the tagged schema and deterministic manifest foundation toward generated compile-time records.
