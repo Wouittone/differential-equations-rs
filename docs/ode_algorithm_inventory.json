@@ -9,8 +9,8 @@
     "included_canonical_or_composite": 333,
     "included_aliases": 12,
     "excluded_names": 4,
-    "implemented_and_julia_tested": 65,
-    "missing_included_names": 280
+    "implemented_and_julia_tested": 66,
+    "missing_included_names": 279
   },
   "uncertainties": [
     "The inventory treats package exports as the public algorithm surface; internal, unexported experimental types are not parity targets.",
@@ -7089,10 +7089,10 @@
         "Jacobian and linear solve",
         "adaptive controller"
       ],
-      "rust_status": "missing",
-      "rust_name": null,
-      "julia_status": "no-matched-compliance-detected",
-      "julia_compliance_detected": false,
+      "rust_status": "implemented-and-julia-tested",
+      "rust_name": "Sdirk2",
+      "julia_status": "matched-compliance-detected",
+      "julia_compliance_detected": true,
       "upstream_source": "lib/OrdinaryDiffEqSDIRK/src/algorithms.jl",
       "upstream_line": 256
     },

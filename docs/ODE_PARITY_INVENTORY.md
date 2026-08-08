@@ -20,8 +20,8 @@ and [ode_algorithm_inventory.csv](ode_algorithm_inventory.csv).
 - In-scope regular ODE names: **345**
   (333 canonical/composite constructors and
   12 public aliases).
-- Implemented and detected in matched Julia tests: **65**.
-- Missing in-scope public names: **280**.
+- Implemented and detected in matched Julia tests: **66**.
+- Missing in-scope public names: **279**.
 - Explicitly excluded public names: **4**.
 
 Aliases are public parity obligations but do not require a second numerical kernel.
@@ -51,7 +51,7 @@ Aliases are public parity obligations but do not require a second numerical kern
 | Rosenbrock and Rosenbrock-W | 40 | 4 | 36 |
 | Runge-Kutta interval prediction | 1 | 0 | 1 |
 | Runge-Kutta-Nystrom | 17 | 0 | 17 |
-| SDIRK, ESDIRK, and additive IMEX RK | 39 | 4 | 35 |
+| SDIRK, ESDIRK, and additive IMEX RK | 39 | 5 | 34 |
 | second-order structural dynamics | 2 | 0 | 2 |
 | SIMD explicit Runge-Kutta | 3 | 0 | 3 |
 | stabilized explicit Runge-Kutta | 13 | 0 | 13 |
@@ -330,7 +330,7 @@ the JSON/CSV records.
 - `Nystrom5VelocityIndependent` — OrdinaryDiffEqRKN; SecondOrderODEProblem or DynamicalODEProblem
 - `RKN4` — OrdinaryDiffEqRKN; SecondOrderODEProblem or DynamicalODEProblem
 
-### SDIRK, ESDIRK, and additive IMEX RK (35)
+### SDIRK, ESDIRK, and additive IMEX RK (34)
 
 - `ARS222` — OrdinaryDiffEqSDIRK; ODEProblem or SplitODEProblem
 - `ARS232` — OrdinaryDiffEqSDIRK; ODEProblem or SplitODEProblem
@@ -359,7 +359,6 @@ the JSON/CSV records.
 - `Kvaerno3` — OrdinaryDiffEqSDIRK; ODEProblem
 - `Kvaerno4` — OrdinaryDiffEqSDIRK; ODEProblem
 - `Kvaerno5` — OrdinaryDiffEqSDIRK; ODEProblem
-- `SDIRK2` — OrdinaryDiffEqSDIRK; ODEProblem
 - `SDIRK22` — OrdinaryDiffEqSDIRK; ODEProblem
 - `SFSDIRK4` — OrdinaryDiffEqSDIRK; ODEProblem
 - `SFSDIRK5` — OrdinaryDiffEqSDIRK; ODEProblem

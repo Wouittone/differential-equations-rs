@@ -17,10 +17,18 @@ fn main() {
     };
     let solution = solve(&problem, Sdirk2, &options).expect("SDIRK2 solve");
     println!(
-        "sdirk2 final t={:.6} u={:.12e} accepted={} rejected={}",
+        "sdirk2,{:.6},{:.12e},{},{}",
         solution.times().last().copied().unwrap_or_default(),
         solution.last_state()[0],
         solution.stats().accepted_steps,
         solution.stats().rejected_steps
     );
+
+    let fixed_options = SolveOptions {
+        adaptive: false,
+        initial_step: Some(0.01),
+        ..options
+    };
+    let fixed = solve(&problem, Sdirk2, &fixed_options).expect("SDIRK2 fixed solve");
+    println!("sdirk2_fixed,{:.17e}", fixed.last_state()[0]);
 }
