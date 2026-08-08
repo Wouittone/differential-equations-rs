@@ -45,7 +45,7 @@ Pinned upstream revision:
 | `/root/abdf2_kernel` | Exact regular ABDF2 identity-mass family implementation | `codex/abdf2-kernel`; `differential-equations-rs-worktrees/abdf2-kernel` | completed and merged as `aedca27` plus estimator/workspace refresh | 2026-08-09T01:05:00Z |
 | `/root/linear_interface_impl2` | Additional generated explicit-coefficient slice | `codex/generated-dp5`; `differential-equations-rs-worktrees/generated-dp5` | completed and merged as `69f6caf`; DP5 generated migration passed | 2026-08-09T02:05:00Z |
 | `/root/linear_interface_impl` | Wire accepted Hermite dense service into one solver family | `codex/phase6-explicit-hermite`; `differential-equations-rs-worktrees/explicit-hermite` | completed and merged as `59ece5d` | 2026-08-09T02:20:00Z |
-| `/root/abdf2_kernel` | Fixed-step regular MEBDF2 feasibility/implementation | new isolated follow-up worktree | active; identity-mass scope under review | 2026-08-09T02:35:00Z |
+| `/root/abdf2_kernel` | Fixed-step regular MEBDF2 feasibility/implementation | `codex/mebdf2-kernel`; `differential-equations-rs-worktrees/mebdf2-kernel` | completed and merged as `5e0650c` | 2026-08-09T03:05:00Z |
 
 ## Completed waves
 
@@ -79,6 +79,7 @@ Pinned upstream revision:
 | Generated BS3 | Migrated the public BS3 explicit tableau to generated pinned coefficients with structural fixture validation and regression coverage | 92 unit tests plus integrations | 210 pass (17 suites) | reviewed and merged as `ddefe73`; SBDF2 explicitly deferred because pinned implementation is split/IMEX |
 | Generated DP5 | Migrated the public DP5 seven-stage tableau and embedded defect to generated pinned coefficients with structural fixture validation | 92 unit tests plus integrations | 210 pass (17 suites) | reviewed and merged as `69f6caf`; pinned Julia compliance unchanged |
 | Explicit RK dense wiring | Wired zero-allocation borrowed Hermite segments into explicit RK save-at sampling, including backward/exact-endpoint/rejection coverage and a pinned Julia cubic reference | 92 unit tests plus integrations and 3 dense tests | 212 pass (18 suites) | reviewed and merged as `59ece5d` + `3ea6279`; endpoint-only allocations and callback semantics preserved |
+| MEBDF2 family | Native fixed-step regular identity-mass MEBDF2 with three sequential Newton corrections, checked Jacobian/LU path, callbacks, backward integration, and pinned Julia fixture | 92 library tests plus 4 MEBDF2 integration tests | 214 pass (19 suites) | reviewed and merged as `5e0650c`; fixed endpoint matches pinned Julia; adaptive/DAE/split paths excluded |
 
 ## Validation snapshot
 
@@ -88,8 +89,8 @@ cargo test --all-targets: pass (92 library tests plus integration tests/examples
 cargo clippy --all-targets -- -D warnings: pass
 git diff --check: pass
 pinned Julia environment: pass and reproducible from tracked manifest (14 packages at pinned revision)
-Julia compliance: pass (212 tests across 18 suites)
-inventory regeneration: pass; 349 source references and strict cross-checkout byte identity verified (67 implemented/tested, 278 missing)
+Julia compliance: pass (214 tests across 19 suites)
+inventory regeneration: pass; 349 source references and strict cross-checkout byte identity verified (68 implemented/tested, 277 missing)
 ```
 
 ## Next dependency-ready task

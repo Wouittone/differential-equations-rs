@@ -20,8 +20,8 @@ and [ode_algorithm_inventory.csv](ode_algorithm_inventory.csv).
 - In-scope regular ODE names: **345**
   (333 canonical/composite constructors and
   12 public aliases).
-- Implemented and detected in matched Julia tests: **67**.
-- Missing in-scope public names: **278**.
+- Implemented and detected in matched Julia tests: **68**.
+- Missing in-scope public names: **277**.
 - Explicitly excluded public names: **4**.
 
 Aliases are public parity obligations but do not require a second numerical kernel.
@@ -33,7 +33,7 @@ Aliases are public parity obligations but do not require a second numerical kern
 | Adams multistep | 13 | 12 | 1 |
 | approximate-matrix-factorization wrapper | 1 | 0 | 1 |
 | automatic/default composite | 2 | 0 | 2 |
-| BDF and IMEX multistep | 15 | 1 | 14 |
+| BDF and IMEX multistep | 15 | 2 | 13 |
 | explicit Runge-Kutta | 2 | 1 | 1 |
 | exponential Runge-Kutta | 17 | 0 | 17 |
 | extrapolation | 7 | 0 | 7 |
@@ -81,12 +81,11 @@ the JSON/CSV records.
 - `DefaultImplicitODEAlgorithm` — OrdinaryDiffEqDefault; ODEProblem
 - `DefaultODEAlgorithm` — OrdinaryDiffEqDefault; ODEProblem
 
-### BDF and IMEX multistep (14)
+### BDF and IMEX multistep (13)
 
 - `FBDF` — OrdinaryDiffEqBDF; ODEProblem
 - `IMEXEuler` — OrdinaryDiffEqBDF; ODEProblem or SplitODEProblem
 - `IMEXEulerARK` — OrdinaryDiffEqBDF; ODEProblem or SplitODEProblem
-- `MEBDF2` — OrdinaryDiffEqBDF; ODEProblem or SplitODEProblem
 - `QBDF` — OrdinaryDiffEqBDF; ODEProblem
 - `QBDF1` — OrdinaryDiffEqBDF; ODEProblem
 - `QBDF2` — OrdinaryDiffEqBDF; ODEProblem
