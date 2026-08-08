@@ -1,4 +1,7 @@
-use crate::generated_coefficients::{RK4_A_ROWS, RK4_B as GENERATED_RK4_B, RK4_STAGE_TIMES};
+use crate::generated_coefficients::{
+    BS3_A_ROWS, BS3_B as GENERATED_BS3_B, BS3_E as GENERATED_BS3_E, BS3_STAGE_TIMES, RK4_A_ROWS,
+    RK4_B as GENERATED_RK4_B, RK4_STAGE_TIMES,
+};
 use crate::integrator::{
     KernelCapabilities, StepEstimate, StepKernel, integrate as drive_integration,
 };
@@ -135,13 +138,10 @@ const ALSHINA3_B: &[f64] = &[2.0 / 9.0, 1.0 / 3.0, 4.0 / 9.0];
 const ALSHINA3_E: &[f64] = &[0.0, 4.0 / 9.0, 0.0];
 const ALSHINA3_C: &[f64] = &[0.0, 0.5, 0.75];
 
-const BS3_A2: &[f64] = &[0.5];
-const BS3_A3: &[f64] = &[0.0, 0.75];
-const BS3_A4: &[f64] = &[2.0 / 9.0, 1.0 / 3.0, 4.0 / 9.0];
-const BS3_A: &[&[f64]] = &[EMPTY, BS3_A2, BS3_A3, BS3_A4];
-const BS3_B: &[f64] = &[2.0 / 9.0, 1.0 / 3.0, 4.0 / 9.0, 0.0];
-const BS3_E: &[f64] = &[-5.0 / 72.0, 1.0 / 12.0, 1.0 / 9.0, -1.0 / 8.0];
-const BS3_C: &[f64] = &[0.0, 0.5, 0.75, 1.0];
+const BS3_A: &[&[f64]] = BS3_A_ROWS;
+const BS3_B: &[f64] = &GENERATED_BS3_B;
+const BS3_E: &[f64] = &GENERATED_BS3_E;
+const BS3_C: &[f64] = &BS3_STAGE_TIMES;
 
 const DP5_A2: &[f64] = &[1.0 / 5.0];
 const DP5_A3: &[f64] = &[3.0 / 40.0, 9.0 / 40.0];
