@@ -8,6 +8,7 @@
 
 mod adams;
 mod callback;
+mod coefficients;
 mod explicit_rk;
 mod implicit;
 mod integrator;
