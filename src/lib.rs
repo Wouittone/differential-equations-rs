@@ -6,6 +6,7 @@
 
 #![forbid(unsafe_code)]
 
+mod abdf2;
 mod adams;
 mod callback;
 mod coefficients;
@@ -28,6 +29,7 @@ mod tsit5;
 mod variable_adams;
 mod verner;
 
+pub use abdf2::Abdf2;
 pub use adams::{Ab3, Ab4, Ab5, Abm32, Abm43, Abm54};
 pub use callback::{CallbackAction, EventDirection};
 pub use explicit_rk::{

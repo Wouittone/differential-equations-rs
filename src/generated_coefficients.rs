@@ -18,6 +18,14 @@ pub(crate) const RK4_B: [f64; 4] = [1.0 / 6.0, 1.0 / 3.0, 1.0 / 3.0, 1.0 / 6.0];
 
 pub(crate) const AB3_HISTORY: [f64; 3] = [23.0 / 12.0, -16.0 / 12.0, 5.0 / 12.0];
 
+/// Variable-step ABDF2 fixed-leading-coefficient constants.  The history
+/// ratio enters the alpha terms at runtime; beta coefficients are invariant
+/// except for the linear `(rho - 1)` correction.
+pub(crate) const ABDF2_BETA_ZERO: f64 = 2.0 / 3.0;
+pub(crate) const ABDF2_BETA_ONE_SCALE: f64 = -1.0 / 3.0;
+pub(crate) const ABDF2_ALPHA_ONE_BASE: f64 = 1.0;
+pub(crate) const ABDF2_ALPHA_HISTORY_SCALE: f64 = 1.0 / 3.0;
+
 pub(crate) const VELOCITY_VERLET_COMPOSITION: [f64; 2] = [0.5, 0.5];
 
 /// Pinned two-stage SDIRK2 ESDIRK tableau from OrdinaryDiffEqSDIRK.
