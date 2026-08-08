@@ -40,6 +40,7 @@ Pinned upstream revision:
 | `/root/driver_low_storage_wave` | Low-storage RK shared-driver migration | `codex/overnight-driver-low-storage`; `differential-equations-rs-worktrees/driver-low-storage` | completed and merged as `962c89a` | 2026-08-04T00:21:00Z |
 | `/root/phase2_lifecycle_audit` | Repository-wide first-order lifecycle audit | `codex/phase2-lifecycle-audit`; `differential-equations-rs-worktrees/phase2-lifecycle-audit` | completed and merged as `5383420` | 2026-08-08T20:34:35Z |
 | `/root/linear_caller_migration` | Checked DenseLu/StateLayout migration of implicit caller | `codex/linear-caller-migration`; `differential-equations-rs-worktrees/linear-caller` | completed and merged as `335d162` | 2026-08-08T21:02:30Z |
+| `/root/sdirk2_kernel` | Exact regular SDIRK2 family implementation | `codex/overnight-sdirk2`; isolated worktree | active | 2026-08-08T21:40:00Z |
 
 ## Completed waves
 
