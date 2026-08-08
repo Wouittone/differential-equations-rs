@@ -18,6 +18,7 @@ mod low_storage_rk;
 mod problem;
 mod rosenbrock;
 mod rosenbrock_extended;
+mod sdirk;
 mod second_order;
 mod solution;
 mod solver;
@@ -41,6 +42,7 @@ pub use low_storage_rk::{
 pub use problem::{MassMatrixOdeProblem, OdeProblem, SplitOdeProblem};
 pub use rosenbrock::Rosenbrock23;
 pub use rosenbrock_extended::{Rodas4, Rodas5P, Rosenbrock32};
+pub use sdirk::Sdirk2;
 pub use second_order::{
     LeapfrogDriftKickDrift, SecondOrderOdeAlgorithm, SecondOrderOdeProblem, SecondOrderSolution,
     SecondOrderSolveError, SymplecticEuler, VelocityVerlet, VerletLeapfrog, solve_second_order,
