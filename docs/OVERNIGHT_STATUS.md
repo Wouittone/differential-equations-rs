@@ -43,6 +43,7 @@ Pinned upstream revision:
 | `/root/sdirk2_kernel` | Exact regular SDIRK2 family implementation | `codex/sdirk2-kernel`; `differential-equations-rs-worktrees/sdirk2-kernel` | completed and merged as `1909900` + `ab1fd98` | 2026-08-09T00:20:00Z |
 | `/root/linear_interface_impl` | Accepted-step dense recorder and controller reset slice | `codex/phase6-dense-controller`; `differential-equations-rs-worktrees/dense-controller` | completed and merged as `dbf9a16` | 2026-08-09T00:35:00Z |
 | `/root/abdf2_kernel` | Exact regular ABDF2 identity-mass family implementation | `codex/abdf2-kernel`; `differential-equations-rs-worktrees/abdf2-kernel` | completed and merged as `aedca27` plus estimator/workspace refresh | 2026-08-09T01:05:00Z |
+| `/root/linear_interface_impl2` | Next regular family or generated explicit-coefficient slice | isolated follow-up worktree | active; SBDF2 scope under review | 2026-08-09T01:20:00Z |
 
 ## Completed waves
 
