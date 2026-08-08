@@ -1,3 +1,4 @@
+#[cfg(feature = "allocation-metrics")]
 use std::alloc::System;
 use std::hint::black_box;
 use std::time::Instant;
@@ -7,8 +8,10 @@ use differential_equations::{
     ImplicitMidpoint, Midpoint, OdeAlgorithm, OdeProblem, Ralston, Ralston4, Rk4, Rkm,
     Rosenbrock23, SaveMode, SolveOptions, SspRk22, SspRk33, SspRk43, Trapezoid, Tsit5, solve,
 };
+#[cfg(feature = "allocation-metrics")]
 use stats_alloc::{INSTRUMENTED_SYSTEM, Region, StatsAlloc};
 
+#[cfg(feature = "allocation-metrics")]
 #[global_allocator]
 static GLOBAL: &StatsAlloc<System> = &INSTRUMENTED_SYSTEM;
 
@@ -56,6 +59,7 @@ fn benchmark<A: OdeAlgorithm + Copy>(
 ) {
     black_box(solve(problem, algorithm, options).expect("warm-up solve failed"));
 
+    #[cfg(feature = "allocation-metrics")]
     let region = Region::new(GLOBAL);
     let started = Instant::now();
     let mut checksum = 0.0;
@@ -67,24 +71,61 @@ fn benchmark<A: OdeAlgorithm + Copy>(
         black_box(&solution);
     }
     let elapsed = started.elapsed();
+    #[cfg(feature = "allocation-metrics")]
     let allocations = region.change();
+    #[cfg(feature = "allocation-metrics")]
+    let (bytes_per_solve, allocations_per_solve) = (
+        allocations.bytes_allocated as f64 / repetitions as f64,
+        allocations.allocations as f64 / repetitions as f64,
+    );
+    #[cfg(not(feature = "allocation-metrics"))]
+    let (bytes_per_solve, allocations_per_solve) = (f64::NAN, f64::NAN);
 
     println!(
         "rust,{name},{},{:.3},{:.1},{:.1},{:.1},{:.17e}",
         problem.initial_state().len(),
         elapsed.as_nanos() as f64 / repetitions as f64,
-        allocations.bytes_allocated as f64 / repetitions as f64,
-        allocations.allocations as f64 / repetitions as f64,
+        bytes_per_solve,
+        allocations_per_solve,
         rhs_evaluations as f64 / repetitions as f64,
         checksum / repetitions as f64,
     );
 }
 
 fn main() {
-    let repetitions = std::env::args()
-        .nth(1)
-        .map(|value| value.parse().expect("repetitions must be an integer"))
-        .unwrap_or(20);
+    let mut repetitions = 20;
+    let mut selected_algorithm = None;
+    let mut positional_repetitions = None;
+    let mut args = std::env::args().skip(1);
+    while let Some(argument) = args.next() {
+        match argument.as_str() {
+            "--repetitions" => {
+                repetitions = args
+                    .next()
+                    .expect("--repetitions requires a value")
+                    .parse()
+                    .expect("repetitions must be an integer")
+            }
+            "--algorithm" => {
+                selected_algorithm = Some(args.next().expect("--algorithm requires a value"))
+            }
+            value if !value.starts_with('-') && positional_repetitions.is_none() => {
+                positional_repetitions =
+                    Some(value.parse().expect("repetitions must be an integer"));
+            }
+            value => panic!("unknown benchmark argument: {value}"),
+        }
+    }
+    if let Some(value) = positional_repetitions {
+        repetitions = value;
+    }
+
+    let selected = |name: &str| {
+        selected_algorithm
+            .as_deref()
+            .is_none_or(|filter| filter == name)
+    };
+    let mut ran = false;
     let nonstiff = problem(128, 0.2, 2.0);
     let stiff = problem(8, 20.0, 1.0);
     let adaptive = adaptive_options();
@@ -93,35 +134,42 @@ fn main() {
     println!(
         "language,algorithm,dimension,nanoseconds_per_solve,bytes_allocated_per_solve,allocations_per_solve,rhs_evaluations_per_solve,checksum"
     );
-    benchmark("Tsit5", &nonstiff, Tsit5, &adaptive, repetitions);
-    benchmark("Midpoint", &nonstiff, Midpoint, &adaptive, repetitions);
-    benchmark("Heun", &nonstiff, Heun, &adaptive, repetitions);
-    benchmark("Ralston", &nonstiff, Ralston, &adaptive, repetitions);
-    benchmark("BS3", &nonstiff, Bs3, &adaptive, repetitions);
-    benchmark("DP5", &nonstiff, Dp5, &adaptive, repetitions);
-    benchmark("Euler", &nonstiff, Euler, &fixed, repetitions);
-    benchmark("RK4", &nonstiff, Rk4, &fixed, repetitions);
-    benchmark("RKM", &nonstiff, Rkm, &fixed, repetitions);
-    benchmark("Ralston4", &nonstiff, Ralston4, &fixed, repetitions);
-    benchmark("Alshina2", &nonstiff, Alshina2, &fixed, repetitions);
-    benchmark("Alshina3", &nonstiff, Alshina3, &fixed, repetitions);
-    benchmark("AB3", &nonstiff, Ab3, &fixed, repetitions);
-    benchmark("AB4", &nonstiff, Ab4, &fixed, repetitions);
-    benchmark("AB5", &nonstiff, Ab5, &fixed, repetitions);
-    benchmark("ABM32", &nonstiff, Abm32, &fixed, repetitions);
-    benchmark("ABM43", &nonstiff, Abm43, &fixed, repetitions);
-    benchmark("ABM54", &nonstiff, Abm54, &fixed, repetitions);
-    benchmark("SSPRK22", &nonstiff, SspRk22, &fixed, repetitions);
-    benchmark("SSPRK33", &nonstiff, SspRk33, &fixed, repetitions);
-    benchmark("SSPRK43", &nonstiff, SspRk43, &adaptive, repetitions);
-    benchmark("ImplicitEuler", &stiff, ImplicitEuler, &fixed, repetitions);
-    benchmark(
-        "ImplicitMidpoint",
-        &stiff,
-        ImplicitMidpoint,
-        &fixed,
-        repetitions,
-    );
-    benchmark("Trapezoid", &stiff, Trapezoid, &fixed, repetitions);
-    benchmark("Rosenbrock23", &stiff, Rosenbrock23, &adaptive, repetitions);
+    macro_rules! run {
+        ($name:literal, $problem:expr, $algorithm:expr, $options:expr) => {
+            if selected($name) {
+                benchmark($name, $problem, $algorithm, $options, repetitions);
+                ran = true;
+            }
+        };
+    }
+    run!("Tsit5", &nonstiff, Tsit5, &adaptive);
+    run!("Midpoint", &nonstiff, Midpoint, &adaptive);
+    run!("Heun", &nonstiff, Heun, &adaptive);
+    run!("Ralston", &nonstiff, Ralston, &adaptive);
+    run!("BS3", &nonstiff, Bs3, &adaptive);
+    run!("DP5", &nonstiff, Dp5, &adaptive);
+    run!("Euler", &nonstiff, Euler, &fixed);
+    run!("RK4", &nonstiff, Rk4, &fixed);
+    run!("RKM", &nonstiff, Rkm, &fixed);
+    run!("Ralston4", &nonstiff, Ralston4, &fixed);
+    run!("Alshina2", &nonstiff, Alshina2, &fixed);
+    run!("Alshina3", &nonstiff, Alshina3, &fixed);
+    run!("AB3", &nonstiff, Ab3, &fixed);
+    run!("AB4", &nonstiff, Ab4, &fixed);
+    run!("AB5", &nonstiff, Ab5, &fixed);
+    run!("ABM32", &nonstiff, Abm32, &fixed);
+    run!("ABM43", &nonstiff, Abm43, &fixed);
+    run!("ABM54", &nonstiff, Abm54, &fixed);
+    run!("SSPRK22", &nonstiff, SspRk22, &fixed);
+    run!("SSPRK33", &nonstiff, SspRk33, &fixed);
+    run!("SSPRK43", &nonstiff, SspRk43, &adaptive);
+    run!("ImplicitEuler", &stiff, ImplicitEuler, &fixed);
+    run!("ImplicitMidpoint", &stiff, ImplicitMidpoint, &fixed);
+    run!("Trapezoid", &stiff, Trapezoid, &fixed);
+    run!("Rosenbrock23", &stiff, Rosenbrock23, &adaptive);
+    if let Some(algorithm) = selected_algorithm.as_deref()
+        && !ran
+    {
+        panic!("unknown benchmark algorithm: {algorithm}");
+    }
 }

@@ -8,23 +8,67 @@ $repository = Split-Path -Parent $PSScriptRoot
 $results = Join-Path $PSScriptRoot 'results'
 New-Item -ItemType Directory -Force -Path $results | Out-Null
 
-$rustOutput = & cargo run --quiet --release --manifest-path (Join-Path $repository 'Cargo.toml') --example benchmark_matrix -- $Repetitions
+$rustTimingOutput = & cargo run --quiet --release --manifest-path (Join-Path $repository 'Cargo.toml') --example benchmark_matrix -- $Repetitions
 if ($LASTEXITCODE -ne 0) {
-    throw 'Rust benchmark failed'
+    throw 'Rust timing benchmark failed'
 }
+$rustAllocationOutput = & cargo run --quiet --release --features allocation-metrics --manifest-path (Join-Path $repository 'Cargo.toml') --example benchmark_matrix -- $Repetitions
+if ($LASTEXITCODE -ne 0) {
+    throw 'Rust allocation benchmark failed'
+}
+$rustTimingPath = Join-Path $results 'rust-timing.csv'
+$rustAllocationPath = Join-Path $results 'rust-allocation.csv'
 $rustPath = Join-Path $results 'rust.csv'
-$rustOutput | Set-Content -LiteralPath $rustPath
+$rustTimingOutput | Set-Content -LiteralPath $rustTimingPath
+$rustAllocationOutput | Set-Content -LiteralPath $rustAllocationPath
+$rustTiming = Import-Csv -LiteralPath $rustTimingPath
+$rustAllocation = Import-Csv -LiteralPath $rustAllocationPath
+$rust = foreach ($timingRow in $rustTiming) {
+    $allocationRow = $rustAllocation | Where-Object algorithm -EQ $timingRow.algorithm
+    [pscustomobject]@{
+        language = $timingRow.language
+        algorithm = $timingRow.algorithm
+        dimension = [int]$timingRow.dimension
+        nanoseconds_per_solve = [double]$timingRow.nanoseconds_per_solve
+        bytes_allocated_per_solve = [double]$allocationRow.bytes_allocated_per_solve
+        allocations_per_solve = [double]$allocationRow.allocations_per_solve
+        rhs_evaluations_per_solve = [double]$timingRow.rhs_evaluations_per_solve
+        checksum = [double]$timingRow.checksum
+    }
+}
+$rust | Export-Csv -LiteralPath $rustPath -NoTypeInformation
 
 $juliaProject = Join-Path $repository 'tests/julia'
-$juliaOutput = & julia --startup-file=no "--project=$juliaProject" (Join-Path $PSScriptRoot 'julia_matrix.jl') $Repetitions
+$juliaTimingOutput = & julia --startup-file=no "--project=$juliaProject" (Join-Path $PSScriptRoot 'julia_matrix.jl') --repetitions $Repetitions --mode timing
 if ($LASTEXITCODE -ne 0) {
-    throw 'Julia benchmark failed'
+    throw 'Julia timing benchmark failed'
 }
+$juliaAllocationOutput = & julia --startup-file=no "--project=$juliaProject" (Join-Path $PSScriptRoot 'julia_matrix.jl') --repetitions $Repetitions --mode allocation
+if ($LASTEXITCODE -ne 0) {
+    throw 'Julia allocation benchmark failed'
+}
+$juliaTimingPath = Join-Path $results 'julia-timing.csv'
+$juliaAllocationPath = Join-Path $results 'julia-allocation.csv'
 $juliaPath = Join-Path $results 'julia.csv'
-$juliaOutput | Set-Content -LiteralPath $juliaPath
+$juliaTimingOutput | Set-Content -LiteralPath $juliaTimingPath
+$juliaAllocationOutput | Set-Content -LiteralPath $juliaAllocationPath
+$juliaTiming = Import-Csv -LiteralPath $juliaTimingPath
+$juliaAllocation = Import-Csv -LiteralPath $juliaAllocationPath
+$julia = foreach ($timingRow in $juliaTiming) {
+    $allocationRow = $juliaAllocation | Where-Object algorithm -EQ $timingRow.algorithm
+    [pscustomobject]@{
+        language = $timingRow.language
+        algorithm = $timingRow.algorithm
+        dimension = [int]$timingRow.dimension
+        nanoseconds_per_solve = [double]$timingRow.nanoseconds_per_solve
+        bytes_allocated_per_solve = [double]$allocationRow.bytes_allocated_per_solve
+        allocations_per_solve = [double]$allocationRow.allocations_per_solve
+        rhs_evaluations_per_solve = [double]$timingRow.rhs_evaluations_per_solve
+        checksum = [double]$timingRow.checksum
+    }
+}
+$julia | Export-Csv -LiteralPath $juliaPath -NoTypeInformation
 
-$rust = Import-Csv -LiteralPath $rustPath
-$julia = Import-Csv -LiteralPath $juliaPath
 $invariant = [Globalization.CultureInfo]::InvariantCulture
 $comparison = foreach ($rustRow in $rust) {
     $juliaRow = $julia | Where-Object algorithm -EQ $rustRow.algorithm
