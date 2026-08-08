@@ -43,7 +43,7 @@ Pinned upstream revision:
 | `/root/sdirk2_kernel` | Exact regular SDIRK2 family implementation | `codex/sdirk2-kernel`; `differential-equations-rs-worktrees/sdirk2-kernel` | completed and merged as `1909900` + `ab1fd98` | 2026-08-09T00:20:00Z |
 | `/root/linear_interface_impl` | Accepted-step dense recorder and controller reset slice | `codex/phase6-dense-controller`; `differential-equations-rs-worktrees/dense-controller` | completed and merged as `dbf9a16` | 2026-08-09T00:35:00Z |
 | `/root/abdf2_kernel` | Exact regular ABDF2 identity-mass family implementation | `codex/abdf2-kernel`; `differential-equations-rs-worktrees/abdf2-kernel` | completed and merged as `aedca27` plus estimator/workspace refresh | 2026-08-09T01:05:00Z |
-| `/root/linear_interface_impl2` | Next regular family or generated explicit-coefficient slice | isolated follow-up worktree | active; SBDF2 scope under review | 2026-08-09T01:20:00Z |
+| `/root/linear_interface_impl2` | Next regular family or generated explicit-coefficient slice | `codex/sbdf2-or-generated`; `differential-equations-rs-worktrees/sbdf2-or-generated` | completed and merged as `ddefe73`; SBDF2 deferred as split/IMEX, BS3 generated migration passed | 2026-08-09T01:45:00Z |
 
 ## Completed waves
 
@@ -74,6 +74,7 @@ Pinned upstream revision:
 | SDIRK2 family | Native regular-ODE SDIRK2 kernel, generated tableau fixture, fixed/adaptive Rust tests, and matched pinned Julia compliance | cargo all-targets pass | 206 pass (16 suites) | reviewed and merged as `1909900` + `ab1fd98`; fixed endpoint matches SDIRK2 at dt=.01; adaptive controller-count caveat documented |
 | Dense/controller service | Domain-checked Hermite segments, accepted-step `record_step_dense` save-at sampling, and controller-history reset after callback mutation | 92 Rust tests plus integrations | 206 pass (16 suites) | reviewed and merged as `dbf9a16`; existing endpoint compliance and allocations preserved; solver kernels still need stage-data wiring |
 | ABDF2 family | Native regular identity-mass ABDF2 with implicit-Euler startup, variable-step coefficients, Newton/Jacobian paths, callback history reset, and pinned Julia fixture | 92 unit tests plus 6 ABDF2 integration tests | 210 pass (17 suites) | reviewed and merged as `aedca27` plus final estimator/workspace refresh; fixed/adaptive endpoint parity within documented tolerance; controller-count caveat documented |
+| Generated BS3 | Migrated the public BS3 explicit tableau to generated pinned coefficients with structural fixture validation and regression coverage | 92 unit tests plus integrations | 210 pass (17 suites) | reviewed and merged as `ddefe73`; SBDF2 explicitly deferred because pinned implementation is split/IMEX |
 
 ## Validation snapshot
 
@@ -89,7 +90,7 @@ inventory regeneration: pass; 349 source references and strict cross-checkout by
 
 ## Next dependency-ready task
 
-Continue with the next dependency-ready regular-ODE family (SBDF2 or a narrowly scoped explicit generated-coefficient family), while wiring accepted-stage dense segments into one solver and preserving matched Julia coverage.
+Continue with the next dependency-ready regular-ODE family or generated-coefficient slice while wiring accepted-stage dense segments into one solver and preserving matched Julia coverage. SBDF2 remains excluded until split/IMEX parity is implemented.
 
 ## Last decision
 
