@@ -243,6 +243,37 @@ impl Solution {
         &self.values[start..]
     }
 
+    /// Interpolates a saved trajectory segment at `time` using the recorder's
+    /// stable linear fallback. Method-specific dense segments can replace this
+    /// path without changing the query contract.
+    pub fn interpolate(&self, time: f64) -> Option<Vec<f64>> {
+        if !time.is_finite() || self.times.is_empty() {
+            return None;
+        }
+        if time == self.times[0] {
+            return Some(self.state(0)?.to_vec());
+        }
+        for index in 1..self.times.len() {
+            let left = self.times[index - 1];
+            let right = self.times[index];
+            if (left <= right && time <= right && time >= left)
+                || (left >= right && time >= right && time <= left)
+            {
+                let fraction = (time - left) / (right - left);
+                let previous = self.state(index - 1)?;
+                let current = self.state(index)?;
+                return Some(
+                    previous
+                        .iter()
+                        .zip(current)
+                        .map(|(previous, current)| previous + fraction * (current - previous))
+                        .collect(),
+                );
+            }
+        }
+        None
+    }
+
     /// Solver work counters.
     pub fn stats(&self) -> SolverStats {
         self.stats
@@ -266,6 +297,8 @@ mod tests {
         assert_eq!(solution.state(2), Some([5.0, 6.0].as_slice()));
         assert_eq!(solution.state(3), None);
         assert_eq!(solution.last_state(), &[5.0, 6.0]);
+        assert_eq!(solution.interpolate(0.25), Some(vec![2.0, 3.0]));
+        assert_eq!(solution.interpolate(2.0), None);
     }
 
     #[test]

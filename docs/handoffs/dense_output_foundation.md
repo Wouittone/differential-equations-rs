@@ -5,7 +5,8 @@ cubic `HermiteSegment` implementation with endpoint derivative data. It
 validates dimensions/times and reproduces both endpoints exactly; midpoint
 behavior is covered by a regression test. The existing recorder remains
 linear until kernels provide endpoint derivative segments, so no public
-trajectory behavior changes in this bounded foundation slice.
+trajectory behavior changes in this bounded foundation slice. `Solution::interpolate`
+now exposes a checked linear fallback query for saved trajectories.
 
 Validation:
 
