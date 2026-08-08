@@ -59,7 +59,7 @@ Pinned upstream revision:
 | Phase 3 checked linear interface | State/matrix views and revisioned dense LU cache; caller migration pending | 80 Rust tests | 202 pass | reviewed and merged as `a1bb8fa` |
 | Phase 4 schema foundation | Tagged coefficient metadata, structural validation, and deterministic manifest check | 82 Rust tests | pending caller-wave rerun | reviewed and merged as `c20da11` |
 | Phase 3 caller proof | Implicit Euler/Midpoint/Trapezoid checked first factorization with allocation-invariant refresh path | 82 Rust tests plus migration integration | 202 pass | reviewed and merged as `335d162`; implicit compliance byte-identical |
-| Phase 3 operator/mass seams | JacobianProvider, checked LinearOperator, dense/identity operators, and nonsingular mass operator | 84 Rust tests | pending integrated Julia rerun | reviewed and merged as `052cef3` + `c64dda1` |
+| Phase 3 operator/mass seams | JacobianProvider, checked LinearOperator, dense/identity operators, and nonsingular mass operator | 84 Rust tests | 202 pass | reviewed and merged as `052cef3` + `c64dda1` |
 
 ## Validation snapshot
 
