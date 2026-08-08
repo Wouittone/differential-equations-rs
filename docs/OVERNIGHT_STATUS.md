@@ -58,6 +58,7 @@ Pinned upstream revision:
 | Phase 2 lifecycle audit | Centralized first-order loop and complete StepKernel coverage; second-order loop explicitly excluded | 77 Rust tests | 202 pass | reviewed and merged as `5383420` |
 | Phase 3 checked linear interface | State/matrix views and revisioned dense LU cache; caller migration pending | 80 Rust tests | 202 pass | reviewed and merged as `a1bb8fa` |
 | Phase 4 schema foundation | Tagged coefficient metadata, structural validation, and deterministic manifest check | 82 Rust tests | pending caller-wave rerun | reviewed and merged as `c20da11` |
+| Phase 4 generated fixtures | Compile-time RK4/AB3/VelocityVerlet constants plus deterministic generator check | 85 Rust tests | 202 pass | reviewed and merged as `775067b` + `cea41fa` |
 | Phase 3 caller proof | Implicit Euler/Midpoint/Trapezoid checked first factorization with allocation-invariant refresh path | 82 Rust tests plus migration integration | 202 pass | reviewed and merged as `335d162`; implicit compliance byte-identical |
 | Phase 3 operator/mass seams | JacobianProvider, checked LinearOperator, dense/identity operators, and nonsingular mass operator | 84 Rust tests | 202 pass | reviewed and merged as `052cef3` + `c64dda1` |
 
@@ -65,7 +66,7 @@ Pinned upstream revision:
 
 ```text
 cargo fmt -- --check: pass
-cargo test --all-targets: pass (77 unit/integration tests plus examples)
+cargo test --all-targets: pass (85 unit/integration tests plus examples)
 cargo clippy --all-targets -- -D warnings: pass
 git diff --check: pass
 pinned Julia environment: pass and reproducible from tracked manifest (13 packages at pinned revision)
