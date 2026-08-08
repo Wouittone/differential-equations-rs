@@ -20,7 +20,7 @@ Pinned upstream revision:
 - [x] Vector/matrix interfaces
 - [x] Coefficient schema/code generation foundation
 - [x] General problem representations foundation
-- [ ] Dense output/controller parity
+- [x] Dense output/controller parity foundation and recorder service
 - [ ] Solver-family migration (in progress; SDIRK2 first wave merged)
 - [ ] Final compliance audit
 
@@ -41,6 +41,7 @@ Pinned upstream revision:
 | `/root/phase2_lifecycle_audit` | Repository-wide first-order lifecycle audit | `codex/phase2-lifecycle-audit`; `differential-equations-rs-worktrees/phase2-lifecycle-audit` | completed and merged as `5383420` | 2026-08-08T20:34:35Z |
 | `/root/linear_caller_migration` | Checked DenseLu/StateLayout migration of implicit caller | `codex/linear-caller-migration`; `differential-equations-rs-worktrees/linear-caller` | completed and merged as `335d162` | 2026-08-08T21:02:30Z |
 | `/root/sdirk2_kernel` | Exact regular SDIRK2 family implementation | `codex/sdirk2-kernel`; `differential-equations-rs-worktrees/sdirk2-kernel` | completed and merged as `1909900` + `ab1fd98` | 2026-08-09T00:20:00Z |
+| `/root/linear_interface_impl` | Accepted-step dense recorder and controller reset slice | `codex/phase6-dense-controller`; `differential-equations-rs-worktrees/dense-controller` | completed and merged as `dbf9a16` | 2026-08-09T00:35:00Z |
 
 ## Completed waves
 
@@ -69,6 +70,7 @@ Pinned upstream revision:
 | Phase 3 caller proof | Implicit Euler/Midpoint/Trapezoid checked first factorization with allocation-invariant refresh path | 82 Rust tests plus migration integration | 202 pass | reviewed and merged as `335d162`; implicit compliance byte-identical |
 | Phase 3 operator/mass seams | JacobianProvider, checked LinearOperator, dense/identity operators, and nonsingular mass operator | 84 Rust tests | 202 pass | reviewed and merged as `052cef3` + `c64dda1` |
 | SDIRK2 family | Native regular-ODE SDIRK2 kernel, generated tableau fixture, fixed/adaptive Rust tests, and matched pinned Julia compliance | cargo all-targets pass | 206 pass (16 suites) | reviewed and merged as `1909900` + `ab1fd98`; fixed endpoint matches SDIRK2 at dt=.01; adaptive controller-count caveat documented |
+| Dense/controller service | Domain-checked Hermite segments, accepted-step `record_step_dense` save-at sampling, and controller-history reset after callback mutation | 92 Rust tests plus integrations | 206 pass (16 suites) | reviewed and merged as `dbf9a16`; existing endpoint compliance and allocations preserved; solver kernels still need stage-data wiring |
 
 ## Validation snapshot
 
@@ -88,4 +90,4 @@ Implement ABDF2 as the next dependency-ready regular-ODE family wave, then migra
 
 ## Last decision
 
-The shared first-order driver is frozen and all queued first-order families (explicit, implicit/TRBDF2, Rosenbrock/Rodas, low-storage, and Adams) pass. The Phase 2 audit found only `src/integrator.rs:228` as the first-order lifecycle loop; `src/second_order.rs:440` is an explicit exclusion. Phase 3 checked views, revisioned dense LU, Jacobian/operator seams, nonsingular mass operators, and one implicit caller proof are merged with unchanged compliance and allocations. Phase 4 schema/generated fixtures and Phase 5 representation foundations are merged. Phase 6 dense/controller seams remain foundational rather than full parity. Phase 7 has begun with SDIRK2; 279 in-scope public constructors remain and ABDF2 is next.
+The shared first-order driver is frozen and all queued first-order families (explicit, implicit/TRBDF2, Rosenbrock/Rodas, low-storage, and Adams) pass. The Phase 2 audit found only `src/integrator.rs:228` as the first-order lifecycle loop; `src/second_order.rs:440` is an explicit exclusion. Phase 3 checked views, revisioned dense LU, Jacobian/operator seams, nonsingular mass operators, and one implicit caller proof are merged with unchanged compliance and allocations. Phase 4 schema/generated fixtures and Phase 5 representation foundations are merged. Phase 6 now has domain-checked Hermite segments, an accepted-step recorder service, and callback controller-history reset; solver stage-data wiring remains queued. Phase 7 has begun with SDIRK2; 279 in-scope public constructors remain and ABDF2 is next.
