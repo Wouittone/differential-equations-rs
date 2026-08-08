@@ -8,8 +8,10 @@ the validator checks dimensions, triangular structure, finite values, dense
 row shape, and required provenance without parsing files at runtime.
 
 Inline fixtures validate RK4-shaped explicit data and AB3-shaped multistep
-metadata with generic Hermite dense output. Runtime solver constants are not
-changed by this foundation slice.
+metadata with generic Hermite dense output. `src/generated_coefficients.rs`
+contains deterministic compile-time RK4, AB3, and VelocityVerlet constants;
+`scripts/generate_coefficients.ps1 -Check` verifies the canonical manifest.
+Runtime solver dispatch has not yet been switched to generated constants.
 
 Validation:
 
