@@ -46,7 +46,7 @@ Pinned upstream revision:
 | `/root/linear_interface_impl2` | Additional generated explicit-coefficient slice | `codex/generated-dp5`; `differential-equations-rs-worktrees/generated-dp5` | completed and merged as `69f6caf`; DP5 generated migration passed | 2026-08-09T02:05:00Z |
 | `/root/linear_interface_impl` | Wire accepted Hermite dense service into one solver family | `codex/phase6-explicit-hermite`; `differential-equations-rs-worktrees/explicit-hermite` | completed and merged as `59ece5d` | 2026-08-09T02:20:00Z |
 | `/root/abdf2_kernel` | Fixed-step regular MEBDF2 feasibility/implementation | `codex/mebdf2-kernel`; `differential-equations-rs-worktrees/mebdf2-kernel` | completed and merged as `5e0650c` | 2026-08-09T03:05:00Z |
-| `/root/linear_interface_impl2` | QNDF1 regular-ODE feasibility or bounded implementation | new isolated follow-up worktree | active; variable-history scope under review | 2026-08-09T03:10:00Z |
+| `/root/linear_interface_impl2` | QNDF1 regular-ODE feasibility or bounded implementation | `codex/generated-dp5`; `differential-equations-rs-worktrees/generated-dp5` | completed and merged as `e5a6603` | 2026-08-09T03:25:00Z |
 
 ## Completed waves
 
@@ -81,6 +81,7 @@ Pinned upstream revision:
 | Generated DP5 | Migrated the public DP5 seven-stage tableau and embedded defect to generated pinned coefficients with structural fixture validation | 92 unit tests plus integrations | 210 pass (17 suites) | reviewed and merged as `69f6caf`; pinned Julia compliance unchanged |
 | Explicit RK dense wiring | Wired zero-allocation borrowed Hermite segments into explicit RK save-at sampling, including backward/exact-endpoint/rejection coverage and a pinned Julia cubic reference | 92 unit tests plus integrations and 3 dense tests | 212 pass (18 suites) | reviewed and merged as `59ece5d` + `3ea6279`; endpoint-only allocations and callback semantics preserved |
 | MEBDF2 family | Native fixed-step regular identity-mass MEBDF2 with three sequential Newton corrections, checked Jacobian/LU path, callbacks, backward integration, and pinned Julia fixture | 92 library tests plus 4 MEBDF2 integration tests | 214 pass (19 suites) | reviewed and merged as `5e0650c`; fixed endpoint matches pinned Julia; adaptive/DAE/split paths excluded |
+| QNDF1 family | Native fixed/adaptive regular identity-mass QNDF1 with one-step history reinterpolation, NDF residual/Newton solve, callback reset, and pinned Julia fixture | 92 library tests plus QNDF1 integration tests | 218 pass (20 suites) | reviewed and merged as `e5a6603`; first-order endpoint differs by documented 4.95e-5 within explicit fixture tolerance |
 
 ## Validation snapshot
 
@@ -90,8 +91,8 @@ cargo test --all-targets: pass (92 library tests plus integration tests/examples
 cargo clippy --all-targets -- -D warnings: pass
 git diff --check: pass
 pinned Julia environment: pass and reproducible from tracked manifest (14 packages at pinned revision)
-Julia compliance: pass (214 tests across 19 suites)
-inventory regeneration: pass; 349 source references and strict cross-checkout byte identity verified (68 implemented/tested, 277 missing)
+Julia compliance: pass (218 tests across 20 suites)
+inventory regeneration: pass; 349 source references and strict cross-checkout byte identity verified (69 implemented/tested, 276 missing)
 ```
 
 ## Next dependency-ready task
