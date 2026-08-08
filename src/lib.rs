@@ -16,6 +16,7 @@ mod implicit;
 mod integrator;
 mod linear;
 mod low_storage_rk;
+mod mebdf2;
 mod problem;
 mod rosenbrock;
 mod rosenbrock_extended;
@@ -41,6 +42,7 @@ pub use low_storage_rk::{
     CarpenterKennedy2N54, Dglddrk73C, Dglddrk84C, Dglddrk84F, Ndblsrk124, Ndblsrk134, Ndblsrk144,
     Ork256, Shlddrk64,
 };
+pub use mebdf2::Mebdf2;
 pub use problem::{MassMatrixOdeProblem, OdeProblem, SplitOdeProblem};
 pub use rosenbrock::Rosenbrock23;
 pub use rosenbrock_extended::{Rodas4, Rodas5P, Rosenbrock32};
