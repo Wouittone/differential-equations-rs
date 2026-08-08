@@ -4,7 +4,7 @@ Coordinator: `/root`
 
 Started: `2026-08-03T23:32:13Z`
 
-Current phase: `Phase 2 - shared first-order integrator driver migration`
+Current phase: `Phase 3 - checked vector/matrix/linear interfaces`
 
 Pinned upstream revision:
 
@@ -16,8 +16,8 @@ Pinned upstream revision:
 
 - [x] Soundness gate
 - [x] Upstream inventory
-- [ ] Shared integrator driver
-- [ ] Vector/matrix interfaces
+- [x] Shared integrator driver
+- [ ] Vector/matrix interfaces (in progress)
 - [ ] Coefficient schema/code generation
 - [ ] General problem representations
 - [ ] Dense output/controller parity
@@ -36,8 +36,9 @@ Pinned upstream revision:
 | `/root/driver_implicit_wave` | Driver contract completion and implicit/TRBDF2 migration | `codex/overnight-driver-implicit`; `differential-equations-rs-worktrees/driver-implicit` | completed and merged as `a288382` | 2026-08-04T00:08:00Z |
 | `/root/linear_interface_audit` | Phase 3 vector/matrix/Jacobian/linear-solver source audit | `codex/overnight-linear-interface-audit`; `differential-equations-rs-worktrees/linear-interface-audit` | completed and merged as `8e76510` | 2026-08-04T00:12:00Z |
 | `/root/driver_rosenbrock_wave` | Rosenbrock/Rodas shared-driver migration | `codex/overnight-driver-rosenbrock`; `differential-equations-rs-worktrees/driver-rosenbrock` | completed and merged as `f5df68b` | 2026-08-04T00:16:00Z |
-| `/root/driver_adams_wave` | Fixed/variable Adams shared-driver migration | `codex/overnight-driver-adams`; `differential-equations-rs-worktrees/driver-adams` | active | 2026-08-04T00:08:00Z |
+| `/root/driver_adams_wave` | Fixed/variable Adams shared-driver migration | `codex/overnight-driver-adams`; `differential-equations-rs-worktrees/driver-adams` | completed and merged as `e747d0b` | 2026-08-08T20:28:34Z |
 | `/root/driver_low_storage_wave` | Low-storage RK shared-driver migration | `codex/overnight-driver-low-storage`; `differential-equations-rs-worktrees/driver-low-storage` | completed and merged as `962c89a` | 2026-08-04T00:21:00Z |
+| `/root/phase2_lifecycle_audit` | Repository-wide first-order lifecycle audit | `codex/phase2-lifecycle-audit`; `differential-equations-rs-worktrees/phase2-lifecycle-audit` | completed and merged as `5383420` | 2026-08-08T20:34:35Z |
 
 ## Completed waves
 
@@ -52,12 +53,14 @@ Pinned upstream revision:
 | Linear-interface audit | Dense views/LU/Jacobian/Jv/mass-operator Phase 3 design and caller map | not applicable | not applicable | report reviewed and merged as `8e76510` |
 | Driver Rosenbrock | Rosenbrock23/32 and Rodas4/5P shared-driver migration | 90 pass | 202 pass | reviewed and merged as `f5df68b`; compliance output byte-identical |
 | Driver low-storage | Nine fixed low-storage RK methods on shared driver | 93 pass | 202 pass | reviewed and merged as `962c89a`; compliance output byte-identical |
+| Driver Adams | Fixed Adams–Bashforth and variable Adams–Moulton families on shared driver | 71 library plus integration pass | 202 pass | reviewed and merged as `e747d0b`; compliance output byte-identical |
+| Phase 2 lifecycle audit | Centralized first-order loop and complete StepKernel coverage; second-order loop explicitly excluded | 77 Rust tests | 202 pass | reviewed and merged as `5383420` |
 
 ## Validation snapshot
 
 ```text
 cargo fmt -- --check: pass
-cargo test --all-targets: pass (93 tests)
+cargo test --all-targets: pass (77 unit/integration tests plus examples)
 cargo clippy --all-targets -- -D warnings: pass
 git diff --check: pass
 pinned Julia environment: pass and reproducible from tracked manifest (13 packages at pinned revision)
@@ -67,8 +70,8 @@ inventory regeneration: pass; 349 source references and strict cross-checkout by
 
 ## Next dependency-ready task
 
-Complete parallel Rosenbrock/Rodas and Adams driver migrations, then migrate specialized fixed explicit loops and close Phase 2.
+Implement the checked vector/matrix/LU interfaces from the Phase 3 linear-interface audit, then migrate one native implicit caller as a compatibility proof.
 
 ## Last decision
 
-The driver contract is frozen after the passing implicit/TRBDF2 wave. Non-overlapping Rosenbrock/Rodas and Adams migrations are active while the Phase 3 source audit prepares the next gate.
+The shared first-order driver is frozen and all queued first-order families (explicit, implicit/TRBDF2, Rosenbrock/Rodas, low-storage, and Adams) pass. The Phase 2 audit found only `src/integrator.rs:228` as the first-order lifecycle loop; `src/second_order.rs:440` is an explicit exclusion. Phase 3 now starts with checked linear/vector interfaces.
