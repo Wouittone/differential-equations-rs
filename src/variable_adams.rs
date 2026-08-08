@@ -1,4 +1,6 @@
-use crate::solution::TrajectoryRecorder;
+use crate::integrator::{
+    ControllerConfig, KernelCapabilities, StepEstimate, StepKernel, integrate,
+};
 use crate::{OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions, SolverStats};
 
 const SAFETY: f64 = 0.9;
@@ -51,7 +53,7 @@ macro_rules! algorithm {
             where
                 F: Fn(&mut [f64], &[f64], &P, f64),
             {
-                integrate(problem, options, &$method)
+                integrate(problem, options, VariableAdamsKernel::new(&$method))
             }
         }
     };
@@ -89,7 +91,6 @@ algorithm!(
 );
 
 struct Workspace {
-    candidate: Vec<f64>,
     predicted: Vec<f64>,
     temporary: Vec<f64>,
     derivative: Vec<f64>,
@@ -110,7 +111,6 @@ impl Workspace {
     fn new(dimension: usize, order: usize) -> Self {
         let vectors = || (0..order).map(|_| vec![0.0; dimension]).collect();
         Self {
-            candidate: vec![0.0; dimension],
             predicted: vec![0.0; dimension],
             temporary: vec![0.0; dimension],
             derivative: vec![0.0; dimension],
@@ -136,192 +136,165 @@ impl Workspace {
     }
 }
 
-fn integrate<F, P>(
-    problem: &OdeProblem<F, P>,
-    options: &SolveOptions,
-    method: &VariableAdamsMethod,
-) -> Result<Solution, SolveError>
+struct VariableAdamsKernel {
+    method: &'static VariableAdamsMethod,
+    workspace: Option<Workspace>,
+    step_number: usize,
+}
+
+impl VariableAdamsKernel {
+    const fn new(method: &'static VariableAdamsMethod) -> Self {
+        Self {
+            method,
+            workspace: None,
+            step_number: 1,
+        }
+    }
+
+    fn workspace(&mut self) -> &mut Workspace {
+        self.workspace
+            .as_mut()
+            .expect("variable Adams kernel is initialized before stepping")
+    }
+}
+
+impl<F, P> StepKernel<F, P> for VariableAdamsKernel
 where
     F: Fn(&mut [f64], &[f64], &P, f64),
 {
-    if !options.adaptive && options.initial_step.is_none() {
-        return Err(SolveError::InitialStepRequired);
+    fn capabilities(&self) -> KernelCapabilities {
+        KernelCapabilities::with_controller(
+            true,
+            ControllerConfig::proportional(self.method.order, SAFETY, MIN_FACTOR, MAX_FACTOR, 0.2),
+        )
     }
 
-    let dimension = problem.initial_state().len();
-    let (start, end) = problem.time_span();
-    let direction = (end - start).signum();
-    let interval = (end - start).abs();
-    let maximum_step = options.max_step.min(interval);
-    let mut state = problem.initial_state().to_vec();
-    let mut state_before_effect = if problem.has_callbacks() {
-        vec![0.0; dimension]
-    } else {
-        Vec::new()
-    };
-    let mut workspace = Workspace::new(dimension, method.order);
-    let mut stats = SolverStats::default();
-    let initial_callbacks = problem.apply_initial_callbacks(&mut state, start)?;
-    stats.callback_invocations += initial_callbacks.invocations;
-    let mut recorder = TrajectoryRecorder::new(&state, start, options);
-    if initial_callbacks.terminate {
-        recorder.force_state(start, &state);
-        return Ok(recorder.finish(stats));
+    fn initialize(
+        &mut self,
+        problem: &OdeProblem<F, P>,
+        state: &[f64],
+        time: f64,
+        stats: &mut SolverStats,
+    ) -> Result<(), SolveError> {
+        let mut workspace = Workspace::new(state.len(), self.method.order);
+        evaluate(problem, &mut workspace.derivative, state, time, stats);
+        ensure_finite(&workspace.derivative)?;
+        self.workspace = Some(workspace);
+        self.step_number = 1;
+        Ok(())
     }
 
-    evaluate(
-        problem,
-        &mut workspace.derivative,
-        &state,
-        start,
-        &mut stats,
-    );
-    ensure_finite(&workspace.derivative)?;
-    let step_magnitude = match options.initial_step {
-        Some(step) => step.min(maximum_step),
-        None => estimate_initial_step(
+    fn estimate_initial_step(
+        &mut self,
+        problem: &OdeProblem<F, P>,
+        state: &[f64],
+        time: f64,
+        direction: f64,
+        maximum_step: f64,
+        _: &mut [f64],
+        options: &SolveOptions,
+        stats: &mut SolverStats,
+    ) -> Result<f64, SolveError> {
+        let order = self.method.order;
+        estimate_initial_step(
             problem,
             options,
-            &state,
-            start,
+            state,
+            time,
             direction,
             maximum_step,
-            method.order,
-            &mut workspace,
-            &mut stats,
-        )?,
-    };
+            order,
+            self.workspace(),
+            stats,
+        )
+    }
 
-    let mut step = direction * step_magnitude;
-    let mut time = start;
-    let mut step_number = 1usize;
-    let mut attempts = 0usize;
-    let mut previous_step_rejected = false;
-
-    while direction * (end - time) > 0.0 {
-        if attempts == options.max_steps {
-            return Err(SolveError::MaxStepsExceeded);
-        }
-        attempts += 1;
-        if direction * (time + step - end) > 0.0 {
-            step = end - time;
-        }
-        if time + step == time {
-            return Err(SolveError::StepSizeUnderflow);
-        }
-
-        prepare_trial_steps(&mut workspace, step, step_number, method.order);
-        update_differences(&mut workspace, step_number);
+    fn attempt_step(
+        &mut self,
+        problem: &OdeProblem<F, P>,
+        state: &[f64],
+        time: f64,
+        step: f64,
+        candidate: &mut [f64],
+        options: &SolveOptions,
+        stats: &mut SolverStats,
+    ) -> Result<StepEstimate, SolveError> {
+        let method = self.method;
+        let step_number = self.step_number;
+        let workspace = self.workspace();
+        prepare_trial_steps(workspace, step, step_number, method.order);
+        update_differences(workspace, step_number);
 
         let startup = step_number < method.order;
         let error = if startup {
             startup_step(
                 problem,
                 options,
-                &state,
+                state,
                 time,
                 step,
                 method.order,
-                &mut workspace,
-                &mut stats,
+                candidate,
+                workspace,
+                stats,
             )?
         } else {
             variable_adams_step(
-                problem,
-                options,
-                &state,
-                time,
-                step,
-                method,
-                &mut workspace,
-                &mut stats,
+                problem, options, state, time, step, method, candidate, workspace, stats,
             )?
         };
-        ensure_finite(&workspace.candidate)?;
-
-        if error <= 1.0 {
-            if !startup {
-                evaluate(
-                    problem,
-                    &mut workspace.next_derivative,
-                    &workspace.candidate,
-                    time + step,
-                    &mut stats,
-                );
-                ensure_finite(&workspace.next_derivative)?;
-            }
-
-            let previous_time = time;
-            let mut next_time = time + step;
-            if direction * (end - next_time) <= 0.0 {
-                next_time = end;
-            }
-            let callbacks = problem.apply_step_callbacks(
-                &state,
-                previous_time,
-                &mut workspace.candidate,
-                &mut next_time,
-                &mut state_before_effect,
-            )?;
-            stats.callback_invocations += callbacks.invocations;
-            time = next_time;
-            std::mem::swap(&mut state, &mut workspace.candidate);
-            stats.accepted_steps += 1;
-            recorder.record_step(
-                &workspace.candidate,
-                previous_time,
-                if callbacks.invocations == 0 {
-                    &state
-                } else {
-                    &state_before_effect
-                },
-                time,
-                time == end,
+        ensure_finite(candidate)?;
+        if error <= 1.0 && !startup {
+            evaluate(
+                problem,
+                &mut workspace.next_derivative,
+                candidate,
+                time + step,
+                stats,
             );
-            if callbacks.invocations > 0 {
-                recorder.force_state(time, &state);
-            }
-            if callbacks.terminate {
-                return Ok(recorder.finish(stats));
-            }
-
-            if callbacks.invocations > 0 {
-                workspace.reset_history();
-                step_number = 1;
-                evaluate(problem, &mut workspace.derivative, &state, time, &mut stats);
-                ensure_finite(&workspace.derivative)?;
-            } else {
-                workspace
-                    .accepted_steps
-                    .copy_from_slice(&workspace.trial_steps);
-                for (previous, current) in workspace
-                    .phi_previous
-                    .iter_mut()
-                    .zip(&workspace.phi)
-                    .take(step_number)
-                {
-                    previous.copy_from_slice(current);
-                }
-                std::mem::swap(&mut workspace.derivative, &mut workspace.next_derivative);
-                step_number = (step_number + 1).min(method.order);
-            }
-
-            if options.adaptive {
-                let mut factor = step_factor(error, method.order);
-                if previous_step_rejected {
-                    factor = factor.min(1.0);
-                }
-                step = direction * (step.abs() * factor).min(maximum_step);
-            }
-            previous_step_rejected = false;
-        } else {
-            stats.rejected_steps += 1;
-            step *= step_factor(error, method.order).min(1.0);
-            previous_step_rejected = true;
+            ensure_finite(&workspace.next_derivative)?;
         }
+        Ok(StepEstimate::new(error))
     }
 
-    Ok(recorder.finish(stats))
+    fn accept_step(
+        &mut self,
+        problem: &OdeProblem<F, P>,
+        _: &[f64],
+        state: &[f64],
+        time: f64,
+        _: f64,
+        callback_applied: bool,
+        stats: &mut SolverStats,
+    ) -> Result<(), SolveError> {
+        let method = self.method;
+        let step_number = self.step_number;
+        let workspace = self.workspace();
+
+        if callback_applied {
+            workspace.reset_history();
+            evaluate(problem, &mut workspace.derivative, state, time, stats);
+            ensure_finite(&workspace.derivative)?;
+            self.step_number = 1;
+        } else {
+            workspace
+                .accepted_steps
+                .copy_from_slice(&workspace.trial_steps);
+            for (previous, current) in workspace
+                .phi_previous
+                .iter_mut()
+                .zip(&workspace.phi)
+                .take(step_number)
+            {
+                previous.copy_from_slice(current);
+            }
+            std::mem::swap(&mut workspace.derivative, &mut workspace.next_derivative);
+            self.step_number = (step_number + 1).min(method.order);
+        }
+        Ok(())
+    }
+
+    fn reject_step(&mut self) {}
 }
 
 fn prepare_trial_steps(workspace: &mut Workspace, step: f64, step_number: usize, order: usize) {
@@ -386,6 +359,7 @@ fn variable_adams_step<F, P>(
     time: f64,
     step: f64,
     method: &VariableAdamsMethod,
+    candidate: &mut [f64],
     workspace: &mut Workspace,
     stats: &mut SolverStats,
 ) -> Result<f64, SolveError>
@@ -395,9 +369,9 @@ where
     let order = method.order;
     if !method.corrector {
         update_g(workspace, order);
-        workspace.candidate.copy_from_slice(state);
+        candidate.copy_from_slice(state);
         for index in 0..order {
-            for (value, difference) in workspace.candidate.iter_mut().zip(&workspace.phi[index]) {
+            for (value, difference) in candidate.iter_mut().zip(&workspace.phi[index]) {
                 *value += workspace.g[index] * difference;
             }
         }
@@ -429,12 +403,8 @@ where
                     before[index - 1][component] - workspace.phi[index - 1][component];
             }
         }
-        workspace.candidate.copy_from_slice(&workspace.predicted);
-        for (value, difference) in workspace
-            .candidate
-            .iter_mut()
-            .zip(&workspace.phi_endpoint[order - 1])
-        {
+        candidate.copy_from_slice(&workspace.predicted);
+        for (value, difference) in candidate.iter_mut().zip(&workspace.phi_endpoint[order - 1]) {
             *value += workspace.g[order - 1] * difference;
         }
         let error_coefficient = workspace.g[order] - workspace.g[order - 1];
@@ -448,7 +418,7 @@ where
     }
 
     Ok(if options.adaptive {
-        scaled_error_norm(&workspace.error, state, &workspace.candidate, options)
+        scaled_error_norm(&workspace.error, state, candidate, options)
     } else {
         0.0
     })
@@ -462,6 +432,7 @@ fn startup_step<F, P>(
     time: f64,
     step: f64,
     order: usize,
+    candidate: &mut [f64],
     workspace: &mut Workspace,
     stats: &mut SolverStats,
 ) -> Result<f64, SolveError>
@@ -469,16 +440,16 @@ where
     F: Fn(&mut [f64], &[f64], &P, f64),
 {
     if order == 3 {
-        bogacki_shampine_step(problem, state, time, step, workspace, stats);
+        bogacki_shampine_step(problem, state, time, step, candidate, workspace, stats);
         ensure_finite(&workspace.next_derivative)?;
         return Ok(if options.adaptive {
-            scaled_error_norm(&workspace.error, state, &workspace.candidate, options)
+            scaled_error_norm(&workspace.error, state, candidate, options)
         } else {
             0.0
         });
     }
 
-    rk4_step(problem, state, time, step, workspace, stats);
+    rk4_step(problem, state, time, step, candidate, workspace, stats);
     ensure_finite(&workspace.next_derivative)?;
     if !options.adaptive {
         return Ok(0.0);
@@ -488,9 +459,9 @@ where
     let mut largest: f64 = 0.0;
     for fraction in sigma {
         for component in 0..state.len() {
-            let delta = workspace.candidate[component] - state[component];
+            let delta = candidate[component] - state[component];
             workspace.temporary[component] = (1.0 - fraction) * state[component]
-                + fraction * workspace.candidate[component]
+                + fraction * candidate[component]
                 + fraction
                     * (fraction - 1.0)
                     * ((1.0 - 2.0 * fraction) * delta
@@ -505,8 +476,8 @@ where
                             * (3.0 * step * workspace.derivative[component]
                                 + 3.0 * step * workspace.next_derivative[component]
                                 + 6.0 * state[component]
-                                - 6.0 * workspace.candidate[component])
-                        + 6.0 * workspace.candidate[component])
+                                - 6.0 * candidate[component])
+                        + 6.0 * candidate[component])
                     / step;
         }
         evaluate(
@@ -523,7 +494,7 @@ where
         largest = largest.max(scaled_error_norm(
             &workspace.error,
             state,
-            &workspace.candidate,
+            candidate,
             options,
         ));
     }
@@ -536,6 +507,7 @@ fn bogacki_shampine_step<F, P>(
     state: &[f64],
     time: f64,
     step: f64,
+    candidate: &mut [f64],
     workspace: &mut Workspace,
     stats: &mut SolverStats,
 ) where
@@ -564,7 +536,7 @@ fn bogacki_shampine_step<F, P>(
         stats,
     );
     for component in 0..state.len() {
-        workspace.candidate[component] = state[component]
+        candidate[component] = state[component]
             + step
                 * (2.0 / 9.0 * workspace.derivative[component]
                     + 1.0 / 3.0 * workspace.stages[0][component]
@@ -573,7 +545,7 @@ fn bogacki_shampine_step<F, P>(
     evaluate(
         problem,
         &mut workspace.next_derivative,
-        &workspace.candidate,
+        candidate,
         time + step,
         stats,
     );
@@ -592,6 +564,7 @@ fn rk4_step<F, P>(
     state: &[f64],
     time: f64,
     step: f64,
+    candidate: &mut [f64],
     workspace: &mut Workspace,
     stats: &mut SolverStats,
 ) where
@@ -630,7 +603,7 @@ fn rk4_step<F, P>(
         stats,
     );
     for component in 0..state.len() {
-        workspace.candidate[component] = state[component]
+        candidate[component] = state[component]
             + step / 6.0
                 * (workspace.derivative[component]
                     + 2.0 * workspace.stages[0][component]
@@ -640,7 +613,7 @@ fn rk4_step<F, P>(
     evaluate(
         problem,
         &mut workspace.next_derivative,
-        &workspace.candidate,
+        candidate,
         time + step,
         stats,
     );
@@ -721,16 +694,6 @@ where
     Ok((100.0 * trial_step).min(accuracy_step).min(maximum_step))
 }
 
-fn step_factor(error: f64, order: usize) -> f64 {
-    if error == 0.0 {
-        MAX_FACTOR
-    } else if error.is_finite() {
-        (SAFETY * error.powf(-1.0 / order as f64)).clamp(MIN_FACTOR, MAX_FACTOR)
-    } else {
-        MIN_FACTOR
-    }
-}
-
 fn evaluate<F, P>(
     problem: &OdeProblem<F, P>,
     derivative: &mut [f64],
@@ -754,10 +717,15 @@ fn ensure_finite(values: &[f64]) -> Result<(), SolveError> {
 
 #[cfg(test)]
 mod tests {
+    use std::cell::Cell;
     use std::f64::consts::E;
+    use std::rc::Rc;
 
-    use super::{Vcab3, Vcab4, Vcab5, Vcabm3, Vcabm4, Vcabm5, update_g};
-    use crate::{CallbackAction, OdeProblem, SaveMode, SolveOptions, solve};
+    use super::{
+        VCAB5_METHOD, VariableAdamsKernel, Vcab3, Vcab4, Vcab5, Vcabm3, Vcabm4, Vcabm5, update_g,
+    };
+    use crate::integrator::StepKernel;
+    use crate::{CallbackAction, OdeProblem, SaveMode, SolveOptions, SolverStats, solve};
 
     type TestRhs = fn(&mut [f64], &[f64], &(), f64);
 
@@ -907,5 +875,138 @@ mod tests {
         ratio!(Vcabm3, 3);
         ratio!(Vcabm4, 4);
         ratio!(Vcabm5, 5);
+    }
+
+    #[test]
+    fn rejected_attempt_does_not_advance_or_contaminate_history() {
+        let problem = exponential((0.0, 1.0));
+        let options = SolveOptions {
+            absolute_tolerance: 1.0e-12,
+            relative_tolerance: 1.0e-12,
+            ..SolveOptions::default()
+        };
+        let mut rejected_kernel = VariableAdamsKernel::new(&VCAB5_METHOD);
+        let mut fresh_kernel = VariableAdamsKernel::new(&VCAB5_METHOD);
+        let mut rejected_stats = SolverStats::default();
+        let mut fresh_stats = SolverStats::default();
+        let state = [1.0];
+        let mut rejected_candidate = [0.0];
+        let mut fresh_candidate = [0.0];
+
+        <VariableAdamsKernel as StepKernel<TestRhs, ()>>::initialize(
+            &mut rejected_kernel,
+            &problem,
+            &state,
+            0.0,
+            &mut rejected_stats,
+        )
+        .unwrap();
+        let rejected = <VariableAdamsKernel as StepKernel<TestRhs, ()>>::attempt_step(
+            &mut rejected_kernel,
+            &problem,
+            &state,
+            0.0,
+            1.0,
+            &mut rejected_candidate,
+            &options,
+            &mut rejected_stats,
+        )
+        .unwrap();
+        assert!(rejected.error_norm > 1.0);
+        <VariableAdamsKernel as StepKernel<TestRhs, ()>>::reject_step(&mut rejected_kernel);
+
+        let accepted_workspace = rejected_kernel.workspace.as_ref().unwrap();
+        assert_eq!(rejected_kernel.step_number, 1);
+        assert!(
+            accepted_workspace
+                .accepted_steps
+                .iter()
+                .all(|step| *step == 0.0)
+        );
+        assert!(
+            accepted_workspace
+                .phi_previous
+                .iter()
+                .flatten()
+                .all(|value| *value == 0.0)
+        );
+        assert_eq!(accepted_workspace.derivative, [1.0]);
+
+        <VariableAdamsKernel as StepKernel<TestRhs, ()>>::initialize(
+            &mut fresh_kernel,
+            &problem,
+            &state,
+            0.0,
+            &mut fresh_stats,
+        )
+        .unwrap();
+        let after_rejection = <VariableAdamsKernel as StepKernel<TestRhs, ()>>::attempt_step(
+            &mut rejected_kernel,
+            &problem,
+            &state,
+            0.0,
+            1.0e-4,
+            &mut rejected_candidate,
+            &options,
+            &mut rejected_stats,
+        )
+        .unwrap();
+        let fresh = <VariableAdamsKernel as StepKernel<TestRhs, ()>>::attempt_step(
+            &mut fresh_kernel,
+            &problem,
+            &state,
+            0.0,
+            1.0e-4,
+            &mut fresh_candidate,
+            &options,
+            &mut fresh_stats,
+        )
+        .unwrap();
+
+        assert_eq!(after_rejection, fresh);
+        assert_eq!(rejected_candidate, fresh_candidate);
+    }
+
+    #[test]
+    fn terminating_callback_skips_accepted_history_derivative() {
+        let calls = Rc::new(Cell::new(0));
+        let terminated = Rc::new(Cell::new(false));
+        let calls_after_termination = Rc::new(Cell::new(0));
+        let rhs_calls = Rc::clone(&calls);
+        let rhs_terminated = Rc::clone(&terminated);
+        let rhs_calls_after_termination = Rc::clone(&calls_after_termination);
+        let effect_terminated = Rc::clone(&terminated);
+        let problem = OdeProblem::new(
+            move |du: &mut [f64], u: &[f64], _: &(), _: f64| {
+                rhs_calls.set(rhs_calls.get() + 1);
+                if rhs_terminated.get() {
+                    rhs_calls_after_termination.set(rhs_calls_after_termination.get() + 1);
+                }
+                du[0] = u[0];
+            },
+            vec![1.0],
+            (0.0, 1.0),
+            (),
+        )
+        .with_continuous_callback(
+            |_: &[f64], _: &(), time| time - 0.625,
+            move |_: &mut [f64], _: &(), _: f64| {
+                effect_terminated.set(true);
+                CallbackAction::Terminate
+            },
+        );
+        let options = SolveOptions {
+            adaptive: false,
+            initial_step: Some(0.25),
+            save: SaveMode::Endpoints,
+            ..SolveOptions::default()
+        };
+
+        let solution = solve(&problem, Vcab3, &options).unwrap();
+
+        assert_eq!(solution.stats().accepted_steps, 3);
+        assert_eq!(solution.stats().rhs_evaluations, 8);
+        assert_eq!(calls.get(), 8);
+        assert_eq!(calls_after_termination.get(), 0);
     }
 }

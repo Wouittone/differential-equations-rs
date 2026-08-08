@@ -1,4 +1,4 @@
-use crate::solution::TrajectoryRecorder;
+use crate::integrator::{KernelCapabilities, StepEstimate, StepKernel, integrate};
 use crate::{OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions, SolverStats};
 
 const AB3_WEIGHTS: &[f64] = &[23.0 / 12.0, -16.0 / 12.0, 5.0 / 12.0];
@@ -88,7 +88,7 @@ macro_rules! algorithm {
             where
                 F: Fn(&mut [f64], &[f64], &P, f64),
             {
-                integrate(problem, options, &$method)
+                integrate(problem, options, AdamsKernel::new(&$method))
             }
         }
     };
@@ -127,7 +127,7 @@ algorithm!(
 
 struct Workspace {
     history: Vec<Vec<f64>>,
-    candidate: Vec<f64>,
+    history_len: usize,
     temporary: Vec<f64>,
     stage2: Vec<f64>,
     stage3: Vec<f64>,
@@ -137,12 +137,10 @@ struct Workspace {
 }
 
 impl Workspace {
-    fn new(initial_derivative: Vec<f64>, dimension: usize, order: usize) -> Self {
-        let mut history = Vec::with_capacity(order);
-        history.push(initial_derivative);
+    fn new(dimension: usize, order: usize) -> Self {
         Self {
-            history,
-            candidate: vec![0.0; dimension],
+            history: (0..order).map(|_| vec![0.0; dimension]).collect(),
+            history_len: 0,
             temporary: vec![0.0; dimension],
             stage2: vec![0.0; dimension],
             stage3: vec![0.0; dimension],
@@ -153,99 +151,115 @@ impl Workspace {
     }
 }
 
-fn integrate<F, P>(
-    problem: &OdeProblem<F, P>,
-    options: &SolveOptions,
-    method: &AdamsMethod,
-) -> Result<Solution, SolveError>
+struct AdamsKernel {
+    method: &'static AdamsMethod,
+    workspace: Option<Workspace>,
+}
+
+impl AdamsKernel {
+    const fn new(method: &'static AdamsMethod) -> Self {
+        Self {
+            method,
+            workspace: None,
+        }
+    }
+
+    fn workspace(&mut self) -> &mut Workspace {
+        self.workspace
+            .as_mut()
+            .expect("Adams kernel is initialized before stepping")
+    }
+}
+
+impl<F, P> StepKernel<F, P> for AdamsKernel
 where
     F: Fn(&mut [f64], &[f64], &P, f64),
 {
-    if options.adaptive {
-        return Err(SolveError::AdaptiveStepUnsupported);
+    fn capabilities(&self) -> KernelCapabilities {
+        KernelCapabilities::new(false, self.method.order)
     }
-    let fixed_step = options
-        .initial_step
-        .ok_or(SolveError::InitialStepRequired)?;
-    let dimension = problem.initial_state().len();
-    let (start, end) = problem.time_span();
-    let direction = (end - start).signum();
-    let maximum_step = options.max_step.min(fixed_step);
-    let mut state = problem.initial_state().to_vec();
-    let mut state_before_effect = if problem.has_callbacks() {
-        vec![0.0; dimension]
-    } else {
-        Vec::new()
-    };
-    let mut stats = SolverStats::default();
-    let initial_callbacks = problem.apply_initial_callbacks(&mut state, start)?;
-    stats.callback_invocations += initial_callbacks.invocations;
-    let mut recorder = TrajectoryRecorder::new(&state, start, options);
-    if initial_callbacks.terminate {
-        recorder.force_state(start, &state);
-        return Ok(recorder.finish(stats));
+
+    fn initialize(
+        &mut self,
+        problem: &OdeProblem<F, P>,
+        state: &[f64],
+        time: f64,
+        stats: &mut SolverStats,
+    ) -> Result<(), SolveError> {
+        let mut workspace = Workspace::new(state.len(), self.method.order);
+        evaluate(problem, &mut workspace.history[0], state, time, stats);
+        ensure_finite(&workspace.history[0])?;
+        workspace.history_len = 1;
+        self.workspace = Some(workspace);
+        Ok(())
     }
-    let mut initial_derivative = vec![0.0; dimension];
-    evaluate(problem, &mut initial_derivative, &state, start, &mut stats);
-    ensure_finite(&initial_derivative)?;
-    let mut workspace = Workspace::new(initial_derivative, dimension, method.order);
 
-    let mut time = start;
-    let mut steps = 0;
+    fn estimate_initial_step(
+        &mut self,
+        _: &OdeProblem<F, P>,
+        _: &[f64],
+        _: f64,
+        _: f64,
+        maximum_step: f64,
+        _: &mut [f64],
+        _: &SolveOptions,
+        _: &mut SolverStats,
+    ) -> Result<f64, SolveError> {
+        Ok(maximum_step)
+    }
 
-    while direction * (end - time) > 0.0 {
-        if steps == options.max_steps {
-            return Err(SolveError::MaxStepsExceeded);
-        }
-        steps += 1;
-        let step = direction * maximum_step.min((end - time).abs());
-        if time + step == time {
-            return Err(SolveError::StepSizeUnderflow);
-        }
-
+    fn attempt_step(
+        &mut self,
+        problem: &OdeProblem<F, P>,
+        state: &[f64],
+        time: f64,
+        step: f64,
+        candidate: &mut [f64],
+        _: &SolveOptions,
+        stats: &mut SolverStats,
+    ) -> Result<StepEstimate, SolveError> {
+        let method = self.method;
+        let workspace = self.workspace();
         let used_bootstrap =
-            workspace.history.len() < method.order || method.repeating_bootstrap_predictor;
+            workspace.history_len < method.order || method.repeating_bootstrap_predictor;
         if used_bootstrap {
             bootstrap_step(
                 problem,
-                &state,
+                state,
                 time,
                 step,
                 method.bootstrap,
-                &mut workspace,
-                &mut stats,
+                candidate,
+                workspace,
+                stats,
             );
         } else {
             weighted_update(
-                &mut workspace.candidate,
-                &state,
+                candidate,
+                state,
                 step,
                 None,
-                &workspace.history,
+                &workspace.history[..workspace.history_len],
                 method.weights,
             );
         }
 
-        let mut next_time = time + step;
-        if direction * (end - next_time) <= 0.0 {
-            next_time = end;
-        }
         let used_corrector = if let Some(corrector_weights) = method.corrector_weights
-            && workspace.history.len() >= method.order - 1
+            && workspace.history_len >= method.order - 1
         {
             evaluate(
                 problem,
                 &mut workspace.predicted_derivative,
-                &workspace.candidate,
-                next_time,
-                &mut stats,
+                candidate,
+                time + step,
+                stats,
             );
             weighted_update(
-                &mut workspace.candidate,
-                &state,
+                candidate,
+                state,
                 step,
                 Some((&workspace.predicted_derivative, corrector_weights[0])),
-                &workspace.history,
+                &workspace.history[..workspace.history_len],
                 &corrector_weights[1..],
             );
             true
@@ -253,71 +267,49 @@ where
             false
         };
         if used_bootstrap || used_corrector {
-            ensure_finite(&workspace.candidate)?;
+            ensure_finite(candidate)?;
         }
 
-        let previous_time = time;
-        let callbacks = problem.apply_step_callbacks(
-            &state,
-            previous_time,
-            &mut workspace.candidate,
-            &mut next_time,
-            &mut state_before_effect,
-        )?;
-        stats.callback_invocations += callbacks.invocations;
-        time = next_time;
-        std::mem::swap(&mut state, &mut workspace.candidate);
-        stats.accepted_steps += 1;
-        recorder.record_step(
-            &workspace.candidate,
-            previous_time,
-            if callbacks.invocations == 0 {
-                &state
-            } else {
-                &state_before_effect
-            },
-            time,
-            time == end,
-        );
-        if callbacks.invocations > 0 {
-            recorder.force_state(time, &state);
-        }
-        if callbacks.terminate {
-            return Ok(recorder.finish(stats));
-        }
-        evaluate(
-            problem,
-            &mut workspace.next_derivative,
-            &state,
-            time,
-            &mut stats,
-        );
-        ensure_finite(&workspace.next_derivative)?;
-        if callbacks.invocations > 0 {
-            workspace.history.clear();
-        }
-        workspace
-            .history
-            .insert(0, std::mem::take(&mut workspace.next_derivative));
-        if workspace.history.len() > method.order {
-            workspace.next_derivative = workspace
-                .history
-                .pop()
-                .expect("history exceeds method order");
-        } else {
-            workspace.next_derivative = vec![0.0; dimension];
-        }
+        Ok(StepEstimate::new(0.0))
     }
 
-    Ok(recorder.finish(stats))
+    fn accept_step(
+        &mut self,
+        problem: &OdeProblem<F, P>,
+        _: &[f64],
+        state: &[f64],
+        time: f64,
+        _: f64,
+        callback_applied: bool,
+        stats: &mut SolverStats,
+    ) -> Result<(), SolveError> {
+        let method = self.method;
+        let workspace = self.workspace();
+        evaluate(problem, &mut workspace.next_derivative, state, time, stats);
+        ensure_finite(&workspace.next_derivative)?;
+        if callback_applied {
+            workspace.history_len = 1;
+        } else {
+            workspace.history_len = (workspace.history_len + 1).min(method.order);
+            for index in (1..workspace.history_len).rev() {
+                workspace.history.swap(index, index - 1);
+            }
+        }
+        std::mem::swap(&mut workspace.history[0], &mut workspace.next_derivative);
+        Ok(())
+    }
+
+    fn reject_step(&mut self) {}
 }
 
+#[allow(clippy::too_many_arguments)]
 fn bootstrap_step<F, P>(
     problem: &OdeProblem<F, P>,
     state: &[f64],
     time: f64,
     step: f64,
     method: Bootstrap,
+    candidate: &mut [f64],
     workspace: &mut Workspace,
     stats: &mut SolverStats,
 ) where
@@ -337,7 +329,7 @@ fn bootstrap_step<F, P>(
                 stats,
             );
             for (index, &value) in state.iter().enumerate() {
-                workspace.candidate[index] = value
+                candidate[index] = value
                     + (step / 4.0) * (workspace.history[0][index] + 3.0 * workspace.stage2[index]);
             }
         }
@@ -373,7 +365,7 @@ fn bootstrap_step<F, P>(
                 stats,
             );
             for (index, &value) in state.iter().enumerate() {
-                workspace.candidate[index] = value
+                candidate[index] = value
                     + (step / 6.0)
                         * (workspace.history[0][index]
                             + 2.0 * workspace.stage2[index]
@@ -435,7 +427,8 @@ mod tests {
     use std::f64::consts::E;
 
     use crate::{
-        Ab3, Ab4, Ab5, Abm32, Abm43, Abm54, OdeProblem, SaveMode, SolveError, SolveOptions, solve,
+        Ab3, Ab4, Ab5, Abm32, Abm43, Abm54, CallbackAction, OdeProblem, SaveMode, SolveError,
+        SolveOptions, solve,
     };
 
     type TestRhs = fn(&mut [f64], &[f64], &(), f64);
@@ -497,5 +490,35 @@ mod tests {
             solve(&problem, Ab3, &options),
             Err(SolveError::NonFiniteDerivative)
         );
+    }
+
+    #[test]
+    fn terminating_callback_skips_accepted_history_derivative() {
+        let calls = Cell::new(0);
+        let problem = OdeProblem::new(
+            |du: &mut [f64], u: &[f64], _: &(), _: f64| {
+                calls.set(calls.get() + 1);
+                du[0] = u[0];
+            },
+            vec![1.0],
+            (0.0, 1.0),
+            (),
+        )
+        .with_continuous_callback(
+            |_: &[f64], _: &(), time| time - 0.5,
+            |_: &mut [f64], _: &(), _: f64| CallbackAction::Terminate,
+        );
+        let options = SolveOptions {
+            adaptive: false,
+            initial_step: Some(1.0),
+            save: SaveMode::Endpoints,
+            ..SolveOptions::default()
+        };
+
+        let solution = solve(&problem, Ab3, &options).unwrap();
+
+        assert_eq!(solution.stats().accepted_steps, 1);
+        assert_eq!(solution.stats().rhs_evaluations, 2);
+        assert_eq!(calls.get(), 2);
     }
 }
