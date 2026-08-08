@@ -234,6 +234,7 @@ where
     let mut time = start;
     let mut attempted_steps = 0;
     let mut previous_step_rejected = false;
+    let mut controller_state = ControllerState::default();
 
     while direction * (end - time) > 0.0 {
         if attempted_steps == options.max_steps {
@@ -264,6 +265,7 @@ where
             {
                 stats.rejected_steps += 1;
                 kernel.reject_step();
+                controller_state.rejected(1.0);
                 step *= capabilities.controller.failed_attempt_factor;
                 previous_step_rejected = true;
                 continue;
@@ -321,7 +323,9 @@ where
             )?;
 
             if options.adaptive {
-                let mut factor = step_factor(estimate.error_norm, capabilities.controller);
+                controller_state.accepted(estimate.error_norm);
+                let mut factor =
+                    controller_state.factor(estimate.error_norm, capabilities.controller);
                 if previous_step_rejected {
                     factor = factor.min(capabilities.controller.rejected_acceptance_maximum);
                 }
@@ -331,7 +335,9 @@ where
         } else {
             stats.rejected_steps += 1;
             kernel.reject_step();
-            step *= step_factor(estimate.error_norm, capabilities.controller)
+            controller_state.rejected(estimate.error_norm);
+            step *= controller_state
+                .factor(estimate.error_norm, capabilities.controller)
                 .min(capabilities.controller.rejection_maximum);
             previous_step_rejected = true;
         }
@@ -372,14 +378,39 @@ fn step_factor_with_history(
         .clamp(controller.minimum_factor, controller.maximum_factor)
 }
 
+#[allow(dead_code)]
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct ControllerState {
+    previous_error: Option<f64>,
+}
+
+#[allow(dead_code)]
+impl ControllerState {
+    pub(crate) fn factor(&self, error: f64, controller: ControllerConfig) -> f64 {
+        step_factor_with_history(error, self.previous_error, controller)
+    }
+
+    pub(crate) fn accepted(&mut self, error: f64) {
+        self.previous_error = error.is_finite().then_some(error.max(f64::MIN_POSITIVE));
+    }
+
+    pub(crate) fn rejected(&mut self, error: f64) {
+        self.previous_error = error.is_finite().then_some(error.max(f64::MIN_POSITIVE));
+    }
+
+    pub(crate) fn reset(&mut self) {
+        self.previous_error = None;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::cell::Cell;
     use std::rc::Rc;
 
     use super::{
-        ControllerConfig, KernelCapabilities, StepEstimate, StepKernel, integrate, step_factor,
-        step_factor_with_history,
+        ControllerConfig, ControllerState, KernelCapabilities, StepEstimate, StepKernel, integrate,
+        step_factor, step_factor_with_history,
     };
     use crate::{CallbackAction, OdeProblem, SaveMode, SolveError, SolveOptions, SolverStats};
 
@@ -762,6 +793,11 @@ mod tests {
             step_factor_with_history(0.25, None, pi),
             step_factor(0.25, pi)
         );
+        let mut state = ControllerState::default();
+        state.accepted(0.5);
+        assert!(state.factor(0.25, pi) < step_factor(0.25, pi));
+        state.reset();
+        assert_eq!(state.factor(0.25, pi), step_factor(0.25, pi));
     }
 
     #[test]
