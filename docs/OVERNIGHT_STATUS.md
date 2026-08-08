@@ -46,7 +46,7 @@ Pinned upstream revision:
 | `/root/linear_interface_impl2` | Additional generated explicit-coefficient slice | `codex/generated-dp5`; `differential-equations-rs-worktrees/generated-dp5` | completed and merged as `69f6caf`; DP5 generated migration passed | 2026-08-09T02:05:00Z |
 | `/root/linear_interface_impl` | Wire accepted Hermite dense service into one solver family | `codex/phase6-explicit-hermite`; `differential-equations-rs-worktrees/explicit-hermite` | completed and merged as `59ece5d` | 2026-08-09T02:20:00Z |
 | `/root/abdf2_kernel` | Fixed-step regular MEBDF2 feasibility/implementation | `codex/mebdf2-kernel`; `differential-equations-rs-worktrees/mebdf2-kernel` | completed and merged as `5e0650c` | 2026-08-09T03:05:00Z |
-| `/root/linear_interface_impl2` | QNDF1 regular-ODE feasibility or bounded implementation | `codex/generated-dp5`; `differential-equations-rs-worktrees/generated-dp5` | completed and merged as `e5a6603` | 2026-08-09T03:25:00Z |
+| `/root/linear_interface_impl2` | QNDF2 regular-ODE feasibility or bounded implementation | new isolated follow-up worktree | active; two-step history scope under review | 2026-08-09T03:40:00Z |
 
 ## Completed waves
 
