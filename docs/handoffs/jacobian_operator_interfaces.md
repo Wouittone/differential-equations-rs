@@ -1,8 +1,9 @@
 # Phase 3 Jacobian/operator interface slice
 
 The checked linear layer now includes crate-private `LinearOperator`,
-`IdentityOperator`, and finite dense `DenseOperator` seams with dimension and
-coefficient validation. `JacobianProvider` adapts the existing analytic
+`IdentityOperator`, `DenseOperator`, and explicit nonsingular
+`NonsingularMassOperator` seams with dimension and coefficient validation.
+`JacobianProvider` adapts the existing analytic
 Jacobian callback without changing `OdeProblem`'s public API and reports
 whether an analytic callback is available.
 

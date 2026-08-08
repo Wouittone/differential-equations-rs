@@ -259,6 +259,42 @@ impl LinearOperator for DenseOperator {
 }
 
 #[allow(dead_code)]
+#[derive(Clone, Debug)]
+pub(crate) struct NonsingularMassOperator {
+    dense: DenseOperator,
+}
+
+#[allow(dead_code)]
+impl NonsingularMassOperator {
+    pub(crate) fn identity(layout: StateLayout) -> Self {
+        let mut matrix = vec![0.0; layout.dimension() * layout.dimension()];
+        for diagonal in 0..layout.dimension() {
+            matrix[diagonal * layout.dimension() + diagonal] = 1.0;
+        }
+        Self {
+            dense: DenseOperator { layout, matrix },
+        }
+    }
+
+    pub(crate) fn dense(layout: StateLayout, matrix: &[f64]) -> Result<Self, LinearError> {
+        Ok(Self {
+            dense: DenseOperator::new(layout, matrix)?,
+        })
+    }
+}
+
+#[allow(dead_code)]
+impl LinearOperator for NonsingularMassOperator {
+    fn dimension(&self) -> usize {
+        self.dense.dimension()
+    }
+
+    fn apply(&self, input: &[f64], output: &mut [f64]) -> Result<(), LinearError> {
+        self.dense.apply(input, output)
+    }
+}
+
+#[allow(dead_code)]
 impl DenseLu {
     pub(crate) fn factorize(
         layout: StateLayout,
@@ -376,8 +412,8 @@ pub(crate) fn solve_factorized(
 #[cfg(test)]
 mod tests {
     use super::{
-        DenseLu, DenseOperator, IdentityOperator, LinearError, LinearOperator, StateLayout,
-        factorize, solve_factorized,
+        DenseLu, DenseOperator, IdentityOperator, LinearError, LinearOperator,
+        NonsingularMassOperator, StateLayout, factorize, solve_factorized,
     };
 
     #[test]
@@ -456,5 +492,9 @@ mod tests {
         let dense = DenseOperator::new(layout, &[2.0, 1.0, 0.0, 3.0]).unwrap();
         dense.apply(&[2.0, -1.0], &mut output).unwrap();
         assert_eq!(output, [3.0, -3.0]);
+
+        let mass = NonsingularMassOperator::identity(layout);
+        mass.apply(&[2.0, -1.0], &mut output).unwrap();
+        assert_eq!(output, [2.0, -1.0]);
     }
 }
