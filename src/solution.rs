@@ -38,6 +38,20 @@ pub(crate) struct HermiteSegment {
     end_derivative: Vec<f64>,
 }
 
+/// Borrowed accepted-step Hermite data for allocation-free recorder calls.
+///
+/// Solver workspaces retain endpoint states and derivatives, so dense sampling
+/// can borrow those slices for the duration of one accepted step instead of
+/// allocating an owning segment on every step.
+pub(crate) struct BorrowedHermiteSegment<'a> {
+    start_time: f64,
+    end_time: f64,
+    start_state: &'a [f64],
+    end_state: &'a [f64],
+    start_derivative: &'a [f64],
+    end_derivative: &'a [f64],
+}
+
 #[allow(dead_code)]
 impl HermiteSegment {
     pub(crate) fn new(
@@ -84,39 +98,127 @@ impl HermiteSegment {
     }
 }
 
+impl<'a> BorrowedHermiteSegment<'a> {
+    pub(crate) fn new(
+        start_time: f64,
+        end_time: f64,
+        start_state: &'a [f64],
+        end_state: &'a [f64],
+        start_derivative: &'a [f64],
+        end_derivative: &'a [f64],
+    ) -> Result<Self, &'static str> {
+        if !start_time.is_finite()
+            || !end_time.is_finite()
+            || end_time == start_time
+            || start_state.is_empty()
+            || start_state.len() != end_state.len()
+            || start_state.len() != start_derivative.len()
+            || start_state.len() != end_derivative.len()
+            || !start_state.iter().all(|value| value.is_finite())
+            || !end_state.iter().all(|value| value.is_finite())
+            || !start_derivative.iter().all(|value| value.is_finite())
+            || !end_derivative.iter().all(|value| value.is_finite())
+        {
+            return Err("invalid dense segment dimensions or times");
+        }
+        Ok(Self {
+            start_time,
+            end_time,
+            start_state,
+            end_state,
+            start_derivative,
+            end_derivative,
+        })
+    }
+
+    fn contains(&self, time: f64) -> bool {
+        if !time.is_finite() {
+            return false;
+        }
+        if self.start_time < self.end_time {
+            (self.start_time..=self.end_time).contains(&time)
+        } else {
+            (self.end_time..=self.start_time).contains(&time)
+        }
+    }
+}
+
 #[allow(dead_code)]
 impl DenseSegment for HermiteSegment {
     fn interpolate(&self, time: f64, output: &mut [f64]) -> Result<(), &'static str> {
-        if output.len() != self.start_state.len() || !self.contains(time) {
+        if !self.contains(time) {
             return Err("dense output dimension or time mismatch");
         }
-        if time == self.start_time {
-            output.copy_from_slice(&self.start_state);
-            return Ok(());
-        }
-        if time == self.end_time {
-            output.copy_from_slice(&self.end_state);
-            return Ok(());
-        }
-        let h = self.end_time - self.start_time;
-        let theta = (time - self.start_time) / h;
-        let theta2 = theta * theta;
-        let theta3 = theta2 * theta;
-        let h00 = 2.0 * theta3 - 3.0 * theta2 + 1.0;
-        let h10 = theta3 - 2.0 * theta2 + theta;
-        let h01 = -2.0 * theta3 + 3.0 * theta2;
-        let h11 = theta3 - theta2;
-        for (((output, start), end), (start_derivative, end_derivative)) in output
-            .iter_mut()
-            .zip(&self.start_state)
-            .zip(&self.end_state)
-            .zip(self.start_derivative.iter().zip(&self.end_derivative))
-        {
-            *output =
-                h00 * start + h10 * h * start_derivative + h01 * end + h11 * h * end_derivative;
-        }
-        Ok(())
+        interpolate_hermite(
+            self.start_time,
+            self.end_time,
+            &self.start_state,
+            &self.end_state,
+            &self.start_derivative,
+            &self.end_derivative,
+            time,
+            output,
+        )
     }
+}
+
+impl DenseSegment for BorrowedHermiteSegment<'_> {
+    fn interpolate(&self, time: f64, output: &mut [f64]) -> Result<(), &'static str> {
+        if !self.contains(time) {
+            return Err("dense output dimension or time mismatch");
+        }
+        interpolate_hermite(
+            self.start_time,
+            self.end_time,
+            self.start_state,
+            self.end_state,
+            self.start_derivative,
+            self.end_derivative,
+            time,
+            output,
+        )
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn interpolate_hermite(
+    start_time: f64,
+    end_time: f64,
+    start_state: &[f64],
+    end_state: &[f64],
+    start_derivative: &[f64],
+    end_derivative: &[f64],
+    time: f64,
+    output: &mut [f64],
+) -> Result<(), &'static str> {
+    if output.len() != start_state.len() || !time.is_finite() {
+        return Err("dense output dimension or time mismatch");
+    }
+    if time == start_time {
+        output.copy_from_slice(start_state);
+        return Ok(());
+    }
+    if time == end_time {
+        output.copy_from_slice(end_state);
+        return Ok(());
+    }
+    let h = end_time - start_time;
+    let theta = (time - start_time) / h;
+    let theta2 = theta * theta;
+    let theta3 = theta2 * theta;
+    let h00 = 2.0 * theta3 - 3.0 * theta2 + 1.0;
+    let h10 = theta3 - 2.0 * theta2 + theta;
+    let h01 = -2.0 * theta3 + 3.0 * theta2;
+    let h11 = theta3 - theta2;
+    for (((output, start), end), (start_derivative, end_derivative)) in output
+        .iter_mut()
+        .zip(start_state)
+        .zip(end_state)
+        .zip(start_derivative.iter().zip(end_derivative))
+    {
+        *output = h00 * start + h10 * h * start_derivative + h01 * end + h11 * h * end_derivative;
+    }
+    Ok(())
 }
 
 pub(crate) struct TrajectoryRecorder<'a> {

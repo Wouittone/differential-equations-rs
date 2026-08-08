@@ -6,6 +6,7 @@ use crate::generated_coefficients::{
 use crate::integrator::{
     KernelCapabilities, StepEstimate, StepKernel, integrate as drive_integration,
 };
+use crate::solution::{BorrowedHermiteSegment, TrajectoryRecorder};
 use crate::{OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions, SolverStats};
 use std::marker::PhantomData;
 
@@ -818,6 +819,44 @@ where
             0.0
         };
         Ok(StepEstimate::new(error))
+    }
+
+    fn record_dense_step(
+        &mut self,
+        problem: &OdeProblem<F, P>,
+        previous_state: &[f64],
+        state: &[f64],
+        previous_time: f64,
+        time: f64,
+        final_time: bool,
+        recorder: &mut TrajectoryRecorder<'_>,
+        stats: &mut SolverStats,
+    ) -> Result<bool, SolveError> {
+        // The initial stage is the derivative at the accepted step's left
+        // endpoint. Reuse the workspace error scratch for the right-endpoint
+        // derivative so dense save-at adds no per-step allocation.
+        evaluate(problem, &mut self.workspace.temporary, state, time, stats);
+        ensure_finite(&self.workspace.temporary)?;
+        let segment = BorrowedHermiteSegment::new(
+            previous_time,
+            time,
+            previous_state,
+            state,
+            self.workspace.stage(0),
+            &self.workspace.temporary,
+        )
+        .map_err(|_| SolveError::NonFiniteDerivative)?;
+        recorder
+            .record_step_dense(
+                previous_state,
+                previous_time,
+                state,
+                time,
+                final_time,
+                &segment,
+            )
+            .map_err(|_| SolveError::NonFiniteDerivative)?;
+        Ok(true)
     }
 
     fn accept_step(

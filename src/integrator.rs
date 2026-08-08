@@ -164,6 +164,26 @@ where
         stats: &mut SolverStats,
     ) -> Result<StepEstimate, SolveError>;
 
+    /// Samples `save_at` through an accepted method-specific dense segment.
+    ///
+    /// The hook runs after callbacks have identified any truncated endpoint,
+    /// but receives the pre-effect state so endpoint callbacks cannot corrupt
+    /// the left-limit interpolant. Returning `false` keeps the compatibility
+    /// endpoint recorder path.
+    fn record_dense_step(
+        &mut self,
+        _: &OdeProblem<F, P>,
+        _: &[f64],
+        _: &[f64],
+        _: f64,
+        _: f64,
+        _: bool,
+        _: &mut TrajectoryRecorder<'_>,
+        _: &mut SolverStats,
+    ) -> Result<bool, SolveError> {
+        Ok(false)
+    }
+
     fn accept_step(
         &mut self,
         problem: &OdeProblem<F, P>,
@@ -292,17 +312,38 @@ where
             stats.callback_invocations += callbacks.invocations;
             stats.accepted_steps += 1;
 
-            recorder.record_step(
-                &state,
-                previous_time,
-                if callbacks.invocations == 0 {
+            let dense_recorded = if !options.save_at.is_empty() {
+                let dense_state = if callbacks.invocations == 0 {
                     &candidate
                 } else {
                     &state_before_effect
-                },
-                next_time,
-                next_time == end,
-            );
+                };
+                kernel.record_dense_step(
+                    problem,
+                    &state,
+                    dense_state,
+                    previous_time,
+                    next_time,
+                    next_time == end,
+                    &mut recorder,
+                    &mut stats,
+                )?
+            } else {
+                false
+            };
+            if !dense_recorded {
+                recorder.record_step(
+                    &state,
+                    previous_time,
+                    if callbacks.invocations == 0 {
+                        &candidate
+                    } else {
+                        &state_before_effect
+                    },
+                    next_time,
+                    next_time == end,
+                );
+            }
             if callbacks.invocations > 0 {
                 recorder.force_state(next_time, &candidate);
             }
