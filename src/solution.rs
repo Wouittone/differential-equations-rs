@@ -55,6 +55,10 @@ impl HermiteSegment {
             || start_state.len() != end_state.len()
             || start_state.len() != start_derivative.len()
             || start_state.len() != end_derivative.len()
+            || !start_state.iter().all(|value| value.is_finite())
+            || !end_state.iter().all(|value| value.is_finite())
+            || !start_derivative.iter().all(|value| value.is_finite())
+            || !end_derivative.iter().all(|value| value.is_finite())
         {
             return Err("invalid dense segment dimensions or times");
         }
@@ -67,13 +71,32 @@ impl HermiteSegment {
             end_derivative,
         })
     }
+
+    fn contains(&self, time: f64) -> bool {
+        if !time.is_finite() {
+            return false;
+        }
+        if self.start_time < self.end_time {
+            (self.start_time..=self.end_time).contains(&time)
+        } else {
+            (self.end_time..=self.start_time).contains(&time)
+        }
+    }
 }
 
 #[allow(dead_code)]
 impl DenseSegment for HermiteSegment {
     fn interpolate(&self, time: f64, output: &mut [f64]) -> Result<(), &'static str> {
-        if output.len() != self.start_state.len() || !time.is_finite() {
+        if output.len() != self.start_state.len() || !self.contains(time) {
             return Err("dense output dimension or time mismatch");
+        }
+        if time == self.start_time {
+            output.copy_from_slice(&self.start_state);
+            return Ok(());
+        }
+        if time == self.end_time {
+            output.copy_from_slice(&self.end_state);
+            return Ok(());
         }
         let h = self.end_time - self.start_time;
         let theta = (time - self.start_time) / h;
@@ -169,6 +192,48 @@ impl<'a> TrajectoryRecorder<'a> {
             self.values.extend_from_slice(&self.interpolation);
             self.next_save += 1;
         }
+    }
+
+    /// Records an accepted step using its method-provided dense interpolant.
+    ///
+    /// This is deliberately separate from [`record_step`]: existing kernels
+    /// still use the endpoint fallback until they expose their accepted-step
+    /// derivative/stage data. The helper shares the recorder's preallocated
+    /// scratch buffer and never evaluates the interpolant more than once per
+    /// requested save point.
+    #[allow(dead_code)]
+    pub(crate) fn record_step_dense(
+        &mut self,
+        previous_state: &[f64],
+        previous_time: f64,
+        state: &[f64],
+        time: f64,
+        final_time: bool,
+        segment: &dyn DenseSegment,
+    ) -> Result<(), &'static str> {
+        let _ = previous_state;
+        if self.save_at.is_empty() {
+            if self.save_mode == SaveMode::EveryStep || final_time {
+                self.push_unique(time, state);
+            }
+            return Ok(());
+        }
+
+        let direction = (time - previous_time).signum();
+        while let Some(&target) = self.save_at.get(self.next_save) {
+            if direction * (target - previous_time) <= 0.0 {
+                self.next_save += 1;
+                continue;
+            }
+            if direction * (time - target) < 0.0 {
+                break;
+            }
+            segment.interpolate(target, &mut self.interpolation)?;
+            self.times.push(target);
+            self.values.extend_from_slice(&self.interpolation);
+            self.next_save += 1;
+        }
+        Ok(())
     }
 
     pub(crate) fn finish(self, stats: SolverStats) -> Solution {
@@ -284,7 +349,7 @@ impl Solution {
 
 #[cfg(test)]
 mod tests {
-    use super::{DenseSegment, HermiteSegment, Solution, SolverStats};
+    use super::{DenseSegment, HermiteSegment, Solution, SolverStats, TrajectoryRecorder};
 
     #[test]
     fn exposes_flat_states_as_slices() {
@@ -314,5 +379,40 @@ mod tests {
         assert_eq!(output, [1.0]);
         segment.interpolate(0.5, &mut output).unwrap();
         assert!((output[0] - 0.25).abs() < 1.0e-14);
+    }
+
+    #[test]
+    fn hermite_segment_is_checked_and_exact_at_endpoints() {
+        let segment =
+            HermiteSegment::new(1.0, 0.0, vec![1.0], vec![0.0], vec![2.0], vec![0.0]).unwrap();
+        let mut output = [f64::NAN];
+        segment.interpolate(1.0, &mut output).unwrap();
+        assert_eq!(output, [1.0]);
+        segment.interpolate(0.0, &mut output).unwrap();
+        assert_eq!(output, [0.0]);
+        assert!(segment.interpolate(1.1, &mut output).is_err());
+        assert!(segment.interpolate(0.5, &mut []).is_err());
+        assert!(
+            HermiteSegment::new(0.0, 1.0, vec![f64::NAN], vec![1.0], vec![0.0], vec![1.0],)
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn recorder_uses_accepted_hermite_segment_for_save_at() {
+        let options = crate::SolveOptions {
+            save_at: vec![0.25, 0.75],
+            ..crate::SolveOptions::default()
+        };
+        let mut recorder = TrajectoryRecorder::new(&[0.0], 0.0, &options);
+        let segment =
+            HermiteSegment::new(0.0, 1.0, vec![0.0], vec![1.0], vec![0.0], vec![3.0]).unwrap();
+        recorder
+            .record_step_dense(&[0.0], 0.0, &[1.0], 1.0, true, &segment)
+            .unwrap();
+        let solution = recorder.finish(SolverStats::default());
+        assert_eq!(solution.times(), &[0.25, 0.75]);
+        assert!((solution.values()[0] - 0.015625).abs() < 1.0e-14);
+        assert!((solution.values()[1] - 0.421875).abs() < 1.0e-14);
     }
 }

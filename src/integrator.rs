@@ -323,6 +323,12 @@ where
             )?;
 
             if options.adaptive {
+                if callbacks.invocations > 0 {
+                    // A callback may change the accepted state discontinuously.
+                    // Do not let an error measured before that mutation bias the
+                    // next PI proposal.
+                    controller_state.reset();
+                }
                 controller_state.accepted(estimate.error_norm);
                 let mut factor =
                     controller_state.factor(estimate.error_norm, capabilities.controller);
