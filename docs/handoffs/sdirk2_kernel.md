@@ -26,7 +26,11 @@ The branch passed cargo test --all-targets; this includes scalar stiff decay,
 second-order convergence, nonautonomous and backward integration, analytic and
 finite-difference Jacobian parity, adaptive rejection, and callback
 termination tests in tests/sdirk2.rs. The sdirk2_compliance example emits a
-deterministic endpoint suitable for the pinned Julia SDIRK2() reference.
+deterministic endpoint suitable for the pinned Julia SDIRK2() reference. The
+coordinator-added `tests/julia/sdirk2.jl` compares the fixed `dt=0.01`
+endpoint against pinned `OrdinaryDiffEqSDIRK.SDIRK2()` and checks adaptive
+termination statistics; the full suite passes 206 assertions across 16
+testsets.
 
 src/lib.rs was temporarily exported on this isolated branch so the
 integration tests could run. The coordinator should retain the mod sdirk;
