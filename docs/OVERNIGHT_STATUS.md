@@ -44,7 +44,7 @@ Pinned upstream revision:
 | `/root/linear_interface_impl` | Accepted-step dense recorder and controller reset slice | `codex/phase6-dense-controller`; `differential-equations-rs-worktrees/dense-controller` | completed and merged as `dbf9a16` | 2026-08-09T00:35:00Z |
 | `/root/abdf2_kernel` | Exact regular ABDF2 identity-mass family implementation | `codex/abdf2-kernel`; `differential-equations-rs-worktrees/abdf2-kernel` | completed and merged as `aedca27` plus estimator/workspace refresh | 2026-08-09T01:05:00Z |
 | `/root/linear_interface_impl2` | Additional generated explicit-coefficient slice | `codex/generated-dp5`; `differential-equations-rs-worktrees/generated-dp5` | completed and merged as `69f6caf`; DP5 generated migration passed | 2026-08-09T02:05:00Z |
-| `/root/linear_interface_impl` | Wire accepted Hermite dense service into one solver family | new isolated follow-up worktree | active; RK4 slice | 2026-08-09T01:55:00Z |
+| `/root/linear_interface_impl` | Wire accepted Hermite dense service into one solver family | `codex/phase6-explicit-hermite`; `differential-equations-rs-worktrees/explicit-hermite` | completed and merged as `59ece5d` | 2026-08-09T02:20:00Z |
 
 ## Completed waves
 
@@ -77,6 +77,7 @@ Pinned upstream revision:
 | ABDF2 family | Native regular identity-mass ABDF2 with implicit-Euler startup, variable-step coefficients, Newton/Jacobian paths, callback history reset, and pinned Julia fixture | 92 unit tests plus 6 ABDF2 integration tests | 210 pass (17 suites) | reviewed and merged as `aedca27` plus final estimator/workspace refresh; fixed/adaptive endpoint parity within documented tolerance; controller-count caveat documented |
 | Generated BS3 | Migrated the public BS3 explicit tableau to generated pinned coefficients with structural fixture validation and regression coverage | 92 unit tests plus integrations | 210 pass (17 suites) | reviewed and merged as `ddefe73`; SBDF2 explicitly deferred because pinned implementation is split/IMEX |
 | Generated DP5 | Migrated the public DP5 seven-stage tableau and embedded defect to generated pinned coefficients with structural fixture validation | 92 unit tests plus integrations | 210 pass (17 suites) | reviewed and merged as `69f6caf`; pinned Julia compliance unchanged |
+| Explicit RK dense wiring | Wired zero-allocation borrowed Hermite segments into explicit RK save-at sampling, including backward/exact-endpoint/rejection coverage | 92 unit tests plus integrations and 3 dense tests | 210 pass (17 suites) | reviewed and merged as `59ece5d`; endpoint-only allocations and callback semantics preserved |
 
 ## Validation snapshot
 
