@@ -395,6 +395,7 @@ where
     }
     stats.jacobian_evaluations += 1;
     factorize(&mut workspace.matrix, &mut workspace.pivots, dimension)?;
+    stats.linear_factorizations += 1;
     workspace.factorization_valid = true;
     Ok(())
 }

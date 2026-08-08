@@ -216,6 +216,7 @@ where
         &mut workspace.pivots,
         dimension,
     )?;
+    stats.linear_factorizations += 1;
 
     for index in 0..dimension {
         workspace.right_hand_side[index] =

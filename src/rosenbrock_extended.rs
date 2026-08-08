@@ -774,7 +774,9 @@ where
         &mut workspace.factorization,
         &mut workspace.pivots,
         dimension,
-    )
+    )?;
+    stats.linear_factorizations += 1;
+    Ok(())
 }
 
 fn differentiate<F, P>(

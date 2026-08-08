@@ -13,6 +13,8 @@ pub struct SolverStats {
     pub jacobian_evaluations: usize,
     /// Number of linear systems solved.
     pub linear_solves: usize,
+    /// Number of dense linear factorizations built.
+    pub linear_factorizations: usize,
     /// Number of discrete or continuous callback effects applied.
     pub callback_invocations: usize,
 }

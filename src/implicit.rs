@@ -386,6 +386,7 @@ where
         }
     }
     stats.jacobian_evaluations += 1;
+    stats.linear_factorizations += 1;
     if workspace.factorization.is_none() {
         let matrix = workspace
             .layout
