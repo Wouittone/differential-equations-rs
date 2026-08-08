@@ -105,6 +105,9 @@ Run the matched steady-state benchmark matrix with:
 
 Raw Rust and Julia measurements plus a ratio table are written beneath
 `benchmarks/results/`. Allocation totals exclude compilation and warm-up.
+For the reproducible, VM-per-case speed/RSS/allocation harness, see
+[`benchmarks/cloud/README.md`](benchmarks/cloud/README.md); it is designed to
+run through `gcloud` and never starts cloud resources on its own.
 The exact generated implemented/remaining algorithm inventory is maintained in
 [`docs/ODE_PARITY_INVENTORY.md`](docs/ODE_PARITY_INVENTORY.md); the coverage
 policy and interpretation are in
