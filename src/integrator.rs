@@ -18,6 +18,7 @@ pub(crate) struct ControllerConfig {
     rejected_acceptance_maximum: f64,
     rejection_maximum: f64,
     failed_attempt_factor: f64,
+    integral_exponent: f64,
 }
 
 impl ControllerConfig {
@@ -36,7 +37,16 @@ impl ControllerConfig {
             rejected_acceptance_maximum: 1.0,
             rejection_maximum: 1.0,
             failed_attempt_factor,
+            integral_exponent: 0.0,
         }
+    }
+
+    /// Adds an optional integral-history exponent for PI controller metadata.
+    /// Zero preserves the existing proportional controller exactly.
+    #[allow(dead_code)]
+    pub(crate) const fn with_integral_exponent(mut self, integral_exponent: f64) -> Self {
+        self.integral_exponent = integral_exponent;
+        self
     }
 
     const fn default_for_order(error_order: usize) -> Self {
@@ -341,12 +351,36 @@ fn step_factor(error: f64, controller: ControllerConfig) -> f64 {
     }
 }
 
+#[allow(dead_code)]
+fn step_factor_with_history(
+    error: f64,
+    previous_error: Option<f64>,
+    controller: ControllerConfig,
+) -> f64 {
+    let proportional = step_factor(error, controller);
+    if controller.integral_exponent == 0.0 {
+        return proportional;
+    }
+    let Some(previous_error) = previous_error.filter(|value| value.is_finite() && *value > 0.0)
+    else {
+        return proportional;
+    };
+    if !error.is_finite() || error <= 0.0 {
+        return proportional;
+    }
+    (proportional * previous_error.powf(controller.integral_exponent))
+        .clamp(controller.minimum_factor, controller.maximum_factor)
+}
+
 #[cfg(test)]
 mod tests {
     use std::cell::Cell;
     use std::rc::Rc;
 
-    use super::{ControllerConfig, KernelCapabilities, StepEstimate, StepKernel, integrate};
+    use super::{
+        ControllerConfig, KernelCapabilities, StepEstimate, StepKernel, integrate, step_factor,
+        step_factor_with_history,
+    };
     use crate::{CallbackAction, OdeProblem, SaveMode, SolveError, SolveOptions, SolverStats};
 
     struct MockKernel {
@@ -713,6 +747,21 @@ mod tests {
         assert_eq!(kernel.attempts, 1);
         assert_eq!(kernel.reject_calls, 0);
         assert_eq!(kernel.accept_calls, 0);
+    }
+
+    #[test]
+    fn pi_controller_metadata_uses_previous_error_without_changing_defaults() {
+        let proportional = ControllerConfig::proportional(5, 0.9, 0.2, 10.0, 0.2);
+        assert_eq!(
+            step_factor_with_history(0.25, Some(0.5), proportional),
+            step_factor_with_history(0.25, Some(0.5), proportional.with_integral_exponent(0.0))
+        );
+        let pi = proportional.with_integral_exponent(0.2);
+        assert!(step_factor_with_history(0.25, Some(0.5), pi) < step_factor(0.25, pi));
+        assert_eq!(
+            step_factor_with_history(0.25, None, pi),
+            step_factor(0.25, pi)
+        );
     }
 
     #[test]
