@@ -19,6 +19,134 @@ pub struct OdeProblem<F, P> {
 
 type JacobianFunction<P> = dyn Fn(&mut [f64], &[f64], &P, f64);
 
+/// A split/IMEX ODE representation retaining explicit and implicit components.
+///
+/// The representation is solver-neutral: kernels choose how to combine the
+/// two components, while dimensions, parameters, and time semantics remain
+/// shared and checked in one place.
+#[allow(dead_code)]
+pub struct SplitOdeProblem<FE, FI, P> {
+    explicit: FE,
+    implicit: FI,
+    initial_state: Vec<f64>,
+    time_span: (f64, f64),
+    parameters: P,
+}
+
+#[allow(dead_code)]
+impl<FE, FI, P> SplitOdeProblem<FE, FI, P> {
+    pub fn new(
+        explicit: FE,
+        implicit: FI,
+        initial_state: impl Into<Vec<f64>>,
+        time_span: (f64, f64),
+        parameters: P,
+    ) -> Self {
+        Self {
+            explicit,
+            implicit,
+            initial_state: initial_state.into(),
+            time_span,
+            parameters,
+        }
+    }
+
+    pub fn initial_state(&self) -> &[f64] {
+        &self.initial_state
+    }
+
+    pub fn time_span(&self) -> (f64, f64) {
+        self.time_span
+    }
+
+    pub fn parameters(&self) -> &P {
+        &self.parameters
+    }
+
+    pub fn dimension(&self) -> usize {
+        self.initial_state.len()
+    }
+
+    pub fn evaluate_explicit(&self, derivative: &mut [f64], state: &[f64], time: f64)
+    where
+        FE: Fn(&mut [f64], &[f64], &P, f64),
+    {
+        (self.explicit)(derivative, state, &self.parameters, time);
+    }
+
+    pub fn evaluate_implicit(&self, derivative: &mut [f64], state: &[f64], time: f64)
+    where
+        FI: Fn(&mut [f64], &[f64], &P, f64),
+    {
+        (self.implicit)(derivative, state, &self.parameters, time);
+    }
+}
+
+/// A regular ODE with a constant nonsingular dense mass matrix `M*u' = f(u,t)`.
+/// Singular/DAE residual initialization is intentionally not represented.
+#[allow(dead_code)]
+pub struct MassMatrixOdeProblem<F, P> {
+    rhs: F,
+    initial_state: Vec<f64>,
+    time_span: (f64, f64),
+    parameters: P,
+    mass_matrix: Vec<f64>,
+}
+
+#[allow(dead_code)]
+impl<F, P> MassMatrixOdeProblem<F, P> {
+    pub fn new(
+        rhs: F,
+        initial_state: impl Into<Vec<f64>>,
+        time_span: (f64, f64),
+        parameters: P,
+        mass_matrix: impl Into<Vec<f64>>,
+    ) -> Result<Self, &'static str> {
+        let initial_state = initial_state.into();
+        if initial_state.is_empty() {
+            return Err("mass-matrix ODE state must be non-empty");
+        }
+        let mass_matrix = mass_matrix.into();
+        let expected = initial_state
+            .len()
+            .checked_mul(initial_state.len())
+            .ok_or("mass-matrix dimension overflow")?;
+        if mass_matrix.len() != expected || mass_matrix.iter().any(|value| !value.is_finite()) {
+            return Err("mass matrix must be a finite square dense matrix");
+        }
+        Ok(Self {
+            rhs,
+            initial_state,
+            time_span,
+            parameters,
+            mass_matrix,
+        })
+    }
+
+    pub fn initial_state(&self) -> &[f64] {
+        &self.initial_state
+    }
+
+    pub fn time_span(&self) -> (f64, f64) {
+        self.time_span
+    }
+
+    pub fn parameters(&self) -> &P {
+        &self.parameters
+    }
+
+    pub fn mass_matrix(&self) -> &[f64] {
+        &self.mass_matrix
+    }
+
+    pub fn evaluate_rhs(&self, derivative: &mut [f64], state: &[f64], time: f64)
+    where
+        F: Fn(&mut [f64], &[f64], &P, f64),
+    {
+        (self.rhs)(derivative, state, &self.parameters, time);
+    }
+}
+
 #[allow(dead_code)]
 pub(crate) struct JacobianProvider<'a, F, P> {
     problem: &'a OdeProblem<F, P>,
@@ -307,7 +435,7 @@ fn ensure_finite_callback_state(state: &[f64]) -> Result<(), SolveError> {
 
 #[cfg(test)]
 mod tests {
-    use super::{JacobianProvider, OdeProblem};
+    use super::{JacobianProvider, MassMatrixOdeProblem, OdeProblem, SplitOdeProblem};
 
     #[test]
     fn jacobian_provider_reports_analytic_callbacks() {
@@ -323,5 +451,42 @@ mod tests {
         assert!(provider.is_analytic());
         assert!(provider.evaluate(&mut jacobian, &[1.0], 0.0));
         assert_eq!(jacobian, [2.0]);
+    }
+
+    #[test]
+    fn split_and_mass_representations_validate_dimensions() {
+        let split = SplitOdeProblem::new(
+            |du: &mut [f64], u: &[f64], _: &(), _: f64| du[0] = u[0],
+            |du: &mut [f64], u: &[f64], _: &(), _: f64| du[0] = -u[0],
+            vec![1.0],
+            (0.0, 1.0),
+            (),
+        );
+        let mut explicit = [0.0];
+        let mut implicit = [0.0];
+        split.evaluate_explicit(&mut explicit, &[2.0], 0.0);
+        split.evaluate_implicit(&mut implicit, &[2.0], 0.0);
+        assert_eq!(explicit, [2.0]);
+        assert_eq!(implicit, [-2.0]);
+
+        let mass = MassMatrixOdeProblem::new(
+            |du: &mut [f64], u: &[f64], _: &(), _: f64| du[0] = u[0],
+            vec![1.0],
+            (0.0, 1.0),
+            (),
+            vec![2.0],
+        )
+        .unwrap();
+        assert_eq!(mass.mass_matrix(), &[2.0]);
+        assert!(
+            MassMatrixOdeProblem::new(
+                |_: &mut [f64], _: &[f64], _: &(), _: f64| {},
+                vec![1.0, 2.0],
+                (0.0, 1.0),
+                (),
+                vec![1.0],
+            )
+            .is_err()
+        );
     }
 }

@@ -38,7 +38,7 @@ pub use low_storage_rk::{
     CarpenterKennedy2N54, Dglddrk73C, Dglddrk84C, Dglddrk84F, Ndblsrk124, Ndblsrk134, Ndblsrk144,
     Ork256, Shlddrk64,
 };
-pub use problem::OdeProblem;
+pub use problem::{MassMatrixOdeProblem, OdeProblem, SplitOdeProblem};
 pub use rosenbrock::Rosenbrock23;
 pub use rosenbrock_extended::{Rodas4, Rodas5P, Rosenbrock32};
 pub use second_order::{
