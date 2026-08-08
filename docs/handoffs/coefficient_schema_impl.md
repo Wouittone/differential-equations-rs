@@ -11,7 +11,9 @@ Inline fixtures validate RK4-shaped explicit data and AB3-shaped multistep
 metadata with generic Hermite dense output. `src/generated_coefficients.rs`
 contains deterministic compile-time RK4, AB3, and VelocityVerlet constants;
 `scripts/generate_coefficients.ps1 -Check` verifies the canonical manifest.
-Runtime solver dispatch has not yet been switched to generated constants.
+The generic explicit RK4 facade now consumes the generated stage times, rows,
+and weights; all other solver families remain on hand-written constants until
+their dedicated migration waves.
 
 Validation:
 

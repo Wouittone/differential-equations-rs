@@ -9,6 +9,11 @@ pub(crate) const RK4_A: [[f64; 4]; 4] = [
     [0.0, 0.5, 0.0, 0.0],
     [0.0, 0.0, 1.0, 0.0],
 ];
+pub(crate) const RK4_EMPTY: &[f64] = &[];
+pub(crate) const RK4_A2: &[f64] = &[0.5];
+pub(crate) const RK4_A3: &[f64] = &[0.0, 0.5];
+pub(crate) const RK4_A4: &[f64] = &[0.0, 0.0, 1.0];
+pub(crate) const RK4_A_ROWS: &[&[f64]] = &[RK4_EMPTY, RK4_A2, RK4_A3, RK4_A4];
 pub(crate) const RK4_B: [f64; 4] = [1.0 / 6.0, 1.0 / 3.0, 1.0 / 3.0, 1.0 / 6.0];
 
 pub(crate) const AB3_HISTORY: [f64; 3] = [23.0 / 12.0, -16.0 / 12.0, 5.0 / 12.0];

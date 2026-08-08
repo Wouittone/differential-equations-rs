@@ -1,3 +1,4 @@
+use crate::generated_coefficients::{RK4_A_ROWS, RK4_B as GENERATED_RK4_B, RK4_STAGE_TIMES};
 use crate::integrator::{
     KernelCapabilities, StepEstimate, StepKernel, integrate as drive_integration,
 };
@@ -84,12 +85,9 @@ const RALSTON_B: &[f64] = &[0.25, 0.75];
 const RALSTON_E: &[f64] = &[-0.75, 0.75];
 const RALSTON_C: &[f64] = &[0.0, 2.0 / 3.0];
 
-const RK4_A2: &[f64] = &[0.5];
-const RK4_A3: &[f64] = &[0.0, 0.5];
-const RK4_A4: &[f64] = &[0.0, 0.0, 1.0];
-const RK4_A: &[&[f64]] = &[EMPTY, RK4_A2, RK4_A3, RK4_A4];
-const RK4_B: &[f64] = &[1.0 / 6.0, 1.0 / 3.0, 1.0 / 3.0, 1.0 / 6.0];
-const RK4_C: &[f64] = &[0.0, 0.5, 0.5, 1.0];
+const RK4_A: &[&[f64]] = RK4_A_ROWS;
+const RK4_B: &[f64] = &GENERATED_RK4_B;
+const RK4_C: &[f64] = &RK4_STAGE_TIMES;
 
 const RKM_A2: &[f64] = &[0.167_266_187_050_662];
 const RKM_A3: &[f64] = &[0.0, 0.484_574_582_244_783];
