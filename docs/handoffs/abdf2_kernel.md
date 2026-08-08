@@ -34,10 +34,11 @@ Jacobian is formed. Newton failures, singular factors, and non-finite
 derivatives follow the shared recoverable adaptive-attempt policy. Callback
 effects reset the two-step history and restart with implicit Euler.
 
-Adaptive error control uses the accepted candidate's predictor defect against
-the current-state Euler predictor and the shared order-2 proportional
-controller. Adaptive step/rejection counts can therefore differ from Julia's
-controller while endpoints remain within parity tolerances.
+Adaptive error control uses the pinned derivative defect
+`(h_prev+h)/6*(f_{n+1}-(1+rho)f_n+rho*f_{n-1})` after startup, with the
+shared order-2 proportional controller. Adaptive step/rejection counts can
+therefore differ from Julia's controller while endpoints remain within parity
+tolerances.
 
 ## Validation evidence
 
@@ -60,6 +61,6 @@ cargo test --all-targets                 # 96 Rust tests including 6 ABDF2 tests
 cargo clippy --all-targets -- -D warnings
 git diff --check
 julia --project=tests/julia tests/julia/pinned_environment.jl --check
-julia --project=tests/julia tests/julia/runtests.jl  # 206 assertions
+julia --project=tests/julia tests/julia/runtests.jl  # 210 assertions
 ```
 

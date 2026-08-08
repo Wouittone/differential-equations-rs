@@ -42,6 +42,7 @@ Pinned upstream revision:
 | `/root/linear_caller_migration` | Checked DenseLu/StateLayout migration of implicit caller | `codex/linear-caller-migration`; `differential-equations-rs-worktrees/linear-caller` | completed and merged as `335d162` | 2026-08-08T21:02:30Z |
 | `/root/sdirk2_kernel` | Exact regular SDIRK2 family implementation | `codex/sdirk2-kernel`; `differential-equations-rs-worktrees/sdirk2-kernel` | completed and merged as `1909900` + `ab1fd98` | 2026-08-09T00:20:00Z |
 | `/root/linear_interface_impl` | Accepted-step dense recorder and controller reset slice | `codex/phase6-dense-controller`; `differential-equations-rs-worktrees/dense-controller` | completed and merged as `dbf9a16` | 2026-08-09T00:35:00Z |
+| `/root/abdf2_kernel` | Exact regular ABDF2 identity-mass family implementation | `codex/abdf2-kernel`; `differential-equations-rs-worktrees/abdf2-kernel` | completed and merged as `aedca27` plus estimator/workspace refresh | 2026-08-09T01:05:00Z |
 
 ## Completed waves
 
@@ -71,23 +72,24 @@ Pinned upstream revision:
 | Phase 3 operator/mass seams | JacobianProvider, checked LinearOperator, dense/identity operators, and nonsingular mass operator | 84 Rust tests | 202 pass | reviewed and merged as `052cef3` + `c64dda1` |
 | SDIRK2 family | Native regular-ODE SDIRK2 kernel, generated tableau fixture, fixed/adaptive Rust tests, and matched pinned Julia compliance | cargo all-targets pass | 206 pass (16 suites) | reviewed and merged as `1909900` + `ab1fd98`; fixed endpoint matches SDIRK2 at dt=.01; adaptive controller-count caveat documented |
 | Dense/controller service | Domain-checked Hermite segments, accepted-step `record_step_dense` save-at sampling, and controller-history reset after callback mutation | 92 Rust tests plus integrations | 206 pass (16 suites) | reviewed and merged as `dbf9a16`; existing endpoint compliance and allocations preserved; solver kernels still need stage-data wiring |
+| ABDF2 family | Native regular identity-mass ABDF2 with implicit-Euler startup, variable-step coefficients, Newton/Jacobian paths, callback history reset, and pinned Julia fixture | 92 unit tests plus 6 ABDF2 integration tests | 210 pass (17 suites) | reviewed and merged as `aedca27` plus final estimator/workspace refresh; fixed/adaptive endpoint parity within documented tolerance; controller-count caveat documented |
 
 ## Validation snapshot
 
 ```text
 cargo fmt -- --check: pass
-cargo test --all-targets: pass (90 library tests plus integration tests/examples)
+cargo test --all-targets: pass (92 library tests plus integration tests/examples)
 cargo clippy --all-targets -- -D warnings: pass
 git diff --check: pass
-pinned Julia environment: pass and reproducible from tracked manifest (13 packages at pinned revision)
-Julia compliance: pass (206 tests across 16 suites)
-inventory regeneration: pass; 349 source references and strict cross-checkout byte identity verified (66 implemented/tested, 279 missing)
+pinned Julia environment: pass and reproducible from tracked manifest (14 packages at pinned revision)
+Julia compliance: pass (210 tests across 17 suites)
+inventory regeneration: pass; 349 source references and strict cross-checkout byte identity verified (67 implemented/tested, 278 missing)
 ```
 
 ## Next dependency-ready task
 
-Implement ABDF2 as the next dependency-ready regular-ODE family wave, then migrate one additional explicit family to generated coefficients while retaining matched Julia coverage.
+Continue with the next dependency-ready regular-ODE family (SBDF2 or a narrowly scoped explicit generated-coefficient family), while wiring accepted-stage dense segments into one solver and preserving matched Julia coverage.
 
 ## Last decision
 
-The shared first-order driver is frozen and all queued first-order families (explicit, implicit/TRBDF2, Rosenbrock/Rodas, low-storage, and Adams) pass. The Phase 2 audit found only `src/integrator.rs:228` as the first-order lifecycle loop; `src/second_order.rs:440` is an explicit exclusion. Phase 3 checked views, revisioned dense LU, Jacobian/operator seams, nonsingular mass operators, and one implicit caller proof are merged with unchanged compliance and allocations. Phase 4 schema/generated fixtures and Phase 5 representation foundations are merged. Phase 6 now has domain-checked Hermite segments, an accepted-step recorder service, and callback controller-history reset; solver stage-data wiring remains queued. Phase 7 has begun with SDIRK2; 279 in-scope public constructors remain and ABDF2 is next.
+The shared first-order driver is frozen and all queued first-order families (explicit, implicit/TRBDF2, Rosenbrock/Rodas, low-storage, and Adams) pass. The Phase 2 audit found only `src/integrator.rs:228` as the first-order lifecycle loop; `src/second_order.rs:440` is an explicit exclusion. Phase 3 checked views, revisioned dense LU, Jacobian/operator seams, nonsingular mass operators, and one implicit caller proof are merged with unchanged compliance and allocations. Phase 4 schema/generated fixtures and Phase 5 representation foundations are merged. Phase 6 now has domain-checked Hermite segments, an accepted-step recorder service, and callback controller-history reset; solver stage-data wiring remains queued. Phase 7 now includes SDIRK2 and ABDF2; 278 in-scope public constructors remain.

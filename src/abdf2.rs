@@ -12,7 +12,7 @@ use crate::generated_coefficients::{
 use crate::integrator::{
     ControllerConfig, KernelCapabilities, StepEstimate, StepKernel, integrate as drive_integration,
 };
-use crate::linear::{DenseLu, LinearError, StateLayout};
+use crate::linear::{DenseLu, LinearError, StateLayout, factorize, solve_factorized};
 use crate::{OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions, SolverStats};
 
 const MAX_NEWTON_ITERATIONS: usize = 12;
@@ -47,6 +47,7 @@ impl OdeAlgorithm for Abdf2 {
 struct Workspace {
     layout: StateLayout,
     current_derivative: Vec<f64>,
+    previous_derivative: Vec<f64>,
     previous_state: Vec<f64>,
     evaluation_derivative: Vec<f64>,
     perturbed_state: Vec<f64>,
@@ -54,7 +55,10 @@ struct Workspace {
     residual: Vec<f64>,
     correction: Vec<f64>,
     matrix: Vec<f64>,
+    pivots: Vec<usize>,
     factorization: Option<DenseLu>,
+    dense_active: bool,
+    factorization_ready: bool,
     last_step: Option<f64>,
 }
 
@@ -64,6 +68,7 @@ impl Workspace {
         Self {
             layout,
             current_derivative: vec![0.0; dimension],
+            previous_derivative: vec![0.0; dimension],
             previous_state: vec![0.0; dimension],
             evaluation_derivative: vec![0.0; dimension],
             perturbed_state: vec![0.0; dimension],
@@ -71,7 +76,10 @@ impl Workspace {
             residual: vec![0.0; dimension],
             correction: vec![0.0; dimension],
             matrix: vec![0.0; dimension * dimension],
+            pivots: vec![0; dimension],
             factorization: None,
+            dense_active: false,
+            factorization_ready: false,
             last_step: None,
         }
     }
@@ -144,7 +152,7 @@ where
         options: &SolveOptions,
         stats: &mut SolverStats,
     ) -> Result<StepEstimate, SolveError> {
-        self.workspace.factorization = None;
+        self.workspace.factorization_ready = false;
         for ((value, &state_value), &derivative) in candidate
             .iter_mut()
             .zip(state)
@@ -188,18 +196,23 @@ where
         if !options.adaptive {
             return Ok(StepEstimate::new(0.0));
         }
-        // ABDF2's pinned fixed-leading-coefficient controller uses a
-        // predictor defect.  The startup defect is also a useful first-order
-        // local estimate and naturally shrinks as the startup step is refined.
+        // Pinned ABDF2's fixed-leading-coefficient estimator is the derivative
+        // defect `(h_prev + h)/6 * (f_{n+1} - (1+rho)f_n + rho*f_{n-1})`.
+        // During implicit-Euler startup, use its Euler predictor defect.
         let mut squared_norm = 0.0;
-        for ((&value, &state_value), &derivative) in candidate
-            .iter()
-            .zip(state)
-            .zip(&self.workspace.current_derivative)
-        {
-            let defect = value - (state_value + step * derivative);
+        for index in 0..candidate.len() {
+            let defect = if startup {
+                candidate[index] - (state[index] + step * self.workspace.current_derivative[index])
+            } else {
+                let previous_step = self.workspace.last_step.expect("non-startup has history");
+                let rho = step / previous_step;
+                (previous_step + step) / 6.0
+                    * (self.workspace.evaluation_derivative[index]
+                        - (1.0 + rho) * self.workspace.current_derivative[index]
+                        + rho * self.workspace.previous_derivative[index])
+            };
             let scale = options.absolute_tolerance
-                + options.relative_tolerance * value.abs().max(state_value.abs());
+                + options.relative_tolerance * candidate[index].abs().max(state[index].abs());
             squared_norm += (defect / scale).powi(2);
         }
         Ok(StepEstimate::new(
@@ -223,6 +236,9 @@ where
             self.workspace
                 .previous_state
                 .copy_from_slice(previous_state);
+            self.workspace
+                .previous_derivative
+                .copy_from_slice(&self.workspace.current_derivative);
             self.workspace.last_step = Some(accepted_step);
         }
         evaluate_checked(
@@ -235,7 +251,7 @@ where
     }
 
     fn reject_step(&mut self) {
-        self.workspace.factorization = None;
+        self.workspace.factorization_ready = false;
     }
 }
 
@@ -288,7 +304,7 @@ where
             return Ok(());
         }
 
-        if workspace.factorization.is_none() {
+        if !workspace.factorization_ready {
             build_factorization(
                 problem,
                 candidate,
@@ -301,12 +317,22 @@ where
         for (correction, &residual) in workspace.correction.iter_mut().zip(&workspace.residual) {
             *correction = -residual;
         }
-        workspace
-            .factorization
-            .as_ref()
-            .ok_or(SolveError::SingularLinearSystem)?
-            .solve(&mut workspace.correction)
-            .map_err(map_linear_error)?;
+        if workspace.dense_active {
+            workspace
+                .factorization
+                .as_ref()
+                .ok_or(SolveError::SingularLinearSystem)?
+                .solve(&mut workspace.correction)
+                .map_err(map_linear_error)?;
+            workspace.dense_active = false;
+        } else {
+            solve_factorized(
+                &workspace.matrix,
+                &workspace.pivots,
+                &mut workspace.correction,
+                candidate.len(),
+            );
+        }
         stats.linear_solves += 1;
         for (value, &correction) in candidate.iter_mut().zip(&workspace.correction) {
             *value += correction;
@@ -363,14 +389,27 @@ where
         }
     }
     stats.jacobian_evaluations += 1;
-    workspace.factorization = Some(
-        DenseLu::factorize(
+    workspace.factorization = Some(if workspace.factorization.is_none() {
+        let dense = DenseLu::factorize(
             workspace.layout,
             &workspace.matrix,
             stats.jacobian_evaluations as u64,
         )
-        .map_err(map_linear_error)?,
-    );
+        .map_err(map_linear_error)?;
+        factorize(&mut workspace.matrix, &mut workspace.pivots, dimension)
+            .map_err(|_| SolveError::SingularLinearSystem)?;
+        workspace.dense_active = true;
+        dense
+    } else {
+        factorize(&mut workspace.matrix, &mut workspace.pivots, dimension)
+            .map_err(|_| SolveError::SingularLinearSystem)?;
+        workspace.dense_active = false;
+        workspace
+            .factorization
+            .take()
+            .expect("checked factorization")
+    });
+    workspace.factorization_ready = true;
     Ok(())
 }
 

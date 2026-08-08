@@ -1,5 +1,6 @@
 [deps]
 OrdinaryDiffEqAdamsBashforthMoulton = "89bda076-bce5-4f1c-845f-551c83cdda9a"
+OrdinaryDiffEqBDF = "6ad6398a-0878-4a85-9266-38940aa047c8"
 OrdinaryDiffEqCore = "bbf590c4-e513-4bbe-9b18-05decba2e5d8"
 OrdinaryDiffEqDifferentiation = "4302a76b-040a-498a-8c04-15b101fed76b"
 OrdinaryDiffEqLowOrderRK = "1344f307-1e59-4825-a18e-ace9aa3fa4c6"
@@ -16,6 +17,7 @@ SciMLBase = "0bca4576-84f4-4d90-8ffe-ffa030f20462"
 
 [compat]
 OrdinaryDiffEqAdamsBashforthMoulton = "2"
+OrdinaryDiffEqBDF = "2"
 OrdinaryDiffEqLowOrderRK = "2"
 OrdinaryDiffEqLowStorageRK = "3"
 OrdinaryDiffEqRosenbrock = "2"

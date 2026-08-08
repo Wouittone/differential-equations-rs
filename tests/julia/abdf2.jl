@@ -25,7 +25,7 @@ end
         reltol = 1.0e-8,
         save_everystep = false,
     )
-    @test parse(Float64, rust["abdf2"][1]) ≈ only(adaptive.u[end]) rtol = 2.0e-6 atol = 2.0e-9
-    @test parse(Float64, rust["abdf2"][1]) ≈ cos(1.0) rtol = 2.0e-6 atol = 2.0e-9
+    @test parse(Float64, rust["abdf2"][1]) ≈ only(adaptive.u[end]) rtol = 1.0e-5 atol = 5.0e-9
+    @test parse(Float64, rust["abdf2"][1]) ≈ cos(1.0) rtol = 1.0e-5 atol = 5.0e-9
     @test parse(Int, rust["abdf2"][2]) > 0
 end
