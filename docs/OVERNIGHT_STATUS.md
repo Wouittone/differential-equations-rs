@@ -77,7 +77,7 @@ Pinned upstream revision:
 | ABDF2 family | Native regular identity-mass ABDF2 with implicit-Euler startup, variable-step coefficients, Newton/Jacobian paths, callback history reset, and pinned Julia fixture | 92 unit tests plus 6 ABDF2 integration tests | 210 pass (17 suites) | reviewed and merged as `aedca27` plus final estimator/workspace refresh; fixed/adaptive endpoint parity within documented tolerance; controller-count caveat documented |
 | Generated BS3 | Migrated the public BS3 explicit tableau to generated pinned coefficients with structural fixture validation and regression coverage | 92 unit tests plus integrations | 210 pass (17 suites) | reviewed and merged as `ddefe73`; SBDF2 explicitly deferred because pinned implementation is split/IMEX |
 | Generated DP5 | Migrated the public DP5 seven-stage tableau and embedded defect to generated pinned coefficients with structural fixture validation | 92 unit tests plus integrations | 210 pass (17 suites) | reviewed and merged as `69f6caf`; pinned Julia compliance unchanged |
-| Explicit RK dense wiring | Wired zero-allocation borrowed Hermite segments into explicit RK save-at sampling, including backward/exact-endpoint/rejection coverage | 92 unit tests plus integrations and 3 dense tests | 210 pass (17 suites) | reviewed and merged as `59ece5d`; endpoint-only allocations and callback semantics preserved |
+| Explicit RK dense wiring | Wired zero-allocation borrowed Hermite segments into explicit RK save-at sampling, including backward/exact-endpoint/rejection coverage and a pinned Julia cubic reference | 92 unit tests plus integrations and 3 dense tests | 212 pass (18 suites) | reviewed and merged as `59ece5d` + `3ea6279`; endpoint-only allocations and callback semantics preserved |
 
 ## Validation snapshot
 
@@ -87,7 +87,7 @@ cargo test --all-targets: pass (92 library tests plus integration tests/examples
 cargo clippy --all-targets -- -D warnings: pass
 git diff --check: pass
 pinned Julia environment: pass and reproducible from tracked manifest (14 packages at pinned revision)
-Julia compliance: pass (210 tests across 17 suites)
+Julia compliance: pass (212 tests across 18 suites)
 inventory regeneration: pass; 349 source references and strict cross-checkout byte identity verified (67 implemented/tested, 278 missing)
 ```
 
