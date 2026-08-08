@@ -1,5 +1,6 @@
 use crate::generated_coefficients::{
-    BS3_A_ROWS, BS3_B as GENERATED_BS3_B, BS3_E as GENERATED_BS3_E, BS3_STAGE_TIMES, RK4_A_ROWS,
+    BS3_A_ROWS, BS3_B as GENERATED_BS3_B, BS3_E as GENERATED_BS3_E, BS3_STAGE_TIMES, DP5_A_ROWS,
+    DP5_B as GENERATED_DP5_B, DP5_E as GENERATED_DP5_E, DP5_STAGE_TIMES, RK4_A_ROWS,
     RK4_B as GENERATED_RK4_B, RK4_STAGE_TIMES,
 };
 use crate::integrator::{
@@ -143,50 +144,10 @@ const BS3_B: &[f64] = &GENERATED_BS3_B;
 const BS3_E: &[f64] = &GENERATED_BS3_E;
 const BS3_C: &[f64] = &BS3_STAGE_TIMES;
 
-const DP5_A2: &[f64] = &[1.0 / 5.0];
-const DP5_A3: &[f64] = &[3.0 / 40.0, 9.0 / 40.0];
-const DP5_A4: &[f64] = &[44.0 / 45.0, -56.0 / 15.0, 32.0 / 9.0];
-const DP5_A5: &[f64] = &[
-    19_372.0 / 6_561.0,
-    -25_360.0 / 2_187.0,
-    64_448.0 / 6_561.0,
-    -212.0 / 729.0,
-];
-const DP5_A6: &[f64] = &[
-    9_017.0 / 3_168.0,
-    -355.0 / 33.0,
-    46_732.0 / 5_247.0,
-    49.0 / 176.0,
-    -5_103.0 / 18_656.0,
-];
-const DP5_A7: &[f64] = &[
-    35.0 / 384.0,
-    0.0,
-    500.0 / 1_113.0,
-    125.0 / 192.0,
-    -2_187.0 / 6_784.0,
-    11.0 / 84.0,
-];
-const DP5_A: &[&[f64]] = &[EMPTY, DP5_A2, DP5_A3, DP5_A4, DP5_A5, DP5_A6, DP5_A7];
-const DP5_B: &[f64] = &[
-    35.0 / 384.0,
-    0.0,
-    500.0 / 1_113.0,
-    125.0 / 192.0,
-    -2_187.0 / 6_784.0,
-    11.0 / 84.0,
-    0.0,
-];
-const DP5_E: &[f64] = &[
-    35.0 / 384.0 - 5_179.0 / 57_600.0,
-    0.0,
-    500.0 / 1_113.0 - 7_571.0 / 16_695.0,
-    125.0 / 192.0 - 393.0 / 640.0,
-    -2_187.0 / 6_784.0 + 92_097.0 / 339_200.0,
-    11.0 / 84.0 - 187.0 / 2_100.0,
-    -1.0 / 40.0,
-];
-const DP5_C: &[f64] = &[0.0, 1.0 / 5.0, 3.0 / 10.0, 4.0 / 5.0, 8.0 / 9.0, 1.0, 1.0];
+const DP5_A: &[&[f64]] = DP5_A_ROWS;
+const DP5_B: &[f64] = &GENERATED_DP5_B;
+const DP5_E: &[f64] = &GENERATED_DP5_E;
+const DP5_C: &[f64] = &DP5_STAGE_TIMES;
 
 // Owren-Zennaro 3/2 pair.
 const OWREN_ZEN3_A2: &[f64] = &[12.0 / 23.0];
