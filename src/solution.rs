@@ -19,6 +19,81 @@ pub struct SolverStats {
 
 use crate::{SaveMode, SolveOptions};
 
+/// Method-specific dense interpolation seam. Segments own their endpoint
+/// data and can be evaluated without mutating the solver kernel.
+#[allow(dead_code)]
+pub(crate) trait DenseSegment {
+    fn interpolate(&self, time: f64, output: &mut [f64]) -> Result<(), &'static str>;
+}
+
+#[allow(dead_code)]
+pub(crate) struct HermiteSegment {
+    start_time: f64,
+    end_time: f64,
+    start_state: Vec<f64>,
+    end_state: Vec<f64>,
+    start_derivative: Vec<f64>,
+    end_derivative: Vec<f64>,
+}
+
+#[allow(dead_code)]
+impl HermiteSegment {
+    pub(crate) fn new(
+        start_time: f64,
+        end_time: f64,
+        start_state: Vec<f64>,
+        end_state: Vec<f64>,
+        start_derivative: Vec<f64>,
+        end_derivative: Vec<f64>,
+    ) -> Result<Self, &'static str> {
+        if !start_time.is_finite()
+            || !end_time.is_finite()
+            || end_time == start_time
+            || start_state.is_empty()
+            || start_state.len() != end_state.len()
+            || start_state.len() != start_derivative.len()
+            || start_state.len() != end_derivative.len()
+        {
+            return Err("invalid dense segment dimensions or times");
+        }
+        Ok(Self {
+            start_time,
+            end_time,
+            start_state,
+            end_state,
+            start_derivative,
+            end_derivative,
+        })
+    }
+}
+
+#[allow(dead_code)]
+impl DenseSegment for HermiteSegment {
+    fn interpolate(&self, time: f64, output: &mut [f64]) -> Result<(), &'static str> {
+        if output.len() != self.start_state.len() || !time.is_finite() {
+            return Err("dense output dimension or time mismatch");
+        }
+        let h = self.end_time - self.start_time;
+        let theta = (time - self.start_time) / h;
+        let theta2 = theta * theta;
+        let theta3 = theta2 * theta;
+        let h00 = 2.0 * theta3 - 3.0 * theta2 + 1.0;
+        let h10 = theta3 - 2.0 * theta2 + theta;
+        let h01 = -2.0 * theta3 + 3.0 * theta2;
+        let h11 = theta3 - theta2;
+        for (((output, start), end), (start_derivative, end_derivative)) in output
+            .iter_mut()
+            .zip(&self.start_state)
+            .zip(&self.end_state)
+            .zip(self.start_derivative.iter().zip(&self.end_derivative))
+        {
+            *output =
+                h00 * start + h10 * h * start_derivative + h01 * end + h11 * h * end_derivative;
+        }
+        Ok(())
+    }
+}
+
 pub(crate) struct TrajectoryRecorder<'a> {
     times: Vec<f64>,
     values: Vec<f64>,
@@ -176,7 +251,7 @@ impl Solution {
 
 #[cfg(test)]
 mod tests {
-    use super::{Solution, SolverStats};
+    use super::{DenseSegment, HermiteSegment, Solution, SolverStats};
 
     #[test]
     fn exposes_flat_states_as_slices() {
@@ -191,5 +266,18 @@ mod tests {
         assert_eq!(solution.state(2), Some([5.0, 6.0].as_slice()));
         assert_eq!(solution.state(3), None);
         assert_eq!(solution.last_state(), &[5.0, 6.0]);
+    }
+
+    #[test]
+    fn hermite_segment_matches_endpoints_and_midpoint() {
+        let segment =
+            HermiteSegment::new(0.0, 1.0, vec![0.0], vec![1.0], vec![0.0], vec![2.0]).unwrap();
+        let mut output = [0.0];
+        segment.interpolate(0.0, &mut output).unwrap();
+        assert_eq!(output, [0.0]);
+        segment.interpolate(1.0, &mut output).unwrap();
+        assert_eq!(output, [1.0]);
+        segment.interpolate(0.5, &mut output).unwrap();
+        assert!((output[0] - 0.25).abs() < 1.0e-14);
     }
 }
