@@ -55,6 +55,7 @@ Pinned upstream revision:
 | Driver low-storage | Nine fixed low-storage RK methods on shared driver | 93 pass | 202 pass | reviewed and merged as `962c89a`; compliance output byte-identical |
 | Driver Adams | Fixed Adams–Bashforth and variable Adams–Moulton families on shared driver | 71 library plus integration pass | 202 pass | reviewed and merged as `e747d0b`; compliance output byte-identical |
 | Phase 2 lifecycle audit | Centralized first-order loop and complete StepKernel coverage; second-order loop explicitly excluded | 77 Rust tests | 202 pass | reviewed and merged as `5383420` |
+| Phase 3 checked linear interface | State/matrix views and revisioned dense LU cache; caller migration pending | 80 Rust tests | 202 pass | reviewed and merged as `a1bb8fa` |
 
 ## Validation snapshot
 
@@ -74,4 +75,4 @@ Implement the checked vector/matrix/LU interfaces from the Phase 3 linear-interf
 
 ## Last decision
 
-The shared first-order driver is frozen and all queued first-order families (explicit, implicit/TRBDF2, Rosenbrock/Rodas, low-storage, and Adams) pass. The Phase 2 audit found only `src/integrator.rs:228` as the first-order lifecycle loop; `src/second_order.rs:440` is an explicit exclusion. Phase 3 now starts with checked linear/vector interfaces.
+The shared first-order driver is frozen and all queued first-order families (explicit, implicit/TRBDF2, Rosenbrock/Rodas, low-storage, and Adams) pass. The Phase 2 audit found only `src/integrator.rs:228` as the first-order lifecycle loop; `src/second_order.rs:440` is an explicit exclusion. Phase 3 checked views and revisioned dense LU are merged; one implicit caller migration remains as the compatibility proof.
