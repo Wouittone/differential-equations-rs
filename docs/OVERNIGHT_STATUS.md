@@ -4,7 +4,7 @@ Coordinator: `/root`
 
 Started: `2026-08-03T23:32:13Z`
 
-Current phase: `Phase 4 - coefficient schema and deterministic code generation`
+Current phase: `Phase 7 - regular solver-family expansion`
 
 Pinned upstream revision:
 
@@ -18,10 +18,10 @@ Pinned upstream revision:
 - [x] Upstream inventory
 - [x] Shared integrator driver
 - [x] Vector/matrix interfaces
-- [ ] Coefficient schema/code generation
-- [ ] General problem representations
+- [x] Coefficient schema/code generation foundation
+- [x] General problem representations foundation
 - [ ] Dense output/controller parity
-- [ ] Solver-family migration
+- [ ] Solver-family migration (in progress; SDIRK2 first wave merged)
 - [ ] Final compliance audit
 
 ## Active agents
@@ -40,7 +40,7 @@ Pinned upstream revision:
 | `/root/driver_low_storage_wave` | Low-storage RK shared-driver migration | `codex/overnight-driver-low-storage`; `differential-equations-rs-worktrees/driver-low-storage` | completed and merged as `962c89a` | 2026-08-04T00:21:00Z |
 | `/root/phase2_lifecycle_audit` | Repository-wide first-order lifecycle audit | `codex/phase2-lifecycle-audit`; `differential-equations-rs-worktrees/phase2-lifecycle-audit` | completed and merged as `5383420` | 2026-08-08T20:34:35Z |
 | `/root/linear_caller_migration` | Checked DenseLu/StateLayout migration of implicit caller | `codex/linear-caller-migration`; `differential-equations-rs-worktrees/linear-caller` | completed and merged as `335d162` | 2026-08-08T21:02:30Z |
-| `/root/sdirk2_kernel` | Exact regular SDIRK2 family implementation | `codex/overnight-sdirk2`; isolated worktree | active | 2026-08-08T21:40:00Z |
+| `/root/sdirk2_kernel` | Exact regular SDIRK2 family implementation | `codex/sdirk2-kernel`; `differential-equations-rs-worktrees/sdirk2-kernel` | completed and merged as `1909900` + `ab1fd98` | 2026-08-09T00:20:00Z |
 
 ## Completed waves
 
@@ -68,23 +68,24 @@ Pinned upstream revision:
 | BDF/SDIRK feasibility audit | Exact pinned source map and dependency assessment; recommends SDIRK2 then ABDF2 | not applicable | not applicable | reviewed and merged as `0f5948d` |
 | Phase 3 caller proof | Implicit Euler/Midpoint/Trapezoid checked first factorization with allocation-invariant refresh path | 82 Rust tests plus migration integration | 202 pass | reviewed and merged as `335d162`; implicit compliance byte-identical |
 | Phase 3 operator/mass seams | JacobianProvider, checked LinearOperator, dense/identity operators, and nonsingular mass operator | 84 Rust tests | 202 pass | reviewed and merged as `052cef3` + `c64dda1` |
+| SDIRK2 family | Native regular-ODE SDIRK2 kernel, generated tableau fixture, fixed/adaptive Rust tests, and matched pinned Julia compliance | cargo all-targets pass | 206 pass (16 suites) | reviewed and merged as `1909900` + `ab1fd98`; fixed endpoint matches SDIRK2 at dt=.01; adaptive controller-count caveat documented |
 
 ## Validation snapshot
 
 ```text
 cargo fmt -- --check: pass
-cargo test --all-targets: pass (85 unit/integration tests plus examples)
+cargo test --all-targets: pass (90 library tests plus integration tests/examples)
 cargo clippy --all-targets -- -D warnings: pass
 git diff --check: pass
 pinned Julia environment: pass and reproducible from tracked manifest (13 packages at pinned revision)
-Julia compliance: pass (202 tests)
-inventory regeneration: pass; 349 source references and strict cross-checkout byte identity verified
+Julia compliance: pass (206 tests across 16 suites)
+inventory regeneration: pass; 349 source references and strict cross-checkout byte identity verified (66 implemented/tested, 279 missing)
 ```
 
 ## Next dependency-ready task
 
-Implement the first exact SDIRK2 regular-ODE family wave from the feasibility audit, then switch one additional explicit family to generated coefficients.
+Implement ABDF2 as the next dependency-ready regular-ODE family wave, then migrate one additional explicit family to generated coefficients while retaining matched Julia coverage.
 
 ## Last decision
 
-The shared first-order driver is frozen and all queued first-order families (explicit, implicit/TRBDF2, Rosenbrock/Rodas, low-storage, and Adams) pass. The Phase 2 audit found only `src/integrator.rs:228` as the first-order lifecycle loop; `src/second_order.rs:440` is an explicit exclusion. Phase 3 checked views, revisioned dense LU, Jacobian/operator seams, nonsingular mass operators, and one implicit caller proof are merged with unchanged compliance and allocations. Phase 4 now advances from the tagged schema and deterministic manifest foundation toward generated compile-time records.
+The shared first-order driver is frozen and all queued first-order families (explicit, implicit/TRBDF2, Rosenbrock/Rodas, low-storage, and Adams) pass. The Phase 2 audit found only `src/integrator.rs:228` as the first-order lifecycle loop; `src/second_order.rs:440` is an explicit exclusion. Phase 3 checked views, revisioned dense LU, Jacobian/operator seams, nonsingular mass operators, and one implicit caller proof are merged with unchanged compliance and allocations. Phase 4 schema/generated fixtures and Phase 5 representation foundations are merged. Phase 6 dense/controller seams remain foundational rather than full parity. Phase 7 has begun with SDIRK2; 279 in-scope public constructors remain and ABDF2 is next.
