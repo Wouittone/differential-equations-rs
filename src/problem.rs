@@ -19,6 +19,26 @@ pub struct OdeProblem<F, P> {
 
 type JacobianFunction<P> = dyn Fn(&mut [f64], &[f64], &P, f64);
 
+#[allow(dead_code)]
+pub(crate) struct JacobianProvider<'a, F, P> {
+    problem: &'a OdeProblem<F, P>,
+}
+
+#[allow(dead_code)]
+impl<'a, F, P> JacobianProvider<'a, F, P> {
+    pub(crate) fn new(problem: &'a OdeProblem<F, P>) -> Self {
+        Self { problem }
+    }
+
+    pub(crate) fn evaluate(&self, jacobian: &mut [f64], state: &[f64], time: f64) -> bool {
+        self.problem.evaluate_jacobian(jacobian, state, time)
+    }
+
+    pub(crate) fn is_analytic(&self) -> bool {
+        self.problem.has_jacobian()
+    }
+}
+
 impl<F, P> OdeProblem<F, P> {
     /// Creates an ODE problem `du/dt = f(u, p, t)`.
     pub fn new(
@@ -283,4 +303,25 @@ fn ensure_finite_callback_state(state: &[f64]) -> Result<(), SolveError> {
         .all(|value| value.is_finite())
         .then_some(())
         .ok_or(SolveError::NonFiniteCallbackState)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{JacobianProvider, OdeProblem};
+
+    #[test]
+    fn jacobian_provider_reports_analytic_callbacks() {
+        let problem = OdeProblem::new(
+            |du: &mut [f64], u: &[f64], _: &(), _: f64| du[0] = u[0],
+            vec![1.0],
+            (0.0, 1.0),
+            (),
+        )
+        .with_jacobian(|jacobian: &mut [f64], _: &[f64], _: &(), _: f64| jacobian[0] = 2.0);
+        let provider = JacobianProvider::new(&problem);
+        let mut jacobian = [0.0];
+        assert!(provider.is_analytic());
+        assert!(provider.evaluate(&mut jacobian, &[1.0], 0.0));
+        assert_eq!(jacobian, [2.0]);
+    }
 }

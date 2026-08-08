@@ -183,6 +183,82 @@ pub(crate) struct DenseLu {
 }
 
 #[allow(dead_code)]
+pub(crate) trait LinearOperator {
+    fn dimension(&self) -> usize;
+    fn apply(&self, input: &[f64], output: &mut [f64]) -> Result<(), LinearError>;
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct IdentityOperator {
+    layout: StateLayout,
+}
+
+#[allow(dead_code)]
+impl IdentityOperator {
+    pub(crate) fn new(layout: StateLayout) -> Self {
+        Self { layout }
+    }
+}
+
+#[allow(dead_code)]
+impl LinearOperator for IdentityOperator {
+    fn dimension(&self) -> usize {
+        self.layout.dimension()
+    }
+
+    fn apply(&self, input: &[f64], output: &mut [f64]) -> Result<(), LinearError> {
+        self.layout.state(input)?;
+        self.layout
+            .state_mut(output)?
+            .as_mut_slice()
+            .copy_from_slice(input);
+        Ok(())
+    }
+}
+
+#[allow(dead_code)]
+#[derive(Clone, Debug)]
+pub(crate) struct DenseOperator {
+    layout: StateLayout,
+    matrix: Vec<f64>,
+}
+
+#[allow(dead_code)]
+impl DenseOperator {
+    pub(crate) fn new(layout: StateLayout, matrix: &[f64]) -> Result<Self, LinearError> {
+        let view = layout.matrix(matrix)?;
+        if view.as_slice().iter().any(|value| !value.is_finite()) {
+            return Err(LinearError::NonFiniteCoefficient);
+        }
+        Ok(Self {
+            layout,
+            matrix: matrix.to_vec(),
+        })
+    }
+}
+
+#[allow(dead_code)]
+impl LinearOperator for DenseOperator {
+    fn dimension(&self) -> usize {
+        self.layout.dimension()
+    }
+
+    fn apply(&self, input: &[f64], output: &mut [f64]) -> Result<(), LinearError> {
+        self.layout.state(input)?;
+        self.layout.state_mut(output)?;
+        for (row, destination) in output.iter_mut().enumerate() {
+            *destination = self.matrix[row * self.dimension()..(row + 1) * self.dimension()]
+                .iter()
+                .zip(input)
+                .map(|(coefficient, value)| coefficient * value)
+                .sum();
+        }
+        Ok(())
+    }
+}
+
+#[allow(dead_code)]
 impl DenseLu {
     pub(crate) fn factorize(
         layout: StateLayout,
@@ -299,7 +375,10 @@ pub(crate) fn solve_factorized(
 
 #[cfg(test)]
 mod tests {
-    use super::{DenseLu, LinearError, StateLayout, factorize, solve_factorized};
+    use super::{
+        DenseLu, DenseOperator, IdentityOperator, LinearError, LinearOperator, StateLayout,
+        factorize, solve_factorized,
+    };
 
     #[test]
     fn pivoted_factorization_handles_row_exchange() {
@@ -357,5 +436,25 @@ mod tests {
             DenseLu::factorize(layout, &[1.0, 2.0, 2.0, 4.0], 0),
             Err(LinearError::Singular)
         );
+    }
+
+    #[test]
+    fn operators_apply_with_checked_dimensions() {
+        let layout = StateLayout::new(2).unwrap();
+        let identity = IdentityOperator::new(layout);
+        let mut output = [0.0; 2];
+        identity.apply(&[2.0, -1.0], &mut output).unwrap();
+        assert_eq!(output, [2.0, -1.0]);
+        assert_eq!(
+            identity.apply(&[1.0], &mut output),
+            Err(LinearError::LengthMismatch {
+                expected: 2,
+                actual: 1,
+            })
+        );
+
+        let dense = DenseOperator::new(layout, &[2.0, 1.0, 0.0, 3.0]).unwrap();
+        dense.apply(&[2.0, -1.0], &mut output).unwrap();
+        assert_eq!(output, [3.0, -3.0]);
     }
 }
