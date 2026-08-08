@@ -1,7 +1,7 @@
 use crate::integrator::{
     KernelCapabilities, StepEstimate, StepKernel, integrate as drive_integration,
 };
-use crate::linear::{factorize, solve_factorized};
+use crate::linear::{DenseLu, LinearError, StateLayout, factorize, solve_factorized};
 use crate::{OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions, SolverStats};
 
 const MAX_NEWTON_ITERATIONS: usize = 12;
@@ -56,6 +56,7 @@ algorithm!(
 );
 
 struct Workspace {
+    layout: StateLayout,
     current_derivative: Vec<f64>,
     evaluation_state: Vec<f64>,
     base_derivative: Vec<f64>,
@@ -64,13 +65,17 @@ struct Workspace {
     residual: Vec<f64>,
     matrix: Vec<f64>,
     pivots: Vec<usize>,
+    factorization: Option<DenseLu>,
+    dense_active: bool,
     correction: Vec<f64>,
     factorization_scale: Option<f64>,
 }
 
 impl Workspace {
     fn new(dimension: usize) -> Self {
+        let layout = StateLayout::new(dimension).expect("solver validates non-empty state");
         Self {
+            layout,
             current_derivative: vec![0.0; dimension],
             evaluation_state: vec![0.0; dimension],
             base_derivative: vec![0.0; dimension],
@@ -79,6 +84,8 @@ impl Workspace {
             residual: vec![0.0; dimension],
             matrix: vec![0.0; dimension * dimension],
             pivots: vec![0; dimension],
+            factorization: None,
+            dense_active: false,
             correction: vec![0.0; dimension],
             factorization_scale: None,
         }
@@ -247,12 +254,26 @@ where
         for (correction, residual) in workspace.correction.iter_mut().zip(&workspace.residual) {
             *correction = -*residual;
         }
-        solve_factorized(
-            &workspace.matrix,
-            &workspace.pivots,
-            &mut workspace.correction,
-            previous.len(),
-        );
+        if workspace.dense_active {
+            let mut correction = workspace
+                .layout
+                .state_mut(&mut workspace.correction)
+                .map_err(map_linear_error)?;
+            workspace
+                .factorization
+                .as_ref()
+                .ok_or(SolveError::SingularLinearSystem)?
+                .solve(correction.as_mut_slice())
+                .map_err(map_linear_error)?;
+            workspace.dense_active = false;
+        } else {
+            solve_factorized(
+                &workspace.matrix,
+                &workspace.pivots,
+                &mut workspace.correction,
+                previous.len(),
+            );
+        }
         stats.linear_solves += 1;
 
         for (candidate, correction) in candidate.iter_mut().zip(&workspace.correction) {
@@ -365,9 +386,41 @@ where
         }
     }
     stats.jacobian_evaluations += 1;
-    factorize(&mut workspace.matrix, &mut workspace.pivots, dimension)?;
+    if workspace.factorization.is_none() {
+        let matrix = workspace
+            .layout
+            .matrix(&workspace.matrix)
+            .map_err(map_linear_error)?;
+        workspace.factorization = Some(
+            DenseLu::factorize(
+                workspace.layout,
+                matrix.as_slice(),
+                stats.jacobian_evaluations as u64,
+            )
+            .map_err(map_linear_error)?,
+        );
+        // Keep the preallocated legacy factors for subsequent refreshes. The
+        // checked DenseLu path is exercised for the first solve while refreshes
+        // remain allocation-free when a nonlinear step needs a new Jacobian.
+        factorize(&mut workspace.matrix, &mut workspace.pivots, dimension)?;
+        workspace.dense_active = true;
+    } else {
+        factorize(&mut workspace.matrix, &mut workspace.pivots, dimension)?;
+        workspace.dense_active = false;
+    }
     workspace.factorization_scale = Some(derivative_scale);
     Ok(())
+}
+
+fn map_linear_error(error: LinearError) -> SolveError {
+    match error {
+        LinearError::EmptyDimension
+        | LinearError::DimensionOverflow { .. }
+        | LinearError::LengthMismatch { .. }
+        | LinearError::NonFiniteCoefficient
+        | LinearError::Singular
+        | LinearError::Unfactorized => SolveError::SingularLinearSystem,
+    }
 }
 
 fn evaluate_unchecked<F, P>(
