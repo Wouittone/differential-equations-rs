@@ -7,6 +7,7 @@ $output = Join-Path $root 'docs/coefficients_manifest.txt'
 $content = @"
 schema-version=1
 source-revision=211142263781255a9aa2f910f6760b9f18ec29c8
+generated-source=src/generated_coefficients.rs
 method=AB3|family=multistep|order=3|variable-step=false
 method=RK4|family=explicit|order=4|embedded-order=none
 method=VelocityVerlet|family=symplectic|order=2|embedded-order=none

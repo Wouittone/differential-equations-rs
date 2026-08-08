@@ -10,6 +10,7 @@ mod adams;
 mod callback;
 mod coefficients;
 mod explicit_rk;
+mod generated_coefficients;
 mod implicit;
 mod integrator;
 mod linear;
