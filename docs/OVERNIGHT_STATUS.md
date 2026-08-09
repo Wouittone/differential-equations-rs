@@ -68,6 +68,8 @@ Pinned upstream revision:
 | `/root/low_order_psrk36` | PSRK3p6q5 fixed-step RK | `codex/low-order-psrk36`; `differential-equations-rs-worktrees/low-order-psrk36` | Rust gates pass; Julia blocked by missing executable; merged as `1d349df` | 2026-08-09T16:26:00Z |
 | `/root/low_order_autodp5` | AutoDP5 regular composite facade | `.worktrees/low-order-autodp5`; `codex/low-order-autodp5` | Rust gates pass; Julia blocked by missing executable; merged as `9f5e5c7` | 2026-08-09T16:35:00Z |
 | `/root/low_order_psrk47` | PSRK4p7q6 fixed-step RK | `codex/low-order-psrk47`; `differential-equations-rs-worktrees/low-order-psrk47` | Rust gates pass; Julia blocked by missing executable; merged as `77d8bdc` | 2026-08-09T16:36:00Z |
+| `/root/low_order_stepanov5` | Stepanov5 adaptive RK | `codex/low-order-stepanov5`; `differential-equations-rs-worktrees/low-order-stepanov5` | Rust gates pass; Julia blocked by missing executable; merged as `7563e9d` | 2026-08-09T16:44:00Z |
+| `/root/ssprk_prrk33` | Parametric relaxation pRRK33 | `codex/ssprk-prrk33`; `differential-equations-rs-worktrees/ssprk-prrk33` | Rust gates pass; Julia blocked by missing executable; merged as `6ac81ff` | 2026-08-09T16:44:00Z |
 
 ## Completed waves
 
@@ -126,8 +128,10 @@ Pinned upstream revision:
 | RKO65 family | Exact pinned fixed fifth-order tableau with explicit endpoint-stage shift | 97 library tests plus RKO65 integrations | Julia unavailable on worker/coordinator; pinned/full rerun blocked by `JULIA-PATH-20260809` | Rust-reviewed and merged as `33f525b`; Julia retry required |
 | Parsani 3S205 family | Native fixed low-storage 3S recurrence with pinned twenty-stage coefficients | 97 library tests plus recurrence/allocation integrations | Julia unavailable on worker/coordinator; pinned/full rerun blocked by `JULIA-PATH-20260809` | Rust-reviewed and merged as `db21a51`; Julia retry required |
 | PSRK3p6q5 family | Exact pinned five-stage fixed fourth-order tableau | 97 library tests plus PSRK integrations | Julia unavailable on worker/coordinator; pinned/full rerun blocked by `JULIA-PATH-20260809` | Rust-reviewed and merged as `1d349df`; Julia retry required |
-| AutoDP5 family | Native DP5 composite facade for regular ODEs; automatic stiff switching explicitly deferred | 97 library tests plus AutoDP5 integrations | Julia unavailable on worker/coordinator; pinned/full rerun blocked by `JULIA-PATH-20260809` | Rust-reviewed and merged as `9f5e5c7`; upstream switch limitation documented |
+| AutoDP5 family | Native DP5 composite facade for regular ODEs; automatic stiff switching explicitly deferred | 97 library tests plus AutoDP5 integrations | Isolated worker pinned/full Julia passed (14 packages; ~158s); integrated coordinator rerun blocked by `JULIA-PATH-20260809` | Rust-reviewed and merged as `9f5e5c7`; upstream switch limitation documented |
 | PSRK4p7q6 family | Exact pinned seven-stage fixed fourth-order tableau | 97 library tests plus PSRK integrations | Julia unavailable on worker/coordinator; pinned/full rerun blocked by `JULIA-PATH-20260809` | Rust-reviewed and merged as `77d8bdc`; Julia retry required |
+| Stepanov5 family | Exact pinned seven-stage embedded adaptive (4,5) FSAL tableau | 97 library tests plus Stepanov5 integrations | Julia unavailable on worker/coordinator; pinned/full rerun blocked by `JULIA-PATH-20260809` | Rust-reviewed and merged as `7563e9d`; Julia retry required |
+| pRRK33 family | Native three-stage parametric relaxation SSPRK33 | 97 library tests plus pRRK33 integrations | Julia unavailable on worker/coordinator; pinned/full rerun blocked by `JULIA-PATH-20260809` | Rust-reviewed and merged as `6ac81ff`; Julia retry required |
 
 ## Validation snapshot
 
@@ -138,13 +142,13 @@ cargo clippy --all-targets -- -D warnings: pass
 git diff --check: pass
 pinned Julia environment: pass and reproducible from tracked manifest (14 packages at pinned revision)
 Julia compliance: pRRK22 worker pass; integrated SSPRK432 rerun blocked by `JULIA-PATH-20260809`
-inventory regeneration: pass; 349 source references and strict cross-checkout byte identity verified (90 implemented/tested, 255 missing)
+inventory regeneration: pass; 349 source references and strict cross-checkout byte identity verified (92 implemented/tested, 253 missing)
 ```
 
 ## Next dependency-ready task
 
-After restoring Julia, rerun the integrated pinned/full suite for SSPRK432, Parsani 3S32/3S53/3S82/3S94/3S105/3S173/3S184/3S205, Alshina6, Anas5, MSRK5, MSRK6, FRK65, PSRK3p5q4/3p6q5/4p7q6, RKO65, and AutoDP5, then continue with the next dependency-ready regular-ODE family or generated-coefficient slice while wiring accepted-stage dense segments into one solver. SBDF2 remains excluded until split/IMEX parity is implemented.
+After restoring Julia, rerun the integrated pinned/full suite for SSPRK432, Parsani 3S32/3S53/3S82/3S94/3S105/3S173/3S184/3S205, Alshina6, Anas5, MSRK5, MSRK6, FRK65, PSRK3p5q4/3p6q5/4p7q6, RKO65, AutoDP5, Stepanov5, and pRRK33, then continue with the next dependency-ready regular-ODE family or generated-coefficient slice while wiring accepted-stage dense segments into one solver. SBDF2 remains excluded until split/IMEX parity is implemented.
 
 ## Last decision
 
-The shared first-order driver is frozen and all queued first-order families (explicit, implicit/TRBDF2, Rosenbrock/Rodas, low-storage, and Adams) pass. The Phase 2 audit found only `src/integrator.rs:228` as the first-order lifecycle loop; `src/second_order.rs:440` is an explicit exclusion. Phase 3 checked views, revisioned dense LU, Jacobian/operator seams, nonsingular mass operators, and one implicit caller proof are merged with unchanged compliance and allocations. Phase 4 schema/generated fixtures and Phase 5 representation foundations are merged. Phase 6 now has domain-checked Hermite segments, an accepted-step recorder service, and callback controller-history reset; solver stage-data wiring remains queued. Phase 7 now includes SDIRK2, ABDF2, MEBDF2, QNDF1/2, Verner6-9, pRRK22, SSPRK432, Parsani 3S32/3S53/3S82/3S94/3S105/3S173/3S184/3S205, Alshina6, Anas5, MSRK5/6, FRK65, PSRK3p5q4/3p6q5/4p7q6, RKO65, and AutoDP5; 255 in-scope public constructors remain. Phase 8 is blocked only by the missing Julia executable and still has documented dense/controller and low-order tolerance gaps.
+The shared first-order driver is frozen and all queued first-order families (explicit, implicit/TRBDF2, Rosenbrock/Rodas, low-storage, and Adams) pass. The Phase 2 audit found only `src/integrator.rs:228` as the first-order lifecycle loop; `src/second_order.rs:440` is an explicit exclusion. Phase 3 checked views, revisioned dense LU, Jacobian/operator seams, nonsingular mass operators, and one implicit caller proof are merged with unchanged compliance and allocations. Phase 4 schema/generated fixtures and Phase 5 representation foundations are merged. Phase 6 now has domain-checked Hermite segments, an accepted-step recorder service, and callback controller-history reset; solver stage-data wiring remains queued. Phase 7 now includes SDIRK2, ABDF2, MEBDF2, QNDF1/2, Verner6-9, pRRK22, SSPRK432, Parsani 3S32/3S53/3S82/3S94/3S105/3S173/3S184/3S205, Alshina6, Anas5, MSRK5/6, FRK65, PSRK3p5q4/3p6q5/4p7q6, RKO65, AutoDP5, Stepanov5, and pRRK33; 253 in-scope public constructors remain. Phase 8 is blocked only by the missing Julia executable and still has documented dense/controller and low-order tolerance gaps.

@@ -20,8 +20,8 @@ and [ode_algorithm_inventory.csv](ode_algorithm_inventory.csv).
 - In-scope regular ODE names: **345**
   (333 canonical/composite constructors and
   12 public aliases).
-- Implemented and detected in matched Julia tests: **90**.
-- Missing in-scope public names: **255**.
+- Implemented and detected in matched Julia tests: **92**.
+- Missing in-scope public names: **253**.
 - Explicitly excluded public names: **4**.
 
 Aliases are public parity obligations but do not require a second numerical kernel.
@@ -41,7 +41,7 @@ Aliases are public parity obligations but do not require a second numerical kern
 | high-order explicit Runge-Kutta | 16 | 4 | 12 |
 | IMEX multistep | 2 | 0 | 2 |
 | linear and Lie-group methods | 18 | 0 | 18 |
-| low-order explicit Runge-Kutta | 28 | 25 | 3 |
+| low-order explicit Runge-Kutta | 28 | 26 | 2 |
 | low-storage explicit Runge-Kutta | 44 | 17 | 27 |
 | multirate and MRI-GARK | 9 | 0 | 9 |
 | Nordsieck variable-order multistep | 4 | 0 | 4 |
@@ -56,7 +56,7 @@ Aliases are public parity obligations but do not require a second numerical kern
 | SIMD explicit Runge-Kutta | 3 | 0 | 3 |
 | stabilized explicit Runge-Kutta | 13 | 0 | 13 |
 | stabilized implicit Runge-Kutta | 1 | 0 | 1 |
-| strong-stability-preserving Runge-Kutta | 21 | 14 | 7 |
+| strong-stability-preserving Runge-Kutta | 21 | 15 | 6 |
 | symplectic and partitioned Runge-Kutta | 18 | 4 | 14 |
 | Taylor series | 3 | 0 | 3 |
 | user-tableau explicit Runge-Kutta | 1 | 0 | 1 |
@@ -178,11 +178,10 @@ the JSON/CSV records.
 - `RKMK2` — OrdinaryDiffEqLinear; ODEProblem with linear/operator ODEFunction
 - `RKMK4` — OrdinaryDiffEqLinear; ODEProblem with linear/operator ODEFunction
 
-### low-order explicit Runge-Kutta (3)
+### low-order explicit Runge-Kutta (2)
 
 - `SIR54` — OrdinaryDiffEqLowOrderRK; ODEProblem
 - `SplitEuler` — OrdinaryDiffEqLowOrderRK; ODEProblem or SplitODEProblem
-- `Stepanov5` — OrdinaryDiffEqLowOrderRK; ODEProblem
 
 ### low-storage explicit Runge-Kutta (27)
 
@@ -376,11 +375,10 @@ the JSON/CSV records.
 
 - `IRKC` — OrdinaryDiffEqStabilizedIRK; ODEProblem
 
-### strong-stability-preserving Runge-Kutta (7)
+### strong-stability-preserving Runge-Kutta (6)
 
 - `KYK2014DGSSPRK_3S2` — OrdinaryDiffEqSSPRK; ODEProblem
 - `KYKSSPRK42` — OrdinaryDiffEqSSPRK; ODEProblem
-- `pRRK33` — OrdinaryDiffEqSSPRK; ODEProblem
 - `pRRK54` — OrdinaryDiffEqSSPRK; ODEProblem
 - `SSPRK932` — OrdinaryDiffEqSSPRK; ODEProblem
 - `SSPRKMSVS32` — OrdinaryDiffEqSSPRK; ODEProblem
