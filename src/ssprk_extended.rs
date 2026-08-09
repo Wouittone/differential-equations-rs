@@ -51,6 +51,45 @@ macro_rules! fixed_ssprk {
     };
 }
 
+/// Adaptive SSPRK432 uses the same four-stage, third-order main method as
+/// [`SspRk43`], but retains the full third/second-order embedded residual
+/// from OrdinaryDiffEqSSPRK's dedicated constructor.  The shared explicit
+/// kernel applies this tableau for both fixed and adaptive stepping.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct SspRk432;
+
+struct SspRk432Tableau;
+
+impl ButcherTableau for SspRk432Tableau {
+    const NODES: &'static [f64] = &[0.0, 0.5, 1.0, 0.5];
+    const COEFFICIENTS: &'static [&'static [f64]] = &[
+        EMPTY,
+        &[0.5],
+        &[0.5, 0.5],
+        &[1.0 / 6.0, 1.0 / 6.0, 1.0 / 6.0],
+    ];
+    const WEIGHTS: &'static [f64] = &[1.0 / 6.0, 1.0 / 6.0, 1.0 / 6.0, 0.5];
+    // utilde = uprev + dt * (f₁ + f₂ + f₃) / 3, while the accepted state is
+    // uprev + dt * (f₁ + f₂ + f₃) / 6 + dt * f₄ / 2.  The sign is immaterial
+    // to the norm, but this is the conventional high-minus-low difference.
+    const ERROR_WEIGHTS: Option<&'static [f64]> = Some(&[-1.0 / 6.0, -1.0 / 6.0, -1.0 / 6.0, 0.5]);
+    const ORDER: usize = 3;
+    const FSAL: bool = false;
+}
+
+impl OdeAlgorithm for SspRk432 {
+    fn solve<F, P>(
+        &self,
+        problem: &OdeProblem<F, P>,
+        options: &SolveOptions,
+    ) -> Result<Solution, SolveError>
+    where
+        F: Fn(&mut [f64], &[f64], &P, f64),
+    {
+        ExplicitRungeKutta::<SspRk432Tableau>::new().solve(problem, options)
+    }
+}
+
 // SSPRK53 (Ruuth 2006).
 const SSPRK53_A2: &[f64] = &[0.377_268_915_331_368_03];
 const SSPRK53_A3: &[f64] = &[0.377_268_915_331_368_03, 0.377_268_915_331_368_03];
@@ -679,7 +718,8 @@ fixed_ssprk!(
 #[cfg(test)]
 mod tests {
     use super::{
-        SspRk53, SspRk53H, SspRk53TwoN1, SspRk53TwoN2, SspRk54, SspRk63, SspRk73, SspRk83, SspRk104,
+        SspRk53, SspRk53H, SspRk53TwoN1, SspRk53TwoN2, SspRk54, SspRk63, SspRk73, SspRk83,
+        SspRk104, SspRk432,
     };
     use crate::{
         CallbackAction, OdeAlgorithm, OdeProblem, SaveMode, SolveError, SolveOptions, solve,
@@ -713,6 +753,23 @@ mod tests {
         let coarse = (endpoint(algorithm, 0.1) - std::f64::consts::E).abs();
         let fine = (endpoint(algorithm, 0.05) - std::f64::consts::E).abs();
         (coarse / fine).log2()
+    }
+
+    #[test]
+    fn ssprk432_supports_fixed_and_adaptive_modes_at_third_order() {
+        let fixed_order = observed_order(SspRk432);
+        assert!(fixed_order > 2.9, "fixed observed order was {fixed_order}");
+
+        let adaptive = SolveOptions {
+            absolute_tolerance: 1.0e-9,
+            relative_tolerance: 1.0e-9,
+            save: SaveMode::Endpoints,
+            ..SolveOptions::default()
+        };
+        let endpoint = solve(&exponential(), SspRk432, &adaptive)
+            .unwrap()
+            .last_state()[0];
+        assert!((endpoint - std::f64::consts::E).abs() < 2.0e-8);
     }
 
     #[test]
@@ -789,5 +846,28 @@ mod tests {
         let solution = solve(&terminating, SspRk53, &fixed(0.1)).unwrap();
         assert!((solution.times().last().unwrap() - 0.5).abs() < 1.0e-14);
         assert_eq!(solution.stats().callback_invocations, 1);
+
+        let adaptive_backward =
+            OdeProblem::new(rhs as TestRhs, vec![std::f64::consts::E], (1.0, 0.0), ());
+        let adaptive_options = SolveOptions {
+            absolute_tolerance: 1.0e-8,
+            relative_tolerance: 1.0e-8,
+            save_at: vec![0.8, 0.5, 0.2],
+            ..SolveOptions::default()
+        };
+        let adaptive_solution = solve(&adaptive_backward, SspRk432, &adaptive_options).unwrap();
+        assert_eq!(adaptive_solution.times(), &[0.8, 0.5, 0.2]);
+        assert!((adaptive_solution.last_state()[0] - 0.2f64.exp()).abs() < 2.0e-7);
+
+        let terminating = exponential()
+            .with_continuous_callback(|_, _, time| time - 0.5, |_, _, _| CallbackAction::Terminate);
+        let callback_options = SolveOptions {
+            save: SaveMode::Endpoints,
+            save_at: Vec::new(),
+            ..adaptive_options.clone()
+        };
+        let adaptive_solution = solve(&terminating, SspRk432, &callback_options).unwrap();
+        assert!((adaptive_solution.times().last().unwrap() - 0.5).abs() < 1.0e-12);
+        assert_eq!(adaptive_solution.stats().callback_invocations, 1);
     }
 }
