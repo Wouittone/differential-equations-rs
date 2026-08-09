@@ -79,6 +79,96 @@ pub(crate) const DP5_E: [f64; 7] = [
     -1.0 / 40.0,
 ];
 
+/// Vern6 6(5) tableau from OrdinaryDiffEqVerner's pinned Float64 cache.
+pub(crate) const VERN6_STAGE_TIMES: [f64; 9] = [
+    0.0,
+    0.06,
+    0.09593333333333333,
+    0.1439,
+    0.4973,
+    0.9725,
+    0.9995,
+    1.0,
+    1.0,
+];
+pub(crate) const VERN6_A_EMPTY: &[f64] = &[];
+pub(crate) const VERN6_A2: &[f64] = &[0.06];
+pub(crate) const VERN6_A3: &[f64] = &[0.019239962962962962, 0.07669337037037037];
+pub(crate) const VERN6_A4: &[f64] = &[0.035975, 0.0, 0.107925];
+pub(crate) const VERN6_A5: &[f64] = &[
+    1.3186834152331484,
+    0.0,
+    -5.042058063628562,
+    4.220674648395414,
+];
+pub(crate) const VERN6_A6: &[f64] = &[
+    -41.87259166432751,
+    0.0,
+    159.43256216313748,
+    -122.11921356501004,
+    5.531743066200053,
+];
+pub(crate) const VERN6_A7: &[f64] = &[
+    -54.430156935316504,
+    0.0,
+    207.06725136501848,
+    -158.61081378459,
+    6.991816585950242,
+    -0.01859723106220323,
+];
+pub(crate) const VERN6_A8: &[f64] = &[
+    -54.66374178728198,
+    0.0,
+    207.95280625538936,
+    -159.2889574744995,
+    7.018743740796944,
+    -0.018338785905045722,
+    -0.0005119484997882099,
+];
+pub(crate) const VERN6_A9: &[f64] = &[
+    0.03438957868357036,
+    0.0,
+    0.0,
+    0.25826245556335037,
+    0.4209371189673537,
+    4.40539646966931,
+    -176.48311902429865,
+    172.36413340141507,
+];
+pub(crate) const VERN6_A_ROWS: &[&[f64]] = &[
+    VERN6_A_EMPTY,
+    VERN6_A2,
+    VERN6_A3,
+    VERN6_A4,
+    VERN6_A5,
+    VERN6_A6,
+    VERN6_A7,
+    VERN6_A8,
+    VERN6_A9,
+];
+pub(crate) const VERN6_B: [f64; 9] = [
+    0.03438957868357036,
+    0.0,
+    0.0,
+    0.25826245556335037,
+    0.4209371189673537,
+    4.40539646966931,
+    -176.48311902429865,
+    172.36413340141507,
+    0.0,
+];
+pub(crate) const VERN6_E: [f64; 9] = [
+    0.008623404282200854,
+    0.0,
+    0.0,
+    -0.019434029953152708,
+    0.028450072588037983,
+    -2.1097110610652914,
+    103.45854289996397,
+    -101.39980461914912,
+    0.03333333333333333,
+];
+
 pub(crate) const AB3_HISTORY: [f64; 3] = [23.0 / 12.0, -16.0 / 12.0, 5.0 / 12.0];
 
 /// Variable-step ABDF2 fixed-leading-coefficient constants.  The history
@@ -105,7 +195,8 @@ mod tests {
     use super::{
         AB3_HISTORY, BS3_A_ROWS, BS3_B, BS3_E, BS3_STAGE_TIMES, DP5_A_ROWS, DP5_B, DP5_E,
         DP5_STAGE_TIMES, RK4_A, RK4_B, RK4_STAGE_TIMES, SDIRK2_A, SDIRK2_B, SDIRK2_B_EMBEDDED,
-        SDIRK2_STAGE_TIMES, VELOCITY_VERLET_COMPOSITION,
+        SDIRK2_STAGE_TIMES, VELOCITY_VERLET_COMPOSITION, VERN6_A_ROWS, VERN6_B, VERN6_E,
+        VERN6_STAGE_TIMES,
     };
 
     #[test]
@@ -121,6 +212,10 @@ mod tests {
         assert_eq!(DP5_B.len(), DP5_STAGE_TIMES.len());
         assert_eq!(DP5_E.len(), DP5_STAGE_TIMES.len());
         assert!((DP5_B.iter().sum::<f64>() - 1.0).abs() < 1.0e-15);
+        assert_eq!(VERN6_A_ROWS.len(), VERN6_STAGE_TIMES.len());
+        assert_eq!(VERN6_B.len(), VERN6_STAGE_TIMES.len());
+        assert_eq!(VERN6_E.len(), VERN6_STAGE_TIMES.len());
+        assert!((VERN6_B.iter().sum::<f64>() - 1.0).abs() < 1.0e-13);
         assert_eq!(VELOCITY_VERLET_COMPOSITION, [0.5, 0.5]);
         assert!((RK4_B.iter().sum::<f64>() - 1.0).abs() < 1.0e-15);
         assert_eq!(SDIRK2_A.len(), SDIRK2_STAGE_TIMES.len());
