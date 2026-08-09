@@ -34,6 +34,14 @@ fn msrk6_has_sixth_order_fixed_step_convergence() {
 }
 
 #[test]
+fn msrk6_reuses_the_endpoint_derivative_between_steps() {
+    let solution = solve(&exponential(), Msrk6, &fixed(0.5)).unwrap();
+    // Initialization evaluates k1 once; each of the two eight-stage steps
+    // evaluates stages k2 through k9, reusing the prior endpoint derivative.
+    assert_eq!(solution.stats().rhs_evaluations, 17);
+}
+
+#[test]
 fn msrk6_supports_forward_backward_save_at() {
     let forward = OdeProblem::new(
         |du: &mut [f64], _: &[f64], _: &(), _: f64| du[0] = 1.0,
