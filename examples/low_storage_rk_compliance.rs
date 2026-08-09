@@ -1,6 +1,7 @@
 use differential_equations::{
     CarpenterKennedy2N54, Dglddrk73C, Dglddrk84C, Dglddrk84F, Ndblsrk124, Ndblsrk134, Ndblsrk144,
-    OdeAlgorithm, OdeProblem, Ork256, SaveMode, Shlddrk64, SolveOptions, solve,
+    OdeAlgorithm, OdeProblem, Ork256, ParsaniKetchesonDeconinck3S32, SaveMode, Shlddrk64,
+    SolveOptions, solve,
 };
 
 type TestRhs = fn(&mut [f64], &[f64], &(), f64);
@@ -27,6 +28,10 @@ fn main() {
     println!(
         "carpenter_kennedy_2n54,{:.17e}",
         endpoint(CarpenterKennedy2N54)
+    );
+    println!(
+        "parsani_ketcheson_deconinck_3s32,{:.17e}",
+        endpoint(ParsaniKetchesonDeconinck3S32)
     );
     println!("shlddrk64,{:.17e}", endpoint(Shlddrk64));
     println!("dglddrk73_c,{:.17e}", endpoint(Dglddrk73C));

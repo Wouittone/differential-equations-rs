@@ -21,6 +21,16 @@ trait LowStorage2N {
     const C: &'static [f64];
 }
 
+trait LowStorage3S {
+    const GAMMA1: &'static [f64];
+    const GAMMA2: &'static [f64];
+    const GAMMA3: &'static [f64];
+    const DELTA: &'static [f64];
+    const BETA1: f64;
+    const BETA2: &'static [f64];
+    const C: &'static [f64];
+}
+
 macro_rules! method {
     ($name:ident, $coefficients:ident, $doc:literal, $a:expr, $b:expr, $c:expr) => {
         #[doc = $doc]
@@ -45,6 +55,39 @@ macro_rules! method {
                 F: Fn(&mut [f64], &[f64], &P, f64),
             {
                 integrate::<F, P, $coefficients>(problem, options)
+            }
+        }
+    };
+}
+
+macro_rules! method_3s {
+    ($name:ident, $coefficients:ident, $doc:literal, $gamma1:expr, $gamma2:expr, $gamma3:expr, $delta:expr, $beta1:expr, $beta2:expr, $c:expr) => {
+        #[doc = $doc]
+        #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+        pub struct $name;
+
+        struct $coefficients;
+
+        impl LowStorage3S for $coefficients {
+            const GAMMA1: &'static [f64] = $gamma1;
+            const GAMMA2: &'static [f64] = $gamma2;
+            const GAMMA3: &'static [f64] = $gamma3;
+            const DELTA: &'static [f64] = $delta;
+            const BETA1: f64 = $beta1;
+            const BETA2: &'static [f64] = $beta2;
+            const C: &'static [f64] = $c;
+        }
+
+        impl OdeAlgorithm for $name {
+            fn solve<F, P>(
+                &self,
+                problem: &OdeProblem<F, P>,
+                options: &SolveOptions,
+            ) -> Result<Solution, SolveError>
+            where
+                F: Fn(&mut [f64], &[f64], &P, f64),
+            {
+                integrate_3s::<F, P, $coefficients>(problem, options)
             }
         }
     };
@@ -339,6 +382,19 @@ method!(
     ]
 );
 
+method_3s!(
+    ParsaniKetchesonDeconinck3S32,
+    ParsaniKetchesonDeconinck3S32Coefficients,
+    "Three-stage, second-order 3S low-storage method optimized for spectral-difference wave propagation.",
+    &[-1.2664395576322218e-1, 1.1426980685848858e+0],
+    &[6.542778259940647e-1, -8.2869287683723744e-2],
+    &[0.0e+0, 0.0e+0],
+    &[7.2196567116037724e-1, 0.0e+0],
+    7.2366074728360086e-1,
+    &[3.4217876502651023e-1, 3.6640216242653251e-1],
+    &[7.2366074728360086e-1, 5.9236433182015646e-1]
+);
+
 fn integrate<F, P, T>(
     problem: &OdeProblem<F, P>,
     options: &SolveOptions,
@@ -355,8 +411,38 @@ where
     )
 }
 
+fn integrate_3s<F, P, T>(
+    problem: &OdeProblem<F, P>,
+    options: &SolveOptions,
+) -> Result<Solution, SolveError>
+where
+    F: Fn(&mut [f64], &[f64], &P, f64),
+    T: LowStorage3S,
+{
+    validate_recurrence_3s::<T>()?;
+    drive_integration(
+        problem,
+        options,
+        LowStorage3SKernel::<T>::new(problem.initial_state().len()),
+    )
+}
+
 fn validate_recurrence<T: LowStorage2N>() -> Result<(), SolveError> {
     if T::A.len() + 1 != T::B.len() || T::A.len() != T::C.len() {
+        return Err(SolveError::InvalidTableau);
+    }
+    Ok(())
+}
+
+fn validate_recurrence_3s<T: LowStorage3S>() -> Result<(), SolveError> {
+    let stages = T::GAMMA1.len();
+    if stages == 0
+        || T::GAMMA2.len() != stages
+        || T::GAMMA3.len() != stages
+        || T::DELTA.len() != stages
+        || T::BETA2.len() != stages
+        || T::C.len() != stages
+    {
         return Err(SolveError::InvalidTableau);
     }
     Ok(())
@@ -366,6 +452,22 @@ struct LowStorageKernel<T> {
     derivative: Vec<f64>,
     residual: Vec<f64>,
     marker: PhantomData<fn() -> T>,
+}
+
+struct LowStorage3SKernel<T> {
+    derivative: Vec<f64>,
+    temporary: Vec<f64>,
+    marker: PhantomData<fn() -> T>,
+}
+
+impl<T> LowStorage3SKernel<T> {
+    fn new(dimension: usize) -> Self {
+        Self {
+            derivative: vec![0.0; dimension],
+            temporary: vec![0.0; dimension],
+            marker: PhantomData,
+        }
+    }
 }
 
 impl<T> LowStorageKernel<T> {
@@ -471,6 +573,100 @@ where
     fn reject_step(&mut self) {}
 }
 
+impl<F, P, T> StepKernel<F, P> for LowStorage3SKernel<T>
+where
+    F: Fn(&mut [f64], &[f64], &P, f64),
+    T: LowStorage3S,
+{
+    fn capabilities(&self) -> KernelCapabilities {
+        KernelCapabilities::new(false, 1)
+    }
+
+    fn initialize(
+        &mut self,
+        _: &OdeProblem<F, P>,
+        _: &[f64],
+        _: f64,
+        _: &mut SolverStats,
+    ) -> Result<(), SolveError> {
+        Ok(())
+    }
+
+    fn estimate_initial_step(
+        &mut self,
+        _: &OdeProblem<F, P>,
+        _: &[f64],
+        _: f64,
+        _: f64,
+        _: f64,
+        _: &mut [f64],
+        _: &SolveOptions,
+        _: &mut SolverStats,
+    ) -> Result<f64, SolveError> {
+        Err(SolveError::InitialStepRequired)
+    }
+
+    fn attempt_step(
+        &mut self,
+        problem: &OdeProblem<F, P>,
+        state: &[f64],
+        time: f64,
+        step: f64,
+        candidate: &mut [f64],
+        _: &SolveOptions,
+        stats: &mut SolverStats,
+    ) -> Result<StepEstimate, SolveError> {
+        candidate.copy_from_slice(state);
+        self.temporary.copy_from_slice(state);
+        evaluate(problem, &mut self.derivative, state, time, stats)?;
+        for (candidate, derivative) in candidate.iter_mut().zip(&self.derivative) {
+            *candidate += T::BETA1 * step * *derivative;
+        }
+        for stage in 0..T::GAMMA1.len() {
+            evaluate(
+                problem,
+                &mut self.derivative,
+                candidate,
+                time + T::C[stage] * step,
+                stats,
+            )?;
+            for (((candidate, temporary), derivative), state_value) in candidate
+                .iter_mut()
+                .zip(&mut self.temporary)
+                .zip(&self.derivative)
+                .zip(state)
+            {
+                *temporary += T::DELTA[stage] * *candidate;
+                *candidate = T::GAMMA1[stage] * *candidate
+                    + T::GAMMA2[stage] * *temporary
+                    + T::GAMMA3[stage] * *state_value
+                    + T::BETA2[stage] * step * *derivative;
+            }
+        }
+        // The pinned implementation evaluates the endpoint derivative for
+        // FSAL/interpolation bookkeeping even though this fixed-step driver
+        // does not reuse it.
+        evaluate(problem, &mut self.derivative, candidate, time + step, stats)?;
+        ensure_finite(candidate)?;
+        Ok(StepEstimate::new(0.0))
+    }
+
+    fn accept_step(
+        &mut self,
+        _: &OdeProblem<F, P>,
+        _: &[f64],
+        _: &[f64],
+        _: f64,
+        _: f64,
+        _: bool,
+        _: &mut SolverStats,
+    ) -> Result<(), SolveError> {
+        Ok(())
+    }
+
+    fn reject_step(&mut self) {}
+}
+
 fn evaluate<F, P>(
     problem: &OdeProblem<F, P>,
     derivative: &mut [f64],
@@ -501,8 +697,20 @@ mod tests {
 
     use super::{
         CarpenterKennedy2N54, Dglddrk73C, Dglddrk84C, Dglddrk84F, Ndblsrk124, Ndblsrk134,
-        Ndblsrk144, Ork256, Shlddrk64, integrate,
+        Ndblsrk144, Ork256, ParsaniKetchesonDeconinck3S32, Shlddrk64, integrate,
     };
+
+    struct Malformed3S;
+
+    impl super::LowStorage3S for Malformed3S {
+        const GAMMA1: &'static [f64] = &[0.0];
+        const GAMMA2: &'static [f64] = &[];
+        const GAMMA3: &'static [f64] = &[0.0];
+        const DELTA: &'static [f64] = &[0.0];
+        const BETA1: f64 = 1.0;
+        const BETA2: &'static [f64] = &[1.0];
+        const C: &'static [f64] = &[0.0];
+    }
     use crate::{
         CallbackAction, OdeAlgorithm, OdeProblem, SaveMode, SolveError, SolveOptions, solve,
     };
@@ -541,6 +749,7 @@ mod tests {
     #[test]
     fn methods_recover_their_design_orders() {
         assert!(order(Ork256) > 1.9);
+        assert!(order(ParsaniKetchesonDeconinck3S32) > 1.8);
         assert!(order(Dglddrk73C) > 2.9);
         for (name, observed) in [
             ("CarpenterKennedy2N54", order(CarpenterKennedy2N54)),
@@ -572,10 +781,33 @@ mod tests {
         assert_eq!(solution.times(), &[1.0, 0.5, 0.0]);
         assert!((solution.last_state()[0] - 1.0).abs() < 1.0e-8);
 
+        let solution = solve(&backward, ParsaniKetchesonDeconinck3S32, &backward_options).unwrap();
+        assert_eq!(solution.times(), &[1.0, 0.5, 0.0]);
+        assert!((solution.last_state()[0] - 1.0).abs() < 2.0e-3);
+
         let terminating = problem((0.0, 1.0), 1.0)
             .with_continuous_callback(|_, _, time| time - 0.5, |_, _, _| CallbackAction::Terminate);
         let solution = solve(&terminating, Dglddrk73C, &options(0.1)).unwrap();
         assert!((solution.times().last().unwrap() - 0.5).abs() < 1.0e-14);
+        assert_eq!(solution.stats().callback_invocations, 1);
+    }
+
+    #[test]
+    fn malformed_three_register_coefficients_are_rejected() {
+        assert_eq!(
+            super::validate_recurrence_3s::<Malformed3S>(),
+            Err(SolveError::InvalidTableau)
+        );
+    }
+
+    #[test]
+    fn three_register_callbacks_terminate_at_the_accepted_endpoint() {
+        let problem = problem((0.0, 1.0), 1.0).with_discrete_callback(
+            |_, _, time| time >= 0.25,
+            |_, _, _| CallbackAction::Terminate,
+        );
+        let solution = solve(&problem, ParsaniKetchesonDeconinck3S32, &options(0.25)).unwrap();
+        assert!((solution.times().last().unwrap() - 0.25).abs() < 1.0e-14);
         assert_eq!(solution.stats().callback_invocations, 1);
     }
 
