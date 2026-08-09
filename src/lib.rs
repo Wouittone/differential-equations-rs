@@ -19,6 +19,7 @@ mod low_storage_rk;
 mod mebdf2;
 mod problem;
 mod qndf1;
+mod qndf2;
 mod rosenbrock;
 mod rosenbrock_extended;
 mod sdirk;
@@ -46,6 +47,7 @@ pub use low_storage_rk::{
 pub use mebdf2::Mebdf2;
 pub use problem::{MassMatrixOdeProblem, OdeProblem, SplitOdeProblem};
 pub use qndf1::Qndf1;
+pub use qndf2::Qndf2;
 pub use rosenbrock::Rosenbrock23;
 pub use rosenbrock_extended::{Rodas4, Rodas5P, Rosenbrock32};
 pub use sdirk::Sdirk2;
