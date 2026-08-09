@@ -36,8 +36,9 @@ pub use abdf2::Abdf2;
 pub use adams::{Ab3, Ab4, Ab5, Abm32, Abm43, Abm54};
 pub use callback::{CallbackAction, EventDirection};
 pub use explicit_rk::{
-    Alshina2, Alshina3, Bs3, Bs5, ButcherTableau, Dp5, Euler, ExplicitRungeKutta, Heun, Midpoint,
-    OwrenZen3, OwrenZen4, OwrenZen5, Ralston, Ralston4, Rk4, Rkm, SspRk22, SspRk33, SspRk43,
+    Alshina2, Alshina3, Alshina6, Bs3, Bs5, ButcherTableau, Dp5, Euler, ExplicitRungeKutta, Heun,
+    Midpoint, OwrenZen3, OwrenZen4, OwrenZen5, Ralston, Ralston4, Rk4, Rkm, SspRk22, SspRk33,
+    SspRk43,
 };
 pub use implicit::{ImplicitEuler, ImplicitMidpoint, Trapezoid};
 pub use low_storage_rk::{

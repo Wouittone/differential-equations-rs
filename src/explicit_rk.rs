@@ -140,6 +140,66 @@ const ALSHINA3_B: &[f64] = &[2.0 / 9.0, 1.0 / 3.0, 4.0 / 9.0];
 const ALSHINA3_E: &[f64] = &[0.0, 4.0 / 9.0, 0.0];
 const ALSHINA3_C: &[f64] = &[0.0, 0.5, 0.75];
 
+// Alshina's optimal sixth-order, seven-stage fixed-step scheme. The
+// coefficients are copied from OrdinaryDiffEqLowOrderRK's
+// `Alshina6ConstantCache` at the pinned upstream revision. The final update
+// uses only stages 1, 5, 6, and 7 (the omitted b2-b4 entries are zero).
+const ALSHINA6_A2: &[f64] = &[0.571_428_571_428_571_4];
+const ALSHINA6_A3: &[f64] = &[1.026_785_714_285_714_2, -0.312_5];
+const ALSHINA6_A4: &[f64] = &[
+    0.934_920_634_920_634_9,
+    0.277_777_777_777_777_8,
+    -0.355_555_555_555_555_57,
+];
+const ALSHINA6_A5: &[f64] = &[
+    0.180_025_671_442_084_34,
+    0.147_379_406_839_616_14,
+    0.016_070_163_293_314_288,
+    -0.067_082_039_324_993_7,
+];
+const ALSHINA6_A6: &[f64] = &[
+    -0.079_797_658_566_031_38,
+    0.025_290_591_998_992_584,
+    -0.351_632_620_226_681_3,
+    0.320_729_490_168_751_6,
+    0.809_016_994_374_947_5,
+];
+const ALSHINA6_A7: &[f64] = &[
+    0.498_859_935_619_735_2,
+    -0.863_349_994_193_042_9,
+    1.677_812_284_666_834_9,
+    -1.268_237_254_218_789_4,
+    -0.427_050_983_124_842_35,
+    1.381_966_011_250_105,
+];
+const ALSHINA6_A: &[&[f64]] = &[
+    EMPTY,
+    ALSHINA6_A2,
+    ALSHINA6_A3,
+    ALSHINA6_A4,
+    ALSHINA6_A5,
+    ALSHINA6_A6,
+    ALSHINA6_A7,
+];
+const ALSHINA6_B: &[f64] = &[
+    1.0 / 12.0,
+    0.0,
+    0.0,
+    0.0,
+    5.0 / 12.0,
+    5.0 / 12.0,
+    1.0 / 12.0,
+];
+const ALSHINA6_C: &[f64] = &[
+    0.0,
+    0.571_428_571_428_571_4,
+    0.714_285_714_285_714_3,
+    0.857_142_857_142_857_1,
+    0.276_393_202_250_021,
+    0.723_606_797_749_978_9,
+    1.0,
+];
+
 const BS3_A: &[&[f64]] = BS3_A_ROWS;
 const BS3_B: &[f64] = &GENERATED_BS3_B;
 const BS3_E: &[f64] = &GENERATED_BS3_E;
@@ -491,6 +551,16 @@ algorithm!(
     weights = ALSHINA3_B,
     error_weights = Some(ALSHINA3_E),
     order = 3,
+    fsal = false
+);
+algorithm!(
+    Alshina6,
+    "The fixed-step optimal seven-stage, sixth-order Alshina method.",
+    nodes = ALSHINA6_C,
+    coefficients = ALSHINA6_A,
+    weights = ALSHINA6_B,
+    error_weights = None,
+    order = 6,
     fsal = false
 );
 algorithm!(
@@ -1070,8 +1140,8 @@ mod tests {
 
     use super::{Bs5, ButcherTableau, ExplicitRungeKutta, OwrenZen3, OwrenZen4, OwrenZen5};
     use crate::{
-        Alshina2, Alshina3, Bs3, Dp5, Euler, Heun, Midpoint, OdeProblem, Ralston, Ralston4, Rk4,
-        Rkm, SaveMode, SolveError, SolveOptions, SspRk22, SspRk33, SspRk43, solve,
+        Alshina2, Alshina3, Alshina6, Bs3, Dp5, Euler, Heun, Midpoint, OdeProblem, Ralston,
+        Ralston4, Rk4, Rkm, SaveMode, SolveError, SolveOptions, SspRk22, SspRk33, SspRk43, solve,
     };
 
     type TestRhs = fn(&mut [f64], &[f64], &(), f64);
@@ -1270,6 +1340,11 @@ mod tests {
             .last_state()[0]
             - E)
             .abs();
+        let alshina6_error = (solve(&exponential(), Alshina6, &options)
+            .unwrap()
+            .last_state()[0]
+            - E)
+            .abs();
 
         assert!(euler_error < 0.002);
         assert!(rk4_error < 1.0e-12);
@@ -1277,6 +1352,8 @@ mod tests {
         assert!(ralston4_error < 1.0e-12);
         assert!(alshina2_error < 1.0e-6);
         assert!(alshina3_error < 1.0e-9);
+        assert!(alshina6_error < 1.0e-12);
+        assert!(convergence_ratio(Alshina6, 0.1) > 40.0);
     }
 
     #[test]
