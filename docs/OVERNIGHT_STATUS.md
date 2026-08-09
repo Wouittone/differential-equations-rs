@@ -46,7 +46,7 @@ Pinned upstream revision:
 | `/root/linear_interface_impl2` | Additional generated explicit-coefficient slice | `codex/generated-dp5`; `differential-equations-rs-worktrees/generated-dp5` | completed and merged as `69f6caf`; DP5 generated migration passed | 2026-08-09T02:05:00Z |
 | `/root/linear_interface_impl` | Wire accepted Hermite dense service into one solver family | `codex/phase6-explicit-hermite`; `differential-equations-rs-worktrees/explicit-hermite` | completed and merged as `59ece5d` | 2026-08-09T02:20:00Z |
 | `/root/abdf2_kernel` | Fixed-step regular MEBDF2 feasibility/implementation | `codex/mebdf2-kernel`; `differential-equations-rs-worktrees/mebdf2-kernel` | completed and merged as `5e0650c` | 2026-08-09T03:05:00Z |
-| `/root/linear_interface_impl2` | Missing regular explicit Verner-family constructor | new isolated follow-up worktree | active; Vern6 candidate | 2026-08-09T14:50:00Z |
+| `/root/linear_interface_impl2` | Missing regular explicit Verner-family constructor | `codex/verner6-generated`; `differential-equations-rs-worktrees/verner6-generated` | completed and merged as `5242ba0` | 2026-08-09T14:55:00Z |
 
 ## Completed waves
 
@@ -83,6 +83,7 @@ Pinned upstream revision:
 | MEBDF2 family | Native fixed-step regular identity-mass MEBDF2 with three sequential Newton corrections, checked Jacobian/LU path, callbacks, backward integration, and pinned Julia fixture | 92 library tests plus 4 MEBDF2 integration tests | 214 pass (19 suites) | reviewed and merged as `5e0650c`; fixed endpoint matches pinned Julia; adaptive/DAE/split paths excluded |
 | QNDF1 family | Native fixed/adaptive regular identity-mass QNDF1 with one-step history reinterpolation, NDF residual/Newton solve, callback reset, and pinned Julia fixture | 92 library tests plus QNDF1 integration tests | 218 pass (20 suites) | reviewed and merged as `e5a6603`; first-order endpoint differs by documented 4.95e-5 within explicit fixture tolerance |
 | QNDF2 family | Native fixed/adaptive regular identity-mass QNDF2 with two-step history reinterpolation, NDF residual/Newton solve, callback reset, and pinned Julia fixture | 92 library tests plus QNDF2 integration tests | 222 pass (21 suites) | reviewed and merged as `e97ef25`; relaxed low-order endpoint tolerances documented in handoff |
+| Vern6 family | Exact pinned nine-stage Vern6 tableau moved to generated coefficients with fixed/adaptive/backward/callback and allocation coverage | 92 library tests plus Vern6 integrations | 222 pass (21 suites) | reviewed and merged as `5242ba0`; existing Julia Verner fixture remains green |
 
 ## Validation snapshot
 
