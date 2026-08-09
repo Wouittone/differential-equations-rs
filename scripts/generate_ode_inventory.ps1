@@ -441,7 +441,12 @@ function Get-JuliaComplianceNames {
     foreach ($file in Get-ChildItem -LiteralPath (Join-Path $RepoPath 'tests/julia') -File -Filter '*.jl') {
         $text = Get-Content -LiteralPath $file.FullName -Raw
         foreach ($match in [regex]::Matches($text, '(?ms)^using\s+OrdinaryDiffEq[A-Za-z0-9_]*\s*:\s*(?<body>.*?)(?=^\S|\z)')) {
-            foreach ($identifier in [regex]::Matches($match.Groups['body'].Value, '\b[A-Z][A-Za-z0-9_]*\b')) {
+            # Julia exports include both conventional uppercase names and
+            # lowercase-prefixed constructors such as `pRRK22`.  Restricting
+            # this scan to an uppercase initial silently loses those matched
+            # compliance fixtures and misclassifies an otherwise implemented
+            # public algorithm.
+            foreach ($identifier in [regex]::Matches($match.Groups['body'].Value, '\b[A-Za-z][A-Za-z0-9_]*\b')) {
                 [void] $names.Add($identifier.Value)
             }
         }

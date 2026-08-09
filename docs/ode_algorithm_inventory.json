@@ -9,8 +9,8 @@
     "included_canonical_or_composite": 333,
     "included_aliases": 12,
     "excluded_names": 4,
-    "implemented_and_julia_tested": 70,
-    "missing_included_names": 275
+    "implemented_and_julia_tested": 72,
+    "missing_included_names": 273
   },
   "uncertainties": [
     "The inventory treats package exports as the public algorithm surface; internal, unexported experimental types are not parity targets.",
@@ -7476,10 +7476,10 @@
         "stage/step limiters",
         "adaptive controller where applicable"
       ],
-      "rust_status": "missing",
-      "rust_name": null,
-      "julia_status": "no-matched-compliance-detected",
-      "julia_compliance_detected": false,
+      "rust_status": "implemented-and-julia-tested",
+      "rust_name": "Prrk22",
+      "julia_status": "matched-compliance-detected",
+      "julia_compliance_detected": true,
       "upstream_source": "lib/OrdinaryDiffEqSSPRK/src/algorithms.jl",
       "upstream_line": 306
     },
@@ -7658,10 +7658,10 @@
         "stage/step limiters",
         "adaptive controller where applicable"
       ],
-      "rust_status": "missing",
-      "rust_name": null,
-      "julia_status": "no-matched-compliance-detected",
-      "julia_compliance_detected": false,
+      "rust_status": "implemented-and-julia-tested",
+      "rust_name": "SspRk432",
+      "julia_status": "matched-compliance-detected",
+      "julia_compliance_detected": true,
       "upstream_source": "lib/OrdinaryDiffEqSSPRK/src/algorithms.jl",
       "upstream_line": 111
     },
