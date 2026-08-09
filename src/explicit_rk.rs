@@ -212,6 +212,72 @@ const MSRK5_C: &[f64] = &[
     1.0,
 ];
 
+// Misha Stepanov's embedded (4,5) seven-stage FSAL pair. The tableau and
+// embedded estimator are copied from OrdinaryDiffEqLowOrderRK's
+// `Stepanov5ConstantCache` at the pinned upstream revision. The final stage
+// evaluates the endpoint derivative and therefore repeats the primary update
+// weights, preserving the FSAL lifecycle used by the upstream implementation.
+const STEPANOV5_A2: &[f64] = &[1.0 / 5.0];
+const STEPANOV5_A3: &[f64] = &[21.0 / 338.0, 441.0 / 1690.0];
+const STEPANOV5_A4: &[f64] = &[639.0 / 392.0, -729.0 / 140.0, 1755.0 / 392.0];
+const STEPANOV5_A5: &[f64] = &[
+    4_878_991.0 / 1_693_440.0,
+    -16_601.0 / 1_792.0,
+    210_067.0 / 28_224.0,
+    -1_469.0 / 17_280.0,
+];
+const STEPANOV5_A6: &[f64] = &[
+    13_759_919.0 / 4_230_954.0,
+    -2_995.0 / 287.0,
+    507_312_091.0 / 61_294_590.0,
+    -22.0 / 405.0,
+    -7_040.0 / 180_687.0,
+];
+const STEPANOV5_B: &[f64] = &[
+    1_441.0 / 14_742.0,
+    0.0,
+    114_244.0 / 234_927.0,
+    118.0 / 81.0,
+    -12_800.0 / 4_407.0,
+    41.0 / 22.0,
+    0.0,
+];
+const STEPANOV5_B_TILDE: &[f64] = &[
+    -1.0 / 273.0,
+    0.0,
+    2_197.0 / 174_020.0,
+    -4.0 / 15.0,
+    1_280.0 / 1_469.0,
+    -33_743.0 / 52_712.0,
+    127.0 / 4_792.0,
+];
+const STEPANOV5_FSAL_ROW: &[f64] = &[
+    1_441.0 / 14_742.0,
+    0.0,
+    114_244.0 / 234_927.0,
+    118.0 / 81.0,
+    -12_800.0 / 4_407.0,
+    41.0 / 22.0,
+];
+const STEPANOV5_A: &[&[f64]] = &[
+    EMPTY,
+    STEPANOV5_A2,
+    STEPANOV5_A3,
+    STEPANOV5_A4,
+    STEPANOV5_A5,
+    STEPANOV5_A6,
+    STEPANOV5_FSAL_ROW,
+];
+const STEPANOV5_C: &[f64] = &[
+    0.0,
+    1.0 / 5.0,
+    21.0 / 65.0,
+    9.0 / 10.0,
+    39.0 / 40.0,
+    1.0,
+    1.0,
+];
+
 // Misha Stepanov's eight-stage sixth-order fixed-step method. The tableau is
 // copied from OrdinaryDiffEqLowOrderRK's `MSRK6ConstantCache` at the pinned
 // upstream revision. OrdinaryDiffEq evaluates one additional endpoint
@@ -805,6 +871,16 @@ algorithm!(
     weights = MSRK6_B,
     error_weights = None,
     order = 6,
+    fsal = true
+);
+algorithm!(
+    Stepanov5,
+    "Misha Stepanov's adaptive embedded (4,5) seven-stage FSAL Runge–Kutta method.",
+    nodes = STEPANOV5_C,
+    coefficients = STEPANOV5_A,
+    weights = STEPANOV5_B,
+    error_weights = Some(STEPANOV5_B_TILDE),
+    order = 5,
     fsal = true
 );
 algorithm!(
