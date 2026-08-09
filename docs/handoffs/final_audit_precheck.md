@@ -95,10 +95,11 @@ regular-ODE inventory by `docs/UPSTREAM_SCOPE.md`.
   with pinned Core references (`controllers.jl:1-76,206-250,600-843,912-1065`
   and `integrator_utils.jl:225-303,580-604,881-906`).
 * QNDF1's fixed endpoint differs from pinned Julia by approximately `4.95e-5`
-  on the stiff tracking fixture and uses `rtol=2e-4`; QNDF2 fixtures use
-  relaxed low-order tolerances (`3e-4` fixed and `8e-4` adaptive in the wave
-  handoff). These are explicit representation differences, not evidence of
-  exact BDF parity, and require final review before any claim of completion.
+  on the stiff tracking fixture and uses `rtol=2e-4`; its adaptive fixture uses
+  `rtol=5e-4`. QNDF2 fixtures use relaxed low-order tolerances (`3e-4` fixed
+  and `8e-4` adaptive). These are explicit representation differences, not
+  evidence of exact BDF parity, and require final review before any claim of
+  completion.
 * SDIRK2 and ABDF2 document adaptive controller-count divergence because the
   local driver uses proportional control while upstream uses method-specific
   PI/I history. MEBDF2 is fixed-step only; QNDF1/2, ABDF2, and MEBDF2 are
@@ -170,4 +171,3 @@ was present and strict inventory verification passed. The parity blocker is
 the documented in-scope implementation/feature gap; retry the final audit only
 after the missing-name count reaches zero and the dense/controller and
 representation caveats above have matched tests or explicit scope records.
-
