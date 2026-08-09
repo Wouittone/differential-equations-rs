@@ -1,6 +1,6 @@
 use differential_equations::{
     Alshina2, Alshina3, Alshina6, Anas5, Bs3, Dp5, Euler, Frk65, Heun, Midpoint, Msrk5, Msrk6,
-    OdeProblem, Psrk3p5q4, Ralston, Ralston4, Rk4, Rkm, SaveMode, SolveOptions, solve,
+    OdeProblem, Psrk3p5q4, Ralston, Ralston4, Rk4, Rkm, Rko65, SaveMode, SolveOptions, solve,
 };
 
 type TestRhs = fn(&mut [f64], &[f64], &(), f64);
@@ -40,6 +40,9 @@ fn main() {
 
     let rkm = solve(&problem(), Rkm, &fixed_options(0.01)).unwrap();
     println!("rkm,{:.17e}", rkm.last_state()[0]);
+
+    let rko65 = solve(&problem(), Rko65, &fixed_options(0.01)).unwrap();
+    println!("rko65,{:.17e}", rko65.last_state()[0]);
 
     let ralston4 = solve(&problem(), Ralston4, &fixed_options(0.01)).unwrap();
     println!("ralston4,{:.17e}", ralston4.last_state()[0]);

@@ -41,7 +41,7 @@ pub use callback::{CallbackAction, EventDirection};
 pub use explicit_rk::{
     Alshina2, Alshina3, Alshina6, Bs3, Bs5, ButcherTableau, Dp5, Euler, ExplicitRungeKutta, Heun,
     Midpoint, Msrk5, Msrk6, OwrenZen3, OwrenZen4, OwrenZen5, Psrk3p5q4, Ralston, Ralston4, Rk4,
-    Rkm, SspRk22, SspRk33, SspRk43,
+    Rkm, Rko65, SspRk22, SspRk33, SspRk43,
 };
 pub use frk65::Frk65;
 pub use implicit::{ImplicitEuler, ImplicitMidpoint, Trapezoid};

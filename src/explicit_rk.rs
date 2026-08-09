@@ -117,6 +117,32 @@ const RKM_C: &[f64] = &[
     0.853_923_000_035_347,
 ];
 
+// Tsitouras' Runge--Kutta--Oliver six-stage fifth-order method. The pinned
+// OrdinaryDiffEq implementation starts with a stage at c=2/3 (rather than
+// evaluating f at the left endpoint). The shared explicit driver reserves an
+// unweighted c=0 stage for dense-output Hermite segments, then stores the
+// upstream six stages at indices 1..=6. This preserves the published tableau
+// exactly while keeping the driver's endpoint and save-at semantics sound.
+const RKO65_A1: &[f64] = &[0.0];
+const RKO65_A2: &[f64] = &[0.0, 1.0 / 6.0];
+const RKO65_A3: &[f64] = &[0.0, -15.0 / 8.0, 21.0 / 8.0];
+const RKO65_A4: &[f64] = &[0.0, -9.0, 75.0 / 7.0, -5.0 / 7.0];
+const RKO65_A5: &[f64] = &[0.0, -3.0, 34257.0 / 8750.0, -114.0 / 875.0, 19.0 / 1250.0];
+const RKO65_A6: &[f64] = &[0.0, 0.0, 123.0 / 380.0, 5.0 / 2.0, 3.0 / 20.0, -75.0 / 38.0];
+const RKO65_A: &[&[f64]] = &[
+    EMPTY, RKO65_A1, RKO65_A2, RKO65_A3, RKO65_A4, RKO65_A5, RKO65_A6,
+];
+const RKO65_B: &[f64] = &[
+    0.0,
+    0.0,
+    54.0 / 133.0,
+    32.0 / 21.0,
+    1.0 / 18.0,
+    -125.0 / 114.0,
+    1.0 / 9.0,
+];
+const RKO65_C: &[f64] = &[0.0, 2.0 / 3.0, 1.0 / 6.0, 3.0 / 4.0, 1.0, 4.0 / 5.0, 1.0];
+
 // Misha Stepanov's eight-stage fifth-order method with a final FSAL stage.
 // Coefficients are copied from OrdinaryDiffEqLowOrderRK's
 // `MSRK5ConstantCache` at the pinned upstream revision.
@@ -671,6 +697,16 @@ algorithm!(
     weights = RKM_B,
     error_weights = None,
     order = 4,
+    fsal = false
+);
+algorithm!(
+    Rko65,
+    "Tsitouras' six-stage, fifth-order Runge--Kutta--Oliver method.",
+    nodes = RKO65_C,
+    coefficients = RKO65_A,
+    weights = RKO65_B,
+    error_weights = None,
+    order = 5,
     fsal = false
 );
 algorithm!(
