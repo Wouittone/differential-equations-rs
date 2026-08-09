@@ -45,7 +45,8 @@ pub use explicit_rk::{
 pub use implicit::{ImplicitEuler, ImplicitMidpoint, Trapezoid};
 pub use low_storage_rk::{
     CarpenterKennedy2N54, Dglddrk73C, Dglddrk84C, Dglddrk84F, Ndblsrk124, Ndblsrk134, Ndblsrk144,
-    Ork256, ParsaniKetchesonDeconinck3S32, ParsaniKetchesonDeconinck3S82, Shlddrk64,
+    Ork256, ParsaniKetchesonDeconinck3S32, ParsaniKetchesonDeconinck3S53,
+    ParsaniKetchesonDeconinck3S82, Shlddrk64,
 };
 pub use mebdf2::Mebdf2;
 pub use problem::{MassMatrixOdeProblem, OdeProblem, SplitOdeProblem};

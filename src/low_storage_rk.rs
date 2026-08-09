@@ -396,6 +396,44 @@ method_3s!(
 );
 
 method_3s!(
+    ParsaniKetchesonDeconinck3S53,
+    ParsaniKetchesonDeconinck3S53Coefficients,
+    "Five-stage, third-order 3S low-storage method optimized for spectral-difference wave propagation.",
+    &[
+        2.5876919610938998e-1,
+        -1.3243708384977859e-1,
+        5.0556648948362981e-2,
+        5.6705507883024708e-1,
+    ],
+    &[
+        5.5284013909611196e-1,
+        6.7318513326032769e-1,
+        2.8031054965521607e-1,
+        5.5215115815918758e-1,
+    ],
+    &[0.0, 0.0, 2.7525797946334213e-1, -8.9505445022148511e-1],
+    &[
+        3.4076878915216791e-1,
+        3.4143871647890728e-1,
+        7.2292984084963252e-1,
+        0.0,
+    ],
+    2.3002859824852059e-1,
+    &[
+        3.0214498165167158e-1,
+        8.0256010238856679e-1,
+        4.3621618871511753e-1,
+        1.1292705979513513e-1,
+    ],
+    &[
+        2.3002859824852059e-1,
+        4.0500453764839639e-1,
+        8.9478204142351003e-1,
+        7.2351146275625733e-1,
+    ]
+);
+
+method_3s!(
     ParsaniKetchesonDeconinck3S82,
     ParsaniKetchesonDeconinck3S82Coefficients,
     "Eight-stage, second-order 3S low-storage method optimized for spectral-difference wave propagation.",
@@ -758,8 +796,8 @@ mod tests {
 
     use super::{
         CarpenterKennedy2N54, Dglddrk73C, Dglddrk84C, Dglddrk84F, Ndblsrk124, Ndblsrk134,
-        Ndblsrk144, Ork256, ParsaniKetchesonDeconinck3S32, ParsaniKetchesonDeconinck3S82,
-        Shlddrk64, integrate,
+        Ndblsrk144, Ork256, ParsaniKetchesonDeconinck3S32, ParsaniKetchesonDeconinck3S53,
+        ParsaniKetchesonDeconinck3S82, Shlddrk64, integrate,
     };
 
     struct Malformed3S;
@@ -812,6 +850,7 @@ mod tests {
     fn methods_recover_their_design_orders() {
         assert!(order(Ork256) > 1.9);
         assert!(order(ParsaniKetchesonDeconinck3S32) > 1.8);
+        assert!(order(ParsaniKetchesonDeconinck3S53) > 2.8);
         assert!(order(ParsaniKetchesonDeconinck3S82) > 1.8);
         assert!(order(Dglddrk73C) > 2.9);
         for (name, observed) in [
@@ -848,6 +887,10 @@ mod tests {
         assert_eq!(solution.times(), &[1.0, 0.5, 0.0]);
         assert!((solution.last_state()[0] - 1.0).abs() < 2.0e-3);
 
+        let solution = solve(&backward, ParsaniKetchesonDeconinck3S53, &backward_options).unwrap();
+        assert_eq!(solution.times(), &[1.0, 0.5, 0.0]);
+        assert!((solution.last_state()[0] - 1.0).abs() < 2.0e-5);
+
         let solution = solve(&backward, ParsaniKetchesonDeconinck3S82, &backward_options).unwrap();
         assert_eq!(solution.times(), &[1.0, 0.5, 0.0]);
         assert!((solution.last_state()[0] - 1.0).abs() < 2.0e-3);
@@ -874,6 +917,10 @@ mod tests {
             |_, _, _| CallbackAction::Terminate,
         );
         let solution = solve(&problem, ParsaniKetchesonDeconinck3S32, &options(0.25)).unwrap();
+        assert!((solution.times().last().unwrap() - 0.25).abs() < 1.0e-14);
+        assert_eq!(solution.stats().callback_invocations, 1);
+
+        let solution = solve(&problem, ParsaniKetchesonDeconinck3S53, &options(0.25)).unwrap();
         assert!((solution.times().last().unwrap() - 0.25).abs() < 1.0e-14);
         assert_eq!(solution.stats().callback_invocations, 1);
 
