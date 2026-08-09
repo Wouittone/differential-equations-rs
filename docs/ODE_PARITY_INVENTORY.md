@@ -20,8 +20,8 @@ and [ode_algorithm_inventory.csv](ode_algorithm_inventory.csv).
 - In-scope regular ODE names: **345**
   (333 canonical/composite constructors and
   12 public aliases).
-- Implemented and detected in matched Julia tests: **72**.
-- Missing in-scope public names: **273**.
+- Implemented and detected in matched Julia tests: **74**.
+- Missing in-scope public names: **271**.
 - Explicitly excluded public names: **4**.
 
 Aliases are public parity obligations but do not require a second numerical kernel.
@@ -41,8 +41,8 @@ Aliases are public parity obligations but do not require a second numerical kern
 | high-order explicit Runge-Kutta | 16 | 4 | 12 |
 | IMEX multistep | 2 | 0 | 2 |
 | linear and Lie-group methods | 18 | 0 | 18 |
-| low-order explicit Runge-Kutta | 28 | 15 | 13 |
-| low-storage explicit Runge-Kutta | 44 | 9 | 35 |
+| low-order explicit Runge-Kutta | 28 | 16 | 12 |
+| low-storage explicit Runge-Kutta | 44 | 10 | 34 |
 | multirate and MRI-GARK | 9 | 0 | 9 |
 | Nordsieck variable-order multistep | 4 | 0 | 4 |
 | parallel diagonally implicit Runge-Kutta | 1 | 0 | 1 |
@@ -178,9 +178,8 @@ the JSON/CSV records.
 - `RKMK2` — OrdinaryDiffEqLinear; ODEProblem with linear/operator ODEFunction
 - `RKMK4` — OrdinaryDiffEqLinear; ODEProblem with linear/operator ODEFunction
 
-### low-order explicit Runge-Kutta (13)
+### low-order explicit Runge-Kutta (12)
 
-- `Alshina6` — OrdinaryDiffEqLowOrderRK; ODEProblem
 - `Anas5` — OrdinaryDiffEqLowOrderRK; ODEProblem
 - `AutoDP5` — OrdinaryDiffEqLowOrderRK; ODEProblem
 - `FRK65` — OrdinaryDiffEqLowOrderRK; ODEProblem
@@ -194,7 +193,7 @@ the JSON/CSV records.
 - `SplitEuler` — OrdinaryDiffEqLowOrderRK; ODEProblem or SplitODEProblem
 - `Stepanov5` — OrdinaryDiffEqLowOrderRK; ODEProblem
 
-### low-storage explicit Runge-Kutta (35)
+### low-storage explicit Runge-Kutta (34)
 
 - `CFRLDDRK64` — OrdinaryDiffEqLowStorageRK; ODEProblem
 - `CKLLSRK43_2` — OrdinaryDiffEqLowStorageRK; ODEProblem
@@ -217,7 +216,6 @@ the JSON/CSV records.
 - `ParsaniKetchesonDeconinck3S173` — OrdinaryDiffEqLowStorageRK; ODEProblem
 - `ParsaniKetchesonDeconinck3S184` — OrdinaryDiffEqLowStorageRK; ODEProblem
 - `ParsaniKetchesonDeconinck3S205` — OrdinaryDiffEqLowStorageRK; ODEProblem
-- `ParsaniKetchesonDeconinck3S32` — OrdinaryDiffEqLowStorageRK; ODEProblem
 - `ParsaniKetchesonDeconinck3S53` — OrdinaryDiffEqLowStorageRK; ODEProblem
 - `ParsaniKetchesonDeconinck3S82` — OrdinaryDiffEqLowStorageRK; ODEProblem
 - `ParsaniKetchesonDeconinck3S94` — OrdinaryDiffEqLowStorageRK; ODEProblem
