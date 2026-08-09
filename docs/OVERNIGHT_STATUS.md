@@ -46,7 +46,7 @@ Pinned upstream revision:
 | `/root/linear_interface_impl2` | Additional generated explicit-coefficient slice | `codex/generated-dp5`; `differential-equations-rs-worktrees/generated-dp5` | completed and merged as `69f6caf`; DP5 generated migration passed | 2026-08-09T02:05:00Z |
 | `/root/linear_interface_impl` | Wire accepted Hermite dense service into one solver family | `codex/phase6-explicit-hermite`; `differential-equations-rs-worktrees/explicit-hermite` | completed and merged as `59ece5d` | 2026-08-09T02:20:00Z |
 | `/root/abdf2_kernel` | Fixed-step regular MEBDF2 feasibility/implementation | `codex/mebdf2-kernel`; `differential-equations-rs-worktrees/mebdf2-kernel` | completed and merged as `5e0650c` | 2026-08-09T03:05:00Z |
-| `/root/linear_interface_impl2` | Next missing regular explicit Verner-family constructor | new isolated follow-up worktree | active; Vern8 candidate | 2026-08-09T15:10:00Z |
+| `/root/linear_interface_impl2` | Next missing regular explicit Verner-family constructor | `codex/verner8-generated`; `differential-equations-rs-worktrees/verner8-generated` | completed and merged as `b784986` | 2026-08-09T15:20:00Z |
 
 ## Completed waves
 
@@ -85,6 +85,7 @@ Pinned upstream revision:
 | QNDF2 family | Native fixed/adaptive regular identity-mass QNDF2 with two-step history reinterpolation, NDF residual/Newton solve, callback reset, and pinned Julia fixture | 92 library tests plus QNDF2 integration tests | 222 pass (21 suites) | reviewed and merged as `e97ef25`; relaxed low-order endpoint tolerances documented in handoff |
 | Vern6 family | Exact pinned nine-stage Vern6 tableau moved to generated coefficients with fixed/adaptive/backward/callback and allocation coverage | 92 library tests plus Vern6 integrations | 222 pass (21 suites) | reviewed and merged as `5242ba0`; existing Julia Verner fixture remains green |
 | Vern7 family | Exact pinned ten-stage Vern7 tableau moved to generated coefficients with fixed/adaptive/backward/callback and allocation coverage | 92 library tests plus Vern7 integrations | 222 pass (21 suites) | reviewed and merged as `81b08b3`; existing Julia Verner fixture remains green |
+| Vern8 family | Exact pinned thirteen-stage Vern8 tableau moved to generated coefficients with fixed/adaptive/backward/callback and allocation coverage | 92 library tests plus Vern8 integrations | 222 pass (21 suites) | reviewed and merged as `b784986`; existing Julia Verner fixture remains green |
 
 ## Validation snapshot
 
