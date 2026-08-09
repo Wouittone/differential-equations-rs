@@ -1,5 +1,6 @@
 using OrdinaryDiffEqLowOrderRK:
-    Alshina2, Alshina3, Alshina6, Anas5, Euler, Midpoint, Heun, Ralston, Ralston4, RK4, RKM, RKO65, MSRK5, MSRK6, FRK65, PSRK3p5q4, PSRK3p6q5, BS3, DP5
+    Alshina2, Alshina3, Alshina6, Anas5, AutoDP5, Euler, Midpoint, Heun, Ralston, Ralston4, RK4, RKM, RKO65, MSRK5, MSRK6, FRK65, PSRK3p5q4, PSRK3p6q5, BS3, DP5
+using OrdinaryDiffEqRosenbrock: Rodas5P
 
 function rust_low_order_endpoints()
     manifest = joinpath(REPOSITORY_ROOT, "Cargo.toml")
@@ -58,6 +59,7 @@ end
         "ralston" => exponential_reference(Ralston()),
         "bs3" => exponential_reference(BS3()),
         "dp5" => exponential_reference(DP5()),
+        "autodp5" => exponential_reference(AutoDP5(Rodas5P())),
     )
 
     @test Set(keys(rust)) == Set(keys(julia))
