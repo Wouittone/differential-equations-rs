@@ -1366,6 +1366,10 @@ mod tests {
             solve(&exponential(), Rk4, &SolveOptions::default()),
             Err(SolveError::AdaptiveStepUnsupported)
         );
+        assert_eq!(
+            solve(&exponential(), Alshina6, &SolveOptions::default()),
+            Err(SolveError::AdaptiveStepUnsupported)
+        );
     }
 
     #[test]
