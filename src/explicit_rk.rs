@@ -188,8 +188,9 @@ const MSRK5_C: &[f64] = &[
 
 // Misha Stepanov's eight-stage sixth-order fixed-step method. The tableau is
 // copied from OrdinaryDiffEqLowOrderRK's `MSRK6ConstantCache` at the pinned
-// upstream revision. Unlike MSRK5, MSRK6 is not FSAL in the upstream
-// algorithm, so the final stage is the eighth derivative used in the update.
+// upstream revision. OrdinaryDiffEq evaluates one additional endpoint
+// derivative for its default FSAL lifecycle, represented here by the final
+// row equal to the update weights and a zero final weight.
 const MSRK6_A2: &[f64] = &[1.0 / 14.0];
 const MSRK6_A3: &[f64] = &[0.0, 1.0 / 7.0];
 const MSRK6_A4: &[f64] = &[3.0 / 56.0, 0.0, 9.0 / 56.0];
@@ -212,8 +213,26 @@ const MSRK6_A8: &[f64] = &[
     -94325.0 / 51192.0,
     3773.0 / 6399.0,
 ];
+const MSRK6_FSAL_ROW: &[f64] = &[
+    16.0 / 243.0,
+    0.0,
+    0.0,
+    16807.0 / 53460.0,
+    53.0 / 300.0,
+    2401.0 / 12150.0,
+    2401.0 / 12150.0,
+    79.0 / 1650.0,
+];
 const MSRK6_A: &[&[f64]] = &[
-    EMPTY, MSRK6_A2, MSRK6_A3, MSRK6_A4, MSRK6_A5, MSRK6_A6, MSRK6_A7, MSRK6_A8,
+    EMPTY,
+    MSRK6_A2,
+    MSRK6_A3,
+    MSRK6_A4,
+    MSRK6_A5,
+    MSRK6_A6,
+    MSRK6_A7,
+    MSRK6_A8,
+    MSRK6_FSAL_ROW,
 ];
 const MSRK6_B: &[f64] = &[
     16.0 / 243.0,
@@ -224,6 +243,7 @@ const MSRK6_B: &[f64] = &[
     2401.0 / 12150.0,
     2401.0 / 12150.0,
     79.0 / 1650.0,
+    0.0,
 ];
 const MSRK6_C: &[f64] = &[
     0.0,
@@ -233,6 +253,7 @@ const MSRK6_C: &[f64] = &[
     1.0 / 2.0,
     9.0 / 14.0,
     6.0 / 7.0,
+    1.0,
     1.0,
 ];
 
@@ -660,7 +681,7 @@ algorithm!(
     weights = MSRK6_B,
     error_weights = None,
     order = 6,
-    fsal = false
+    fsal = true
 );
 algorithm!(
     Ralston4,
