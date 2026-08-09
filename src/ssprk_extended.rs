@@ -1,4 +1,5 @@
-//! Fixed-step strong-stability-preserving Runge--Kutta methods.
+//! Strong-stability-preserving Runge--Kutta methods, including fixed-step
+//! families and the adaptive SSPRK432 embedded pair.
 //!
 //! The coefficients below are algebraically equivalent Butcher forms of the
 //! Shu--Osher implementations in OrdinaryDiffEqSSPRK.  Keeping them in the
