@@ -1,6 +1,7 @@
 use differential_equations::{
     Alshina2, Alshina3, Alshina6, Anas5, AutoDp5, Bs3, Dp5, Euler, Frk65, Heun, Midpoint, Msrk5,
-    Msrk6, OdeProblem, Psrk3p5q4, Psrk3p6q5, Ralston, Ralston4, Rk4, Rkm, Rko65, Rodas5P, SaveMode,
+    Msrk6, OdeProblem, Psrk3p5q4, Psrk3p6q5, Psrk4p7q6, Ralston, Ralston4, Rk4, Rkm, Rko65,
+    Rodas5P, SaveMode,
     SolveOptions, solve,
 };
 
@@ -74,6 +75,9 @@ fn main() {
 
     let psrk3p6q5 = solve(&problem(), Psrk3p6q5, &fixed_options(0.01)).unwrap();
     println!("psrk3p6q5,{:.17e}", psrk3p6q5.last_state()[0]);
+
+    let psrk4p7q6 = solve(&problem(), Psrk4p7q6, &fixed_options(0.01)).unwrap();
+    println!("psrk4p7q6,{:.17e}", psrk4p7q6.last_state()[0]);
 
     let midpoint = solve(&problem(), Midpoint, &adaptive_options()).unwrap();
     println!("midpoint,{:.17e}", midpoint.last_state()[0]);

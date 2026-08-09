@@ -634,6 +634,50 @@ const PSRK3P6Q5_C: &[f64] = &[
     1.0,
 ];
 
+// Six-stage, fourth-order pseudo-symplectic Runge--Kutta method. Coefficients
+// are copied from OrdinaryDiffEqLowOrderRK's `PSRK4p7q6ConstantCache` at the
+// pinned upstream revision.
+const PSRK4P7Q6_A2: &[f64] = &[0.23593376536652];
+const PSRK4P7Q6_A3: &[f64] = &[0.34750735658424, -0.13561935398346];
+const PSRK4P7Q6_A4: &[f64] = &[-0.20592852403227, 1.89179076622108, -0.89775024478958];
+const PSRK4P7Q6_A5: &[f64] = &[
+    -0.09435493281455,
+    1.75617141223762,
+    -0.96707850476948,
+    0.06932825997989,
+];
+const PSRK4P7Q6_A6: &[f64] = &[
+    0.14157883255197,
+    -1.17039696277833,
+    1.30579112376331,
+    -2.20354136855289,
+    2.92656837501595,
+];
+const PSRK4P7Q6_A: &[&[f64]] = &[
+    EMPTY,
+    PSRK4P7Q6_A2,
+    PSRK4P7Q6_A3,
+    PSRK4P7Q6_A4,
+    PSRK4P7Q6_A5,
+    PSRK4P7Q6_A6,
+];
+const PSRK4P7Q6_B: &[f64] = &[
+    0.07078941627598,
+    0.87808570611881,
+    -0.44887512239479,
+    -0.44887512239479,
+    0.87808570611881,
+    0.07078941627598,
+];
+const PSRK4P7Q6_C: &[f64] = &[
+    0.0,
+    0.23593376536652,
+    0.21188800260078,
+    0.78811199739923,
+    0.76406623463348,
+    1.0,
+];
+
 macro_rules! algorithm {
     (
         $name:ident,
@@ -932,6 +976,16 @@ algorithm!(
     weights = PSRK3P6Q5_B,
     error_weights = None,
     order = 3,
+    fsal = false
+);
+algorithm!(
+    Psrk4p7q6,
+    "The fixed-step six-stage, fourth-order pseudo-symplectic Runge–Kutta method.",
+    nodes = PSRK4P7Q6_C,
+    coefficients = PSRK4P7Q6_A,
+    weights = PSRK4P7Q6_B,
+    error_weights = None,
+    order = 4,
     fsal = false
 );
 
