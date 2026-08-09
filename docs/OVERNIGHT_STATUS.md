@@ -57,7 +57,7 @@ Pinned upstream revision:
 | `/root/low_storage_3s53` | Parsani Ketcheson Deconinck 3S53 | `codex/low-storage-3s53`; `differential-equations-rs-worktrees/low-storage-3s53` | Rust gates pass; Julia blocked by missing executable; merged as `6e905c4` | 2026-08-09T15:40:00Z |
 | `/root/low_order_msrk5` | MSRK5 fixed-step RK | `codex/low-order-msrk5`; `differential-equations-rs-worktrees/low-order-msrk5` | Rust gates pass; Julia blocked by missing executable; merged as `1b7499b` | 2026-08-09T15:41:00Z |
 | `/root/low_storage_3s94` | Parsani Ketcheson Deconinck 3S94 | `codex/low-storage-3s94`; `differential-equations-rs-worktrees/low-storage-3s94` | Rust gates pass; Julia blocked by missing executable; merged as `2fb5dc5` | 2026-08-09T15:47:00Z |
-| `/root/low_order_msrk6` | MSRK6 fixed-step RK | `codex/low-order-msrk6`; `differential-equations-rs-worktrees/low-order-msrk6` | Rust gates pass; Julia blocked by missing executable; merged as `5ebff1b` | 2026-08-09T15:47:00Z |
+| `/root/low_order_msrk6` | MSRK6 fixed-step RK | `codex/low-order-msrk6`; `differential-equations-rs-worktrees/low-order-msrk6` | Rust gates pass; Julia blocked by missing executable; final FSAL correction merged as `3cfdf35` | 2026-08-09T15:47:00Z |
 
 ## Completed waves
 
@@ -107,7 +107,7 @@ Pinned upstream revision:
 | Parsani 3S53 family | Native fixed low-storage 3S recurrence with pinned five-stage coefficients | 95 library tests plus recurrence/allocation integrations | Julia unavailable on worker/coordinator; pinned/full rerun blocked by `JULIA-PATH-20260809` | Rust-reviewed and merged as `6e905c4`; Julia retry required |
 | MSRK5 family | Exact pinned nine-stage fixed FSAL tableau | 95 library tests plus MSRK5 integrations | Julia unavailable on worker/coordinator; pinned/full rerun blocked by `JULIA-PATH-20260809` | Rust-reviewed and merged as `1b7499b`; Julia retry required |
 | Parsani 3S94 family | Native fixed low-storage 3S recurrence with pinned nine-stage coefficients | 95 library tests plus recurrence/allocation integrations | Julia unavailable on worker/coordinator; pinned/full rerun blocked by `JULIA-PATH-20260809` | Rust-reviewed and merged as `2fb5dc5`; Julia retry required |
-| MSRK6 family | Exact pinned eight-stage fixed sixth-order tableau | 95 library tests plus MSRK6 integrations | Julia unavailable on worker/coordinator; pinned/full rerun blocked by `JULIA-PATH-20260809` | Rust-reviewed and merged as `5ebff1b`; Julia retry required |
+| MSRK6 family | Exact pinned eight-stage fixed sixth-order tableau plus endpoint FSAL row/RHS-count regression | 95 library tests plus MSRK6 integrations | Julia unavailable on worker/coordinator; pinned/full rerun blocked by `JULIA-PATH-20260809` | Rust-reviewed and merged as `3cfdf35`; Julia retry required |
 
 ## Validation snapshot
 
