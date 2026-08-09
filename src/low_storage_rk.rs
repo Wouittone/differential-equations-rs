@@ -495,6 +495,121 @@ method_3s!(
 );
 
 method_3s!(
+    ParsaniKetchesonDeconinck3S173,
+    ParsaniKetchesonDeconinck3S173Coefficients,
+    "Seventeen-stage, third-order 3S low-storage method optimized for spectral-difference wave propagation.",
+    &[
+        7.9377023961829174e-1,
+        -8.3475116244241754e-2,
+        -1.6706337980062214e-2,
+        3.6410691500331427e-1,
+        6.917825518154278e-1,
+        1.4887115004739182e0,
+        4.5336125560871188e-1,
+        -1.2705776046458739e-1,
+        8.3749845457747696e-1,
+        1.5709218393361746e-1,
+        -5.7768207086288348e-1,
+        -5.7340394122375393e-1,
+        -1.205073484651447e0,
+        -2.8100719513641002e0,
+        1.6142798657609492e-1,
+        -2.5801264756641613e0,
+    ],
+    &[
+        3.285786194081125e-1,
+        1.1276843361180819e0,
+        1.3149447395238016e0,
+        5.2062891534209055e-1,
+        8.8127462325164985e-1,
+        4.2020606445856712e-1,
+        7.6532635739246124e-2,
+        4.4386734924685722e-1,
+        6.6503093955199682e-2,
+        1.5850209163184039e0,
+        1.1521721573462576e0,
+        1.1172750819374575e0,
+        7.7630223917584007e-1,
+        1.0046657060652295e0,
+        -1.9795868964959054e-1,
+        1.3350583594705518e0,
+    ],
+    &[
+        0.0e0,
+        0.0e0,
+        8.4034574578399479e-1,
+        8.5047738439705145e-1,
+        1.4082448501410852e-1,
+        -3.2678802469519369e-1,
+        5.3716357620635535e-1,
+        9.0228922115199051e-1,
+        1.5960226946983552e-1,
+        1.1038153140686748e0,
+        1.0843516423068365e-1,
+        4.6212710442787724e-1,
+        -3.3448312125108398e-1,
+        1.1153826567096696e0,
+        1.5503248734613539e0,
+        -1.2200245424704212e0,
+    ],
+    &[
+        -3.7235794357769936e-1,
+        3.3315440189685536e-1,
+        -8.266763033840252e-1,
+        -5.4628377681035534e-1,
+        6.0210777634642887e-1,
+        -5.7528717894031067e-1,
+        5.0914861529202782e-1,
+        3.8258114767897194e-1,
+        -4.627906322118529e-1,
+        -2.0820434288562648e-1,
+        1.4398056081552713e0,
+        -2.8056600927348752e-1,
+        2.2767189929551406e0,
+        -5.8917530100546356e-1,
+        9.1328651048418164e-1,
+        0.0e0,
+    ],
+    4.9565403010221741e-2,
+    &[
+        9.7408718698159397e-2,
+        -1.762073797680187e-1,
+        1.485206917546025e-1,
+        -3.3127657103714951e-2,
+        4.8294609330498492e-2,
+        4.9622612199980112e-2,
+        8.7340766269850378e-1,
+        -2.869280439908537e-1,
+        1.2679897532256112e0,
+        -1.0217436118953449e-2,
+        8.466557003259835e-2,
+        2.8253854742588246e-2,
+        -9.2936733010804407e-2,
+        -8.4798124766803512e-2,
+        -1.6923145636158564e-2,
+        -4.7305106233879957e-2,
+    ],
+    &[
+        4.9565403010221741e-2,
+        1.3068799001687578e-1,
+        -1.5883063460310493e-1,
+        3.5681144740196935e-1,
+        7.6727123317642698e-2,
+        1.0812579255374613e-1,
+        1.8767228084815801e-1,
+        9.6162976936182631e-1,
+        -2.2760719867560897e-1,
+        1.1115681606027146e0,
+        6.126684542767652e-1,
+        1.0729473245077408e0,
+        3.7824186468104548e-1,
+        7.904189134764672e-1,
+        -1.0406955693161675e0,
+        -2.4607146824557105e-1,
+    ]
+);
+
+method_3s!(
     ParsaniKetchesonDeconinck3S94,
     ParsaniKetchesonDeconinck3S94Coefficients,
     "Nine-stage, fourth-order 3S low-storage method optimized for spectral-difference wave propagation.",
@@ -938,7 +1053,7 @@ mod tests {
         CarpenterKennedy2N54, Dglddrk73C, Dglddrk84C, Dglddrk84F, Ndblsrk124, Ndblsrk134,
         Ndblsrk144, Ork256, ParsaniKetchesonDeconinck3S32, ParsaniKetchesonDeconinck3S53,
         ParsaniKetchesonDeconinck3S82, ParsaniKetchesonDeconinck3S94,
-        ParsaniKetchesonDeconinck3S105, Shlddrk64, integrate,
+        ParsaniKetchesonDeconinck3S105, ParsaniKetchesonDeconinck3S173, Shlddrk64, integrate,
     };
 
     struct Malformed3S;
@@ -992,6 +1107,7 @@ mod tests {
         assert!(order(Ork256) > 1.9);
         assert!(order(ParsaniKetchesonDeconinck3S32) > 1.8);
         assert!(order(ParsaniKetchesonDeconinck3S53) > 2.8);
+        assert!(order(ParsaniKetchesonDeconinck3S173) > 2.8);
         assert!(order(ParsaniKetchesonDeconinck3S105) > 4.7);
         assert!(order(ParsaniKetchesonDeconinck3S82) > 1.8);
         assert!(order(ParsaniKetchesonDeconinck3S94) > 3.75);
@@ -1034,6 +1150,10 @@ mod tests {
         assert_eq!(solution.times(), &[1.0, 0.5, 0.0]);
         assert!((solution.last_state()[0] - 1.0).abs() < 2.0e-5);
 
+        let solution = solve(&backward, ParsaniKetchesonDeconinck3S173, &backward_options).unwrap();
+        assert_eq!(solution.times(), &[1.0, 0.5, 0.0]);
+        assert!((solution.last_state()[0] - 1.0).abs() < 2.0e-5);
+
         let solution = solve(&backward, ParsaniKetchesonDeconinck3S105, &backward_options).unwrap();
         assert_eq!(solution.times(), &[1.0, 0.5, 0.0]);
         assert!((solution.last_state()[0] - 1.0).abs() < 2.0e-8);
@@ -1072,6 +1192,10 @@ mod tests {
         assert_eq!(solution.stats().callback_invocations, 1);
 
         let solution = solve(&problem, ParsaniKetchesonDeconinck3S53, &options(0.25)).unwrap();
+        assert!((solution.times().last().unwrap() - 0.25).abs() < 1.0e-14);
+        assert_eq!(solution.stats().callback_invocations, 1);
+
+        let solution = solve(&problem, ParsaniKetchesonDeconinck3S173, &options(0.25)).unwrap();
         assert!((solution.times().last().unwrap() - 0.25).abs() < 1.0e-14);
         assert_eq!(solution.stats().callback_invocations, 1);
 

@@ -49,7 +49,7 @@ pub use low_storage_rk::{
     CarpenterKennedy2N54, Dglddrk73C, Dglddrk84C, Dglddrk84F, Ndblsrk124, Ndblsrk134, Ndblsrk144,
     Ork256, ParsaniKetchesonDeconinck3S32, ParsaniKetchesonDeconinck3S53,
     ParsaniKetchesonDeconinck3S82, ParsaniKetchesonDeconinck3S94, ParsaniKetchesonDeconinck3S105,
-    Shlddrk64,
+    ParsaniKetchesonDeconinck3S173, Shlddrk64,
 };
 pub use mebdf2::Mebdf2;
 pub use problem::{MassMatrixOdeProblem, OdeProblem, SplitOdeProblem};
