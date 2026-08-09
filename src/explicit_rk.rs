@@ -117,6 +117,75 @@ const RKM_C: &[f64] = &[
     0.853_923_000_035_347,
 ];
 
+// Misha Stepanov's eight-stage fifth-order method with a final FSAL stage.
+// Coefficients are copied from OrdinaryDiffEqLowOrderRK's
+// `MSRK5ConstantCache` at the pinned upstream revision.
+const MSRK5_A2: &[f64] = &[4.0 / 45.0];
+const MSRK5_A3: &[f64] = &[1.0 / 30.0, 1.0 / 10.0];
+const MSRK5_A4: &[f64] = &[1.0 / 20.0, 0.0, 3.0 / 20.0];
+const MSRK5_A5: &[f64] = &[1.0 / 2.0, 0.0, -15.0 / 8.0, 15.0 / 8.0];
+const MSRK5_A6: &[f64] = &[-11.0 / 135.0, 0.0, 23.0 / 45.0, -2.0 / 27.0, 8.0 / 45.0];
+const MSRK5_A7: &[f64] = &[
+    5.0 / 108.0,
+    0.0,
+    35.0 / 72.0,
+    -59.0 / 216.0,
+    -25.0 / 27.0,
+    3.0 / 2.0,
+];
+const MSRK5_A8: &[f64] = &[
+    31.0 / 128.0,
+    0.0,
+    -7563.0 / 4480.0,
+    233.0 / 112.0,
+    3461.0 / 2240.0,
+    -765.0 / 448.0,
+    153.0 / 320.0,
+];
+const MSRK5_B: &[f64] = &[
+    29.0 / 456.0,
+    0.0,
+    0.0,
+    11.0 / 38.0,
+    2.0 / 27.0,
+    11.0 / 40.0,
+    4.0 / 19.0,
+    224.0 / 2565.0,
+    0.0,
+];
+const MSRK5_FSAL_ROW: &[f64] = &[
+    29.0 / 456.0,
+    0.0,
+    0.0,
+    11.0 / 38.0,
+    2.0 / 27.0,
+    11.0 / 40.0,
+    4.0 / 19.0,
+    224.0 / 2565.0,
+];
+const MSRK5_A: &[&[f64]] = &[
+    EMPTY,
+    MSRK5_A2,
+    MSRK5_A3,
+    MSRK5_A4,
+    MSRK5_A5,
+    MSRK5_A6,
+    MSRK5_A7,
+    MSRK5_A8,
+    MSRK5_FSAL_ROW,
+];
+const MSRK5_C: &[f64] = &[
+    0.0,
+    4.0 / 45.0,
+    2.0 / 15.0,
+    1.0 / 5.0,
+    1.0 / 2.0,
+    8.0 / 15.0,
+    5.0 / 6.0,
+    19.0 / 20.0,
+    1.0,
+];
+
 const RALSTON4_A2: &[f64] = &[0.4];
 const RALSTON4_A3: &[f64] = &[0.296_977_609_247_753_57, 0.158_759_644_971_035_84];
 const RALSTON4_A4: &[f64] = &[
@@ -522,6 +591,16 @@ algorithm!(
     error_weights = None,
     order = 4,
     fsal = false
+);
+algorithm!(
+    Msrk5,
+    "The fixed-step eight-stage, fifth-order Misha Stepanov Runge–Kutta method.",
+    nodes = MSRK5_C,
+    coefficients = MSRK5_A,
+    weights = MSRK5_B,
+    error_weights = None,
+    order = 5,
+    fsal = true
 );
 algorithm!(
     Ralston4,
