@@ -494,6 +494,73 @@ method_3s!(
     ]
 );
 
+method_3s!(
+    ParsaniKetchesonDeconinck3S94,
+    ParsaniKetchesonDeconinck3S94Coefficients,
+    "Nine-stage, fourth-order 3S low-storage method optimized for spectral-difference wave propagation.",
+    &[
+        -4.6556413837561301e+0,
+        -7.7202649689034453e-1,
+        -4.0244202720632174e+0,
+        -2.1296873883702272e-2,
+        -2.4350219407769953e+0,
+        1.9856336960249132e-2,
+        -2.8107894116913812e-1,
+        1.68943543736779e-1,
+    ],
+    &[
+        2.4992627683300688e+0,
+        5.8668202764174726e-1,
+        1.2051419816240785e+0,
+        3.4747937498564541e-1,
+        1.3213458736302766e+0,
+        3.1196363453264964e-1,
+        4.3514189245414447e-1,
+        2.3596980658341213e-1,
+    ],
+    &[
+        0.0e+0,
+        0.0e+0,
+        7.6209857891449362e-1,
+        -1.981181783296552e-1,
+        -6.2289587091629484e-1,
+        -3.7522475499063573e-1,
+        -3.3554373281046146e-1,
+        -4.5609629702116454e-2,
+    ],
+    &[
+        1.2629238731608268e+0,
+        7.5749675232391733e-1,
+        5.1635907196195419e-1,
+        -2.7463346616574083e-2,
+        -4.3826743572318672e-1,
+        1.2735870231839268e+0,
+        -6.294738221773023e-1,
+        0.0e+0,
+    ],
+    2.8363432481011769e-1,
+    &[
+        9.7364980747486463e-1,
+        3.3823592364196498e-1,
+        -3.5849518935750763e-1,
+        -4.1139587569859462e-3,
+        1.4279689871485013e+0,
+        1.8084680519536503e-2,
+        1.6057708856060501e-1,
+        2.9522267863254809e-1,
+    ],
+    &[
+        2.8363432481011769e-1,
+        5.4840742446661772e-1,
+        3.6872298094969475e-1,
+        -6.8061183026103156e-1,
+        3.5185265855105619e-1,
+        1.6659419385562171e+0,
+        9.7152778807463247e-1,
+        9.0515694340066954e-1,
+    ]
+);
+
 fn integrate<F, P, T>(
     problem: &OdeProblem<F, P>,
     options: &SolveOptions,
@@ -797,7 +864,7 @@ mod tests {
     use super::{
         CarpenterKennedy2N54, Dglddrk73C, Dglddrk84C, Dglddrk84F, Ndblsrk124, Ndblsrk134,
         Ndblsrk144, Ork256, ParsaniKetchesonDeconinck3S32, ParsaniKetchesonDeconinck3S53,
-        ParsaniKetchesonDeconinck3S82, Shlddrk64, integrate,
+        ParsaniKetchesonDeconinck3S82, ParsaniKetchesonDeconinck3S94, Shlddrk64, integrate,
     };
 
     struct Malformed3S;
@@ -852,6 +919,7 @@ mod tests {
         assert!(order(ParsaniKetchesonDeconinck3S32) > 1.8);
         assert!(order(ParsaniKetchesonDeconinck3S53) > 2.8);
         assert!(order(ParsaniKetchesonDeconinck3S82) > 1.8);
+        assert!(order(ParsaniKetchesonDeconinck3S94) > 3.75);
         assert!(order(Dglddrk73C) > 2.9);
         for (name, observed) in [
             ("CarpenterKennedy2N54", order(CarpenterKennedy2N54)),
@@ -895,6 +963,10 @@ mod tests {
         assert_eq!(solution.times(), &[1.0, 0.5, 0.0]);
         assert!((solution.last_state()[0] - 1.0).abs() < 2.0e-3);
 
+        let solution = solve(&backward, ParsaniKetchesonDeconinck3S94, &backward_options).unwrap();
+        assert_eq!(solution.times(), &[1.0, 0.5, 0.0]);
+        assert!((solution.last_state()[0] - 1.0).abs() < 2.0e-5);
+
         let terminating = problem((0.0, 1.0), 1.0)
             .with_continuous_callback(|_, _, time| time - 0.5, |_, _, _| CallbackAction::Terminate);
         let solution = solve(&terminating, Dglddrk73C, &options(0.1)).unwrap();
@@ -925,6 +997,10 @@ mod tests {
         assert_eq!(solution.stats().callback_invocations, 1);
 
         let solution = solve(&problem, ParsaniKetchesonDeconinck3S82, &options(0.25)).unwrap();
+        assert!((solution.times().last().unwrap() - 0.25).abs() < 1.0e-14);
+        assert_eq!(solution.stats().callback_invocations, 1);
+
+        let solution = solve(&problem, ParsaniKetchesonDeconinck3S94, &options(0.25)).unwrap();
         assert!((solution.times().last().unwrap() - 0.25).abs() < 1.0e-14);
         assert_eq!(solution.stats().callback_invocations, 1);
     }

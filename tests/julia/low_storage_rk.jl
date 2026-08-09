@@ -10,7 +10,8 @@ using OrdinaryDiffEqLowStorageRK:
     SHLDDRK64,
     ParsaniKetchesonDeconinck3S32,
     ParsaniKetchesonDeconinck3S53,
-    ParsaniKetchesonDeconinck3S82
+    ParsaniKetchesonDeconinck3S82,
+    ParsaniKetchesonDeconinck3S94
 
 function rust_low_storage_endpoints()
     manifest = joinpath(REPOSITORY_ROOT, "Cargo.toml")
@@ -55,6 +56,8 @@ end
             low_storage_reference(ParsaniKetchesonDeconinck3S53()),
         "parsani_ketcheson_deconinck_3s82" =>
             low_storage_reference(ParsaniKetchesonDeconinck3S82()),
+        "parsani_ketcheson_deconinck_3s94" =>
+            low_storage_reference(ParsaniKetchesonDeconinck3S94()),
     )
 
     @test Set(keys(rust)) == Set(keys(julia))
