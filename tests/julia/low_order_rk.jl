@@ -1,5 +1,5 @@
 using OrdinaryDiffEqLowOrderRK:
-    Alshina2, Alshina3, Alshina6, Anas5, Euler, Midpoint, Heun, Ralston, Ralston4, RK4, RKM, RKO65, MSRK5, MSRK6, FRK65, PSRK3p5q4, BS3, DP5
+    Alshina2, Alshina3, Alshina6, Anas5, Euler, Midpoint, Heun, Ralston, Ralston4, RK4, RKM, RKO65, MSRK5, MSRK6, FRK65, PSRK3p5q4, PSRK3p6q5, BS3, DP5
 
 function rust_low_order_endpoints()
     manifest = joinpath(REPOSITORY_ROOT, "Cargo.toml")
@@ -52,6 +52,7 @@ end
         "msrk6" => exponential_reference(MSRK6(); adaptive = false, dt = 0.01),
         "frk65" => exponential_reference(FRK65(); adaptive = false, dt = 0.01),
         "psrk3p5q4" => exponential_reference(PSRK3p5q4(); adaptive = false, dt = 0.01),
+        "psrk3p6q5" => exponential_reference(PSRK3p6q5(); adaptive = false, dt = 0.01),
         "midpoint" => exponential_reference(Midpoint()),
         "heun" => exponential_reference(Heun()),
         "ralston" => exponential_reference(Ralston()),

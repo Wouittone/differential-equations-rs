@@ -1,6 +1,7 @@
 use differential_equations::{
     Alshina2, Alshina3, Alshina6, Anas5, Bs3, Dp5, Euler, Frk65, Heun, Midpoint, Msrk5, Msrk6,
-    OdeProblem, Psrk3p5q4, Ralston, Ralston4, Rk4, Rkm, Rko65, SaveMode, SolveOptions, solve,
+    OdeProblem, Psrk3p5q4, Psrk3p6q5, Ralston, Ralston4, Rk4, Rkm, Rko65, SaveMode, SolveOptions,
+    solve,
 };
 
 type TestRhs = fn(&mut [f64], &[f64], &(), f64);
@@ -70,6 +71,9 @@ fn main() {
 
     let psrk3p5q4 = solve(&problem(), Psrk3p5q4, &fixed_options(0.01)).unwrap();
     println!("psrk3p5q4,{:.17e}", psrk3p5q4.last_state()[0]);
+
+    let psrk3p6q5 = solve(&problem(), Psrk3p6q5, &fixed_options(0.01)).unwrap();
+    println!("psrk3p6q5,{:.17e}", psrk3p6q5.last_state()[0]);
 
     let midpoint = solve(&problem(), Midpoint, &adaptive_options()).unwrap();
     println!("midpoint,{:.17e}", midpoint.last_state()[0]);
