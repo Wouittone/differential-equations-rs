@@ -870,6 +870,139 @@ method_3s!(
     ]
 );
 
+method_3s!(
+    ParsaniKetchesonDeconinck3S205,
+    ParsaniKetchesonDeconinck3S205Coefficients,
+    "Twenty-stage, fifth-order 3S low-storage method optimized for spectral-difference wave propagation.",
+    &[
+        -1.168247970322938e0,
+        -2.5112155037089772e0,
+        -5.5259960154735988e-1,
+        2.924303350951174e-3,
+        -4.7948973385386493e0,
+        -5.3095533497183016e0,
+        -2.3624194456630736e0,
+        2.0068995756589547e-1,
+        -1.498580866159771e0,
+        4.8941228502377687e-1,
+        -1.0387512755259576e-1,
+        -1.3287664273288191e-1,
+        7.5858678822837511e-1,
+        -4.3321586294096939e0,
+        4.8199700138402146e-1,
+        -7.0924756614960671e-3,
+        -8.8422252029506054e-1,
+        -8.9129367099545231e-1,
+        1.5297157134040762e0,
+    ],
+    &[
+        8.8952052154583572e-1,
+        8.8988129100385194e-1,
+        3.5701564494677057e-1,
+        2.4232462479216824e-1,
+        1.2727083024258155e0,
+        1.1126977210342681e0,
+        5.1360709645409097e-1,
+        1.1181089682044856e-1,
+        2.7881272382085232e-1,
+        4.9032886260666715e-2,
+        4.187105106589787e-2,
+        4.4602463796686219e-2,
+        1.489727125115475e-2,
+        2.6244269699436817e-1,
+        -4.7486056986590294e-3,
+        2.3219312682036197e-2,
+        6.2852588972458059e-2,
+        5.4473719351268962e-2,
+        2.4345446089014514e-2,
+    ],
+    &[
+        0.0e0,
+        0.0e0,
+        1.9595487007932735e-1,
+        -6.9871675039100595e-5,
+        1.059223116981005e-1,
+        1.0730426871909635e0,
+        8.9257826744389124e-1,
+        -1.4078912484894415e-1,
+        -2.6869890558434262e-1,
+        -6.5175753568318007e-2,
+        4.9177812903108553e-1,
+        4.6017684776493678e-1,
+        -6.4689512947008251e-3,
+        4.4034728024115377e-1,
+        6.1086885767527943e-1,
+        5.0546454457410162e-1,
+        5.4668509293072887e-1,
+        7.1414182420995431e-1,
+        -1.0558095282893749e0,
+    ],
+    &[
+        1.4375468781258596e0,
+        1.5081653637261594e0,
+        -1.4575347066062688e-1,
+        3.1495761082838158e-1,
+        3.5505919368536931e-1,
+        2.361638937456696e-1,
+        1.0267488547302055e-1,
+        3.5991243524519438e0,
+        1.5172890003890782e0,
+        1.8171662741779953e0,
+        2.8762263521436831e0,
+        4.6350154228218754e-1,
+        1.557312211072722e0,
+        2.0001066778080254e0,
+        9.1690694855534305e-1,
+        2.0474618401365854e0,
+        -3.2336329115436924e-1,
+        3.2899060754742177e-1,
+        0.0e0,
+    ],
+    1.7342385375780556e-1,
+    &[
+        2.8569004728564801e-1,
+        6.8727044379779589e-1,
+        1.2812121060977319e-1,
+        4.9137180740403122e-4,
+        4.7033584446956857e-2,
+        4.4539998128170821e-1,
+        1.225982488734372e0,
+        2.0616463985024421e-2,
+        1.5941162575324802e-1,
+        1.2953803678226099e0,
+        1.7287352967302603e-3,
+        1.1660483420536467e-1,
+        7.7997036621815521e-2,
+        3.2563250234418012e-1,
+        1.0611520488333197e0,
+        6.5891625628040993e-4,
+        8.3534647700054046e-2,
+        9.8972579458252483e-2,
+        4.301011614509704e-2,
+    ],
+    &[
+        1.7342385375780556e-1,
+        3.0484982420032158e-1,
+        5.5271395645729193e-1,
+        4.7079204549750037e-2,
+        1.5652540451324129e-1,
+        1.8602224049074517e-1,
+        2.8426620035751449e-1,
+        9.5094727548792268e-1,
+        6.804650107009601e-1,
+        5.9705366562360063e-1,
+        1.8970821645077285e0,
+        2.9742664004529606e-1,
+        6.081346370013494e-1,
+        7.3080004188477765e-1,
+        9.1656999044951792e-1,
+        1.430968755461453e0,
+        4.1043824968249148e-1,
+        8.4898255952298962e-1,
+        3.3543896258348421e-1,
+    ]
+);
+
 fn integrate<F, P, T>(
     problem: &OdeProblem<F, P>,
     options: &SolveOptions,
@@ -1175,7 +1308,7 @@ mod tests {
         Ndblsrk144, Ork256, ParsaniKetchesonDeconinck3S32, ParsaniKetchesonDeconinck3S53,
         ParsaniKetchesonDeconinck3S82, ParsaniKetchesonDeconinck3S94,
         ParsaniKetchesonDeconinck3S105, ParsaniKetchesonDeconinck3S173,
-        ParsaniKetchesonDeconinck3S184, Shlddrk64, integrate,
+        ParsaniKetchesonDeconinck3S184, ParsaniKetchesonDeconinck3S205, Shlddrk64, integrate,
     };
 
     struct Malformed3S;
@@ -1234,6 +1367,7 @@ mod tests {
         assert!(order(ParsaniKetchesonDeconinck3S82) > 1.8);
         assert!(order(ParsaniKetchesonDeconinck3S94) > 3.75);
         assert!(order(ParsaniKetchesonDeconinck3S184) > 3.75);
+        assert!(order(ParsaniKetchesonDeconinck3S205) > 4.7);
         assert!(order(Dglddrk73C) > 2.9);
         for (name, observed) in [
             ("CarpenterKennedy2N54", order(CarpenterKennedy2N54)),
@@ -1293,6 +1427,10 @@ mod tests {
         assert_eq!(solution.times(), &[1.0, 0.5, 0.0]);
         assert!((solution.last_state()[0] - 1.0).abs() < 2.0e-5);
 
+        let solution = solve(&backward, ParsaniKetchesonDeconinck3S205, &backward_options).unwrap();
+        assert_eq!(solution.times(), &[1.0, 0.5, 0.0]);
+        assert!((solution.last_state()[0] - 1.0).abs() < 2.0e-8);
+
         let terminating = problem((0.0, 1.0), 1.0)
             .with_continuous_callback(|_, _, time| time - 0.5, |_, _, _| CallbackAction::Terminate);
         let solution = solve(&terminating, Dglddrk73C, &options(0.1)).unwrap();
@@ -1335,6 +1473,10 @@ mod tests {
         assert_eq!(solution.stats().callback_invocations, 1);
 
         let solution = solve(&problem, ParsaniKetchesonDeconinck3S184, &options(0.25)).unwrap();
+        assert!((solution.times().last().unwrap() - 0.25).abs() < 1.0e-14);
+        assert_eq!(solution.stats().callback_invocations, 1);
+
+        let solution = solve(&problem, ParsaniKetchesonDeconinck3S205, &options(0.25)).unwrap();
         assert!((solution.times().last().unwrap() - 0.25).abs() < 1.0e-14);
         assert_eq!(solution.stats().callback_invocations, 1);
 
