@@ -564,6 +564,16 @@ const SSPRK43_B: &[f64] = &[1.0 / 6.0, 1.0 / 6.0, 1.0 / 6.0, 0.5];
 const SSPRK43_E: &[f64] = &[-1.0 / 12.0, -1.0 / 12.0, -1.0 / 12.0, 0.25];
 const SSPRK43_C: &[f64] = &[0.0, 0.5, 1.0, 0.5];
 
+// Four-stage, third-order pseudo-symplectic Runge–Kutta method. These
+// coefficients are copied from OrdinaryDiffEqLowOrderRK's
+// `PSRK3p5q4ConstantCache` at the pinned upstream revision.
+const PSRK3P5Q4_A2: &[f64] = &[3.0 / 8.0];
+const PSRK3P5Q4_A3: &[f64] = &[11.0 / 12.0, -2.0 / 3.0];
+const PSRK3P5Q4_A4: &[f64] = &[-1.0 / 12.0, 11.0 / 6.0, -3.0 / 4.0];
+const PSRK3P5Q4_A: &[&[f64]] = &[EMPTY, PSRK3P5Q4_A2, PSRK3P5Q4_A3, PSRK3P5Q4_A4];
+const PSRK3P5Q4_B: &[f64] = &[1.0 / 9.0, 8.0 / 9.0, -2.0 / 9.0, 2.0 / 9.0];
+const PSRK3P5Q4_C: &[f64] = &[0.0, 3.0 / 8.0, 1.0 / 4.0, 1.0];
+
 macro_rules! algorithm {
     (
         $name:ident,
@@ -831,6 +841,16 @@ algorithm!(
     coefficients = SSPRK43_A,
     weights = SSPRK43_B,
     error_weights = Some(SSPRK43_E),
+    order = 3,
+    fsal = false
+);
+algorithm!(
+    Psrk3p5q4,
+    "The fixed-step four-stage, third-order pseudo-symplectic Runge–Kutta method.",
+    nodes = PSRK3P5Q4_C,
+    coefficients = PSRK3P5Q4_A,
+    weights = PSRK3P5Q4_B,
+    error_weights = None,
     order = 3,
     fsal = false
 );
