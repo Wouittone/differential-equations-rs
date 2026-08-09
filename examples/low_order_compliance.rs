@@ -1,5 +1,5 @@
 use differential_equations::{
-    Alshina2, Alshina3, Alshina6, Anas5, Bs3, Dp5, Euler, Heun, Midpoint, Msrk5, OdeProblem,
+    Alshina2, Alshina3, Alshina6, Anas5, Bs3, Dp5, Euler, Heun, Midpoint, Msrk5, Msrk6, OdeProblem,
     Ralston, Ralston4, Rk4, Rkm, SaveMode, SolveOptions, solve,
 };
 
@@ -58,6 +58,9 @@ fn main() {
 
     let msrk5 = solve(&problem(), Msrk5, &fixed_options(0.01)).unwrap();
     println!("msrk5,{:.17e}", msrk5.last_state()[0]);
+
+    let msrk6 = solve(&problem(), Msrk6, &fixed_options(0.01)).unwrap();
+    println!("msrk6,{:.17e}", msrk6.last_state()[0]);
 
     let midpoint = solve(&problem(), Midpoint, &adaptive_options()).unwrap();
     println!("midpoint,{:.17e}", midpoint.last_state()[0]);

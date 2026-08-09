@@ -186,6 +186,56 @@ const MSRK5_C: &[f64] = &[
     1.0,
 ];
 
+// Misha Stepanov's eight-stage sixth-order fixed-step method. The tableau is
+// copied from OrdinaryDiffEqLowOrderRK's `MSRK6ConstantCache` at the pinned
+// upstream revision. Unlike MSRK5, MSRK6 is not FSAL in the upstream
+// algorithm, so the final stage is the eighth derivative used in the update.
+const MSRK6_A2: &[f64] = &[1.0 / 14.0];
+const MSRK6_A3: &[f64] = &[0.0, 1.0 / 7.0];
+const MSRK6_A4: &[f64] = &[3.0 / 56.0, 0.0, 9.0 / 56.0];
+const MSRK6_A5: &[f64] = &[29.0 / 72.0, 0.0, -35.0 / 24.0, 14.0 / 9.0];
+const MSRK6_A6: &[f64] = &[-17.0 / 56.0, 0.0, 93.0 / 56.0, -8.0 / 7.0, 3.0 / 7.0];
+const MSRK6_A7: &[f64] = &[
+    199.0 / 1372.0,
+    0.0,
+    -195.0 / 196.0,
+    1259.0 / 784.0,
+    -3855.0 / 5488.0,
+    45.0 / 56.0,
+];
+const MSRK6_A8: &[f64] = &[
+    4903.0 / 25596.0,
+    0.0,
+    4487.0 / 2844.0,
+    -255101.0 / 102384.0,
+    33847.0 / 11376.0,
+    -94325.0 / 51192.0,
+    3773.0 / 6399.0,
+];
+const MSRK6_A: &[&[f64]] = &[
+    EMPTY, MSRK6_A2, MSRK6_A3, MSRK6_A4, MSRK6_A5, MSRK6_A6, MSRK6_A7, MSRK6_A8,
+];
+const MSRK6_B: &[f64] = &[
+    16.0 / 243.0,
+    0.0,
+    0.0,
+    16807.0 / 53460.0,
+    53.0 / 300.0,
+    2401.0 / 12150.0,
+    2401.0 / 12150.0,
+    79.0 / 1650.0,
+];
+const MSRK6_C: &[f64] = &[
+    0.0,
+    1.0 / 14.0,
+    1.0 / 7.0,
+    3.0 / 14.0,
+    1.0 / 2.0,
+    9.0 / 14.0,
+    6.0 / 7.0,
+    1.0,
+];
+
 const RALSTON4_A2: &[f64] = &[0.4];
 const RALSTON4_A3: &[f64] = &[0.296_977_609_247_753_57, 0.158_759_644_971_035_84];
 const RALSTON4_A4: &[f64] = &[
@@ -601,6 +651,16 @@ algorithm!(
     error_weights = None,
     order = 5,
     fsal = true
+);
+algorithm!(
+    Msrk6,
+    "The fixed-step eight-stage, sixth-order Misha Stepanov Runge–Kutta method.",
+    nodes = MSRK6_C,
+    coefficients = MSRK6_A,
+    weights = MSRK6_B,
+    error_weights = None,
+    order = 6,
+    fsal = false
 );
 algorithm!(
     Ralston4,
