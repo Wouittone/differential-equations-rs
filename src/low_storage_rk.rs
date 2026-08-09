@@ -561,6 +561,79 @@ method_3s!(
     ]
 );
 
+method_3s!(
+    ParsaniKetchesonDeconinck3S105,
+    ParsaniKetchesonDeconinck3S105Coefficients,
+    "Ten-stage, fifth-order 3S low-storage method optimized for spectral-difference wave propagation.",
+    &[
+        4.0436600785287713e-1,
+        -8.5034274641295027e-1,
+        -6.9508941671218478e0,
+        9.2387652252320684e-1,
+        -2.5631780399589106e0,
+        2.5457448699988827e-1,
+        3.1258317336761454e-1,
+        -7.0071148003175443e-1,
+        4.8396209710057070e-1,
+    ],
+    &[
+        6.8714670697294733e-1,
+        1.0930247604585732e0,
+        3.2259753823377983e0,
+        1.0411537008416110e0,
+        1.2928214888638039e0,
+        7.3914627692888835e-1,
+        1.2391292570651462e-1,
+        1.8427534793568445e-1,
+        5.7127889427161162e-2,
+    ],
+    &[
+        0.0e0,
+        0.0e0,
+        -2.3934051593398129e0,
+        -1.9028544220991284e0,
+        -2.8200422105835639e0,
+        -1.8326984641282289e0,
+        -2.1990945108072310e-1,
+        -4.0824306603783045e-1,
+        -1.3776697911236280e-1,
+    ],
+    &[
+        -1.3317784091400336e-1,
+        8.2604227852898304e-1,
+        1.5137004305165804e0,
+        -1.3058100631721905e0,
+        3.0366787893355149e0,
+        -1.4494582670831953e0,
+        3.8343138733685103e0,
+        4.1222939718018692e0,
+        0.0e0,
+    ],
+    2.5978835757039448e-1,
+    &[
+        1.7770088002098183e-2,
+        2.4816366373161344e-1,
+        7.9417368275785671e-1,
+        3.8853912968701337e-1,
+        1.4550516642704694e-1,
+        1.5875173794655811e-1,
+        1.6506056315937651e-1,
+        2.1180932999328042e-1,
+        1.5593923403495016e-1,
+    ],
+    &[
+        2.5978835757039448e-1,
+        9.9045731158085557e-2,
+        2.1555118823045644e-1,
+        5.007950078415504e-1,
+        5.5922519148547800e-1,
+        5.4499869734044426e-1,
+        7.6152246625852738e-1,
+        8.4270620830633836e-1,
+        9.1522098071770008e-1,
+    ]
+);
+
 fn integrate<F, P, T>(
     problem: &OdeProblem<F, P>,
     options: &SolveOptions,
@@ -864,7 +937,8 @@ mod tests {
     use super::{
         CarpenterKennedy2N54, Dglddrk73C, Dglddrk84C, Dglddrk84F, Ndblsrk124, Ndblsrk134,
         Ndblsrk144, Ork256, ParsaniKetchesonDeconinck3S32, ParsaniKetchesonDeconinck3S53,
-        ParsaniKetchesonDeconinck3S82, ParsaniKetchesonDeconinck3S94, Shlddrk64, integrate,
+        ParsaniKetchesonDeconinck3S82, ParsaniKetchesonDeconinck3S94,
+        ParsaniKetchesonDeconinck3S105, Shlddrk64, integrate,
     };
 
     struct Malformed3S;
@@ -918,6 +992,7 @@ mod tests {
         assert!(order(Ork256) > 1.9);
         assert!(order(ParsaniKetchesonDeconinck3S32) > 1.8);
         assert!(order(ParsaniKetchesonDeconinck3S53) > 2.8);
+        assert!(order(ParsaniKetchesonDeconinck3S105) > 4.7);
         assert!(order(ParsaniKetchesonDeconinck3S82) > 1.8);
         assert!(order(ParsaniKetchesonDeconinck3S94) > 3.75);
         assert!(order(Dglddrk73C) > 2.9);
@@ -958,6 +1033,10 @@ mod tests {
         let solution = solve(&backward, ParsaniKetchesonDeconinck3S53, &backward_options).unwrap();
         assert_eq!(solution.times(), &[1.0, 0.5, 0.0]);
         assert!((solution.last_state()[0] - 1.0).abs() < 2.0e-5);
+
+        let solution = solve(&backward, ParsaniKetchesonDeconinck3S105, &backward_options).unwrap();
+        assert_eq!(solution.times(), &[1.0, 0.5, 0.0]);
+        assert!((solution.last_state()[0] - 1.0).abs() < 2.0e-8);
 
         let solution = solve(&backward, ParsaniKetchesonDeconinck3S82, &backward_options).unwrap();
         assert_eq!(solution.times(), &[1.0, 0.5, 0.0]);
@@ -1001,6 +1080,10 @@ mod tests {
         assert_eq!(solution.stats().callback_invocations, 1);
 
         let solution = solve(&problem, ParsaniKetchesonDeconinck3S94, &options(0.25)).unwrap();
+        assert!((solution.times().last().unwrap() - 0.25).abs() < 1.0e-14);
+        assert_eq!(solution.stats().callback_invocations, 1);
+
+        let solution = solve(&problem, ParsaniKetchesonDeconinck3S105, &options(0.25)).unwrap();
         assert!((solution.times().last().unwrap() - 0.25).abs() < 1.0e-14);
         assert_eq!(solution.stats().callback_invocations, 1);
     }
