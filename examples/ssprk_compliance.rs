@@ -1,5 +1,5 @@
 use differential_equations::{
-    OdeProblem, SaveMode, SolveOptions, SspRk22, SspRk33, SspRk43, solve,
+    OdeProblem, Prrk22, SaveMode, SolveOptions, SspRk22, SspRk33, SspRk43, solve,
 };
 
 type TestRhs = fn(&mut [f64], &[f64], &(), f64);
@@ -32,6 +32,9 @@ fn adaptive_options() -> SolveOptions {
 fn main() {
     let rk22 = solve(&problem(), SspRk22, &fixed_options()).unwrap();
     println!("ssprk22,{:.17e}", rk22.last_state()[0]);
+
+    let prrk22 = solve(&problem(), Prrk22::default(), &fixed_options()).unwrap();
+    println!("prrk22,{:.17e}", prrk22.last_state()[0]);
 
     let rk33 = solve(&problem(), SspRk33, &fixed_options()).unwrap();
     println!("ssprk33,{:.17e}", rk33.last_state()[0]);
