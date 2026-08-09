@@ -4,7 +4,8 @@ use std::hint::black_box;
 use differential_equations::{
     CarpenterKennedy2N54, OdeAlgorithm, OdeProblem, ParsaniKetchesonDeconinck3S32,
     ParsaniKetchesonDeconinck3S53, ParsaniKetchesonDeconinck3S82, ParsaniKetchesonDeconinck3S94,
-    ParsaniKetchesonDeconinck3S105, ParsaniKetchesonDeconinck3S173, SaveMode, SolveOptions, solve,
+    ParsaniKetchesonDeconinck3S105, ParsaniKetchesonDeconinck3S173, ParsaniKetchesonDeconinck3S184,
+    SaveMode, SolveOptions, solve,
 };
 use stats_alloc::{INSTRUMENTED_SYSTEM, Region, StatsAlloc};
 
@@ -90,5 +91,13 @@ fn callback_free_low_storage_steps_do_not_allocate_per_step() {
     assert!(
         one_step <= 7,
         "unexpected 3S94 low-storage solve allocation count: {one_step}"
+    );
+
+    let one_step = allocations_for(ParsaniKetchesonDeconinck3S184, 1.0);
+    let thousand_steps = allocations_for(ParsaniKetchesonDeconinck3S184, 0.001);
+    assert_eq!(thousand_steps, one_step);
+    assert!(
+        one_step <= 7,
+        "unexpected 3S184 low-storage solve allocation count: {one_step}"
     );
 }

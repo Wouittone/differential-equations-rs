@@ -11,6 +11,7 @@ using OrdinaryDiffEqLowStorageRK:
     ParsaniKetchesonDeconinck3S32,
     ParsaniKetchesonDeconinck3S53,
     ParsaniKetchesonDeconinck3S173,
+    ParsaniKetchesonDeconinck3S184,
     ParsaniKetchesonDeconinck3S105,
     ParsaniKetchesonDeconinck3S82,
     ParsaniKetchesonDeconinck3S94
@@ -58,6 +59,8 @@ end
             low_storage_reference(ParsaniKetchesonDeconinck3S53()),
         "parsani_ketcheson_deconinck_3s173" =>
             low_storage_reference(ParsaniKetchesonDeconinck3S173()),
+        "parsani_ketcheson_deconinck_3s184" =>
+            low_storage_reference(ParsaniKetchesonDeconinck3S184()),
         "parsani_ketcheson_deconinck_3s105" =>
             low_storage_reference(ParsaniKetchesonDeconinck3S105()),
         "parsani_ketcheson_deconinck_3s82" =>
