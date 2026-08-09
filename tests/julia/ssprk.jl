@@ -1,4 +1,4 @@
-using OrdinaryDiffEqSSPRK: SSPRK22, SSPRK33, SSPRK43, SSPRK432, pRRK22
+using OrdinaryDiffEqSSPRK: SSPRK22, SSPRK33, SSPRK43, SSPRK432, pRRK22, pRRK33
 
 function rust_ssprk_endpoints()
     manifest = joinpath(REPOSITORY_ROOT, "Cargo.toml")
@@ -40,6 +40,7 @@ end
     julia = Dict(
         "ssprk22" => ssprk_reference(SSPRK22(); adaptive = false),
         "prrk22" => ssprk_reference(pRRK22(); adaptive = false),
+        "prrk33" => ssprk_reference(pRRK33(); adaptive = false),
         "ssprk33" => ssprk_reference(SSPRK33(); adaptive = false),
         "ssprk43" => ssprk_reference(SSPRK43(); adaptive = true),
         "ssprk432" => ssprk_reference(SSPRK432(); adaptive = true),
