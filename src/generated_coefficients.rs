@@ -274,6 +274,162 @@ pub(crate) const VERN7_E: [f64; 10] = [
     -0.02029518466335628,
 ];
 
+/// Vern8 8(7) tableau from OrdinaryDiffEqVerner's pinned Float64 cache.
+pub(crate) const VERN8_STAGE_TIMES: [f64; 13] = [
+    0.0,
+    0.05,
+    0.1065625,
+    0.15984375,
+    0.39,
+    0.465,
+    0.155,
+    0.943,
+    0.901802041735857,
+    0.909,
+    0.94,
+    1.0,
+    1.0,
+];
+pub(crate) const VERN8_A_EMPTY: &[f64] = &[];
+pub(crate) const VERN8_A2: &[f64] = &[0.05];
+pub(crate) const VERN8_A3: &[f64] = &[-0.0069931640625, 0.1135556640625];
+pub(crate) const VERN8_A4: &[f64] = &[0.0399609375, 0.0, 0.1198828125];
+pub(crate) const VERN8_A5: &[f64] = &[
+    0.36139756280045754,
+    0.0,
+    -1.3415240667004928,
+    1.3701265039000352,
+];
+pub(crate) const VERN8_A6: &[f64] = &[
+    0.049047202797202795,
+    0.0,
+    0.0,
+    0.23509720422144048,
+    0.18085559298135673,
+];
+pub(crate) const VERN8_A7: &[f64] = &[
+    0.06169289044289044,
+    0.0,
+    0.0,
+    0.11236568314640277,
+    -0.03885046071451367,
+    0.01979188712522046,
+];
+pub(crate) const VERN8_A8: &[f64] = &[
+    -1.767630240222327,
+    0.0,
+    0.0,
+    -62.5,
+    -6.061889377376669,
+    5.6508231982227635,
+    65.62169641937624,
+];
+pub(crate) const VERN8_A9: &[f64] = &[
+    -1.1809450665549708,
+    0.0,
+    0.0,
+    -41.50473441114321,
+    -4.434438319103725,
+    4.260408188586133,
+    43.75364022446172,
+    0.00787142548991231,
+];
+pub(crate) const VERN8_A10: &[f64] = &[
+    -1.2814059994414884,
+    0.0,
+    0.0,
+    -45.047139960139866,
+    -4.731362069449576,
+    4.514967016593808,
+    47.44909557172985,
+    0.01059228297111661,
+    -0.0057468422638446166,
+];
+pub(crate) const VERN8_A11: &[f64] = &[
+    -1.7244701342624853,
+    0.0,
+    0.0,
+    -60.92349008483054,
+    -5.951518376222392,
+    5.556523730698456,
+    63.98301198033305,
+    0.014642028250414961,
+    0.06460408772358203,
+    -0.0793032316900888,
+];
+pub(crate) const VERN8_A12: &[f64] = &[
+    -3.301622667747079,
+    0.0,
+    0.0,
+    -118.01127235975251,
+    -10.141422388456112,
+    9.139311332232058,
+    123.37594282840426,
+    4.62324437887458,
+    -3.3832777380682018,
+    4.527592100324618,
+    -5.828495485811623,
+];
+pub(crate) const VERN8_A13: &[f64] = &[
+    -3.039515033766309,
+    0.0,
+    0.0,
+    -109.26086808941763,
+    -9.290642497400293,
+    8.43050498176491,
+    114.20100103783314,
+    -0.9637271342145479,
+    -5.0348840888021895,
+    5.958130824002923,
+    0.0,
+    0.0,
+];
+pub(crate) const VERN8_A_ROWS: &[&[f64]] = &[
+    VERN8_A_EMPTY,
+    VERN8_A2,
+    VERN8_A3,
+    VERN8_A4,
+    VERN8_A5,
+    VERN8_A6,
+    VERN8_A7,
+    VERN8_A8,
+    VERN8_A9,
+    VERN8_A10,
+    VERN8_A11,
+    VERN8_A12,
+    VERN8_A13,
+];
+pub(crate) const VERN8_B: [f64; 13] = [
+    0.04427989419007951,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.3541049391724449,
+    0.24796921549564377,
+    -15.694202038838085,
+    25.084064965558564,
+    -31.738367786260277,
+    22.938283273988784,
+    -0.2361324633071542,
+    0.0,
+];
+pub(crate) const VERN8_E: [f64; 13] = [
+    -3.272103901028138e-5,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    -0.0005046250618777704,
+    0.0001211723589784759,
+    -20.142336771313868,
+    5.2371785994398286,
+    -8.156744408794658,
+    22.938283273988784,
+    -0.2361324633071542,
+    0.36016794372897754,
+];
+
 pub(crate) const AB3_HISTORY: [f64; 3] = [23.0 / 12.0, -16.0 / 12.0, 5.0 / 12.0];
 
 /// Variable-step ABDF2 fixed-leading-coefficient constants.  The history
@@ -301,7 +457,8 @@ mod tests {
         AB3_HISTORY, BS3_A_ROWS, BS3_B, BS3_E, BS3_STAGE_TIMES, DP5_A_ROWS, DP5_B, DP5_E,
         DP5_STAGE_TIMES, RK4_A, RK4_B, RK4_STAGE_TIMES, SDIRK2_A, SDIRK2_B, SDIRK2_B_EMBEDDED,
         SDIRK2_STAGE_TIMES, VELOCITY_VERLET_COMPOSITION, VERN6_A_ROWS, VERN6_B, VERN6_E,
-        VERN6_STAGE_TIMES, VERN7_A_ROWS, VERN7_B, VERN7_E, VERN7_STAGE_TIMES,
+        VERN6_STAGE_TIMES, VERN7_A_ROWS, VERN7_B, VERN7_E, VERN7_STAGE_TIMES, VERN8_A_ROWS,
+        VERN8_B, VERN8_E, VERN8_STAGE_TIMES,
     };
 
     #[test]
@@ -325,6 +482,10 @@ mod tests {
         assert_eq!(VERN7_B.len(), VERN7_STAGE_TIMES.len());
         assert_eq!(VERN7_E.len(), VERN7_STAGE_TIMES.len());
         assert!((VERN7_B.iter().sum::<f64>() - 1.0).abs() < 1.0e-13);
+        assert_eq!(VERN8_A_ROWS.len(), VERN8_STAGE_TIMES.len());
+        assert_eq!(VERN8_B.len(), VERN8_STAGE_TIMES.len());
+        assert_eq!(VERN8_E.len(), VERN8_STAGE_TIMES.len());
+        assert!((VERN8_B.iter().sum::<f64>() - 1.0).abs() < 1.0e-13);
         assert_eq!(VELOCITY_VERLET_COMPOSITION, [0.5, 0.5]);
         assert!((RK4_B.iter().sum::<f64>() - 1.0).abs() < 1.0e-15);
         assert_eq!(SDIRK2_A.len(), SDIRK2_STAGE_TIMES.len());
