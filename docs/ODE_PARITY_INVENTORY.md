@@ -20,8 +20,8 @@ and [ode_algorithm_inventory.csv](ode_algorithm_inventory.csv).
 - In-scope regular ODE names: **345**
   (333 canonical/composite constructors and
   12 public aliases).
-- Implemented and detected in matched Julia tests: **76**.
-- Missing in-scope public names: **269**.
+- Implemented and detected in matched Julia tests: **77**.
+- Missing in-scope public names: **268**.
 - Explicitly excluded public names: **4**.
 
 Aliases are public parity obligations but do not require a second numerical kernel.
@@ -42,7 +42,7 @@ Aliases are public parity obligations but do not require a second numerical kern
 | IMEX multistep | 2 | 0 | 2 |
 | linear and Lie-group methods | 18 | 0 | 18 |
 | low-order explicit Runge-Kutta | 28 | 17 | 11 |
-| low-storage explicit Runge-Kutta | 44 | 11 | 33 |
+| low-storage explicit Runge-Kutta | 44 | 12 | 32 |
 | multirate and MRI-GARK | 9 | 0 | 9 |
 | Nordsieck variable-order multistep | 4 | 0 | 4 |
 | parallel diagonally implicit Runge-Kutta | 1 | 0 | 1 |
@@ -192,7 +192,7 @@ the JSON/CSV records.
 - `SplitEuler` — OrdinaryDiffEqLowOrderRK; ODEProblem or SplitODEProblem
 - `Stepanov5` — OrdinaryDiffEqLowOrderRK; ODEProblem
 
-### low-storage explicit Runge-Kutta (33)
+### low-storage explicit Runge-Kutta (32)
 
 - `CFRLDDRK64` — OrdinaryDiffEqLowStorageRK; ODEProblem
 - `CKLLSRK43_2` — OrdinaryDiffEqLowStorageRK; ODEProblem
@@ -215,7 +215,6 @@ the JSON/CSV records.
 - `ParsaniKetchesonDeconinck3S173` — OrdinaryDiffEqLowStorageRK; ODEProblem
 - `ParsaniKetchesonDeconinck3S184` — OrdinaryDiffEqLowStorageRK; ODEProblem
 - `ParsaniKetchesonDeconinck3S205` — OrdinaryDiffEqLowStorageRK; ODEProblem
-- `ParsaniKetchesonDeconinck3S53` — OrdinaryDiffEqLowStorageRK; ODEProblem
 - `ParsaniKetchesonDeconinck3S94` — OrdinaryDiffEqLowStorageRK; ODEProblem
 - `RDPK3Sp35` — OrdinaryDiffEqLowStorageRK; ODEProblem
 - `RDPK3Sp49` — OrdinaryDiffEqLowStorageRK; ODEProblem

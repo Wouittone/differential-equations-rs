@@ -54,6 +54,8 @@ Pinned upstream revision:
 | `/root/low_order_next` | Alshina6 fixed-step RK | `codex/low-order-next`; `differential-equations-rs-worktrees/low-order-next` | Rust gates pass; Julia blocked by missing executable; merged as `1aafd9d` | 2026-08-09T15:23:00Z |
 | `/root/low_storage_next` | Parsani Ketcheson Deconinck 3S82 follow-up | `codex/low-storage-3s82`; `differential-equations-rs-worktrees/low-storage-3s82` | Rust gates pass; Julia blocked by missing executable; merged as `86de559` | 2026-08-09T15:29:00Z |
 | `/root/low_order_next` | Anas5 parameterized fixed-step RK | `codex/low-order-anas5`; `differential-equations-rs-worktrees/low-order-anas5` | Rust gates pass; Julia blocked by missing executable; merged as `80867f2` | 2026-08-09T15:33:00Z |
+| `/root/low_storage_3s53` | Parsani Ketcheson Deconinck 3S53 | `codex/low-storage-3s53`; `differential-equations-rs-worktrees/low-storage-3s53` | Rust gates pass; Julia blocked by missing executable; merged as `6e905c4` | 2026-08-09T15:40:00Z |
+| `/root/low_order_msrk5` | MSRK5 fixed-step RK | `codex/low-order-msrk5`; `differential-equations-rs-worktrees/low-order-msrk5` | Rust gates pass; Julia blocked by missing executable; merged as `1b7499b` | 2026-08-09T15:41:00Z |
 
 ## Completed waves
 
@@ -100,6 +102,8 @@ Pinned upstream revision:
 | Alshina6 family | Exact pinned seven-stage sixth-order fixed explicit tableau | 93 library tests plus Alshina6 integrations | Julia unavailable on worker/coordinator; pinned/full rerun blocked by `JULIA-PATH-20260809` | Rust-reviewed and merged as `1aafd9d`; Julia retry required |
 | Parsani 3S82 family | Native fixed low-storage 3S recurrence with pinned seven-stage coefficients | 95 library tests plus recurrence/allocation integrations | Julia unavailable on worker/coordinator; pinned/full rerun blocked by `JULIA-PATH-20260809` | Rust-reviewed and merged as `86de559`; Julia retry required |
 | Anas5 family | Parameterized fixed-step low-order RK with pinned dynamic `a65(w,dt)` and FSAL endpoint reuse | 95 library tests plus Anas5 integrations | Julia unavailable on worker/coordinator; pinned/full rerun blocked by `JULIA-PATH-20260809` | Rust-reviewed and merged as `80867f2`; Julia retry required |
+| Parsani 3S53 family | Native fixed low-storage 3S recurrence with pinned five-stage coefficients | 95 library tests plus recurrence/allocation integrations | Julia unavailable on worker/coordinator; pinned/full rerun blocked by `JULIA-PATH-20260809` | Rust-reviewed and merged as `6e905c4`; Julia retry required |
+| MSRK5 family | Exact pinned nine-stage fixed FSAL tableau | 95 library tests plus MSRK5 integrations | Julia unavailable on worker/coordinator; pinned/full rerun blocked by `JULIA-PATH-20260809` | Rust-reviewed and merged as `1b7499b`; Julia retry required |
 
 ## Validation snapshot
 
@@ -110,13 +114,13 @@ cargo clippy --all-targets -- -D warnings: pass
 git diff --check: pass
 pinned Julia environment: pass and reproducible from tracked manifest (14 packages at pinned revision)
 Julia compliance: pRRK22 worker pass; integrated SSPRK432 rerun blocked by `JULIA-PATH-20260809`
-inventory regeneration: pass; 349 source references and strict cross-checkout byte identity verified (76 implemented/tested, 269 missing)
+inventory regeneration: pass; 349 source references and strict cross-checkout byte identity verified (77 implemented/tested, 268 missing)
 ```
 
 ## Next dependency-ready task
 
-After restoring Julia, rerun the integrated pinned/full suite for SSPRK432, Parsani 3S32/3S82, Alshina6, and Anas5, then continue with the next dependency-ready regular-ODE family or generated-coefficient slice while wiring accepted-stage dense segments into one solver. SBDF2 remains excluded until split/IMEX parity is implemented.
+After restoring Julia, rerun the integrated pinned/full suite for SSPRK432, Parsani 3S32/3S53/3S82, Alshina6, Anas5, and MSRK5, then continue with the next dependency-ready regular-ODE family or generated-coefficient slice while wiring accepted-stage dense segments into one solver. SBDF2 remains excluded until split/IMEX parity is implemented.
 
 ## Last decision
 
-The shared first-order driver is frozen and all queued first-order families (explicit, implicit/TRBDF2, Rosenbrock/Rodas, low-storage, and Adams) pass. The Phase 2 audit found only `src/integrator.rs:228` as the first-order lifecycle loop; `src/second_order.rs:440` is an explicit exclusion. Phase 3 checked views, revisioned dense LU, Jacobian/operator seams, nonsingular mass operators, and one implicit caller proof are merged with unchanged compliance and allocations. Phase 4 schema/generated fixtures and Phase 5 representation foundations are merged. Phase 6 now has domain-checked Hermite segments, an accepted-step recorder service, and callback controller-history reset; solver stage-data wiring remains queued. Phase 7 now includes SDIRK2, ABDF2, MEBDF2, QNDF1/2, Verner6-9, pRRK22, SSPRK432, Parsani 3S32/3S82, Alshina6, and Anas5; 269 in-scope public constructors remain. Phase 8 is blocked only by the missing Julia executable and still has documented dense/controller and low-order tolerance gaps.
+The shared first-order driver is frozen and all queued first-order families (explicit, implicit/TRBDF2, Rosenbrock/Rodas, low-storage, and Adams) pass. The Phase 2 audit found only `src/integrator.rs:228` as the first-order lifecycle loop; `src/second_order.rs:440` is an explicit exclusion. Phase 3 checked views, revisioned dense LU, Jacobian/operator seams, nonsingular mass operators, and one implicit caller proof are merged with unchanged compliance and allocations. Phase 4 schema/generated fixtures and Phase 5 representation foundations are merged. Phase 6 now has domain-checked Hermite segments, an accepted-step recorder service, and callback controller-history reset; solver stage-data wiring remains queued. Phase 7 now includes SDIRK2, ABDF2, MEBDF2, QNDF1/2, Verner6-9, pRRK22, SSPRK432, Parsani 3S32/3S53/3S82, Alshina6, Anas5, and MSRK5; 268 in-scope public constructors remain. Phase 8 is blocked only by the missing Julia executable and still has documented dense/controller and low-order tolerance gaps.
