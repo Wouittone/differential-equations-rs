@@ -12,6 +12,7 @@ mod anas5;
 mod callback;
 mod coefficients;
 mod explicit_rk;
+mod frk65;
 mod generated_coefficients;
 mod implicit;
 mod integrator;
@@ -42,6 +43,7 @@ pub use explicit_rk::{
     Midpoint, Msrk5, Msrk6, OwrenZen3, OwrenZen4, OwrenZen5, Ralston, Ralston4, Rk4, Rkm, SspRk22,
     SspRk33, SspRk43,
 };
+pub use frk65::Frk65;
 pub use implicit::{ImplicitEuler, ImplicitMidpoint, Trapezoid};
 pub use low_storage_rk::{
     CarpenterKennedy2N54, Dglddrk73C, Dglddrk84C, Dglddrk84F, Ndblsrk124, Ndblsrk134, Ndblsrk144,
