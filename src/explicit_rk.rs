@@ -1,7 +1,9 @@
 use crate::generated_coefficients::{
     BS3_A_ROWS, BS3_B as GENERATED_BS3_B, BS3_E as GENERATED_BS3_E, BS3_STAGE_TIMES, DP5_A_ROWS,
-    DP5_B as GENERATED_DP5_B, DP5_E as GENERATED_DP5_E, DP5_STAGE_TIMES, RK4_A_ROWS,
-    RK4_B as GENERATED_RK4_B, RK4_STAGE_TIMES,
+    DP5_B as GENERATED_DP5_B, DP5_E as GENERATED_DP5_E, DP5_STAGE_TIMES, EULER_A_ROWS,
+    EULER_B as GENERATED_EULER_B, EULER_STAGE_TIMES, HEUN_A_ROWS, HEUN_B as GENERATED_HEUN_B,
+    HEUN_ERROR, HEUN_STAGE_TIMES, MIDPOINT_A_ROWS, MIDPOINT_B as GENERATED_MIDPOINT_B,
+    MIDPOINT_ERROR, MIDPOINT_STAGE_TIMES, RK4_A_ROWS, RK4_B as GENERATED_RK4_B, RK4_STAGE_TIMES,
 };
 use crate::integrator::{
     KernelCapabilities, StepEstimate, StepKernel, integrate as drive_integration,
@@ -67,21 +69,19 @@ where
 }
 
 const EMPTY: &[f64] = &[];
-const EULER_A: &[&[f64]] = &[EMPTY];
-const EULER_B: &[f64] = &[1.0];
-const EULER_C: &[f64] = &[0.0];
+const EULER_A: &[&[f64]] = EULER_A_ROWS;
+const EULER_B: &[f64] = &GENERATED_EULER_B;
+const EULER_C: &[f64] = &EULER_STAGE_TIMES;
 
-const MIDPOINT_A2: &[f64] = &[0.5];
-const MIDPOINT_A: &[&[f64]] = &[EMPTY, MIDPOINT_A2];
-const MIDPOINT_B: &[f64] = &[0.0, 1.0];
-const MIDPOINT_E: &[f64] = &[-1.0, 1.0];
-const MIDPOINT_C: &[f64] = &[0.0, 0.5];
+const MIDPOINT_A: &[&[f64]] = MIDPOINT_A_ROWS;
+const MIDPOINT_B: &[f64] = &GENERATED_MIDPOINT_B;
+const MIDPOINT_E: &[f64] = &MIDPOINT_ERROR;
+const MIDPOINT_C: &[f64] = &MIDPOINT_STAGE_TIMES;
 
-const HEUN_A2: &[f64] = &[1.0];
-const HEUN_A: &[&[f64]] = &[EMPTY, HEUN_A2];
-const HEUN_B: &[f64] = &[0.5, 0.5];
-const HEUN_E: &[f64] = &[-0.5, 0.5];
-const HEUN_C: &[f64] = &[0.0, 1.0];
+const HEUN_A: &[&[f64]] = HEUN_A_ROWS;
+const HEUN_B: &[f64] = &GENERATED_HEUN_B;
+const HEUN_E: &[f64] = &HEUN_ERROR;
+const HEUN_C: &[f64] = &HEUN_STAGE_TIMES;
 
 const RALSTON_A2: &[f64] = &[2.0 / 3.0];
 const RALSTON_A: &[&[f64]] = &[EMPTY, RALSTON_A2];
