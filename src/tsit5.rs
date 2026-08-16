@@ -53,9 +53,8 @@ const ERROR_WEIGHTS: &[f64] = &[
 
 /// The Tsitouras 5/4 explicit Runge-Kutta method.
 ///
-/// `Tsit5` is an adaptive, FSAL (first-same-as-last) method intended for
-/// non-stiff ODEs at medium tolerances. It is a named facade over the shared
-/// [`ExplicitRungeKutta`] kernel.
+/// `Tsit5` is an adaptive, FSAL (first-same-as-last) method intended for non-stiff ODEs at medium tolerances.
+/// It is a named facade over the shared [`ExplicitRungeKutta`] kernel.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Tsit5;
 

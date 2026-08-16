@@ -12,10 +12,9 @@ use std::marker::PhantomData;
 
 /// Coefficients and method properties for an explicit Runge–Kutta method.
 ///
-/// `COEFFICIENTS[i]` is the strictly lower-triangular row for stage `i`, so it
-/// must contain exactly `i` entries. All other coefficient arrays must contain
-/// one entry per stage. [`ExplicitRungeKutta`] validates these invariants before
-/// solving.
+/// `COEFFICIENTS[i]` is the strictly lower-triangular row for stage `i`, so it must contain exactly `i` entries.
+/// All other coefficient arrays must contain one entry per stage.
+/// [`ExplicitRungeKutta`] validates these invariants before solving.
 pub trait ButcherTableau {
     const NODES: &'static [f64];
     const COEFFICIENTS: &'static [&'static [f64]];
