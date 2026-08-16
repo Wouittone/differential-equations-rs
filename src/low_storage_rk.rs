@@ -9,7 +9,9 @@
 
 use std::marker::PhantomData;
 
-use crate::integrator::{KernelCapabilities, StepEstimate, StepKernel, integrate as drive_integration};
+use crate::integrator::{
+    KernelCapabilities, StepEstimate, StepKernel, integrate as drive_integration,
+};
 use crate::{OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions, SolverStats};
 
 trait LowStorage2N {
