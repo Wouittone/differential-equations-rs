@@ -126,6 +126,15 @@ pub struct Rodas5P;
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct RosenbrockW6S4OS;
 
+/// The adaptive third-order, second-order embedded Rodas23W Rosenbrock-W
+/// method.
+///
+/// Rodas23W is the five-stage W-method from the pinned
+/// `OrdinaryDiffEqRosenbrock` revision. The primary update is third order and
+/// the embedded update is second order (`btilde = [0, 0, 0, 1, -1]`).
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct Rodas23W;
+
 struct RodasTableau {
     stages: usize,
     gamma: f64,
@@ -1115,6 +1124,64 @@ const ROSENBROCK_W6S4OS_TABLEAU: RodasTableau = RodasTableau {
     error_weights: ROSENBROCK_W6S4OS_E,
 };
 
+// Rodas23WRodasTableau(T, T2) from
+// lib/OrdinaryDiffEqRosenbrock/src/rosenbrock_tableaus.jl at
+// 211142263781255a9aa2f910f6760b9f18ec29c8.
+//
+// The upstream tableau is constructed in Julia using exact rational literals
+// for gamma and decimal coefficients for the remaining entries. Keeping the
+// same Float64 values here makes the regular-ODE stage path deterministic and
+// allocation-free. The upstream H matrix is only used for stiff-aware dense
+// interpolation; regular ODE trajectories use the shared recorder instead.
+const RODAS23W_A: &[f64] = &[
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0, // stage 1
+    4.0 / 3.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0, // stage 2
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0, // stage 3
+    2.90625,
+    3.375,
+    0.40625,
+    0.0,
+    0.0, // stage 4
+    2.90625,
+    3.375,
+    0.40625,
+    0.0,
+    0.0, // stage 5
+];
+const RODAS23W_C: &[f64] = &[
+    0.0, 0.0, 0.0, 0.0, 0.0, // stage 1
+    -4.0, 0.0, 0.0, 0.0, 0.0, // stage 2
+    8.25, 6.75, 0.0, 0.0, 0.0, // stage 3
+    1.21875, -5.0625, -1.96875, 0.0, 0.0, // stage 4
+    4.03125, -15.1875, -4.03125, 6.0, 0.0, // stage 5
+];
+const RODAS23W_NODES: &[f64] = &[0.0, 4.0 / 9.0, 0.0, 1.0, 1.0];
+const RODAS23W_D: &[f64] = &[1.0 / 3.0, -1.0 / 9.0, 1.0, 0.0, 0.0];
+const RODAS23W_B: &[f64] = &[2.90625, 3.375, 0.40625, 1.0, 0.0];
+const RODAS23W_E: &[f64] = &[0.0, 0.0, 0.0, 1.0, -1.0];
+const RODAS23W_TABLEAU: RodasTableau = RodasTableau {
+    stages: 5,
+    gamma: 1.0 / 3.0,
+    a: RODAS23W_A,
+    c_matrix: RODAS23W_C,
+    nodes: RODAS23W_NODES,
+    time_weights: RODAS23W_D,
+    weights: RODAS23W_B,
+    error_weights: RODAS23W_E,
+};
+
 #[allow(clippy::too_many_arguments)]
 trait ExtendedRosenbrockMethod {
     const ERROR_ORDER: usize;
@@ -1170,6 +1237,7 @@ algorithm!(Ros34Pw2);
 algorithm!(Rodas4);
 algorithm!(Rodas5P);
 algorithm!(RosenbrockW6S4OS);
+algorithm!(Rodas23W);
 
 impl ExtendedRosenbrockMethod for Rosenbrock32 {
     const ERROR_ORDER: usize = 3;
@@ -1234,6 +1302,7 @@ rodas_method!(Ros34Pw1b, 3, ROS34PW1B_TABLEAU);
 rodas_method!(Ros34Pw2, 3, ROS34PW2_TABLEAU);
 rodas_method!(Rodas4, 4, RODAS4_TABLEAU);
 rodas_method!(Rodas5P, 5, RODAS5P_TABLEAU);
+rodas_method!(Rodas23W, 3, RODAS23W_TABLEAU);
 
 impl ExtendedRosenbrockMethod for RosenbrockW6S4OS {
     const ERROR_ORDER: usize = 4;
@@ -1766,8 +1835,8 @@ mod tests {
     use std::rc::Rc;
 
     use super::{
-        Grk4a, Grk4t, Rodas3, Rodas4, Rodas5P, Ros2, Ros3, Ros3Pr, Ros3p, Ros34Prw, Ros34Pw1b,
-        Rosenbrock32, RosenbrockW6S4OS,
+        Grk4a, Grk4t, Rodas3, Rodas4, Rodas5P, Rodas23W, Ros2, Ros3, Ros3Pr, Ros3p, Ros34Prw,
+        Ros34Pw1b, Rosenbrock32, RosenbrockW6S4OS,
     };
     use crate::{CallbackAction, OdeProblem, SaveMode, SolveError, SolveOptions, solve};
 
@@ -1844,6 +1913,13 @@ mod tests {
             )
             .unwrap()
             .last_state()[0],
+            solve(
+                &stiff_problem((0.0, 1.0), 1.0),
+                Rodas23W,
+                &adaptive_options(),
+            )
+            .unwrap()
+            .last_state()[0],
         ];
         for endpoint in endpoints {
             assert!((endpoint - 1.0_f64.cos()).abs() < 2.0e-6);
@@ -1887,6 +1963,7 @@ mod tests {
             convergence_ratio(Ros34Pw1b, 0.1),
             convergence_ratio(Rodas5P, 0.2),
             convergence_ratio(RosenbrockW6S4OS, 0.1),
+            convergence_ratio(Rodas23W, 0.1),
         ];
         assert!(ratios[0] > 3.0);
         assert!(ratios[1] > 7.0);
@@ -1904,6 +1981,61 @@ mod tests {
         // ROS34PW1b is third order in its primary fixed-step update.
         assert!(ratios[9] > 7.0);
         assert!(ratios[10] > 14.0);
+        assert!(ratios[11] > 7.0);
+    }
+
+    #[test]
+    fn rodas23w_supports_jacobian_backward_callbacks_and_save_at() {
+        let jacobian_calls = Rc::new(Cell::new(0));
+        let jacobian_calls_for_problem = Rc::clone(&jacobian_calls);
+        let problem = OdeProblem::new(
+            |du: &mut [f64], u: &[f64], _: &(), _: f64| du[0] = -2.0 * u[0],
+            vec![1.0],
+            (0.0, 1.0),
+            (),
+        )
+        .with_jacobian(move |jacobian: &mut [f64], _: &[f64], _: &(), _: f64| {
+            jacobian_calls_for_problem.set(jacobian_calls_for_problem.get() + 1);
+            jacobian[0] = -2.0;
+        })
+        .with_discrete_callback(
+            |_, _, time| time == 0.5,
+            |state, _, _| {
+                state[0] += 0.25;
+                CallbackAction::Continue
+            },
+        );
+        let options = SolveOptions {
+            adaptive: false,
+            initial_step: Some(0.25),
+            save: SaveMode::Endpoints,
+            save_at: vec![0.25, 0.5, 0.75],
+            ..SolveOptions::default()
+        };
+        let solution = solve(&problem, Rodas23W, &options).unwrap();
+        assert_eq!(solution.stats().callback_invocations, 1);
+        assert!(solution.stats().jacobian_evaluations > 0);
+        assert!(jacobian_calls.get() > 0);
+        for time in options.save_at {
+            assert!(solution.times().contains(&time), "missing save_at={time}");
+        }
+
+        let backward_problem = OdeProblem::new(
+            |du: &mut [f64], u: &[f64], _: &(), _: f64| du[0] = -2.0 * u[0],
+            vec![(-2.0_f64).exp()],
+            (1.0, 0.0),
+            (),
+        );
+        let backward_options = SolveOptions {
+            initial_step: Some(0.01),
+            max_step: 0.01,
+            save: SaveMode::Endpoints,
+            ..adaptive_options()
+        };
+        let endpoint = solve(&backward_problem, Rodas23W, &backward_options)
+            .unwrap()
+            .last_state()[0];
+        assert!((endpoint - 1.0).abs() < 1.0e-5, "endpoint={endpoint:.17e}");
     }
 
     #[test]
