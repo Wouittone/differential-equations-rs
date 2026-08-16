@@ -42,3 +42,23 @@ Latest verification: 2026-08-16T19:07:00+02:00 coordinator reran the pinned
 reproducer; PowerShell still reports that `julia` is not recognized. Rust
 gates and inventory regeneration continue independently, and the exact retry
 condition above is unchanged.
+
+ID: CLIPPY-BENCHMARK-DIRTY-20260816
+Date/time: 2026-08-16T20:24:00+02:00
+Agent: /root
+Phase: Phase 8 Rust compliance gate
+Severity: minor
+Reproducer: `cargo clippy --all-targets -- -D warnings`
+Expected behavior: all targets pass with warnings denied.
+Observed behavior: the unrelated user-added `benchmarks/adapters/rust.rs:48`
+`emit_runs` helper triggers `clippy::too_many_arguments` (8/7).
+Upstream reference: not applicable; benchmark-only working-tree change.
+Likely cause: dirty benchmark adapter is outside the regular-ODE parity port.
+Independent work started: `cargo clippy --lib --tests -- -D warnings` passes for
+the parity code; solver tests, formatting, diff check, and inventory checks
+continue independently.
+Proposed resolution: benchmark owner should refactor the helper or add a
+narrow lint allowance in that adapter, without changing solver behavior.
+Retry condition: rerun the mandated all-target clippy command after the dirty
+benchmark adapter no longer raises `too_many_arguments`.
+Status: open; no parity-source lint blocker identified.
