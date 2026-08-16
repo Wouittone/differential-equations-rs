@@ -134,17 +134,19 @@ Pinned upstream revision:
 | pRRK33 family | Native three-stage parametric relaxation SSPRK33 | 97 library tests plus pRRK33 integrations | Julia unavailable on worker/coordinator; pinned/full rerun blocked by `JULIA-PATH-20260809` | Rust-reviewed and merged as `6ac81ff`; Julia retry required |
 | KYK2014DGSSPRK_3S2 family | Native fixed-step second-order SSPRK Shu–Osher tableau | 97 library tests plus KYK convergence/backward/save_at/callback/allocation integrations | Julia unavailable on coordinator; pinned/full rerun blocked by `JULIA-PATH-20260809` | Rust-reviewed and merged as `586bf09` (source wave `3138c0a`); Julia retry required |
 | SIR54 family | Exact pinned embedded FSAL (5,4) low-order RK tableau | 99 library tests plus SIR54 convergence/save_at integrations | Julia unavailable on coordinator; pinned/full rerun blocked by `JULIA-PATH-20260809` | Rust-reviewed and merged as `bfda97d` (source wave `2fb3855`); Julia retry required |
+| RosenbrockW6S4OS family | Exact pinned six-stage fourth-order fixed Rosenbrock-W tableau | 101 library tests plus stiff/backward/callback/save_at/Jacobian/allocation integrations | Julia unavailable on coordinator; pinned/full rerun blocked by `JULIA-PATH-20260809` | Rust-reviewed and merged as `b000635` (source wave `070b85b`); Julia retry required |
+| pRRK54 family | Native parametric-relaxation SSPRK54 with pinned rescaling coefficients | 101 library tests plus pRRK54 convergence/backward/callback/allocation integrations | Julia unavailable on coordinator; pinned/full rerun blocked by `JULIA-PATH-20260809` | Rust-reviewed and merged as `ab598d4` (source wave `17769c6`); Julia retry required |
 
 ## Validation snapshot
 
 ```text
 cargo fmt -- --check: pass
-cargo test --all-targets: pass (99 library tests plus integration tests/examples)
+cargo test --all-targets: pass (101 library tests plus integration tests/examples)
 cargo clippy --all-targets -- -D warnings: pass
 git diff --check: pass
 pinned Julia environment: pass and reproducible from tracked manifest (14 packages at pinned revision)
 Julia compliance: isolated AutoDP5 worker pass; integrated rerun blocked by `JULIA-PATH-20260809`
-inventory regeneration: pass; 349 source references and strict cross-checkout byte identity verified (94 implemented/tested, 251 missing)
+inventory regeneration: pass; 349 source references and strict cross-checkout byte identity verified (96 implemented/tested, 249 missing)
 ```
 
 ## Next dependency-ready task
