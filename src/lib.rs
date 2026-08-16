@@ -26,6 +26,7 @@ mod qndf2;
 mod rosenbrock;
 mod rosenbrock_extended;
 mod sdirk;
+mod sdirk_cash4;
 mod second_order;
 mod solution;
 mod solver;
@@ -68,6 +69,7 @@ pub use rosenbrock_extended::{
     Ros34Pw2, Ros34Pw3, Rosenbrock32, RosenbrockW6S4OS,
 };
 pub use sdirk::Sdirk2;
+pub use sdirk_cash4::Cash4;
 pub use second_order::{
     LeapfrogDriftKickDrift, SecondOrderOdeAlgorithm, SecondOrderOdeProblem, SecondOrderSolution,
     SecondOrderSolveError, SymplecticEuler, VelocityVerlet, VerletLeapfrog, solve_second_order,
