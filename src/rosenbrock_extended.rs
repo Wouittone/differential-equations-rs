@@ -145,6 +145,13 @@ pub struct Rodas42;
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Rodas4P;
 
+/// The six-stage, fourth-order L-stable Rodas4P2 method.
+///
+/// Rodas4P2 is the improved parabolic-problem variant of Rodas4P from the
+/// pinned `OrdinaryDiffEqRosenbrockTableaus` revision.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct Rodas4P2;
+
 /// The nine-stage, fourth-order Rosenbrock-W Rodas4PW method.
 ///
 /// Coefficients are from the pinned `Rodas4PWTableau` regular-ODE tableau.
@@ -1227,6 +1234,111 @@ const RODAS4P_TABLEAU: RodasTableau = RodasTableau {
     time_weights: RODAS4P_D,
     weights: RODAS4P_B,
     error_weights: RODAS4P_E,
+};
+
+// Rodas4P2Tableau(T, T2) from
+// lib/OrdinaryDiffEqRosenbrockTableaus/src/rosenbrock_tableaus.jl at
+// OrdinaryDiffEq revision 211142263781255a9aa2f910f6760b9f18ec29c8.
+#[allow(clippy::excessive_precision)]
+const RODAS4P2_A: &[f64] = &[
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    3.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.906377755268814,
+    -0.189707390391685,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    3.758617027739064,
+    1.161741776019525,
+    -0.849258085312803,
+    0.0,
+    0.0,
+    0.0,
+    7.089566927282776,
+    4.573591406461604,
+    -8.423496976860259,
+    -0.959280113459775,
+    0.0,
+    0.0,
+    7.089566927282776,
+    4.573591406461604,
+    -8.423496976860259,
+    -0.959280113459775,
+    1.0,
+    0.0,
+];
+#[allow(clippy::excessive_precision)]
+const RODAS4P2_C: &[f64] = &[
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    -12.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    -6.354581592719008,
+    0.338972550544623,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    -8.575016317114033,
+    -7.606483992117508,
+    12.22499765012482,
+    0.0,
+    0.0,
+    0.0,
+    -5.888975457523102,
+    -8.157396617841821,
+    24.805546872612922,
+    12.790401512796979,
+    0.0,
+    0.0,
+    -4.408651676063871,
+    -6.692003137674639,
+    24.625568527593117,
+    16.627521966636085,
+    -5.714285714285718,
+    0.0,
+];
+#[allow(clippy::excessive_precision)]
+const RODAS4P2_NODES: &[f64] = &[0.0, 0.75, 0.321448134013046, 0.519745732277726, 1.0, 1.0];
+#[allow(clippy::excessive_precision)]
+const RODAS4P2_D: &[f64] = &[0.25, -0.5, -0.189532918363016, 0.085612108792769, 0.0, 0.0];
+const RODAS4P2_B: &[f64] = &[
+    7.089566927282776,
+    4.573591406461604,
+    -8.423496976860259,
+    -0.959280113459775,
+    1.0,
+    1.0,
+];
+const RODAS4P2_E: &[f64] = &[0.0, 0.0, 0.0, 0.0, 0.0, 1.0];
+const RODAS4P2_TABLEAU: RodasTableau = RodasTableau {
+    stages: 6,
+    gamma: 0.25,
+    a: RODAS4P2_A,
+    c_matrix: RODAS4P2_C,
+    nodes: RODAS4P2_NODES,
+    time_weights: RODAS4P2_D,
+    weights: RODAS4P2_B,
+    error_weights: RODAS4P2_E,
 };
 
 // Rodas4PWTableau(T, T2) from
@@ -2886,6 +2998,7 @@ algorithm!(Ros34Pw2);
 algorithm!(Rodas4);
 algorithm!(Rodas42);
 algorithm!(Rodas4P);
+algorithm!(Rodas4P2);
 algorithm!(Rodas4PW);
 algorithm!(Rodas5);
 algorithm!(Rodas5P);
@@ -2962,6 +3075,7 @@ rodas_method!(Ros34Pw2, 3, ROS34PW2_TABLEAU);
 rodas_method!(Rodas4, 4, RODAS4_TABLEAU);
 rodas_method!(Rodas42, 4, RODAS42_TABLEAU);
 rodas_method!(Rodas4P, 4, RODAS4P_TABLEAU);
+rodas_method!(Rodas4P2, 4, RODAS4P2_TABLEAU);
 rodas_method!(Rodas4PW, 4, RODAS4PW_TABLEAU);
 rodas_method!(Rodas5, 5, RODAS5_TABLEAU);
 rodas_method!(Rodas5P, 5, RODAS5P_TABLEAU);

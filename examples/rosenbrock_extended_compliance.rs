@@ -1,7 +1,7 @@
 use differential_equations::{
-    Grk4a, Grk4t, OdeAlgorithm, OdeProblem, Rodas3, Rodas3d, Rodas4, Rodas4P, Rodas4PW, Rodas5,
-    Rodas5P, Rodas6P, Rodas23W, Rodas42, Ros2, Ros3, Ros3Pr, Ros3Prl, Ros3p, Ros34Prw, Ros34Pw1b,
-    Ros34Pw2, Rosenbrock32, RosenbrockW6S4OS, SaveMode, SolveOptions, solve,
+    Grk4a, Grk4t, OdeAlgorithm, OdeProblem, Rodas3, Rodas3d, Rodas4, Rodas4P, Rodas4P2, Rodas4PW,
+    Rodas5, Rodas5P, Rodas6P, Rodas23W, Rodas42, Ros2, Ros3, Ros3Pr, Ros3Prl, Ros3p, Ros34Prw,
+    Ros34Pw1b, Ros34Pw2, Rosenbrock32, RosenbrockW6S4OS, SaveMode, SolveOptions, solve,
 };
 
 type TestRhs = fn(&mut [f64], &[f64], &(), f64);
@@ -65,6 +65,7 @@ fn main() {
     print_result("rodas4", Rodas4);
     print_result("rodas42", Rodas42);
     print_result("rodas4p", Rodas4P);
+    print_result("rodas4p2", Rodas4P2);
     print_result("rodas5", Rodas5);
     print_result("rodas4pw", Rodas4PW);
     print_result("grk4a", Grk4a);
