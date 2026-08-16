@@ -9,8 +9,8 @@
     "included_canonical_or_composite": 333,
     "included_aliases": 12,
     "excluded_names": 4,
-    "implemented_and_julia_tested": 113,
-    "missing_included_names": 232
+    "implemented_and_julia_tested": 116,
+    "missing_included_names": 229
   },
   "uncertainties": [
     "The inventory treats package exports as the public algorithm surface; internal, unexported experimental types are not parity targets.",
@@ -5411,10 +5411,10 @@
         "linear solve",
         "adaptive controller"
       ],
-      "rust_status": "missing",
-      "rust_name": null,
-      "julia_status": "no-matched-compliance-detected",
-      "julia_compliance_detected": false,
+      "rust_status": "implemented-and-julia-tested",
+      "rust_name": "Rodas3d",
+      "julia_status": "matched-compliance-detected",
+      "julia_compliance_detected": true,
       "upstream_source": "lib/OrdinaryDiffEqRosenbrock/src/algorithms.jl",
       "upstream_line": 30
     },
@@ -5697,10 +5697,10 @@
         "linear solve",
         "adaptive controller"
       ],
-      "rust_status": "missing",
-      "rust_name": null,
-      "julia_status": "no-matched-compliance-detected",
-      "julia_compliance_detected": false,
+      "rust_status": "implemented-and-julia-tested",
+      "rust_name": "Rodas6P",
+      "julia_status": "matched-compliance-detected",
+      "julia_compliance_detected": true,
       "upstream_source": "lib/OrdinaryDiffEqRosenbrock/src/algorithms.jl",
       "upstream_line": 102
     },
@@ -6035,10 +6035,10 @@
         "linear solve",
         "adaptive controller"
       ],
-      "rust_status": "missing",
-      "rust_name": null,
-      "julia_status": "no-matched-compliance-detected",
-      "julia_compliance_detected": false,
+      "rust_status": "implemented-and-julia-tested",
+      "rust_name": "Ros3Prl",
+      "julia_status": "matched-compliance-detected",
+      "julia_compliance_detected": true,
       "upstream_source": "lib/OrdinaryDiffEqRosenbrock/src/algorithms.jl",
       "upstream_line": 256
     },
