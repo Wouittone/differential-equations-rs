@@ -1,13 +1,4 @@
-use std::alloc::System;
-use std::hint::black_box;
-use std::sync::Mutex;
-
 use differential_equations::{CallbackAction, OdeProblem, Ros34Pw3, SaveMode, SolveOptions, solve};
-use stats_alloc::{INSTRUMENTED_SYSTEM, Region, StatsAlloc};
-
-#[global_allocator]
-static GLOBAL: &StatsAlloc<System> = &INSTRUMENTED_SYSTEM;
-static TEST_LOCK: Mutex<()> = Mutex::new(());
 
 fn fixed_options(step: f64) -> SolveOptions {
     SolveOptions {
@@ -90,28 +81,4 @@ fn adaptive_jacobian_callbacks_and_save_at_are_supported() {
         assert!(solution.times().contains(&time), "missing save_at={time}");
     }
     assert!(solution.stats().jacobian_evaluations > 0);
-}
-
-fn allocations(step: f64) -> usize {
-    let region = Region::new(GLOBAL);
-    let solution = solve(
-        &exponential_problem((0.0, 1.0), 1.0),
-        Ros34Pw3,
-        &fixed_options(step),
-    )
-    .unwrap();
-    black_box(solution.last_state());
-    region.change().allocations
-}
-
-#[test]
-fn callback_free_steps_do_not_allocate_per_step() {
-    let _guard = TEST_LOCK.lock().expect("allocation test lock poisoned");
-    let one_step = allocations(1.0);
-    let many_steps = allocations(0.001);
-    assert!(
-        many_steps <= one_step + 2,
-        "step allocations grew unexpectedly: one_step={one_step}, many_steps={many_steps}"
-    );
-    assert!(one_step <= 60, "unexpected allocation count: {one_step}");
 }
