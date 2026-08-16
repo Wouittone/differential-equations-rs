@@ -1,11 +1,13 @@
 use std::alloc::System;
 use std::hint::black_box;
+use std::sync::Mutex;
 
 use differential_equations::{CallbackAction, OdeProblem, Ros34Pw3, SaveMode, SolveOptions, solve};
 use stats_alloc::{INSTRUMENTED_SYSTEM, Region, StatsAlloc};
 
 #[global_allocator]
 static GLOBAL: &StatsAlloc<System> = &INSTRUMENTED_SYSTEM;
+static TEST_LOCK: Mutex<()> = Mutex::new(());
 
 fn fixed_options(step: f64) -> SolveOptions {
     SolveOptions {
@@ -104,6 +106,7 @@ fn allocations(step: f64) -> usize {
 
 #[test]
 fn callback_free_steps_do_not_allocate_per_step() {
+    let _guard = TEST_LOCK.lock().expect("allocation test lock poisoned");
     let one_step = allocations(1.0);
     let many_steps = allocations(0.001);
     assert!(
