@@ -110,6 +110,14 @@ pub struct Grk4a;
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Grk4t;
 
+/// The four-stage, fourth-order ROK4a Rosenbrock method.
+///
+/// This is the `ROK4aRodasTableau` from the pinned
+/// `OrdinaryDiffEqRosenbrockTableaus` revision. It is an A-stable method with
+/// a third-order embedded estimator used by the shared adaptive controller.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct Rok4a;
+
 /// The four-stage, third-order Rosenbrock-W method `ROS34PW1b`.
 ///
 /// The upstream method has a fourth-order primary formula and a third-order
@@ -802,6 +810,80 @@ const GRK4T_TABLEAU: RodasTableau = RodasTableau {
     time_weights: GRK4T_D,
     weights: GRK4T_B,
     error_weights: GRK4T_E,
+};
+
+// ROK4aRodasTableau(T, T2) from
+// lib/OrdinaryDiffEqRosenbrockTableaus/src/rosenbrock_tableaus.jl at
+// 211142263781255a9aa2f910f6760b9f18ec29c8.
+#[allow(clippy::excessive_precision)]
+const ROK4A_A: &[f64] = &[
+    0.0,
+    0.0,
+    0.0,
+    0.0, // stage 1
+    1.745761101158346,
+    0.0,
+    0.0,
+    0.0, // stage 2
+    2.4703844781940627,
+    0.6835475189193349,
+    0.0,
+    0.0, // stage 3
+    1.6819503991264864,
+    0.25286213499736193,
+    -0.13856798941027462,
+    0.0, // stage 4
+];
+#[allow(clippy::excessive_precision)]
+const ROK4A_C: &[f64] = &[
+    0.0,
+    0.0,
+    0.0,
+    0.0, // stage 1
+    -5.825741115110917,
+    0.0,
+    0.0,
+    0.0, // stage 2
+    1.0021333747582308,
+    0.0,
+    0.0,
+    0.0, // stage 3
+    -2.0798465277651803,
+    -0.7428770881288675,
+    -0.5200138498012211,
+    0.0, // stage 4
+];
+const ROK4A_NODES: &[f64] = &[0.0, 1.0, 0.5, 0.5];
+#[allow(clippy::excessive_precision)]
+const ROK4A_D: &[f64] = &[
+    0.572816062482135,
+    -1.338715867278416,
+    0.9016343030936702,
+    0.19147495119907043,
+];
+#[allow(clippy::excessive_precision)]
+const ROK4A_B: &[f64] = &[
+    2.6484813878883307,
+    0.7862115756123027,
+    0.3466758998674807,
+    1.1638407341055639,
+];
+#[allow(clippy::excessive_precision)]
+const ROK4A_E: &[f64] = &[
+    0.3665053527208292,
+    0.2997106934923117,
+    -0.03500203986368344,
+    1.1638407341055639,
+];
+const ROK4A_TABLEAU: RodasTableau = RodasTableau {
+    stages: 4,
+    gamma: 0.572816062482135,
+    a: ROK4A_A,
+    c_matrix: ROK4A_C,
+    nodes: ROK4A_NODES,
+    time_weights: ROK4A_D,
+    weights: ROK4A_B,
+    error_weights: ROK4A_E,
 };
 
 // ROS34PW1bRodasTableau(T, T2) from
@@ -2993,6 +3075,7 @@ algorithm!(Ros34Prw);
 algorithm!(Ros34Pw3);
 algorithm!(Grk4a);
 algorithm!(Grk4t);
+algorithm!(Rok4a);
 algorithm!(Ros34Pw1b);
 algorithm!(Ros34Pw2);
 algorithm!(Rodas4);
@@ -3070,6 +3153,7 @@ rodas_method!(Ros34Prw, 3, ROS34PRW_TABLEAU);
 rodas_method!(Ros34Pw3, 4, ROS34PW3_TABLEAU);
 rodas_method!(Grk4a, 4, GRK4A_TABLEAU);
 rodas_method!(Grk4t, 4, GRK4T_TABLEAU);
+rodas_method!(Rok4a, 4, ROK4A_TABLEAU);
 rodas_method!(Ros34Pw1b, 3, ROS34PW1B_TABLEAU);
 rodas_method!(Ros34Pw2, 3, ROS34PW2_TABLEAU);
 rodas_method!(Rodas4, 4, RODAS4_TABLEAU);
