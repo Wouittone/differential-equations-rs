@@ -1,4 +1,5 @@
-using OrdinaryDiffEqRosenbrock: GRK4A, GRK4T, ROK4a, ROS2, ROS3, ROS3P, ROS3PR, ROS3PRL, Rodas23W, Rodas3, Rodas3d, Rodas4, Rodas42, Rodas4P, Rodas4P2, Rodas4PW, Rodas5, Rodas5P, Rodas5Pe, Rodas5Pr, Rodas6P,
+<<<<<<< HEAD
+using OrdinaryDiffEqRosenbrock: GRK4A, GRK4T, ROK4a, ROS2, ROS3, ROS3P, ROS3PR, ROS3PRL, ROS3PRL2, Rodas23W, Rodas3, Rodas3d, Rodas4, Rodas42, Rodas4P, Rodas4P2, Rodas4PW, Rodas5, Rodas5P, Rodas5Pe, Rodas5Pr, Rodas6P,
     ROS34PRw, ROS34PW1b, ROS34PW2, Rosenbrock32, RosenbrockW6S4OS
 
 function rust_extended_rosenbrock_endpoints()
@@ -49,6 +50,7 @@ end
         "rodas3d" => Rodas3d(),
         "ros3pr" => ROS3PR(),
         "ros3prl" => ROS3PRL(),
+        "ros3prl2" => ROS3PRL2(),
         "ros3p" => ROS3P(),
         "ros34prw" => ROS34PRw(),
         "rosenbrock32" => Rosenbrock32(),

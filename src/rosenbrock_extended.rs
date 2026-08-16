@@ -68,6 +68,15 @@ pub struct Ros3Pr;
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Ros3Prl;
 
+/// The four-stage, third-order stiffly accurate low-storage ROS3PRL2 method.
+///
+/// Coefficients are from `ROS3PRL2RodasTableau` in the pinned
+/// `OrdinaryDiffEqRosenbrockTableaus` revision. Unlike `ROS3PRL`, the
+/// embedded estimator is consistent on medium-stiff Prothero--Robinson
+/// problems as in the upstream method documentation.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct Ros3Prl2;
+
 /// The adaptive third-order A-stable Rosenbrock method designed for
 /// parabolic problems.
 ///
@@ -482,6 +491,70 @@ const ROS3PRL_TABLEAU: RodasTableau = RodasTableau {
     time_weights: ROS3PRL_D,
     weights: ROS3PRL_B,
     error_weights: ROS3PRL_E,
+};
+
+// ROS3PRL2RodasTableau(T, T2) from
+// lib/OrdinaryDiffEqRosenbrockTableaus/src/rosenbrock_tableaus.jl at the
+// pinned OrdinaryDiffEq.jl revision.
+const ROS3PRL2_A: &[f64] = &[
+    0.0,
+    0.0,
+    0.0,
+    0.0, // stage 1
+    3.000000000000007,
+    0.0,
+    0.0,
+    0.0, // stage 2
+    4.588560720558092,
+    1.147140180139521,
+    0.0,
+    0.0, // stage 3
+    4.588560720558092,
+    1.147140180139521,
+    0.0,
+    0.0, // stage 4
+];
+const ROS3PRL2_C: &[f64] = &[
+    0.0,
+    0.0,
+    0.0,
+    0.0, // stage 1
+    -6.882841080837141,
+    0.0,
+    0.0,
+    0.0, // stage 2
+    -12.579179703104524,
+    -2.9475127180857186,
+    0.0,
+    0.0, // stage 3
+    3.556592450580385,
+    -0.4663124315128337,
+    3.545260255335102,
+    0.0, // stage 4
+];
+const ROS3PRL2_NODES: &[f64] = &[0.0, 1.30759956452538, 1.0, 1.0];
+const ROS3PRL2_D: &[f64] = &[
+    0.435866521508459,
+    -0.871733043016921,
+    -0.8339865967040412,
+    -5.551115123125783e-17,
+];
+const ROS3PRL2_B: &[f64] = &[4.5885607205580925, 1.1471401801395211, 0.0, 1.0];
+const ROS3PRL2_E: &[f64] = &[
+    0.8808636262903982,
+    0.3041167493114213,
+    0.14248471842891264,
+    0.26131506383377634,
+];
+const ROS3PRL2_TABLEAU: RodasTableau = RodasTableau {
+    stages: 4,
+    gamma: 0.435866521508459,
+    a: ROS3PRL2_A,
+    c_matrix: ROS3PRL2_C,
+    nodes: ROS3PRL2_NODES,
+    time_weights: ROS3PRL2_D,
+    weights: ROS3PRL2_B,
+    error_weights: ROS3PRL2_E,
 };
 
 // ROS3PRodasTableau(T, T2) from
@@ -3070,6 +3143,7 @@ algorithm!(Rodas3d);
 algorithm!(Ros3);
 algorithm!(Ros3Pr);
 algorithm!(Ros3Prl);
+algorithm!(Ros3Prl2);
 algorithm!(Ros3p);
 algorithm!(Ros34Prw);
 algorithm!(Ros34Pw3);
@@ -3148,6 +3222,7 @@ rodas_method!(Rodas3d, 3, RODAS3D_TABLEAU);
 rodas_method!(Ros3, 3, ROS3_TABLEAU);
 rodas_method!(Ros3Pr, 3, ROS3PR_TABLEAU);
 rodas_method!(Ros3Prl, 3, ROS3PRL_TABLEAU);
+rodas_method!(Ros3Prl2, 3, ROS3PRL2_TABLEAU);
 rodas_method!(Ros3p, 3, ROS3P_TABLEAU);
 rodas_method!(Ros34Prw, 3, ROS34PRW_TABLEAU);
 rodas_method!(Ros34Pw3, 4, ROS34PW3_TABLEAU);
@@ -3788,7 +3863,8 @@ mod tests {
 
     use super::{
         Grk4a, Grk4t, Rodas3, Rodas3d, Rodas4, Rodas4P, Rodas5P, Rodas5Pr, Rodas6P, Rodas23W, Ros2,
-        Ros3, Ros3Pr, Ros3Prl, Ros3p, Ros34Prw, Ros34Pw1b, Rosenbrock32, RosenbrockW6S4OS,
+        Ros3, Ros3Pr, Ros3Prl, Ros3Prl2, Ros3p, Ros34Prw, Ros34Pw1b, Rosenbrock32,
+        RosenbrockW6S4OS,
     };
     use crate::{CallbackAction, OdeProblem, SaveMode, SolveError, SolveOptions, solve};
 
@@ -3835,6 +3911,13 @@ mod tests {
             solve(
                 &stiff_problem((0.0, 1.0), 1.0),
                 Ros3Prl,
+                &adaptive_options(),
+            )
+            .unwrap()
+            .last_state()[0],
+            solve(
+                &stiff_problem((0.0, 1.0), 1.0),
+                Ros3Prl2,
                 &adaptive_options(),
             )
             .unwrap()
@@ -3937,6 +4020,7 @@ mod tests {
             convergence_ratio(Rodas3d, 0.1),
             convergence_ratio(Ros3Pr, 0.1),
             convergence_ratio(Ros3Prl, 0.1),
+            convergence_ratio(Ros3Prl2, 0.1),
             convergence_ratio(Ros3p, 0.1),
             convergence_ratio(Ros34Prw, 0.1),
             convergence_ratio(Rodas4, 0.1),
@@ -3959,16 +4043,17 @@ mod tests {
         assert!(ratios[5] > 7.0);
         assert!(ratios[6] > 7.0);
         assert!(ratios[7] > 7.0);
-        assert!(ratios[8] > 14.0);
+        assert!(ratios[8] > 7.0);
         assert!(ratios[9] > 14.0);
         assert!(ratios[10] > 14.0);
-        assert!(ratios[11] > 7.0);
-        assert!(ratios[12] > 7.0);
-        assert!(ratios[13] > 14.0);
+        assert!(ratios[11] > 14.0);
+        assert!(ratios[12] > 14.0);
+        assert!(ratios[13] > 7.0);
         assert!(ratios[14] > 14.0);
-        assert!(ratios[15] > 7.0);
+        assert!(ratios[15] > 14.0);
+        assert!(ratios[16] > 7.0);
         // Pinned Rodas23W uses a second-order primary solution.
-        assert!(ratios[16] > 3.0 && ratios[16] < 5.5);
+        assert!(ratios[17] > 3.0 && ratios[17] < 5.5);
     }
 
     #[test]
@@ -4366,6 +4451,52 @@ mod tests {
             ..SolveOptions::default()
         };
         let backward = solve(&backward_problem, Ros3Prl, &backward_options)
+            .unwrap()
+            .last_state()[0];
+        assert!((backward - 1.0).abs() < 3.0e-6);
+    }
+
+    #[test]
+    fn ros3prl2_covers_regular_ode_lifecycle() {
+        let jacobian_calls = Rc::new(Cell::new(0));
+        let jacobian_calls_for_problem = Rc::clone(&jacobian_calls);
+        let problem = OdeProblem::new(
+            |du: &mut [f64], u: &[f64], _: &(), _: f64| du[0] = u[0],
+            vec![1.0],
+            (0.0, 1.0),
+            (),
+        )
+        .with_jacobian(move |jacobian: &mut [f64], _: &[f64], _: &(), _: f64| {
+            jacobian_calls_for_problem.set(jacobian_calls_for_problem.get() + 1);
+            jacobian[0] = 1.0;
+        });
+        let options = SolveOptions {
+            adaptive: false,
+            initial_step: Some(0.01),
+            save: SaveMode::Endpoints,
+            save_at: vec![0.25, 0.5, 0.75],
+            ..SolveOptions::default()
+        };
+        let solution = solve(&problem, Ros3Prl2, &options).unwrap();
+        assert!(jacobian_calls.get() > 0);
+        for &time in &options.save_at {
+            assert!(solution.times().contains(&time), "missing save_at={time}");
+        }
+        assert!((solution.last_state()[0] - 0.75_f64.exp()).abs() < 3.0e-6);
+
+        let backward_problem = OdeProblem::new(
+            |du: &mut [f64], u: &[f64], _: &(), _: f64| du[0] = -2.0 * u[0],
+            vec![(-2.0_f64).exp()],
+            (1.0, 0.0),
+            (),
+        );
+        let backward_options = SolveOptions {
+            adaptive: false,
+            initial_step: Some(0.01),
+            save: SaveMode::Endpoints,
+            ..SolveOptions::default()
+        };
+        let backward = solve(&backward_problem, Ros3Prl2, &backward_options)
             .unwrap()
             .last_state()[0];
         assert!((backward - 1.0).abs() < 3.0e-6);
