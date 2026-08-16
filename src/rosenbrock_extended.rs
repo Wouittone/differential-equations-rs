@@ -69,6 +69,14 @@ pub struct Ros3p;
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Grk4a;
 
+/// The four-stage, fourth-order efficient GRK4T Rosenbrock method.
+///
+/// This is the `GRK4TRodasTableau` from the pinned
+/// `OrdinaryDiffEqRosenbrockTableaus` revision. Its embedded estimator is
+/// third order and is used by the shared adaptive controller.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct Grk4t;
+
 /// The six-stage, fourth-order L-stable Rodas4 method.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Rodas4;
@@ -341,6 +349,74 @@ const GRK4A_TABLEAU: RodasTableau = RodasTableau {
     time_weights: GRK4A_D,
     weights: GRK4A_B,
     error_weights: GRK4A_E,
+};
+
+// GRK4TRodasTableau(T, T2) from
+// lib/OrdinaryDiffEqRosenbrockTableaus/src/rosenbrock_tableaus.jl.
+const GRK4T_A: &[f64] = &[
+    0.0,
+    0.0,
+    0.0,
+    0.0, // stage 1
+    2.0,
+    0.0,
+    0.0,
+    0.0, // stage 2
+    4.524708207373116,
+    4.163528788597648,
+    0.0,
+    0.0, // stage 3
+    4.524708207373116,
+    4.163528788597648,
+    0.0,
+    0.0, // stage 4
+];
+const GRK4T_C: &[f64] = &[
+    0.0,
+    0.0,
+    0.0,
+    0.0, // stage 1
+    -5.071675338776316,
+    0.0,
+    0.0,
+    0.0, // stage 2
+    6.020152728650786,
+    0.1597506846727117,
+    0.0,
+    0.0, // stage 3
+    -1.856343618686113,
+    -8.505380858179826,
+    -2.084075136023187,
+    0.0, // stage 4
+];
+const GRK4T_NODES: &[f64] = &[0.0, 0.462, 0.8802083333333334, 0.8802083333333334];
+const GRK4T_D: &[f64] = &[
+    0.231,
+    -0.03962966775244303,
+    0.5507789395789127,
+    -0.05535098457052764,
+];
+const GRK4T_B: &[f64] = &[
+    3.957503746640777,
+    4.624892388363313,
+    0.6174772638750108,
+    1.282612945269037,
+];
+const GRK4T_E: &[f64] = &[
+    2.302155402932996,
+    3.073634485392623,
+    -0.8732808018045032,
+    -1.282612945269037,
+];
+const GRK4T_TABLEAU: RodasTableau = RodasTableau {
+    stages: 4,
+    gamma: 0.231,
+    a: GRK4T_A,
+    c_matrix: GRK4T_C,
+    nodes: GRK4T_NODES,
+    time_weights: GRK4T_D,
+    weights: GRK4T_B,
+    error_weights: GRK4T_E,
 };
 
 const RODAS4_A: &[f64] = &[
@@ -774,6 +850,7 @@ algorithm!(Ros3);
 algorithm!(Ros3Pr);
 algorithm!(Ros3p);
 algorithm!(Grk4a);
+algorithm!(Grk4t);
 algorithm!(Rodas4);
 algorithm!(Rodas5P);
 algorithm!(RosenbrockW6S4OS);
@@ -834,6 +911,7 @@ rodas_method!(Ros3, 3, ROS3_TABLEAU);
 rodas_method!(Ros3Pr, 3, ROS3PR_TABLEAU);
 rodas_method!(Ros3p, 3, ROS3P_TABLEAU);
 rodas_method!(Grk4a, 4, GRK4A_TABLEAU);
+rodas_method!(Grk4t, 4, GRK4T_TABLEAU);
 rodas_method!(Rodas4, 4, RODAS4_TABLEAU);
 rodas_method!(Rodas5P, 5, RODAS5P_TABLEAU);
 
@@ -1368,7 +1446,8 @@ mod tests {
     use std::rc::Rc;
 
     use super::{
-        Grk4a, Rodas3, Rodas4, Rodas5P, Ros2, Ros3, Ros3Pr, Ros3p, Rosenbrock32, RosenbrockW6S4OS,
+        Grk4a, Grk4t, Rodas3, Rodas4, Rodas5P, Ros2, Ros3, Ros3Pr, Ros3p, Rosenbrock32,
+        RosenbrockW6S4OS,
     };
     use crate::{CallbackAction, OdeProblem, SaveMode, SolveError, SolveOptions, solve};
 
@@ -1421,6 +1500,9 @@ mod tests {
             solve(&stiff_problem((0.0, 1.0), 1.0), Grk4a, &adaptive_options())
                 .unwrap()
                 .last_state()[0],
+            solve(&stiff_problem((0.0, 1.0), 1.0), Grk4t, &adaptive_options())
+                .unwrap()
+                .last_state()[0],
             solve(
                 &stiff_problem((0.0, 1.0), 1.0),
                 Rodas5P,
@@ -1466,6 +1548,7 @@ mod tests {
             convergence_ratio(Ros3p, 0.1),
             convergence_ratio(Rodas4, 0.1),
             convergence_ratio(Grk4a, 0.1),
+            convergence_ratio(Grk4t, 0.1),
             convergence_ratio(Rodas5P, 0.2),
             convergence_ratio(RosenbrockW6S4OS, 0.1),
         ];
@@ -1481,6 +1564,8 @@ mod tests {
         // table and keeps the stronger ratio check below.
         assert!(ratios[6] > 14.0);
         assert!(ratios[7] > 14.0);
+        assert!(ratios[8] > 14.0);
+        assert!(ratios[9] > 14.0);
     }
 
     #[test]
@@ -1539,6 +1624,23 @@ mod tests {
             assert!(solution.times().contains(&time), "missing save_at={time}");
         }
         assert!(solution.last_state()[0] > 0.0);
+
+        let grk4t_options = SolveOptions {
+            adaptive: false,
+            initial_step: Some(0.25),
+            save: SaveMode::Endpoints,
+            save_at: vec![0.25, 0.5, 0.75],
+            ..SolveOptions::default()
+        };
+        let grk4t_solution = solve(&problem, Grk4t, &grk4t_options).unwrap();
+        assert_eq!(grk4t_solution.stats().callback_invocations, 1);
+        for time in grk4t_options.save_at {
+            assert!(
+                grk4t_solution.times().contains(&time),
+                "missing GRK4T save_at={time}"
+            );
+        }
+        assert!(grk4t_solution.last_state()[0] > 0.0);
     }
 
     #[test]
@@ -1596,6 +1698,12 @@ mod tests {
             (
                 "grk4a",
                 solve(&backward_problem(), Grk4a, &adaptive_options())
+                    .unwrap()
+                    .last_state()[0],
+            ),
+            (
+                "grk4t",
+                solve(&backward_problem(), Grk4t, &adaptive_options())
                     .unwrap()
                     .last_state()[0],
             ),
