@@ -69,8 +69,8 @@ pub use second_order::{
 pub use solution::{Solution, SolverStats};
 pub use solver::{OdeAlgorithm, SaveMode, SolveError, SolveOptions, solve};
 pub use ssprk_extended::{
-    Prrk22, Prrk33, SspRk53, SspRk53H, SspRk53TwoN1, SspRk53TwoN2, SspRk54, SspRk63, SspRk73,
-    SspRk83, SspRk104, SspRk432, pRRK22, pRRK33,
+    Prrk22, Prrk33, Prrk54, SspRk53, SspRk53H, SspRk53TwoN1, SspRk53TwoN2, SspRk54, SspRk63,
+    SspRk73, SspRk83, SspRk104, SspRk432, pRRK22, pRRK33, pRRK54,
 };
 pub use ssprk_kyk2014::Kyk2014DgSsprk3S2;
 pub use trbdf2::Trbdf2;
