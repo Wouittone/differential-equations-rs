@@ -132,17 +132,18 @@ Pinned upstream revision:
 | PSRK4p7q6 family | Exact pinned seven-stage fixed fourth-order tableau | 97 library tests plus PSRK integrations | Julia unavailable on worker/coordinator; pinned/full rerun blocked by `JULIA-PATH-20260809` | Rust-reviewed and merged as `77d8bdc`; Julia retry required |
 | Stepanov5 family | Exact pinned seven-stage embedded adaptive (4,5) FSAL tableau | 97 library tests plus Stepanov5 integrations | Julia unavailable on worker/coordinator; pinned/full rerun blocked by `JULIA-PATH-20260809` | Rust-reviewed and merged as `7563e9d`; Julia retry required |
 | pRRK33 family | Native three-stage parametric relaxation SSPRK33 | 97 library tests plus pRRK33 integrations | Julia unavailable on worker/coordinator; pinned/full rerun blocked by `JULIA-PATH-20260809` | Rust-reviewed and merged as `6ac81ff`; Julia retry required |
+| KYK2014DGSSPRK_3S2 family | Native fixed-step second-order SSPRK Shu–Osher tableau | 97 library tests plus KYK convergence/backward/save_at/callback/allocation integrations | Julia unavailable on coordinator; pinned/full rerun blocked by `JULIA-PATH-20260809` | Rust-reviewed and merged as `586bf09` (source wave `3138c0a`); Julia retry required |
 
 ## Validation snapshot
 
 ```text
 cargo fmt -- --check: pass
-cargo test --all-targets: pass (94 library tests plus integration tests/examples)
+cargo test --all-targets: pass (97 library tests plus integration tests/examples)
 cargo clippy --all-targets -- -D warnings: pass
 git diff --check: pass
 pinned Julia environment: pass and reproducible from tracked manifest (14 packages at pinned revision)
-Julia compliance: pRRK22 worker pass; integrated SSPRK432 rerun blocked by `JULIA-PATH-20260809`
-inventory regeneration: pass; 349 source references and strict cross-checkout byte identity verified (92 implemented/tested, 253 missing)
+Julia compliance: isolated AutoDP5 worker pass; integrated rerun blocked by `JULIA-PATH-20260809`
+inventory regeneration: pass; 349 source references and strict cross-checkout byte identity verified (93 implemented/tested, 252 missing)
 ```
 
 ## Next dependency-ready task

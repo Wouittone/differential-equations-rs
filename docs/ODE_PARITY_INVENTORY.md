@@ -20,8 +20,8 @@ and [ode_algorithm_inventory.csv](ode_algorithm_inventory.csv).
 - In-scope regular ODE names: **345**
   (333 canonical/composite constructors and
   12 public aliases).
-- Implemented and detected in matched Julia tests: **92**.
-- Missing in-scope public names: **253**.
+- Implemented and detected in matched Julia tests: **93**.
+- Missing in-scope public names: **252**.
 - Explicitly excluded public names: **4**.
 
 Aliases are public parity obligations but do not require a second numerical kernel.
@@ -56,7 +56,7 @@ Aliases are public parity obligations but do not require a second numerical kern
 | SIMD explicit Runge-Kutta | 3 | 0 | 3 |
 | stabilized explicit Runge-Kutta | 13 | 0 | 13 |
 | stabilized implicit Runge-Kutta | 1 | 0 | 1 |
-| strong-stability-preserving Runge-Kutta | 21 | 15 | 6 |
+| strong-stability-preserving Runge-Kutta | 21 | 16 | 5 |
 | symplectic and partitioned Runge-Kutta | 18 | 4 | 14 |
 | Taylor series | 3 | 0 | 3 |
 | user-tableau explicit Runge-Kutta | 1 | 0 | 1 |
@@ -375,9 +375,8 @@ the JSON/CSV records.
 
 - `IRKC` — OrdinaryDiffEqStabilizedIRK; ODEProblem
 
-### strong-stability-preserving Runge-Kutta (6)
+### strong-stability-preserving Runge-Kutta (5)
 
-- `KYK2014DGSSPRK_3S2` — OrdinaryDiffEqSSPRK; ODEProblem
 - `KYKSSPRK42` — OrdinaryDiffEqSSPRK; ODEProblem
 - `pRRK54` — OrdinaryDiffEqSSPRK; ODEProblem
 - `SSPRK932` — OrdinaryDiffEqSSPRK; ODEProblem
