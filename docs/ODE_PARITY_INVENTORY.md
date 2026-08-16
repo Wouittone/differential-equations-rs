@@ -20,8 +20,8 @@ and [ode_algorithm_inventory.csv](ode_algorithm_inventory.csv).
 - In-scope regular ODE names: **345**
   (333 canonical/composite constructors and
   12 public aliases).
-- Implemented and detected in matched Julia tests: **93**.
-- Missing in-scope public names: **252**.
+- Implemented and detected in matched Julia tests: **94**.
+- Missing in-scope public names: **251**.
 - Explicitly excluded public names: **4**.
 
 Aliases are public parity obligations but do not require a second numerical kernel.
@@ -41,7 +41,7 @@ Aliases are public parity obligations but do not require a second numerical kern
 | high-order explicit Runge-Kutta | 16 | 4 | 12 |
 | IMEX multistep | 2 | 0 | 2 |
 | linear and Lie-group methods | 18 | 0 | 18 |
-| low-order explicit Runge-Kutta | 28 | 26 | 2 |
+| low-order explicit Runge-Kutta | 28 | 27 | 1 |
 | low-storage explicit Runge-Kutta | 44 | 17 | 27 |
 | multirate and MRI-GARK | 9 | 0 | 9 |
 | Nordsieck variable-order multistep | 4 | 0 | 4 |
@@ -178,9 +178,8 @@ the JSON/CSV records.
 - `RKMK2` — OrdinaryDiffEqLinear; ODEProblem with linear/operator ODEFunction
 - `RKMK4` — OrdinaryDiffEqLinear; ODEProblem with linear/operator ODEFunction
 
-### low-order explicit Runge-Kutta (2)
+### low-order explicit Runge-Kutta (1)
 
-- `SIR54` — OrdinaryDiffEqLowOrderRK; ODEProblem
 - `SplitEuler` — OrdinaryDiffEqLowOrderRK; ODEProblem or SplitODEProblem
 
 ### low-storage explicit Runge-Kutta (27)
