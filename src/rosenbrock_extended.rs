@@ -3178,8 +3178,8 @@ mod tests {
     use std::rc::Rc;
 
     use super::{
-        Grk4a, Grk4t, Rodas3, Rodas3d, Rodas4, Rodas4P, Rodas5P, Rodas5Pr, Rodas23W, Ros2, Ros3,
-        Rodas6P, Ros3Pr, Ros3Prl, Ros3p, Ros34Prw, Ros34Pw1b, Rosenbrock32, RosenbrockW6S4OS,
+        Grk4a, Grk4t, Rodas3, Rodas3d, Rodas4, Rodas4P, Rodas5P, Rodas5Pr, Rodas6P, Rodas23W, Ros2,
+        Ros3, Ros3Pr, Ros3Prl, Ros3p, Ros34Prw, Ros34Pw1b, Rosenbrock32, RosenbrockW6S4OS,
     };
     use crate::{CallbackAction, OdeProblem, SaveMode, SolveError, SolveOptions, solve};
 
