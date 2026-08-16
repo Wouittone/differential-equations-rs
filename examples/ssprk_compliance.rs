@@ -1,5 +1,6 @@
 use differential_equations::{
-    OdeProblem, Prrk22, Prrk33, SaveMode, SolveOptions, SspRk22, SspRk33, SspRk43, SspRk432, solve,
+    Kyk2014DgSsprk3S2, OdeProblem, Prrk22, Prrk33, SaveMode, SolveOptions, SspRk22, SspRk33,
+    SspRk43, SspRk432, solve,
 };
 
 type TestRhs = fn(&mut [f64], &[f64], &(), f64);
@@ -47,4 +48,7 @@ fn main() {
 
     let rk432 = solve(&problem(), SspRk432, &adaptive_options()).unwrap();
     println!("ssprk432,{:.17e}", rk432.last_state()[0]);
+
+    let kyk2014 = solve(&problem(), Kyk2014DgSsprk3S2, &fixed_options()).unwrap();
+    println!("kyk2014dgssprk_3s2,{:.17e}", kyk2014.last_state()[0]);
 }

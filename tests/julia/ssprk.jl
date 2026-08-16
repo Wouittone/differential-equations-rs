@@ -1,4 +1,5 @@
-using OrdinaryDiffEqSSPRK: SSPRK22, SSPRK33, SSPRK43, SSPRK432, pRRK22, pRRK33
+using OrdinaryDiffEqSSPRK:
+    KYK2014DGSSPRK_3S2, SSPRK22, SSPRK33, SSPRK43, SSPRK432, pRRK22, pRRK33
 
 function rust_ssprk_endpoints()
     manifest = joinpath(REPOSITORY_ROOT, "Cargo.toml")
@@ -44,6 +45,7 @@ end
         "ssprk33" => ssprk_reference(SSPRK33(); adaptive = false),
         "ssprk43" => ssprk_reference(SSPRK43(); adaptive = true),
         "ssprk432" => ssprk_reference(SSPRK432(); adaptive = true),
+        "kyk2014dgssprk_3s2" => ssprk_reference(KYK2014DGSSPRK_3S2(); adaptive = false),
     )
 
     @test Set(keys(rust)) == Set(keys(julia))
