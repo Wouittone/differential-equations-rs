@@ -91,6 +91,129 @@ impl OdeAlgorithm for SspRk432 {
     }
 }
 
+/// Adaptive nine-stage, third-order SSPRK932.
+///
+/// This is the regular explicit SSPRK932 method from the pinned
+/// `OrdinaryDiffEqSSPRK` implementation.  Its Shu--Osher recurrence is
+/// expanded into an equivalent Butcher tableau so the shared explicit driver
+/// provides fixed/adaptive stepping, callbacks, backward integration, and
+/// `save_at` handling.  Stage and step limiter hooks from the Julia wrapper
+/// are intentionally outside this regular ODE facade.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct SspRk932;
+
+struct SspRk932Tableau;
+
+impl ButcherTableau for SspRk932Tableau {
+    // The first six stages are the six equal SSP substeps.  Stage 7 is the
+    // endpoint derivative used only by the adaptive embedded estimate. Stages
+    // 8--10 are the second SSP branch; the final state is stage 10 plus one
+    // further dt/6 derivative increment. The endpoint stage has zero primary
+    // weight, so fixed-step results retain the upstream main method.
+    const NODES: &'static [f64] = &[
+        0.0,
+        1.0 / 6.0,
+        1.0 / 3.0,
+        1.0 / 2.0,
+        2.0 / 3.0,
+        5.0 / 6.0,
+        1.0,
+        1.0 / 2.0,
+        2.0 / 3.0,
+        5.0 / 6.0,
+    ];
+    const COEFFICIENTS: &'static [&'static [f64]] = &[
+        EMPTY,
+        &[1.0 / 6.0],
+        &[1.0 / 6.0, 1.0 / 6.0],
+        &[1.0 / 6.0, 1.0 / 6.0, 1.0 / 6.0],
+        &[1.0 / 6.0, 1.0 / 6.0, 1.0 / 6.0, 1.0 / 6.0],
+        &[1.0 / 6.0, 1.0 / 6.0, 1.0 / 6.0, 1.0 / 6.0, 1.0 / 6.0],
+        &[
+            1.0 / 6.0,
+            1.0 / 6.0,
+            1.0 / 6.0,
+            1.0 / 6.0,
+            1.0 / 6.0,
+            1.0 / 6.0,
+        ],
+        &[
+            1.0 / 6.0,
+            1.0 / 15.0,
+            1.0 / 15.0,
+            1.0 / 15.0,
+            1.0 / 15.0,
+            1.0 / 15.0,
+            0.0,
+        ],
+        &[
+            1.0 / 6.0,
+            1.0 / 15.0,
+            1.0 / 15.0,
+            1.0 / 15.0,
+            1.0 / 15.0,
+            1.0 / 15.0,
+            0.0,
+            1.0 / 6.0,
+        ],
+        &[
+            1.0 / 6.0,
+            1.0 / 15.0,
+            1.0 / 15.0,
+            1.0 / 15.0,
+            1.0 / 15.0,
+            1.0 / 15.0,
+            0.0,
+            1.0 / 6.0,
+            1.0 / 6.0,
+        ],
+    ];
+    const WEIGHTS: &'static [f64] = &[
+        1.0 / 6.0,
+        1.0 / 15.0,
+        1.0 / 15.0,
+        1.0 / 15.0,
+        1.0 / 15.0,
+        1.0 / 15.0,
+        0.0,
+        1.0 / 6.0,
+        1.0 / 6.0,
+        1.0 / 6.0,
+    ];
+    // The pinned perform-step source writes the low estimate as
+    // (uprev + 6*u6 + 6*dt*f7) / 7.  That expression has derivative weights
+    // summing to 12/7 (an upstream inconsistency); the shared driver requires
+    // a consistent embedded estimate, so the endpoint weight is normalized to
+    // 1/7 here.  The main SSPRK932 update remains an exact tableau expansion.
+    const ERROR_WEIGHTS: Option<&'static [f64]> = Some(&[
+        1.0 / 42.0,
+        -8.0 / 105.0,
+        -8.0 / 105.0,
+        -8.0 / 105.0,
+        -8.0 / 105.0,
+        -8.0 / 105.0,
+        -1.0 / 7.0,
+        1.0 / 6.0,
+        1.0 / 6.0,
+        1.0 / 6.0,
+    ]);
+    const ORDER: usize = 3;
+    const FSAL: bool = false;
+}
+
+impl OdeAlgorithm for SspRk932 {
+    fn solve<F, P>(
+        &self,
+        problem: &OdeProblem<F, P>,
+        options: &SolveOptions,
+    ) -> Result<Solution, SolveError>
+    where
+        F: Fn(&mut [f64], &[f64], &P, f64),
+    {
+        ExplicitRungeKutta::<SspRk932Tableau>::new().solve(problem, options)
+    }
+}
+
 // SSPRK53 (Ruuth 2006).
 const SSPRK53_A2: &[f64] = &[0.377_268_915_331_368_03];
 const SSPRK53_A3: &[f64] = &[0.377_268_915_331_368_03, 0.377_268_915_331_368_03];
@@ -1267,7 +1390,7 @@ fixed_ssprk!(
 mod tests {
     use super::{
         SspRk53, SspRk53H, SspRk53TwoN1, SspRk53TwoN2, SspRk54, SspRk63, SspRk73, SspRk83,
-        SspRk104, SspRk432,
+        SspRk104, SspRk432, SspRk932,
     };
     use crate::{
         CallbackAction, OdeAlgorithm, OdeProblem, SaveMode, SolveError, SolveOptions, solve,
@@ -1318,6 +1441,43 @@ mod tests {
             .unwrap()
             .last_state()[0];
         assert!((endpoint - std::f64::consts::E).abs() < 2.0e-8);
+    }
+
+    #[test]
+    fn ssprk932_supports_fixed_adaptive_and_shared_output_features() {
+        let fixed_order = observed_order(SspRk932);
+        assert!(fixed_order > 2.9, "fixed observed order was {fixed_order}");
+
+        let adaptive = SolveOptions {
+            absolute_tolerance: 1.0e-9,
+            relative_tolerance: 1.0e-9,
+            save: SaveMode::Endpoints,
+            ..SolveOptions::default()
+        };
+        let endpoint = solve(&exponential(), SspRk932, &adaptive)
+            .unwrap()
+            .last_state()[0];
+        assert!((endpoint - std::f64::consts::E).abs() < 2.0e-8);
+
+        let backward = OdeProblem::new(
+            (|du: &mut [f64], u: &[f64], _: &(), _: f64| du[0] = u[0]) as TestRhs,
+            vec![std::f64::consts::E],
+            (1.0, 0.0),
+            (),
+        );
+        let save_at_options = SolveOptions {
+            save_at: vec![0.8, 0.5, 0.2],
+            ..adaptive.clone()
+        };
+        let saved = solve(&backward, SspRk932, &save_at_options).unwrap();
+        assert_eq!(saved.times(), &[0.8, 0.5, 0.2]);
+        assert!((saved.last_state()[0] - 0.2f64.exp()).abs() < 2.0e-7);
+
+        let terminating = exponential()
+            .with_continuous_callback(|_, _, time| time - 0.5, |_, _, _| CallbackAction::Terminate);
+        let terminated = solve(&terminating, SspRk932, &adaptive).unwrap();
+        assert!((terminated.times().last().unwrap() - 0.5).abs() < 1.0e-12);
+        assert_eq!(terminated.stats().callback_invocations, 1);
     }
 
     #[test]

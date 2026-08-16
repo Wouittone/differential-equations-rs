@@ -7,7 +7,8 @@ using OrdinaryDiffEqSSPRK:
     SSPRK63,
     SSPRK73,
     SSPRK83,
-    SSPRK104
+    SSPRK104,
+    SSPRK932
 
 function rust_extended_ssprk_endpoints()
     manifest = joinpath(REPOSITORY_ROOT, "Cargo.toml")
@@ -46,6 +47,7 @@ end
         "ssprk83" => extended_ssprk_reference(SSPRK83()),
         "ssprk54" => extended_ssprk_reference(SSPRK54()),
         "ssprk104" => extended_ssprk_reference(SSPRK104()),
+        "ssprk932" => extended_ssprk_reference(SSPRK932()),
     )
 
     @test Set(keys(rust)) == Set(keys(julia))
