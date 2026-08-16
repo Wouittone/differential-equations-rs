@@ -20,8 +20,8 @@ and [ode_algorithm_inventory.csv](ode_algorithm_inventory.csv).
 - In-scope regular ODE names: **345**
   (333 canonical/composite constructors and
   12 public aliases).
-- Implemented and detected in matched Julia tests: **98**.
-- Missing in-scope public names: **247**.
+- Implemented and detected in matched Julia tests: **100**.
+- Missing in-scope public names: **245**.
 - Explicitly excluded public names: **4**.
 
 Aliases are public parity obligations but do not require a second numerical kernel.
@@ -48,7 +48,7 @@ Aliases are public parity obligations but do not require a second numerical kern
 | parallel diagonally implicit Runge-Kutta | 1 | 0 | 1 |
 | parallel explicit Runge-Kutta | 1 | 0 | 1 |
 | QPRK explicit Runge-Kutta | 1 | 0 | 1 |
-| Rosenbrock and Rosenbrock-W | 40 | 6 | 34 |
+| Rosenbrock and Rosenbrock-W | 40 | 8 | 32 |
 | Runge-Kutta interval prediction | 1 | 0 | 1 |
 | Runge-Kutta-Nystrom | 17 | 0 | 17 |
 | SDIRK, ESDIRK, and additive IMEX RK | 39 | 5 | 34 |
@@ -243,13 +243,12 @@ the JSON/CSV records.
 
 - `QPRK98` — OrdinaryDiffEqQPRK; ODEProblem
 
-### Rosenbrock and Rosenbrock-W (34)
+### Rosenbrock and Rosenbrock-W (32)
 
 - `GRK4A` — OrdinaryDiffEqRosenbrock; ODEProblem
 - `GRK4T` — OrdinaryDiffEqRosenbrock; ODEProblem
 - `HybridExplicitImplicitRK` — OrdinaryDiffEqRosenbrock; ODEProblem
 - `Rodas23W` — OrdinaryDiffEqRosenbrock; ODEProblem
-- `Rodas3` — OrdinaryDiffEqRosenbrock; ODEProblem
 - `Rodas3d` — OrdinaryDiffEqRosenbrock; ODEProblem
 - `Rodas3P` — OrdinaryDiffEqRosenbrock; ODEProblem
 - `Rodas42` — OrdinaryDiffEqRosenbrock; ODEProblem
@@ -263,7 +262,6 @@ the JSON/CSV records.
 - `ROK4a` — OrdinaryDiffEqRosenbrock; ODEProblem
 - `ROS2PR` — OrdinaryDiffEqRosenbrock; ODEProblem
 - `ROS2S` — OrdinaryDiffEqRosenbrock; ODEProblem
-- `ROS3` — OrdinaryDiffEqRosenbrock; ODEProblem
 - `ROS34PRw` — OrdinaryDiffEqRosenbrock; ODEProblem
 - `ROS34PW1a` — OrdinaryDiffEqRosenbrock; ODEProblem
 - `ROS34PW1b` — OrdinaryDiffEqRosenbrock; ODEProblem

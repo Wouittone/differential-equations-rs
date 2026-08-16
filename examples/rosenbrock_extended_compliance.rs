@@ -1,6 +1,5 @@
 use differential_equations::{
-    OdeAlgorithm, OdeProblem, Rodas3, Rodas4, Rodas5P, Ros2, Ros3, Rosenbrock32,
-    RosenbrockW6S4OS,
+    OdeAlgorithm, OdeProblem, Rodas3, Rodas4, Rodas5P, Ros2, Ros3, Rosenbrock32, RosenbrockW6S4OS,
     SaveMode, SolveOptions, solve,
 };
 

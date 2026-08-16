@@ -138,6 +138,8 @@ Pinned upstream revision:
 | pRRK54 family | Native parametric-relaxation SSPRK54 with pinned rescaling coefficients | 101 library tests plus pRRK54 convergence/backward/callback/allocation integrations | Julia unavailable on coordinator; pinned/full rerun blocked by `JULIA-PATH-20260809` | Rust-reviewed and merged as `ab598d4` (source wave `17769c6`); Julia retry required |
 | ROS2 family | Native two-stage Rosenbrock fixed-step tableau | 104 library tests plus ROS2 stiff/Jacobian/backward/callback/save_at/allocation integrations | Julia unavailable on coordinator; pinned/full rerun blocked by `JULIA-PATH-20260809` | Rust-reviewed and merged as `91c66d8` (source wave `42c7306`); Julia retry required |
 | KYKSSPRK42 family | Native four-stage second-order SSPRK tableau | 104 library tests plus KYK convergence/backward/callback/save_at integrations | Julia unavailable on coordinator; pinned/full rerun blocked by `JULIA-PATH-20260809` | Rust-reviewed and merged as `62ac826` (source wave `51945b9`); Julia retry required |
+| Rodas3 family | Native four-stage third-order adaptive Rosenbrock tableau | 104 library tests plus Rodas3 stiff/Jacobian/backward/callback/save_at/allocation integrations | Julia unavailable on coordinator; pinned/full rerun blocked by `JULIA-PATH-20260809` | Rust-reviewed and merged as `fc3155c` (source wave `e157e14`); Julia retry required |
+| ROS3 family | Native three-stage third-order adaptive Rosenbrock tableau | 104 library tests plus ROS3 adaptive compliance/Jacobian coverage | Julia unavailable on coordinator; pinned/full rerun blocked by `JULIA-PATH-20260809` | Rust-reviewed and conflict-resolved/merged as `6427213` (source wave `3822c42`); Julia retry required |
 
 ## Validation snapshot
 
@@ -148,7 +150,7 @@ cargo clippy --all-targets -- -D warnings: pass
 git diff --check: pass
 pinned Julia environment: pass and reproducible from tracked manifest (14 packages at pinned revision)
 Julia compliance: isolated AutoDP5 worker pass; integrated rerun blocked by `JULIA-PATH-20260809`
-inventory regeneration: pass; 349 source references and strict cross-checkout byte identity verified (98 implemented/tested, 247 missing)
+inventory regeneration: pass; 349 source references and strict cross-checkout byte identity verified (100 implemented/tested, 245 missing)
 ```
 
 ## Next dependency-ready task
