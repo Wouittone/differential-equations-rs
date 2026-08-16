@@ -32,6 +32,7 @@ mod solver;
 mod ssprk_extended;
 mod ssprk_kyk2014;
 mod ssprk_kyk42;
+mod ssprk_msvs;
 mod trbdf2;
 mod tsit5;
 mod variable_adams;
@@ -79,6 +80,7 @@ pub use ssprk_extended::{
 };
 pub use ssprk_kyk42::{KYKSSPRK42, KykSsprk42};
 pub use ssprk_kyk2014::Kyk2014DgSsprk3S2;
+pub use ssprk_msvs::{SSPRKMSVS32, SspRkMsvs32};
 pub use trbdf2::Trbdf2;
 pub use tsit5::Tsit5;
 pub use variable_adams::{Vcab3, Vcab4, Vcab5, Vcabm3, Vcabm4, Vcabm5};
