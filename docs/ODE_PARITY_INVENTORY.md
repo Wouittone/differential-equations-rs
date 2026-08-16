@@ -20,8 +20,8 @@ and [ode_algorithm_inventory.csv](ode_algorithm_inventory.csv).
 - In-scope regular ODE names: **345**
   (333 canonical/composite constructors and
   12 public aliases).
-- Implemented and detected in matched Julia tests: **108**.
-- Missing in-scope public names: **237**.
+- Implemented and detected in matched Julia tests: **109**.
+- Missing in-scope public names: **236**.
 - Explicitly excluded public names: **4**.
 
 Aliases are public parity obligations but do not require a second numerical kernel.
@@ -56,7 +56,7 @@ Aliases are public parity obligations but do not require a second numerical kern
 | SIMD explicit Runge-Kutta | 3 | 0 | 3 |
 | stabilized explicit Runge-Kutta | 13 | 0 | 13 |
 | stabilized implicit Runge-Kutta | 1 | 0 | 1 |
-| strong-stability-preserving Runge-Kutta | 21 | 18 | 3 |
+| strong-stability-preserving Runge-Kutta | 21 | 19 | 2 |
 | symplectic and partitioned Runge-Kutta | 18 | 4 | 14 |
 | Taylor series | 3 | 0 | 3 |
 | user-tableau explicit Runge-Kutta | 1 | 0 | 1 |
@@ -362,9 +362,8 @@ the JSON/CSV records.
 
 - `IRKC` — OrdinaryDiffEqStabilizedIRK; ODEProblem
 
-### strong-stability-preserving Runge-Kutta (3)
+### strong-stability-preserving Runge-Kutta (2)
 
-- `SSPRK932` — OrdinaryDiffEqSSPRK; ODEProblem
 - `SSPRKMSVS32` — OrdinaryDiffEqSSPRK; ODEProblem
 - `SSPRKMSVS43` — OrdinaryDiffEqSSPRK; ODEProblem
 
