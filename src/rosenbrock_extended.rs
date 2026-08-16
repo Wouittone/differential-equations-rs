@@ -61,6 +61,15 @@ pub struct Ros3Pr;
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Ros3p;
 
+/// The four-stage, third-order stiffly accurate Rosenbrock-Wanner method.
+///
+/// This is the `ROS34PRw` tableau from the pinned
+/// `OrdinaryDiffEqRosenbrockTableaus` revision. Its embedded estimator is
+/// second order and, as in the upstream implementation, its consistency
+/// degrades on medium-stiff problems.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct Ros34Prw;
+
 /// The four-stage, fourth-order A-stable GRK4A Rosenbrock method.
 ///
 /// This is the `GRK4ARodasTableau` from the pinned
@@ -281,6 +290,79 @@ const ROS3P_TABLEAU: RodasTableau = RodasTableau {
     time_weights: ROS3P_D,
     weights: ROS3P_B,
     error_weights: ROS3P_E,
+};
+
+// ROS34PRwRodasTableau(T, T2) from
+// lib/OrdinaryDiffEqRosenbrockTableaus/src/rosenbrock_tableaus.jl.
+const ROS34PRW_A: &[f64] = &[
+    0.0,
+    0.0,
+    0.0,
+    0.0, // stage 1
+    2.0,
+    0.0,
+    0.0,
+    0.0, // stage 2
+    1.9166355646921893,
+    -0.7305046154473316,
+    0.0,
+    0.0, // stage 3
+    3.7075384385487764,
+    1.984721005641544,
+    -0.7228174329072325,
+    0.0, // stage 4
+];
+const ROS34PRW_C: &[f64] = &[
+    0.0,
+    0.0,
+    0.0,
+    0.0, // stage 1
+    -4.588560720558084,
+    0.0,
+    0.0,
+    0.0, // stage 2
+    -1.4496008611374558,
+    2.6585485498967283,
+    0.0,
+    0.0, // stage 3
+    -0.8142320398640468,
+    2.1949369533270104,
+    -0.9042300763629808,
+    0.0, // stage 4
+];
+const ROS34PRW_NODES: &[f64] = &[
+    0.0,
+    0.871733043016918,
+    1.1537997822626886,
+    0.9999999999999999,
+];
+const ROS34PRW_D: &[f64] = &[
+    0.435866521508459,
+    -0.435866521508459,
+    -0.34459816128502135,
+    5.551115123125783e-17,
+];
+const ROS34PRW_B: &[f64] = &[
+    3.7075384385487764,
+    1.9847210056415439,
+    -0.7228174329072324,
+    1.0,
+];
+const ROS34PRW_E: &[f64] = &[
+    -0.08016142700721947,
+    0.15059517863671545,
+    -0.29187352202361583,
+    0.26131506383377556,
+];
+const ROS34PRW_TABLEAU: RodasTableau = RodasTableau {
+    stages: 4,
+    gamma: 0.435866521508459,
+    a: ROS34PRW_A,
+    c_matrix: ROS34PRW_C,
+    nodes: ROS34PRW_NODES,
+    time_weights: ROS34PRW_D,
+    weights: ROS34PRW_B,
+    error_weights: ROS34PRW_E,
 };
 
 // GRK4ARodasTableau(T, T2) from
@@ -849,6 +931,7 @@ algorithm!(Rodas3);
 algorithm!(Ros3);
 algorithm!(Ros3Pr);
 algorithm!(Ros3p);
+algorithm!(Ros34Prw);
 algorithm!(Grk4a);
 algorithm!(Grk4t);
 algorithm!(Rodas4);
@@ -910,6 +993,7 @@ rodas_method!(Rodas3, 3, RODAS3_TABLEAU);
 rodas_method!(Ros3, 3, ROS3_TABLEAU);
 rodas_method!(Ros3Pr, 3, ROS3PR_TABLEAU);
 rodas_method!(Ros3p, 3, ROS3P_TABLEAU);
+rodas_method!(Ros34Prw, 3, ROS34PRW_TABLEAU);
 rodas_method!(Grk4a, 4, GRK4A_TABLEAU);
 rodas_method!(Grk4t, 4, GRK4T_TABLEAU);
 rodas_method!(Rodas4, 4, RODAS4_TABLEAU);
@@ -1446,7 +1530,7 @@ mod tests {
     use std::rc::Rc;
 
     use super::{
-        Grk4a, Grk4t, Rodas3, Rodas4, Rodas5P, Ros2, Ros3, Ros3Pr, Ros3p, Rosenbrock32,
+        Grk4a, Grk4t, Rodas3, Rodas4, Rodas5P, Ros2, Ros3, Ros3Pr, Ros3p, Ros34Prw, Rosenbrock32,
         RosenbrockW6S4OS,
     };
     use crate::{CallbackAction, OdeProblem, SaveMode, SolveError, SolveOptions, solve};
@@ -1487,6 +1571,13 @@ mod tests {
             solve(&stiff_problem((0.0, 1.0), 1.0), Ros3p, &adaptive_options())
                 .unwrap()
                 .last_state()[0],
+            solve(
+                &stiff_problem((0.0, 1.0), 1.0),
+                Ros34Prw,
+                &adaptive_options(),
+            )
+            .unwrap()
+            .last_state()[0],
             solve(
                 &stiff_problem((0.0, 1.0), 1.0),
                 Rosenbrock32,
@@ -1546,6 +1637,7 @@ mod tests {
             convergence_ratio(Rodas3, 0.1),
             convergence_ratio(Ros3Pr, 0.1),
             convergence_ratio(Ros3p, 0.1),
+            convergence_ratio(Ros34Prw, 0.1),
             convergence_ratio(Rodas4, 0.1),
             convergence_ratio(Grk4a, 0.1),
             convergence_ratio(Grk4t, 0.1),
@@ -1559,10 +1651,10 @@ mod tests {
         // ROS3P is a third-order method; the adjacent fourth-order methods
         // retain the stricter ratio checks below.
         assert!(ratios[4] > 7.0);
-        assert!(ratios[5] > 14.0);
+        assert!(ratios[5] > 7.0);
+        assert!(ratios[6] > 14.0);
         // GRK4A is fourth order; Rodas5P is the fifth-order method in this
         // table and keeps the stronger ratio check below.
-        assert!(ratios[6] > 14.0);
         assert!(ratios[7] > 14.0);
         assert!(ratios[8] > 14.0);
         assert!(ratios[9] > 14.0);
@@ -1707,6 +1799,12 @@ mod tests {
                     .unwrap()
                     .last_state()[0],
             ),
+            (
+                "ros34prw",
+                solve(&backward_problem(), Ros34Prw, &adaptive_options())
+                    .unwrap()
+                    .last_state()[0],
+            ),
         ] {
             assert!(
                 (endpoint - 1.0).abs() < 3.0e-7,
@@ -1744,6 +1842,23 @@ mod tests {
             .with_jacobian(|jacobian: &mut [f64], _: &[f64], _: &(), _: f64| jacobian[0] = -1000.0);
         let numeric = solve(&numeric, Rodas4, &adaptive_options()).unwrap();
         let analytic = solve(&analytic, Rodas4, &adaptive_options()).unwrap();
+        assert!((numeric.last_state()[0] - analytic.last_state()[0]).abs() < 2.0e-10);
+        assert!(analytic.stats().rhs_evaluations < numeric.stats().rhs_evaluations);
+
+        let numeric = solve(
+            &OdeProblem::new(rhs as Rhs, vec![1.0], (0.0, 0.2), ()),
+            Ros34Prw,
+            &adaptive_options(),
+        )
+        .unwrap();
+        let analytic = solve(
+            &OdeProblem::new(rhs as Rhs, vec![1.0], (0.0, 0.2), ()).with_jacobian(
+                |jacobian: &mut [f64], _: &[f64], _: &(), _: f64| jacobian[0] = -1000.0,
+            ),
+            Ros34Prw,
+            &adaptive_options(),
+        )
+        .unwrap();
         assert!((numeric.last_state()[0] - analytic.last_state()[0]).abs() < 2.0e-10);
         assert!(analytic.stats().rhs_evaluations < numeric.stats().rhs_evaluations);
 
@@ -1864,6 +1979,11 @@ mod tests {
         assert!(ros3p_solution.times().contains(&0.25));
         assert!(ros3p_solution.times().contains(&0.5));
         assert!(ros3p_solution.times().contains(&0.75));
+        let ros34prw_solution = solve(&problem, Ros34Prw, &options).unwrap();
+        assert!(ros34prw_solution.stats().callback_invocations > 0);
+        assert!(ros34prw_solution.times().contains(&0.25));
+        assert!(ros34prw_solution.times().contains(&0.5));
+        assert!(ros34prw_solution.times().contains(&0.75));
     }
 
     #[test]
