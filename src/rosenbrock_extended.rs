@@ -114,6 +114,14 @@ pub struct Ros34Pw2;
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Rodas4;
 
+/// The six-stage, fourth-order L-stable Rodas4P method.
+///
+/// Rodas4P emphasizes stability for parabolic problems. Its coefficients are
+/// the `Rodas4PTableau` from the pinned `OrdinaryDiffEqRosenbrockTableaus`
+/// revision.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct Rodas4P;
+
 /// The eight-stage, fifth-order L-stable Rodas5P method.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Rodas5P;
@@ -838,6 +846,106 @@ const RODAS4_TABLEAU: RodasTableau = RodasTableau {
     error_weights: RODAS4_E,
 };
 
+// Rodas4PTableau(T, T2) from
+// lib/OrdinaryDiffEqRosenbrockTableaus/src/rosenbrock_tableaus.jl.
+const RODAS4P_A: &[f64] = &[
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0, // stage 1
+    3.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0, // stage 2
+    1.831036793486759,
+    0.4955183967433795,
+    0.0,
+    0.0,
+    0.0,
+    0.0, // stage 3
+    2.304376582692669,
+    -0.05249275245743001,
+    -1.176798761832782,
+    0.0,
+    0.0,
+    0.0, // stage 4
+    -7.170454962423024,
+    -4.741636671481785,
+    -16.31002631330971,
+    -1.062004044111401,
+    0.0,
+    0.0, // stage 5
+    -7.170454962423024,
+    -4.741636671481785,
+    -16.31002631330971,
+    -1.062004044111401,
+    1.0,
+    0.0, // stage 6
+];
+const RODAS4P_C: &[f64] = &[
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0, // stage 1
+    -12.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0, // stage 2
+    -8.791795173947035,
+    -2.207865586973518,
+    0.0,
+    0.0,
+    0.0,
+    0.0, // stage 3
+    10.81793056857153,
+    6.780270611428266,
+    19.5348594464241,
+    0.0,
+    0.0,
+    0.0, // stage 4
+    34.19095006749676,
+    15.49671153725963,
+    54.7476087596413,
+    14.16005392148534,
+    0.0,
+    0.0, // stage 5
+    34.62605830930532,
+    15.30084976114473,
+    56.99955578662667,
+    18.40807009793095,
+    -5.714285714285717,
+    0.0, // stage 6
+];
+const RODAS4P_NODES: &[f64] = &[0.0, 0.75, 0.21, 0.63, 1.0, 1.0];
+const RODAS4P_D: &[f64] = &[0.25, -0.5, -0.023504, -0.0362, 0.0, 0.0];
+const RODAS4P_B: &[f64] = &[
+    -7.170454962423024,
+    -4.741636671481785,
+    -16.31002631330971,
+    -1.062004044111401,
+    1.0,
+    1.0,
+];
+const RODAS4P_E: &[f64] = &[0.0, 0.0, 0.0, 0.0, 0.0, 1.0];
+const RODAS4P_TABLEAU: RodasTableau = RodasTableau {
+    stages: 6,
+    gamma: 0.25,
+    a: RODAS4P_A,
+    c_matrix: RODAS4P_C,
+    nodes: RODAS4P_NODES,
+    time_weights: RODAS4P_D,
+    weights: RODAS4P_B,
+    error_weights: RODAS4P_E,
+};
+
 const RODAS5P_A: &[f64] = &[
     0.0,
     0.0,
@@ -1235,6 +1343,7 @@ algorithm!(Grk4t);
 algorithm!(Ros34Pw1b);
 algorithm!(Ros34Pw2);
 algorithm!(Rodas4);
+algorithm!(Rodas4P);
 algorithm!(Rodas5P);
 algorithm!(RosenbrockW6S4OS);
 algorithm!(Rodas23W);
@@ -1301,6 +1410,7 @@ rodas_method!(Grk4t, 4, GRK4T_TABLEAU);
 rodas_method!(Ros34Pw1b, 3, ROS34PW1B_TABLEAU);
 rodas_method!(Ros34Pw2, 3, ROS34PW2_TABLEAU);
 rodas_method!(Rodas4, 4, RODAS4_TABLEAU);
+rodas_method!(Rodas4P, 4, RODAS4P_TABLEAU);
 rodas_method!(Rodas5P, 5, RODAS5P_TABLEAU);
 rodas_method!(Rodas23W, 3, RODAS23W_TABLEAU);
 
@@ -1835,8 +1945,8 @@ mod tests {
     use std::rc::Rc;
 
     use super::{
-        Grk4a, Grk4t, Rodas3, Rodas4, Rodas5P, Rodas23W, Ros2, Ros3, Ros3Pr, Ros3p, Ros34Prw,
-        Ros34Pw1b, Rosenbrock32, RosenbrockW6S4OS,
+        Grk4a, Grk4t, Rodas3, Rodas4, Rodas4P, Rodas5P, Rodas23W, Ros2, Ros3, Ros3Pr, Ros3p,
+        Ros34Prw, Ros34Pw1b, Rosenbrock32, RosenbrockW6S4OS,
     };
     use crate::{CallbackAction, OdeProblem, SaveMode, SolveError, SolveOptions, solve};
 
@@ -1893,6 +2003,13 @@ mod tests {
             solve(&stiff_problem((0.0, 1.0), 1.0), Rodas4, &adaptive_options())
                 .unwrap()
                 .last_state()[0],
+            solve(
+                &stiff_problem((0.0, 1.0), 1.0),
+                Rodas4P,
+                &adaptive_options(),
+            )
+            .unwrap()
+            .last_state()[0],
             solve(&stiff_problem((0.0, 1.0), 1.0), Grk4a, &adaptive_options())
                 .unwrap()
                 .last_state()[0],
@@ -1958,6 +2075,7 @@ mod tests {
             convergence_ratio(Ros3p, 0.1),
             convergence_ratio(Ros34Prw, 0.1),
             convergence_ratio(Rodas4, 0.1),
+            convergence_ratio(Rodas4P, 0.1),
             convergence_ratio(Grk4a, 0.1),
             convergence_ratio(Grk4t, 0.1),
             convergence_ratio(Ros34Pw1b, 0.1),
@@ -1974,14 +2092,16 @@ mod tests {
         assert!(ratios[4] > 7.0);
         assert!(ratios[5] > 7.0);
         assert!(ratios[6] > 14.0);
+        assert!(ratios[7] > 14.0);
         // GRK4A is fourth order; Rodas5P is the fifth-order method in this
         // table and keeps the stronger ratio check below.
-        assert!(ratios[7] > 14.0);
-        assert!(ratios[8] > 7.0);
-        // ROS34PW1b is third order in its primary fixed-step update.
+        assert!(ratios[8] > 14.0);
         assert!(ratios[9] > 7.0);
-        assert!(ratios[10] > 14.0);
-        assert!(ratios[11] > 7.0);
+        // ROS34PW1b and Rodas23W are third-order primary updates.
+        assert!(ratios[10] > 7.0);
+        assert!(ratios[11] > 14.0);
+        assert!(ratios[12] > 7.0);
+        assert!(ratios[13] > 7.0);
     }
 
     #[test]
@@ -2067,7 +2187,7 @@ mod tests {
     }
 
     #[test]
-    fn w6s4os_preserves_callbacks_and_requested_samples() {
+    fn stiff_methods_preserve_callbacks_and_requested_samples() {
         let problem = OdeProblem::new(
             |du: &mut [f64], u: &[f64], _: &(), _: f64| du[0] = -u[0],
             vec![1.0],
@@ -2090,10 +2210,21 @@ mod tests {
         };
         let solution = solve(&problem, RosenbrockW6S4OS, &options).unwrap();
         assert_eq!(solution.stats().callback_invocations, 1);
-        for time in options.save_at {
+        for &time in &options.save_at {
             assert!(solution.times().contains(&time), "missing save_at={time}");
         }
         assert!(solution.last_state()[0] > 0.0);
+
+        let rodas4p_solution = solve(&problem, Rodas4P, &options).unwrap();
+        assert_eq!(rodas4p_solution.stats().callback_invocations, 1);
+        assert!(rodas4p_solution.stats().jacobian_evaluations > 0);
+        for &time in &options.save_at {
+            assert!(
+                rodas4p_solution.times().contains(&time),
+                "missing Rodas4P save_at={time}"
+            );
+        }
+        assert!(rodas4p_solution.last_state()[0] > 0.0);
 
         let grk4t_options = SolveOptions {
             adaptive: false,
@@ -2190,6 +2321,12 @@ mod tests {
             (
                 "rodas4",
                 solve(&backward_problem(), Rodas4, &adaptive_options())
+                    .unwrap()
+                    .last_state()[0],
+            ),
+            (
+                "rodas4p",
+                solve(&backward_problem(), Rodas4P, &adaptive_options())
                     .unwrap()
                     .last_state()[0],
             ),
