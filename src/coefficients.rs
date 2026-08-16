@@ -1,7 +1,7 @@
 //! Compile-time coefficient metadata and structural validation.
 //!
-//! These records describe solver data only; no declarative file is parsed on
-//! a solve path. Runtime caches and mutable history remain owned by kernels.
+//! These records describe solver data only; no declarative file is parsed on a solve path.
+//! Runtime caches and mutable history remain owned by kernels.
 
 #![allow(dead_code)]
 
