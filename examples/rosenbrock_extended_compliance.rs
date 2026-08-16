@@ -1,6 +1,7 @@
 use differential_equations::{
-    Grk4a, Grk4t, OdeAlgorithm, OdeProblem, Rodas3, Rodas4, Rodas4P, Rodas5P, Rodas23W, Ros2, Ros3,
-    Ros3Pr, Ros3Prl, Ros3p, Ros34Prw, Ros34Pw1b, Ros34Pw2, Rosenbrock32, RosenbrockW6S4OS,
+    Grk4a, Grk4t, OdeAlgorithm, OdeProblem, Rodas3, Rodas3d, Rodas4, Rodas4P, Rodas5P, Rodas23W,
+    Ros2, Ros3, Ros3Pr, Ros3Prl, Ros3p, Ros34Prw, Ros34Pw1b, Ros34Pw2, Rosenbrock32,
+    RosenbrockW6S4OS,
     SaveMode, SolveOptions, solve,
 };
 
@@ -52,6 +53,7 @@ fn main() {
     print_result("ros2", Ros2);
     print_result("rodas23w", Rodas23W);
     print_result("rodas3", Rodas3);
+    print_result("rodas3d", Rodas3d);
     print_adaptive("ros3", Ros3);
     print_result("ros3pr", Ros3Pr);
     print_result("ros3prl", Ros3Prl);

@@ -39,6 +39,13 @@ pub struct Ros2;
 /// interpolant; the shared recorder supplies trajectory samples.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Rodas3;
+
+/// The four-stage, third-order stiffly accurate Rodas3d method.
+///
+/// This damped method uses the pinned `Rodas3dRodasTableau` coefficients,
+/// including its embedded second-order estimator for adaptive stepping.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct Rodas3d;
 /// The adaptive third-order, three-stage L-stable `ROS3` Rosenbrock method.
 ///
 /// The embedded estimator is second order and strongly A-stable, matching the
@@ -240,6 +247,62 @@ const RODAS3_TABLEAU: RodasTableau = RodasTableau {
     time_weights: RODAS3_D,
     weights: RODAS3_B,
     error_weights: RODAS3_E,
+};
+
+// Rodas3dRodasTableau(T, T2) from
+// lib/OrdinaryDiffEqRosenbrockTableaus/src/rosenbrock_tableaus.jl at
+// OrdinaryDiffEq revision 211142263781255a9aa2f910f6760b9f18ec29c8.
+#[allow(clippy::excessive_precision)]
+const RODAS3D_A: &[f64] = &[
+    0.0,
+    0.0,
+    0.0,
+    0.0, // stage 1
+    2.1736562342774159,
+    0.0,
+    0.0,
+    0.0, // stage 2
+    1.745761108723104,
+    0.0,
+    0.0,
+    0.0, // stage 3
+    1.745761108723104,
+    0.0,
+    1.0,
+    0.0, // stage 4
+];
+#[allow(clippy::excessive_precision)]
+const RODAS3D_C: &[f64] = &[
+    0.0,
+    0.0,
+    0.0,
+    0.0, // stage 1
+    -13.387001858207178,
+    0.0,
+    0.0,
+    0.0, // stage 2
+    0.30442314006596932,
+    0.30745278826153299,
+    0.0,
+    0.0, // stage 3
+    0.57287646414081528,
+    0.34771098605699358,
+    -2.7425340696473901,
+    0.0, // stage 4
+];
+const RODAS3D_NODES: &[f64] = &[0.0, 1.2451051999132263, 1.0, 1.0];
+const RODAS3D_D: &[f64] = &[0.57281606, -3.819703409768521, 0.0, 0.0];
+const RODAS3D_B: &[f64] = &[1.745761108723104, 0.0, 1.0, 1.0];
+const RODAS3D_E: &[f64] = &[0.0, 0.0, 0.0, 1.0];
+const RODAS3D_TABLEAU: RodasTableau = RodasTableau {
+    stages: 4,
+    gamma: 0.57281606,
+    a: RODAS3D_A,
+    c_matrix: RODAS3D_C,
+    nodes: RODAS3D_NODES,
+    time_weights: RODAS3D_D,
+    weights: RODAS3D_B,
+    error_weights: RODAS3D_E,
 };
 
 // ROS3RodasTableau(T, T2) from
@@ -1477,6 +1540,7 @@ macro_rules! algorithm {
 algorithm!(Rosenbrock32);
 algorithm!(Ros2);
 algorithm!(Rodas3);
+algorithm!(Rodas3d);
 algorithm!(Ros3);
 algorithm!(Ros3Pr);
 algorithm!(Ros3Prl);
@@ -1548,6 +1612,7 @@ macro_rules! rodas_method {
 
 rodas_method!(Ros2, 2, ROS2_TABLEAU);
 rodas_method!(Rodas3, 3, RODAS3_TABLEAU);
+rodas_method!(Rodas3d, 3, RODAS3D_TABLEAU);
 rodas_method!(Ros3, 3, ROS3_TABLEAU);
 rodas_method!(Ros3Pr, 3, ROS3PR_TABLEAU);
 rodas_method!(Ros3Prl, 3, ROS3PRL_TABLEAU);
@@ -2184,8 +2249,8 @@ mod tests {
     use std::rc::Rc;
 
     use super::{
-        Grk4a, Grk4t, Rodas3, Rodas4, Rodas4P, Rodas5P, Rodas5Pr, Rodas23W, Ros2, Ros3, Ros3Pr,
-        Ros3Prl, Ros3p, Ros34Prw, Ros34Pw1b, Rosenbrock32, RosenbrockW6S4OS,
+        Grk4a, Grk4t, Rodas3, Rodas3d, Rodas4, Rodas4P, Rodas5P, Rodas5Pr, Rodas23W, Ros2, Ros3,
+        Ros3Pr, Ros3Prl, Ros3p, Ros34Prw, Ros34Pw1b, Rosenbrock32, RosenbrockW6S4OS,
     };
     use crate::{CallbackAction, OdeProblem, SaveMode, SolveError, SolveOptions, solve};
 
@@ -2216,6 +2281,13 @@ mod tests {
             solve(&stiff_problem((0.0, 1.0), 1.0), Rodas3, &adaptive_options())
                 .unwrap()
                 .last_state()[0],
+            solve(
+                &stiff_problem((0.0, 1.0), 1.0),
+                Rodas3d,
+                &adaptive_options(),
+            )
+            .unwrap()
+            .last_state()[0],
             solve(&stiff_problem((0.0, 1.0), 1.0), Ros3, &adaptive_options())
                 .unwrap()
                 .last_state()[0],
@@ -2317,6 +2389,7 @@ mod tests {
             convergence_ratio(Ros2, 0.1),
             convergence_ratio(Rosenbrock32, 0.1),
             convergence_ratio(Rodas3, 0.1),
+            convergence_ratio(Rodas3d, 0.1),
             convergence_ratio(Ros3Pr, 0.1),
             convergence_ratio(Ros3Prl, 0.1),
             convergence_ratio(Ros3p, 0.1),
@@ -2333,24 +2406,22 @@ mod tests {
         assert!(ratios[0] > 3.0);
         assert!(ratios[1] > 7.0);
         assert!(ratios[2] > 7.0);
-        assert!(ratios[3] > 7.0);
+        // Rodas3d is fourth order on this linear problem because its damping
+        // parameter is a root of the fourth-order linear order condition.
+        assert!(ratios[3] > 14.0);
         assert!(ratios[4] > 7.0);
-        // ROS3P is a third-order method; the adjacent fourth-order methods
-        // retain the stricter ratio checks below.
         assert!(ratios[5] > 7.0);
         assert!(ratios[6] > 7.0);
-        assert!(ratios[7] > 14.0);
+        assert!(ratios[7] > 7.0);
         assert!(ratios[8] > 14.0);
-        // GRK4A is fourth order; Rodas5P is the fifth-order method in this
-        // table and keeps the stronger ratio check below.
         assert!(ratios[9] > 14.0);
-        assert!(ratios[10] > 7.0);
-        // ROS34PW1b is third order; pinned Rodas23W explicitly uses the
-        // second-order primary solution (the name denotes its 2/3 pair).
+        assert!(ratios[10] > 14.0);
         assert!(ratios[11] > 7.0);
-        assert!(ratios[12] > 14.0);
-        assert!(ratios[13] > 7.0);
-        assert!(ratios[14] > 3.0 && ratios[14] < 5.5);
+        assert!(ratios[12] > 7.0);
+        assert!(ratios[13] > 14.0);
+        assert!(ratios[14] > 7.0);
+        // Pinned Rodas23W uses a second-order primary solution.
+        assert!(ratios[15] > 3.0 && ratios[15] < 5.5);
     }
 
     #[test]
@@ -2586,6 +2657,12 @@ mod tests {
                     .last_state()[0],
             ),
             (
+                "rodas3d",
+                solve(&backward_problem(), Rodas3d, &adaptive_options())
+                    .unwrap()
+                    .last_state()[0],
+            ),
+            (
                 "rosenbrock32",
                 solve(&backward_problem(), Rosenbrock32, &adaptive_options())
                     .unwrap()
@@ -2746,6 +2823,23 @@ mod tests {
 
         let numeric = solve(
             &OdeProblem::new(rhs as Rhs, vec![1.0], (0.0, 0.2), ()),
+            Rodas3d,
+            &adaptive_options(),
+        )
+        .unwrap();
+        let analytic = solve(
+            &OdeProblem::new(rhs as Rhs, vec![1.0], (0.0, 0.2), ()).with_jacobian(
+                |jacobian: &mut [f64], _: &[f64], _: &(), _: f64| jacobian[0] = -1000.0,
+            ),
+            Rodas3d,
+            &adaptive_options(),
+        )
+        .unwrap();
+        assert!((numeric.last_state()[0] - analytic.last_state()[0]).abs() < 2.0e-10);
+        assert!(analytic.stats().rhs_evaluations < numeric.stats().rhs_evaluations);
+
+        let numeric = solve(
+            &OdeProblem::new(rhs as Rhs, vec![1.0], (0.0, 0.2), ()),
             Ros34Prw,
             &adaptive_options(),
         )
@@ -2861,6 +2955,12 @@ mod tests {
         assert!(rodas3_solution.times().contains(&0.25));
         assert!(rodas3_solution.times().contains(&0.5));
         assert!(rodas3_solution.times().contains(&0.75));
+
+        let rodas3d_solution = solve(&problem, Rodas3d, &options).unwrap();
+        assert!(rodas3d_solution.stats().callback_invocations > 0);
+        assert!(rodas3d_solution.times().contains(&0.25));
+        assert!(rodas3d_solution.times().contains(&0.5));
+        assert!(rodas3d_solution.times().contains(&0.75));
 
         let ros2_solution = solve(&problem, Ros2, &options).unwrap();
         assert!(ros2_solution.stats().callback_invocations > 0);
