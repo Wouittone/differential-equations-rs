@@ -3,15 +3,27 @@ param(
     [Parameter(Mandatory = $true)]
     [string] $UpstreamPath,
 
-    [string] $RepositoryPath = (Split-Path -Parent $PSScriptRoot),
+    [string] $RepositoryPath,
 
-    [string] $OutputDirectory = (Join-Path (Split-Path -Parent $PSScriptRoot) 'docs'),
+    [string] $OutputDirectory,
 
     [switch] $Check
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+
+# Windows PowerShell 5.1 evaluates parameter defaults before `$PSScriptRoot`
+# is populated for `-File` invocation. Resolve defaults after parameter binding
+# so the documented `powershell -File ...` command works on both PowerShell 5
+# and PowerShell 7.
+$scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Definition
+if ([string]::IsNullOrWhiteSpace($RepositoryPath)) {
+    $RepositoryPath = Split-Path -Parent $scriptRoot
+}
+if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
+    $OutputDirectory = Join-Path $RepositoryPath 'docs'
+}
 
 $expectedRevision = '211142263781255a9aa2f910f6760b9f18ec29c8'
 $resolvedUpstream = (Resolve-Path -LiteralPath $UpstreamPath).Path
@@ -408,7 +420,21 @@ function Get-StepControl {
 
 function Convert-ToRelativeUnixPath {
     param([string] $BasePath, [string] $Path)
-    return ([System.IO.Path]::GetRelativePath($BasePath, $Path) -replace '\\', '/')
+    $relativeMethod = [System.IO.Path].GetMethod('GetRelativePath', [type[]]@([string], [string]))
+    if ($null -ne $relativeMethod) {
+        return ([System.IO.Path]::GetRelativePath($BasePath, $Path) -replace '\\', '/')
+    }
+
+    # .NET Framework (used by Windows PowerShell 5.1) lacks Path.GetRelativePath.
+    # Uri.MakeRelativeUri provides the same lexical path conversion without
+    # changing the generated inventory contents.
+    $baseFull = [System.IO.Path]::GetFullPath($BasePath)
+    if (-not $baseFull.EndsWith([System.IO.Path]::DirectorySeparatorChar)) {
+        $baseFull += [System.IO.Path]::DirectorySeparatorChar
+    }
+    $baseUri = [System.Uri]$baseFull
+    $pathUri = [System.Uri]([System.IO.Path]::GetFullPath($Path))
+    return [System.Uri]::UnescapeDataString($baseUri.MakeRelativeUri($pathUri).ToString()) -replace '/', '/'
 }
 
 function Normalize-AlgorithmName {
@@ -668,6 +694,30 @@ $csvPath = Join-Path $OutputDirectory 'ode_algorithm_inventory.csv'
 $markdownPath = Join-Path $OutputDirectory 'ODE_PARITY_INVENTORY.md'
 
 $jsonText = $summary | ConvertTo-Json -Depth 8
+# ConvertTo-Json uses four-space indentation and extra colon padding on
+# Windows PowerShell 5.1, but two-space indentation on PowerShell 7. Normalize
+# the structural whitespace so both documented runtimes produce identical
+# tracked artifacts.
+$jsonLines = @()
+$jsonDepth = 0
+foreach ($jsonLine in ($jsonText -split "`r?`n")) {
+    $trimmed = $jsonLine.Trim()
+    if ([string]::IsNullOrWhiteSpace($trimmed)) {
+        $jsonLines += ''
+        continue
+    }
+    $outputDepth = $jsonDepth
+    if ($trimmed.StartsWith('}') -or $trimmed.StartsWith(']')) {
+        $outputDepth = [Math]::Max(0, $jsonDepth - 1)
+    }
+    $trimmed = $trimmed -replace '^("[^"]+":)\s+', '$1 '
+    $jsonLines += ((' ' * ($outputDepth * 2)) + $trimmed)
+    $structural = $trimmed -replace '"(?:\\.|[^"\\])*"', ''
+    $jsonDepth += ([regex]::Matches($structural, '[\{\[]')).Count
+    $jsonDepth -= ([regex]::Matches($structural, '[\}\]]')).Count
+    if ($jsonDepth -lt 0) { $jsonDepth = 0 }
+}
+$jsonText = $jsonLines -join "`n"
 Write-CanonicalUtf8Text -Path $jsonPath -Content $jsonText
 $csvLines = $inventory | Select-Object name, kind, alias_of, upstream_package, family, scope, exclusion_reason,
     problem_representation, fixed_adaptive_behavior, jacobian_requirement, linear_solver_requirement,
@@ -697,7 +747,7 @@ $nonAlgorithmExportRows = $summary.non_algorithm_exports | ForEach-Object {
 }
 $missingSections = $missing | Group-Object family | Sort-Object Name | ForEach-Object {
     $entries = @($_.Group | Sort-Object name | ForEach-Object {
-        "- ``$($_.name)`` — $($_.upstream_package); $($_.problem_representation)"
+        ("- " + [char]96 + $_.name + [char]96 + " " + [char]0x2014 + " " + $_.upstream_package + "; " + $_.problem_representation)
     })
     "### $($_.Name) ($($_.Count))`n`n$($entries -join "`n")"
 }
