@@ -61,6 +61,14 @@ pub struct Ros3Pr;
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Ros3p;
 
+/// The four-stage, fourth-order A-stable GRK4A Rosenbrock method.
+///
+/// This is the `GRK4ARodasTableau` from the pinned
+/// `OrdinaryDiffEqRosenbrockTableaus` revision. Its embedded estimator is
+/// third order and is used by the shared adaptive controller.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct Grk4a;
+
 /// The six-stage, fourth-order L-stable Rodas4 method.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Rodas4;
@@ -265,6 +273,74 @@ const ROS3P_TABLEAU: RodasTableau = RodasTableau {
     time_weights: ROS3P_D,
     weights: ROS3P_B,
     error_weights: ROS3P_E,
+};
+
+// GRK4ARodasTableau(T, T2) from
+// lib/OrdinaryDiffEqRosenbrockTableaus/src/rosenbrock_tableaus.jl.
+const GRK4A_A: &[f64] = &[
+    0.0,
+    0.0,
+    0.0,
+    0.0, // stage 1
+    1.108860759493671,
+    0.0,
+    0.0,
+    0.0, // stage 2
+    2.37708526198336,
+    0.1850114988899692,
+    0.0,
+    0.0, // stage 3
+    2.37708526198336,
+    0.1850114988899692,
+    0.0,
+    0.0, // stage 4
+];
+const GRK4A_C: &[f64] = &[
+    0.0,
+    0.0,
+    0.0,
+    0.0, // stage 1
+    -4.920188402397641,
+    0.0,
+    0.0,
+    0.0, // stage 2
+    1.055588686048583,
+    3.351817267668938,
+    0.0,
+    0.0, // stage 3
+    3.846869007049313,
+    3.42710924126818,
+    -2.162408848753263,
+    0.0, // stage 4
+];
+const GRK4A_NODES: &[f64] = &[0.0, 0.438, 0.87, 0.87];
+const GRK4A_D: &[f64] = &[
+    0.395,
+    -0.372672395484092,
+    0.06629196544571492,
+    0.4340946962568634,
+];
+const GRK4A_B: &[f64] = &[
+    1.84568324040584,
+    0.1369796894360503,
+    0.7129097783291559,
+    0.6329113924050632,
+];
+const GRK4A_E: &[f64] = &[
+    0.04831870177201765,
+    -0.6471108651049505,
+    0.218687666050024,
+    -0.6329113924050632,
+];
+const GRK4A_TABLEAU: RodasTableau = RodasTableau {
+    stages: 4,
+    gamma: 0.395,
+    a: GRK4A_A,
+    c_matrix: GRK4A_C,
+    nodes: GRK4A_NODES,
+    time_weights: GRK4A_D,
+    weights: GRK4A_B,
+    error_weights: GRK4A_E,
 };
 
 const RODAS4_A: &[f64] = &[
@@ -697,6 +773,8 @@ algorithm!(Rodas3);
 algorithm!(Ros3);
 algorithm!(Ros3Pr);
 algorithm!(Ros3p);
+algorithm!(Grk4a);
+algorithm!(Grk4a);
 algorithm!(Rodas4);
 algorithm!(Rodas5P);
 algorithm!(RosenbrockW6S4OS);
@@ -756,6 +834,8 @@ rodas_method!(Rodas3, 3, RODAS3_TABLEAU);
 rodas_method!(Ros3, 3, ROS3_TABLEAU);
 rodas_method!(Ros3Pr, 3, ROS3PR_TABLEAU);
 rodas_method!(Ros3p, 3, ROS3P_TABLEAU);
+rodas_method!(Grk4a, 4, GRK4A_TABLEAU);
+rodas_method!(Grk4a, 4, GRK4A_TABLEAU);
 rodas_method!(Rodas4, 4, RODAS4_TABLEAU);
 rodas_method!(Rodas5P, 5, RODAS5P_TABLEAU);
 
@@ -1290,7 +1370,7 @@ mod tests {
     use std::rc::Rc;
 
     use super::{
-        Rodas3, Rodas4, Rodas5P, Ros2, Ros3, Ros3Pr, Ros3p, Rosenbrock32, RosenbrockW6S4OS,
+        Grk4a, Rodas3, Rodas4, Rodas5P, Ros2, Ros3, Ros3Pr, Ros3p, Rosenbrock32, RosenbrockW6S4OS,
     };
     use crate::{CallbackAction, OdeProblem, SaveMode, SolveError, SolveOptions, solve};
 
@@ -1338,6 +1418,9 @@ mod tests {
             solve(&stiff_problem((0.0, 1.0), 1.0), Rodas4, &adaptive_options())
                 .unwrap()
                 .last_state()[0],
+            solve(&stiff_problem((0.0, 1.0), 1.0), Grk4a, &adaptive_options())
+                .unwrap()
+                .last_state()[0],
             solve(
                 &stiff_problem((0.0, 1.0), 1.0),
                 Rodas5P,
@@ -1382,6 +1465,7 @@ mod tests {
             convergence_ratio(Ros3Pr, 0.1),
             convergence_ratio(Ros3p, 0.1),
             convergence_ratio(Rodas4, 0.1),
+            convergence_ratio(Grk4a, 0.1),
             convergence_ratio(Rodas5P, 0.2),
             convergence_ratio(RosenbrockW6S4OS, 0.1),
         ];
@@ -1390,8 +1474,9 @@ mod tests {
         assert!(ratios[2] > 7.0);
         assert!(ratios[3] > 7.0);
         assert!(ratios[4] > 14.0);
-        assert!(ratios[5] > 25.0);
-        assert!(ratios[6] > 14.0);
+        assert!(ratios[5] > 14.0);
+        assert!(ratios[6] > 25.0);
+        assert!(ratios[7] > 14.0);
     }
 
     #[test]
@@ -1504,6 +1589,12 @@ mod tests {
                     .unwrap()
                     .last_state()[0],
             ),
+            (
+                "grk4a",
+                solve(&backward_problem(), Grk4a, &adaptive_options())
+                    .unwrap()
+                    .last_state()[0],
+            ),
         ] {
             assert!(
                 (endpoint - 1.0).abs() < 3.0e-7,
@@ -1541,6 +1632,23 @@ mod tests {
             .with_jacobian(|jacobian: &mut [f64], _: &[f64], _: &(), _: f64| jacobian[0] = -1000.0);
         let numeric = solve(&numeric, Rodas4, &adaptive_options()).unwrap();
         let analytic = solve(&analytic, Rodas4, &adaptive_options()).unwrap();
+        assert!((numeric.last_state()[0] - analytic.last_state()[0]).abs() < 2.0e-10);
+        assert!(analytic.stats().rhs_evaluations < numeric.stats().rhs_evaluations);
+
+        let numeric = solve(
+            &OdeProblem::new(rhs as Rhs, vec![1.0], (0.0, 0.2), ()),
+            Grk4a,
+            &adaptive_options(),
+        )
+        .unwrap();
+        let analytic = solve(
+            &OdeProblem::new(rhs as Rhs, vec![1.0], (0.0, 0.2), ()).with_jacobian(
+                |jacobian: &mut [f64], _: &[f64], _: &(), _: f64| jacobian[0] = -1000.0,
+            ),
+            Grk4a,
+            &adaptive_options(),
+        )
+        .unwrap();
         assert!((numeric.last_state()[0] - analytic.last_state()[0]).abs() < 2.0e-10);
         assert!(analytic.stats().rhs_evaluations < numeric.stats().rhs_evaluations);
 
@@ -1615,6 +1723,12 @@ mod tests {
         assert!(solution.times().contains(&0.25));
         assert!(solution.times().contains(&0.5));
         assert!(solution.times().contains(&0.75));
+
+        let grk4a_solution = solve(&problem, Grk4a, &options).unwrap();
+        assert!(grk4a_solution.stats().callback_invocations > 0);
+        assert!(grk4a_solution.times().contains(&0.25));
+        assert!(grk4a_solution.times().contains(&0.5));
+        assert!(grk4a_solution.times().contains(&0.75));
 
         let rodas3_solution = solve(&problem, Rodas3, &options).unwrap();
         assert!(rodas3_solution.stats().callback_invocations > 0);
