@@ -1,4 +1,4 @@
-using OrdinaryDiffEqRosenbrock: GRK4A, GRK4T, ROS2, ROS3, ROS3P, ROS3PR, ROS3PRL, Rodas23W, Rodas3, Rodas3d, Rodas4, Rodas4P, Rodas5P, Rodas5Pe, Rodas5Pr,
+using OrdinaryDiffEqRosenbrock: GRK4A, GRK4T, ROS2, ROS3, ROS3P, ROS3PR, ROS3PRL, Rodas23W, Rodas3, Rodas3d, Rodas4, Rodas4P, Rodas5P, Rodas5Pe, Rodas5Pr, Rodas6P,
     ROS34PRw, ROS34PW1b, ROS34PW2, Rosenbrock32, RosenbrockW6S4OS
 
 function rust_extended_rosenbrock_endpoints()
@@ -62,6 +62,7 @@ end
         "ros34pw1b" => ROS34PW1b(),
         "ros34pw2" => ROS34PW2(),
         "rodas5p" => Rodas5P(),
+        "rodas6p" => Rodas6P(),
         "rosenbrockw6s4os" => RosenbrockW6S4OS(),
     )
     julia = Dict{String, Float64}()
