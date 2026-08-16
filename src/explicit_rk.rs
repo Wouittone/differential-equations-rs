@@ -278,6 +278,98 @@ const STEPANOV5_C: &[f64] = &[
     1.0,
 ];
 
+// Kovalnogov--Simos--Tsitouras' seven-stage embedded (4,5) pair designed for
+// SIR-type epidemic models. Coefficients are copied from
+// `SIR54ConstantCache` in OrdinaryDiffEqLowOrderRK at the pinned revision.
+// The eighth row evaluates the accepted endpoint derivative and repeats the
+// primary weights, enabling the shared driver's FSAL lifecycle.
+#[allow(clippy::excessive_precision)]
+const SIR54_A2: &[f64] = &[0.224_991_857_145_594_237];
+#[allow(clippy::excessive_precision)]
+const SIR54_A3: &[f64] = &[0.089_153_361_032_067_110_3, 0.238_960_211_116_888_553];
+#[allow(clippy::excessive_precision)]
+const SIR54_A4: &[f64] = &[
+    1.305_022_398_630_580_47,
+    -5.501_775_490_886_398_96,
+    5.141_131_395_293_160_96,
+];
+#[allow(clippy::excessive_precision)]
+const SIR54_A5: &[f64] = &[
+    1.762_340_129_275_443_37,
+    -7.448_004_284_702_026_72,
+    6.708_799_990_212_466_12,
+    -0.034_137_733_035_716_306_3,
+];
+#[allow(clippy::excessive_precision)]
+const SIR54_A6: &[f64] = &[
+    1.874_129_116_198_187_46,
+    -7.914_679_777_117_707_18,
+    7.079_854_670_922_640_69,
+    -0.024_494_533_823_827_536_7,
+    -0.014_809_476_179_293_43,
+];
+#[allow(clippy::excessive_precision)]
+const SIR54_A7: &[f64] = &[
+    0.098_697_149_855_166_425_6,
+    0.001_007_293_468_741_506_52,
+    0.495_118_366_873_759_549,
+    3.937_670_696_186_871_79,
+    -13.739_542_408_717_368_5,
+    10.207_048_902_332_829_2,
+];
+#[allow(clippy::excessive_precision)]
+const SIR54_B: &[f64] = &[
+    0.098_697_149_855_166_425_6,
+    0.001_007_293_468_741_506_52,
+    0.495_118_366_873_759_549,
+    3.937_670_696_186_871_79,
+    -13.739_542_408_717_368_5,
+    10.207_048_902_332_829_2,
+    0.0,
+    0.0,
+];
+const SIR54_ERROR: &[f64] = &[
+    0.008_811_109_678_338_494,
+    0.000_114_075_641_625_599_92,
+    -0.029_774_887_187_671_295,
+    9.643_100_938_483_734,
+    -8.034_112_166_420_506,
+    6.316_157_977_385_73,
+    -0.05,
+    0.0,
+];
+#[allow(clippy::excessive_precision)]
+const SIR54_FSAL_ROW: &[f64] = &[
+    0.098_697_149_855_166_425_6,
+    0.001_007_293_468_741_506_52,
+    0.495_118_366_873_759_549,
+    3.937_670_696_186_871_79,
+    -13.739_542_408_717_368_5,
+    10.207_048_902_332_829_2,
+    0.0,
+];
+const SIR54_A: &[&[f64]] = &[
+    EMPTY,
+    SIR54_A2,
+    SIR54_A3,
+    SIR54_A4,
+    SIR54_A5,
+    SIR54_A6,
+    SIR54_A7,
+    SIR54_FSAL_ROW,
+];
+#[allow(clippy::excessive_precision)]
+const SIR54_C: &[f64] = &[
+    0.0,
+    0.224_991_857_145_594_237,
+    0.328_113_572_148_955_663,
+    0.944_378_303_037_342_471,
+    0.988_998_101_750_166_47,
+    1.0,
+    1.0,
+    1.0,
+];
+
 // Misha Stepanov's eight-stage sixth-order fixed-step method. The tableau is
 // copied from OrdinaryDiffEqLowOrderRK's `MSRK6ConstantCache` at the pinned
 // upstream revision. OrdinaryDiffEq evaluates one additional endpoint
@@ -880,6 +972,16 @@ algorithm!(
     coefficients = STEPANOV5_A,
     weights = STEPANOV5_B,
     error_weights = Some(STEPANOV5_B_TILDE),
+    order = 5,
+    fsal = true
+);
+algorithm!(
+    Sir54,
+    "The adaptive embedded (4,5) seven-stage FSAL Runge–Kutta method for SIR-type epidemic models.",
+    nodes = SIR54_C,
+    coefficients = SIR54_A,
+    weights = SIR54_B,
+    error_weights = Some(SIR54_ERROR),
     order = 5,
     fsal = true
 );

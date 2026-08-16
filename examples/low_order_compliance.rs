@@ -1,7 +1,7 @@
 use differential_equations::{
     Alshina2, Alshina3, Alshina6, Anas5, AutoDp5, Bs3, Dp5, Euler, Frk65, Heun, Midpoint, Msrk5,
     Msrk6, OdeProblem, Psrk3p5q4, Psrk3p6q5, Psrk4p7q6, Ralston, Ralston4, Rk4, Rkm, Rko65,
-    Rodas5P, SaveMode, SolveOptions, Stepanov5, solve,
+    Rodas5P, SaveMode, Sir54, SolveOptions, Stepanov5, solve,
 };
 
 type TestRhs = fn(&mut [f64], &[f64], &(), f64);
@@ -68,6 +68,9 @@ fn main() {
 
     let stepanov5 = solve(&problem(), Stepanov5, &fixed_options(0.01)).unwrap();
     println!("stepanov5,{:.17e}", stepanov5.last_state()[0]);
+
+    let sir54 = solve(&problem(), Sir54, &fixed_options(0.01)).unwrap();
+    println!("sir54,{:.17e}", sir54.last_state()[0]);
 
     let frk65 = solve(&problem(), Frk65::default(), &fixed_options(0.01)).unwrap();
     println!("frk65,{:.17e}", frk65.last_state()[0]);

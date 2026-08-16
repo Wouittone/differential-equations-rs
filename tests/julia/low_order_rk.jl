@@ -1,5 +1,5 @@
 using OrdinaryDiffEqLowOrderRK:
-    Alshina2, Alshina3, Alshina6, Anas5, AutoDP5, Euler, Midpoint, Heun, Ralston, Ralston4, RK4, RKM, RKO65, MSRK5, MSRK6, Stepanov5, FRK65, PSRK3p5q4, PSRK3p6q5, PSRK4p7q6, BS3, DP5
+    Alshina2, Alshina3, Alshina6, Anas5, AutoDP5, Euler, Midpoint, Heun, Ralston, Ralston4, RK4, RKM, RKO65, MSRK5, MSRK6, Stepanov5, SIR54, FRK65, PSRK3p5q4, PSRK3p6q5, PSRK4p7q6, BS3, DP5
 using OrdinaryDiffEqRosenbrock: Rodas5P
 
 function rust_low_order_endpoints()
@@ -52,6 +52,7 @@ end
         "msrk5" => exponential_reference(MSRK5(); adaptive = false, dt = 0.01),
         "msrk6" => exponential_reference(MSRK6(); adaptive = false, dt = 0.01),
         "stepanov5" => exponential_reference(Stepanov5(); adaptive = false, dt = 0.01),
+        "sir54" => exponential_reference(SIR54(); adaptive = false, dt = 0.01),
         "frk65" => exponential_reference(FRK65(); adaptive = false, dt = 0.01),
         "psrk3p5q4" => exponential_reference(PSRK3p5q4(); adaptive = false, dt = 0.01),
         "psrk3p6q5" => exponential_reference(PSRK3p6q5(); adaptive = false, dt = 0.01),
