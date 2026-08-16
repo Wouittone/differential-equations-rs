@@ -1,5 +1,6 @@
 use differential_equations::{
-    OdeAlgorithm, OdeProblem, Rodas4, Rodas5P, Rosenbrock32, SaveMode, SolveOptions, solve,
+    OdeAlgorithm, OdeProblem, Rodas4, Rodas5P, Rosenbrock32, RosenbrockW6S4OS, SaveMode,
+    SolveOptions, solve,
 };
 
 type TestRhs = fn(&mut [f64], &[f64], &(), f64);
@@ -46,4 +47,8 @@ fn main() {
     print_result("rosenbrock32", Rosenbrock32);
     print_result("rodas4", Rodas4);
     print_result("rodas5p", Rodas5P);
+    println!(
+        "rosenbrockw6s4os_fixed,{:.17e}",
+        endpoint(RosenbrockW6S4OS, false)
+    );
 }

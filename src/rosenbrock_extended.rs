@@ -32,6 +32,14 @@ pub struct Rodas4;
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Rodas5P;
 
+/// The six-stage, fourth-order Rosenbrock-W method (fixed step only).
+///
+/// Coefficients are from `RosenbrockW6S4OSRodasTableau` in the pinned
+/// `OrdinaryDiffEqRosenbrockTableaus` revision. The upstream algorithm is
+/// intentionally fixed-step because it has no embedded error estimator.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct RosenbrockW6S4OS;
+
 struct RodasTableau {
     stages: usize,
     gamma: f64,
@@ -315,9 +323,122 @@ const RODAS5P_TABLEAU: RodasTableau = RodasTableau {
     error_weights: RODAS5P_E,
 };
 
+const ROSENBROCK_W6S4OS_A: &[f64] = &[
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.5812383407115008,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.903962441371467,
+    1.861519155534501,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    2.076579719675,
+    0.1884255381414796,
+    1.870158967491032,
+    0.0,
+    0.0,
+    0.0,
+    4.435550638484312,
+    5.457181798610189,
+    4.61635078806893,
+    3.118111952402361,
+    0.0,
+    0.0,
+    10.79170169848326,
+    -10.05691522584131,
+    14.99564485428419,
+    5.274339954390943,
+    1.42973087126119,
+    0.0,
+];
+const ROSENBROCK_W6S4OS_C: &[f64] = &[
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    -2.661294105131369,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    -3.128450202373838,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    -6.920335474535658,
+    -1.202675288266817,
+    -9.73356181141362,
+    0.0,
+    0.0,
+    0.0,
+    -28.09530629102695,
+    20.37126295479377,
+    -41.04375275302869,
+    -19.66373175620895,
+    0.0,
+    0.0,
+    9.7998186780974,
+    11.93579288660318,
+    3.673874929013201,
+    14.8078285410955,
+    0.831858399869068,
+    0.0,
+];
+const ROSENBROCK_W6S4OS_NODES: &[f64] = &[
+    0.0,
+    0.1453095851778752,
+    0.3817422770256738,
+    0.6367813704374599,
+    0.7560744496323561,
+    0.927104723987567,
+];
+const ROSENBROCK_W6S4OS_D: &[f64] = &[
+    0.25,
+    0.0836691184292894,
+    0.0544718623516351,
+    -0.3402289722355864,
+    0.0337651588339529,
+    -0.090307426761854,
+];
+const ROSENBROCK_W6S4OS_B: &[f64] = &[
+    6.456217074653235,
+    -4.853141317768053,
+    9.76531833406926,
+    2.081084177278723,
+    0.6603936866352417,
+    0.6,
+];
+const ROSENBROCK_W6S4OS_E: &[f64] = &[0.0; 6];
+const ROSENBROCK_W6S4OS_TABLEAU: RodasTableau = RodasTableau {
+    stages: 6,
+    gamma: 0.25,
+    a: ROSENBROCK_W6S4OS_A,
+    c_matrix: ROSENBROCK_W6S4OS_C,
+    nodes: ROSENBROCK_W6S4OS_NODES,
+    time_weights: ROSENBROCK_W6S4OS_D,
+    weights: ROSENBROCK_W6S4OS_B,
+    error_weights: ROSENBROCK_W6S4OS_E,
+};
+
 #[allow(clippy::too_many_arguments)]
 trait ExtendedRosenbrockMethod {
     const ERROR_ORDER: usize;
+    const ADAPTIVE: bool;
 
     fn perform_step<F, P>(
         problem: &OdeProblem<F, P>,
@@ -357,9 +478,11 @@ macro_rules! algorithm {
 algorithm!(Rosenbrock32);
 algorithm!(Rodas4);
 algorithm!(Rodas5P);
+algorithm!(RosenbrockW6S4OS);
 
 impl ExtendedRosenbrockMethod for Rosenbrock32 {
     const ERROR_ORDER: usize = 3;
+    const ADAPTIVE: bool = true;
 
     fn perform_step<F, P>(
         problem: &OdeProblem<F, P>,
@@ -384,6 +507,7 @@ macro_rules! rodas_method {
     ($name:ident, $order:literal, $tableau:ident) => {
         impl ExtendedRosenbrockMethod for $name {
             const ERROR_ORDER: usize = $order;
+            const ADAPTIVE: bool = true;
 
             fn perform_step<F, P>(
                 problem: &OdeProblem<F, P>,
@@ -408,6 +532,37 @@ macro_rules! rodas_method {
 
 rodas_method!(Rodas4, 4, RODAS4_TABLEAU);
 rodas_method!(Rodas5P, 5, RODAS5P_TABLEAU);
+
+impl ExtendedRosenbrockMethod for RosenbrockW6S4OS {
+    const ERROR_ORDER: usize = 4;
+    const ADAPTIVE: bool = false;
+
+    fn perform_step<F, P>(
+        problem: &OdeProblem<F, P>,
+        state: &[f64],
+        time: f64,
+        step: f64,
+        candidate: &mut [f64],
+        options: &SolveOptions,
+        workspace: &mut Workspace,
+        stats: &mut SolverStats,
+    ) -> Result<f64, SolveError>
+    where
+        F: Fn(&mut [f64], &[f64], &P, f64),
+    {
+        perform_rodas(
+            problem,
+            candidate,
+            state,
+            time,
+            step,
+            options,
+            &ROSENBROCK_W6S4OS_TABLEAU,
+            workspace,
+            stats,
+        )
+    }
+}
 
 struct Workspace {
     current_derivative: Vec<f64>,
@@ -466,7 +621,7 @@ where
 {
     fn capabilities(&self) -> KernelCapabilities {
         KernelCapabilities::with_controller(
-            true,
+            M::ADAPTIVE,
             ControllerConfig::proportional(
                 M::ERROR_ORDER,
                 SAFETY,
@@ -908,8 +1063,8 @@ mod tests {
     use std::cell::Cell;
     use std::rc::Rc;
 
-    use super::{Rodas4, Rodas5P, Rosenbrock32};
-    use crate::{CallbackAction, OdeProblem, SaveMode, SolveOptions, solve};
+    use super::{Rodas4, Rodas5P, Rosenbrock32, RosenbrockW6S4OS};
+    use crate::{CallbackAction, OdeProblem, SaveMode, SolveError, SolveOptions, solve};
 
     type TestRhs = fn(&mut [f64], &[f64], &(), f64);
 
@@ -983,10 +1138,70 @@ mod tests {
             convergence_ratio(Rosenbrock32, 0.1),
             convergence_ratio(Rodas4, 0.1),
             convergence_ratio(Rodas5P, 0.2),
+            convergence_ratio(RosenbrockW6S4OS, 0.1),
         ];
         assert!(ratios[0] > 7.0);
         assert!(ratios[1] > 14.0);
         assert!(ratios[2] > 25.0);
+        assert!(ratios[3] > 14.0);
+    }
+
+    #[test]
+    fn w6s4os_is_fixed_step_only_and_supports_backward_integration() {
+        let adaptive_error = solve(
+            &stiff_problem((0.0, 1.0), 1.0),
+            RosenbrockW6S4OS,
+            &adaptive_options(),
+        )
+        .expect_err("RosenbrockW6S4OS must reject adaptive scheduling");
+        assert_eq!(adaptive_error, SolveError::AdaptiveStepUnsupported);
+
+        let backward_problem = OdeProblem::new(
+            |du: &mut [f64], u: &[f64], _: &(), _: f64| du[0] = -2.0 * u[0],
+            vec![(-2.0_f64).exp()],
+            (1.0, 0.0),
+            (),
+        );
+        let options = SolveOptions {
+            adaptive: false,
+            initial_step: Some(0.05),
+            save: SaveMode::Endpoints,
+            ..SolveOptions::default()
+        };
+        let endpoint = solve(&backward_problem, RosenbrockW6S4OS, &options)
+            .unwrap()
+            .last_state()[0];
+        assert!((endpoint - 1.0).abs() < 5.0e-7, "endpoint={endpoint:.17e}");
+    }
+
+    #[test]
+    fn w6s4os_preserves_callbacks_and_requested_samples() {
+        let problem = OdeProblem::new(
+            |du: &mut [f64], u: &[f64], _: &(), _: f64| du[0] = -u[0],
+            vec![1.0],
+            (0.0, 1.0),
+            (),
+        )
+        .with_discrete_callback(
+            |_, _, time| time == 0.5,
+            |state, _, _| {
+                state[0] += 0.25;
+                CallbackAction::Continue
+            },
+        );
+        let options = SolveOptions {
+            adaptive: false,
+            initial_step: Some(0.25),
+            save: SaveMode::Endpoints,
+            save_at: vec![0.25, 0.5, 0.75],
+            ..SolveOptions::default()
+        };
+        let solution = solve(&problem, RosenbrockW6S4OS, &options).unwrap();
+        assert_eq!(solution.stats().callback_invocations, 1);
+        for time in options.save_at {
+            assert!(solution.times().contains(&time), "missing save_at={time}");
+        }
+        assert!(solution.last_state()[0] > 0.0);
     }
 
     #[test]
