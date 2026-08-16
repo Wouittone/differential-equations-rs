@@ -1,5 +1,5 @@
 using OrdinaryDiffEqRosenbrock: GRK4A, GRK4T, ROS2, ROS3, ROS3P, ROS3PR, Rodas3, Rodas4, Rodas5P,
-    ROS34PRw, ROS34PW1b, Rosenbrock32, RosenbrockW6S4OS
+    ROS34PRw, ROS34PW1b, ROS34PW2, Rosenbrock32, RosenbrockW6S4OS
 
 function rust_extended_rosenbrock_endpoints()
     manifest = joinpath(REPOSITORY_ROOT, "Cargo.toml")
@@ -54,6 +54,7 @@ end
         "grk4a" => GRK4A(),
         "grk4t" => GRK4T(),
         "ros34pw1b" => ROS34PW1b(),
+        "ros34pw2" => ROS34PW2(),
         "rodas5p" => Rodas5P(),
         "rosenbrockw6s4os" => RosenbrockW6S4OS(),
     )

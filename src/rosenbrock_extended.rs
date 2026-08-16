@@ -94,6 +94,14 @@ pub struct Grk4t;
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Ros34Pw1b;
 
+/// The four-stage, fourth-order stiffly accurate ROS34PW2 Rosenbrock-W method.
+///
+/// Coefficients are from `ROS34PW2RodasTableau` in the pinned
+/// `OrdinaryDiffEqRosenbrockTableaus` revision. The embedded estimator is
+/// third order and is used by the shared adaptive controller.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct Ros34Pw2;
+
 /// The six-stage, fourth-order L-stable Rodas4 method.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Rodas4;
@@ -573,6 +581,75 @@ const ROS34PW1B_TABLEAU: RodasTableau = RodasTableau {
     error_weights: ROS34PW1B_E,
 };
 
+// ROS34PW2RodasTableau(T, T2) from
+// lib/OrdinaryDiffEqRosenbrockTableaus/src/rosenbrock_tableaus.jl at
+// 211142263781255a9aa2f910f6760b9f18ec29c8.
+const ROS34PW2_A: &[f64] = &[
+    0.0,
+    0.0,
+    0.0,
+    0.0, // stage 1
+    2.0,
+    0.0,
+    0.0,
+    0.0, // stage 2
+    1.4192173174557647,
+    -0.2592322116729697,
+    0.0,
+    0.0, // stage 3
+    4.18476048231916,
+    -0.28519201735549593,
+    2.294280360279042,
+    0.0, // stage 4
+];
+const ROS34PW2_C: &[f64] = &[
+    0.0,
+    0.0,
+    0.0,
+    0.0, // stage 1
+    -4.588560720558084,
+    0.0,
+    0.0,
+    0.0, // stage 2
+    -4.18476048231916,
+    0.28519201735549593,
+    0.0,
+    0.0, // stage 3
+    -6.368179200128359,
+    -6.795620944466837,
+    2.8700986043310563,
+    0.0, // stage 4
+];
+const ROS34PW2_NODES: &[f64] = &[0.0, 0.871733043016918, 0.7315799577888524, 1.0];
+const ROS34PW2_D: &[f64] = &[
+    0.435866521508459,
+    -0.435866521508459,
+    -0.4133333762338865,
+    -5.551115123125783e-17,
+];
+const ROS34PW2_B: &[f64] = &[
+    4.1847604823191595,
+    -0.28519201735549565,
+    2.2942803602790414,
+    1.0,
+];
+const ROS34PW2_E: &[f64] = &[
+    0.2777499476479681,
+    -1.4032398951759992,
+    1.7726301276675507,
+    0.5,
+];
+const ROS34PW2_TABLEAU: RodasTableau = RodasTableau {
+    stages: 4,
+    gamma: 0.435866521508459,
+    a: ROS34PW2_A,
+    c_matrix: ROS34PW2_C,
+    nodes: ROS34PW2_NODES,
+    time_weights: ROS34PW2_D,
+    weights: ROS34PW2_B,
+    error_weights: ROS34PW2_E,
+};
+
 const RODAS4_A: &[f64] = &[
     0.0,
     0.0,
@@ -1007,6 +1084,7 @@ algorithm!(Ros34Prw);
 algorithm!(Grk4a);
 algorithm!(Grk4t);
 algorithm!(Ros34Pw1b);
+algorithm!(Ros34Pw2);
 algorithm!(Rodas4);
 algorithm!(Rodas5P);
 algorithm!(RosenbrockW6S4OS);
@@ -1070,6 +1148,7 @@ rodas_method!(Ros34Prw, 3, ROS34PRW_TABLEAU);
 rodas_method!(Grk4a, 4, GRK4A_TABLEAU);
 rodas_method!(Grk4t, 4, GRK4T_TABLEAU);
 rodas_method!(Ros34Pw1b, 3, ROS34PW1B_TABLEAU);
+rodas_method!(Ros34Pw2, 3, ROS34PW2_TABLEAU);
 rodas_method!(Rodas4, 4, RODAS4_TABLEAU);
 rodas_method!(Rodas5P, 5, RODAS5P_TABLEAU);
 
@@ -1739,7 +1818,8 @@ mod tests {
         // table and keeps the stronger ratio check below.
         assert!(ratios[7] > 14.0);
         assert!(ratios[8] > 7.0);
-        assert!(ratios[9] > 14.0);
+        // ROS34PW1b is third order in its primary fixed-step update.
+        assert!(ratios[9] > 7.0);
         assert!(ratios[10] > 14.0);
     }
 
