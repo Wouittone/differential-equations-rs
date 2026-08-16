@@ -1,5 +1,5 @@
 use differential_equations::{
-    OdeAlgorithm, OdeProblem, Rodas3, Rodas4, Rodas5P, Ros2, Ros3, Ros3Pr, Rosenbrock32,
+    OdeAlgorithm, OdeProblem, Rodas3, Rodas4, Rodas5P, Ros2, Ros3, Ros3Pr, Ros3p, Rosenbrock32,
     RosenbrockW6S4OS, SaveMode, SolveOptions, solve,
 };
 
@@ -52,6 +52,7 @@ fn main() {
     print_result("rodas3", Rodas3);
     print_adaptive("ros3", Ros3);
     print_result("ros3pr", Ros3Pr);
+    print_result("ros3p", Ros3p);
     print_result("rosenbrock32", Rosenbrock32);
     print_result("rodas4", Rodas4);
     print_result("rodas5p", Rodas5P);

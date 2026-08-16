@@ -52,6 +52,14 @@ pub struct Ros3;
 /// `OrdinaryDiffEqRosenbrockTableaus` revision.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Ros3Pr;
+/// The adaptive third-order A-stable Rosenbrock method designed for
+/// parabolic problems.
+///
+/// This is the `ROS3P` tableau from the pinned
+/// `OrdinaryDiffEqRosenbrockTableaus` revision. The embedded estimator is
+/// second order, as in the upstream `ROS3PRodasTableau`.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct Ros3p;
 
 /// The six-stage, fourth-order L-stable Rodas4 method.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -211,6 +219,52 @@ const ROS3PR_TABLEAU: RodasTableau = RodasTableau {
     time_weights: ROS3PR_D,
     weights: ROS3PR_B,
     error_weights: ROS3PR_E,
+};
+
+// ROS3PRodasTableau(T, T2) from
+// lib/OrdinaryDiffEqRosenbrockTableaus/src/rosenbrock_tableaus.jl.
+// The source computes these values from gamma = 1/2 + sqrt(3)/6. They are
+// written as literals here so the solve path remains allocation-free and
+// deterministic while retaining the upstream Float64 tableau.
+const ROS3P_A: &[f64] = &[
+    0.0,
+    0.0,
+    0.0, // stage 1
+    1.2679491924311228,
+    0.0,
+    0.0, // stage 2
+    1.2679491924311228,
+    0.0,
+    0.0, // stage 3
+];
+const ROS3P_C: &[f64] = &[
+    0.0,
+    0.0,
+    0.0, // stage 1
+    -1.6076951545867364,
+    0.0,
+    0.0, // stage 2
+    -3.4641016151377553,
+    -1.7320508075688774,
+    0.0, // stage 3
+];
+const ROS3P_NODES: &[f64] = &[0.0, 1.0, 1.0];
+const ROS3P_D: &[f64] = &[0.7886751345948129, -0.2113248654051871, -1.077350269189626];
+const ROS3P_B: &[f64] = &[2.0, 0.5773502691896257, 0.42264973081037427];
+const ROS3P_E: &[f64] = &[
+    -0.1132486540518709,
+    -0.42264973081037427,
+    5.551115123125783e-17,
+];
+const ROS3P_TABLEAU: RodasTableau = RodasTableau {
+    stages: 3,
+    gamma: 0.7886751345948129,
+    a: ROS3P_A,
+    c_matrix: ROS3P_C,
+    nodes: ROS3P_NODES,
+    time_weights: ROS3P_D,
+    weights: ROS3P_B,
+    error_weights: ROS3P_E,
 };
 
 const RODAS4_A: &[f64] = &[
@@ -642,6 +696,7 @@ algorithm!(Ros2);
 algorithm!(Rodas3);
 algorithm!(Ros3);
 algorithm!(Ros3Pr);
+algorithm!(Ros3p);
 algorithm!(Rodas4);
 algorithm!(Rodas5P);
 algorithm!(RosenbrockW6S4OS);
@@ -700,6 +755,7 @@ rodas_method!(Ros2, 2, ROS2_TABLEAU);
 rodas_method!(Rodas3, 3, RODAS3_TABLEAU);
 rodas_method!(Ros3, 3, ROS3_TABLEAU);
 rodas_method!(Ros3Pr, 3, ROS3PR_TABLEAU);
+rodas_method!(Ros3p, 3, ROS3P_TABLEAU);
 rodas_method!(Rodas4, 4, RODAS4_TABLEAU);
 rodas_method!(Rodas5P, 5, RODAS5P_TABLEAU);
 
@@ -1233,7 +1289,9 @@ mod tests {
     use std::cell::Cell;
     use std::rc::Rc;
 
-    use super::{Rodas3, Rodas4, Rodas5P, Ros2, Ros3, Ros3Pr, Rosenbrock32, RosenbrockW6S4OS};
+    use super::{
+        Rodas3, Rodas4, Rodas5P, Ros2, Ros3, Ros3Pr, Ros3p, Rosenbrock32, RosenbrockW6S4OS,
+    };
     use crate::{CallbackAction, OdeProblem, SaveMode, SolveError, SolveOptions, solve};
 
     type TestRhs = fn(&mut [f64], &[f64], &(), f64);
@@ -1267,6 +1325,7 @@ mod tests {
                 .unwrap()
                 .last_state()[0],
             solve(&stiff_problem((0.0, 1.0), 1.0), Ros3Pr, &adaptive_options())
+            solve(&stiff_problem((0.0, 1.0), 1.0), Ros3p, &adaptive_options())
                 .unwrap()
                 .last_state()[0],
             solve(
@@ -1321,6 +1380,7 @@ mod tests {
             convergence_ratio(Rosenbrock32, 0.1),
             convergence_ratio(Rodas3, 0.1),
             convergence_ratio(Ros3Pr, 0.1),
+            convergence_ratio(Ros3p, 0.1),
             convergence_ratio(Rodas4, 0.1),
             convergence_ratio(Rodas5P, 0.2),
             convergence_ratio(RosenbrockW6S4OS, 0.1),
@@ -1402,24 +1462,53 @@ mod tests {
                 (),
             )
         };
-        for endpoint in [
-            solve(&backward_problem(), Ros2, &adaptive_options())
-                .unwrap()
-                .last_state()[0],
-            solve(&backward_problem(), Rodas3, &adaptive_options())
-                .unwrap()
-                .last_state()[0],
-            solve(&backward_problem(), Rosenbrock32, &adaptive_options())
-                .unwrap()
-                .last_state()[0],
-            solve(&backward_problem(), Rodas4, &adaptive_options())
-                .unwrap()
-                .last_state()[0],
-            solve(&backward_problem(), Rodas5P, &adaptive_options())
-                .unwrap()
-                .last_state()[0],
+        let ros3p_options = SolveOptions {
+            adaptive: false,
+            initial_step: Some(0.01),
+            save: SaveMode::Endpoints,
+            ..SolveOptions::default()
+        };
+        let ros3p_endpoint = solve(&backward_problem(), Ros3p, &ros3p_options)
+            .unwrap()
+            .last_state()[0];
+        assert!((ros3p_endpoint - 1.0).abs() < 3.0e-6);
+
+        for (name, endpoint) in [
+            (
+                "ros2",
+                solve(&backward_problem(), Ros2, &adaptive_options())
+                    .unwrap()
+                    .last_state()[0],
+            ),
+            (
+                "rodas3",
+                solve(&backward_problem(), Rodas3, &adaptive_options())
+                    .unwrap()
+                    .last_state()[0],
+            ),
+            (
+                "rosenbrock32",
+                solve(&backward_problem(), Rosenbrock32, &adaptive_options())
+                    .unwrap()
+                    .last_state()[0],
+            ),
+            (
+                "rodas4",
+                solve(&backward_problem(), Rodas4, &adaptive_options())
+                    .unwrap()
+                    .last_state()[0],
+            ),
+            (
+                "rodas5p",
+                solve(&backward_problem(), Rodas5P, &adaptive_options())
+                    .unwrap()
+                    .last_state()[0],
+            ),
         ] {
-            assert!((endpoint - 1.0).abs() < 3.0e-7);
+            assert!(
+                (endpoint - 1.0).abs() < 3.0e-7,
+                "{name}: endpoint={endpoint:.17e}"
+            );
         }
     }
 
@@ -1544,6 +1633,11 @@ mod tests {
         assert!(ros3pr_solution.times().contains(&0.25));
         assert!(ros3pr_solution.times().contains(&0.5));
         assert!(ros3pr_solution.times().contains(&0.75));
+        let ros3p_solution = solve(&problem, Ros3p, &options).unwrap();
+        assert!(ros3p_solution.stats().callback_invocations > 0);
+        assert!(ros3p_solution.times().contains(&0.25));
+        assert!(ros3p_solution.times().contains(&0.5));
+        assert!(ros3p_solution.times().contains(&0.75));
     }
 
     #[test]
