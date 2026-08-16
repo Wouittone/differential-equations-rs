@@ -46,6 +46,13 @@ pub struct Rodas3;
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Ros3;
 
+/// The three-stage, third-order A-stable ROS3PR Rosenbrock method.
+///
+/// Coefficients are from `ROS3PRRodasTableau` in the pinned
+/// `OrdinaryDiffEqRosenbrockTableaus` revision.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct Ros3Pr;
+
 /// The six-stage, fourth-order L-stable Rodas4 method.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Rodas4;
@@ -165,6 +172,45 @@ const ROS3_TABLEAU: RodasTableau = RodasTableau {
     time_weights: ROS3_D,
     weights: ROS3_B,
     error_weights: ROS3_E,
+};
+
+// ROS3PRRodasTableau(T, T2) from
+// lib/OrdinaryDiffEqRosenbrockTableaus/src/rosenbrock_tableaus.jl.
+const ROS3PR_A: &[f64] = &[
+    0.0,
+    0.0,
+    0.0, // stage 1
+    3.0000000000000018,
+    0.0,
+    0.0, // stage 2
+    3.80384757729337,
+    1.2679491924311226,
+    0.0, // stage 3
+];
+const ROS3PR_C: &[f64] = &[
+    0.0,
+    0.0,
+    0.0, // stage 1
+    -3.80384757729337,
+    0.0,
+    0.0, // stage 2
+    -5.673079295488928,
+    -1.7384634363911504,
+    0.0, // stage 3
+];
+const ROS3PR_NODES: &[f64] = &[0.0, 2.36602540378444, 1.0];
+const ROS3PR_D: &[f64] = &[0.788675134594813, -1.577350269189627, -0.577350269189621];
+const ROS3PR_B: &[f64] = &[4.5358983848622305, 1.2679491924311173, 1.0];
+const ROS3PR_E: &[f64] = &[-0.4598572229918937, -0.22992861149594657, 0.0];
+const ROS3PR_TABLEAU: RodasTableau = RodasTableau {
+    stages: 3,
+    gamma: 0.788675134594813,
+    a: ROS3PR_A,
+    c_matrix: ROS3PR_C,
+    nodes: ROS3PR_NODES,
+    time_weights: ROS3PR_D,
+    weights: ROS3PR_B,
+    error_weights: ROS3PR_E,
 };
 
 const RODAS4_A: &[f64] = &[
@@ -595,6 +641,7 @@ algorithm!(Rosenbrock32);
 algorithm!(Ros2);
 algorithm!(Rodas3);
 algorithm!(Ros3);
+algorithm!(Ros3Pr);
 algorithm!(Rodas4);
 algorithm!(Rodas5P);
 algorithm!(RosenbrockW6S4OS);
@@ -652,6 +699,7 @@ macro_rules! rodas_method {
 rodas_method!(Ros2, 2, ROS2_TABLEAU);
 rodas_method!(Rodas3, 3, RODAS3_TABLEAU);
 rodas_method!(Ros3, 3, ROS3_TABLEAU);
+rodas_method!(Ros3Pr, 3, ROS3PR_TABLEAU);
 rodas_method!(Rodas4, 4, RODAS4_TABLEAU);
 rodas_method!(Rodas5P, 5, RODAS5P_TABLEAU);
 
@@ -1185,7 +1233,7 @@ mod tests {
     use std::cell::Cell;
     use std::rc::Rc;
 
-    use super::{Rodas3, Rodas4, Rodas5P, Ros2, Ros3, Rosenbrock32, RosenbrockW6S4OS};
+    use super::{Rodas3, Rodas4, Rodas5P, Ros2, Ros3, Ros3Pr, Rosenbrock32, RosenbrockW6S4OS};
     use crate::{CallbackAction, OdeProblem, SaveMode, SolveError, SolveOptions, solve};
 
     type TestRhs = fn(&mut [f64], &[f64], &(), f64);
@@ -1216,6 +1264,7 @@ mod tests {
                 .unwrap()
                 .last_state()[0],
             solve(&stiff_problem((0.0, 1.0), 1.0), Ros3, &adaptive_options())
+            solve(&stiff_problem((0.0, 1.0), 1.0), Ros3Pr, &adaptive_options())
                 .unwrap()
                 .last_state()[0],
             solve(
@@ -1269,6 +1318,7 @@ mod tests {
             convergence_ratio(Ros2, 0.1),
             convergence_ratio(Rosenbrock32, 0.1),
             convergence_ratio(Rodas3, 0.1),
+            convergence_ratio(Ros3Pr, 0.1),
             convergence_ratio(Rodas4, 0.1),
             convergence_ratio(Rodas5P, 0.2),
             convergence_ratio(RosenbrockW6S4OS, 0.1),
@@ -1276,9 +1326,10 @@ mod tests {
         assert!(ratios[0] > 3.0);
         assert!(ratios[1] > 7.0);
         assert!(ratios[2] > 7.0);
-        assert!(ratios[3] > 14.0);
-        assert!(ratios[4] > 25.0);
-        assert!(ratios[5] > 14.0);
+        assert!(ratios[3] > 7.0);
+        assert!(ratios[4] > 14.0);
+        assert!(ratios[5] > 25.0);
+        assert!(ratios[6] > 14.0);
     }
 
     #[test]
@@ -1371,6 +1422,24 @@ mod tests {
     }
 
     #[test]
+    fn ros3pr_supports_fixed_step_backward_integration() {
+        let problem = OdeProblem::new(
+            |du: &mut [f64], u: &[f64], _: &(), _: f64| du[0] = -2.0 * u[0],
+            vec![(-2.0_f64).exp()],
+            (1.0, 0.0),
+            (),
+        );
+        let options = SolveOptions {
+            adaptive: false,
+            initial_step: Some(0.01),
+            save: SaveMode::Endpoints,
+            ..SolveOptions::default()
+        };
+        let solution = solve(&problem, Ros3Pr, &options).unwrap();
+        assert!((solution.last_state()[0] - 1.0).abs() < 3.0e-6);
+    }
+
+    #[test]
     fn analytic_jacobian_reduces_rhs_work() {
         fn rhs(du: &mut [f64], u: &[f64], _: &(), time: f64) {
             du[0] = -1000.0 * (u[0] - time.cos()) - time.sin();
@@ -1381,6 +1450,23 @@ mod tests {
             .with_jacobian(|jacobian: &mut [f64], _: &[f64], _: &(), _: f64| jacobian[0] = -1000.0);
         let numeric = solve(&numeric, Rodas4, &adaptive_options()).unwrap();
         let analytic = solve(&analytic, Rodas4, &adaptive_options()).unwrap();
+        assert!((numeric.last_state()[0] - analytic.last_state()[0]).abs() < 2.0e-10);
+        assert!(analytic.stats().rhs_evaluations < numeric.stats().rhs_evaluations);
+
+        let numeric = solve(
+            &OdeProblem::new(rhs as Rhs, vec![1.0], (0.0, 0.2), ()),
+            Ros3Pr,
+            &adaptive_options(),
+        )
+        .unwrap();
+        let analytic = solve(
+            &OdeProblem::new(rhs as Rhs, vec![1.0], (0.0, 0.2), ()).with_jacobian(
+                |jacobian: &mut [f64], _: &[f64], _: &(), _: f64| jacobian[0] = -1000.0,
+            ),
+            Ros3Pr,
+            &adaptive_options(),
+        )
+        .unwrap();
         assert!((numeric.last_state()[0] - analytic.last_state()[0]).abs() < 2.0e-10);
         assert!(analytic.stats().rhs_evaluations < numeric.stats().rhs_evaluations);
 
@@ -1450,6 +1536,12 @@ mod tests {
         assert!(ros2_solution.times().contains(&0.25));
         assert!(ros2_solution.times().contains(&0.5));
         assert!(ros2_solution.times().contains(&0.75));
+
+        let ros3pr_solution = solve(&problem, Ros3Pr, &options).unwrap();
+        assert!(ros3pr_solution.stats().callback_invocations > 0);
+        assert!(ros3pr_solution.times().contains(&0.25));
+        assert!(ros3pr_solution.times().contains(&0.5));
+        assert!(ros3pr_solution.times().contains(&0.75));
     }
 
     #[test]
