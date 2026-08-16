@@ -134,12 +134,12 @@ pub struct Rodas5P;
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct RosenbrockW6S4OS;
 
-/// The adaptive third-order, second-order embedded Rodas23W Rosenbrock-W
-/// method.
+/// The adaptive Rodas23W Rosenbrock-W method.
 ///
 /// Rodas23W is the five-stage W-method from the pinned
-/// `OrdinaryDiffEqRosenbrock` revision. The primary update is third order and
-/// the embedded update is second order (`btilde = [0, 0, 0, 1, -1]`).
+/// `OrdinaryDiffEqRosenbrock` revision. Its tableau metadata advertises order
+/// 3 while the pinned regular-ODE convergence fixture measures order 2; the
+/// embedded update is second order (`btilde = [0, 0, 0, 1, -1]`).
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Rodas23W;
 
@@ -2097,11 +2097,12 @@ mod tests {
         // table and keeps the stronger ratio check below.
         assert!(ratios[8] > 14.0);
         assert!(ratios[9] > 7.0);
-        // ROS34PW1b and Rodas23W are third-order primary updates.
+        // ROS34PW1b is third order; pinned Rodas23W explicitly uses the
+        // second-order primary solution (the name denotes its 2/3 pair).
         assert!(ratios[10] > 7.0);
         assert!(ratios[11] > 14.0);
         assert!(ratios[12] > 7.0);
-        assert!(ratios[13] > 7.0);
+        assert!(ratios[13] > 3.0 && ratios[13] < 5.5);
     }
 
     #[test]
