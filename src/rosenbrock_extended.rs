@@ -133,6 +133,16 @@ pub struct Rodas5P;
 /// estimate.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Rodas5Pe;
+/// The eight-stage, fifth-order Rodas5P variant with residual control.
+///
+/// `Rodas5Pr` uses the exact `Rodas5PTableau` and performs the additional
+/// midpoint residual estimate from the pinned OrdinaryDiffEq
+/// `perform_step!` implementation when an adaptive step's embedded estimate
+/// is below one. This extra check is useful on problems where the embedded
+/// estimate becomes over-optimistic while the method is entering a stiff
+/// transient.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct Rodas5Pr;
 
 /// The six-stage, fourth-order Rosenbrock-W method (fixed step only).
 ///
@@ -1151,6 +1161,36 @@ const RODAS5PE_TABLEAU: RodasTableau = RodasTableau {
     weights: RODAS5P_B,
     error_weights: RODAS5PE_E,
 };
+// RODAS5PH from lib/OrdinaryDiffEqRosenbrock/src/rosenbrock_tableaus.jl at
+// 211142263781255a9aa2f910f6760b9f18ec29c8. Rodas5Pr uses this same H matrix
+// for its residual-control midpoint estimate (the regular ODE path does not
+// otherwise need stiff-aware dense interpolation).
+const RODAS5P_H: &[f64] = &[
+    25.948786856663858,
+    -2.5579724845846235,
+    10.433815404888879,
+    -2.3679251022685204,
+    0.524948541321073,
+    1.1241088310450404,
+    0.4272876194431874,
+    -0.17202221070155493,
+    -9.91568850695171,
+    -0.9689944594115154,
+    3.0438037242978453,
+    -24.495224566215796,
+    20.176138334709044,
+    15.98066361424651,
+    -6.789040303419874,
+    -6.710236069923372,
+    11.419903575922262,
+    2.8879645146136994,
+    72.92137995996029,
+    80.12511834622643,
+    -52.072871366152654,
+    -59.78993625266729,
+    -0.15582684282751913,
+    4.883087185713722,
+];
 
 const ROSENBROCK_W6S4OS_A: &[f64] = &[
     0.0,
@@ -1378,6 +1418,7 @@ algorithm!(Rodas4);
 algorithm!(Rodas4P);
 algorithm!(Rodas5P);
 algorithm!(Rodas5Pe);
+algorithm!(Rodas5Pr);
 algorithm!(RosenbrockW6S4OS);
 algorithm!(Rodas23W);
 
@@ -1424,7 +1465,8 @@ macro_rules! rodas_method {
                 F: Fn(&mut [f64], &[f64], &P, f64),
             {
                 perform_rodas(
-                    problem, candidate, state, time, step, options, &$tableau, workspace, stats,
+                    problem, candidate, state, time, step, options, &$tableau, false, workspace,
+                    stats,
                 )
             }
         }
@@ -1447,6 +1489,38 @@ rodas_method!(Rodas4P, 4, RODAS4P_TABLEAU);
 rodas_method!(Rodas5P, 5, RODAS5P_TABLEAU);
 rodas_method!(Rodas5Pe, 5, RODAS5PE_TABLEAU);
 rodas_method!(Rodas23W, 3, RODAS23W_TABLEAU);
+
+impl ExtendedRosenbrockMethod for Rodas5Pr {
+    const ERROR_ORDER: usize = 5;
+    const ADAPTIVE: bool = true;
+
+    fn perform_step<F, P>(
+        problem: &OdeProblem<F, P>,
+        state: &[f64],
+        time: f64,
+        step: f64,
+        candidate: &mut [f64],
+        options: &SolveOptions,
+        workspace: &mut Workspace,
+        stats: &mut SolverStats,
+    ) -> Result<f64, SolveError>
+    where
+        F: Fn(&mut [f64], &[f64], &P, f64),
+    {
+        perform_rodas(
+            problem,
+            candidate,
+            state,
+            time,
+            step,
+            options,
+            &RODAS5P_TABLEAU,
+            true,
+            workspace,
+            stats,
+        )
+    }
+}
 
 impl ExtendedRosenbrockMethod for RosenbrockW6S4OS {
     const ERROR_ORDER: usize = 4;
@@ -1473,6 +1547,7 @@ impl ExtendedRosenbrockMethod for RosenbrockW6S4OS {
             step,
             options,
             &ROSENBROCK_W6S4OS_TABLEAU,
+            false,
             workspace,
             stats,
         )
@@ -1742,6 +1817,7 @@ fn perform_rodas<F, P>(
     step: f64,
     options: &SolveOptions,
     tableau: &RodasTableau,
+    residual_control: bool,
     workspace: &mut Workspace,
     stats: &mut SolverStats,
 ) -> Result<f64, SolveError>
@@ -1809,11 +1885,66 @@ where
             workspace.error[component] += tableau.error_weights[stage] * increment;
         }
     }
-    Ok(if options.adaptive {
+    let mut error_estimate = if options.adaptive {
         scaled_error_norm(state, candidate, &workspace.error, options)
     } else {
         0.0
-    })
+    };
+
+    // OrdinaryDiffEq's Rodas5Pr performs an additional residual check only
+    // when the embedded estimate accepts the step. The three H rows are the
+    // pinned Rodas5P dense-output weights; use otherwise-idle stage buffers
+    // here so this check remains allocation-free without clobbering the
+    // current derivative needed if the integrator rejects and retries.
+    if residual_control && options.adaptive && error_estimate < 1.0 {
+        let dimension = state.len();
+        for component in 0..dimension {
+            workspace.error[component] = 0.0;
+            workspace.stage_derivative[component] = 0.0;
+            workspace.perturbed_derivative[component] = 0.0;
+            for stage in 0..tableau.stages {
+                let increment = workspace.stages[stage * dimension + component];
+                workspace.error[component] += RODAS5P_H[stage] * increment;
+                workspace.stage_derivative[component] += RODAS5P_H[8 + stage] * increment;
+                workspace.perturbed_derivative[component] += RODAS5P_H[16 + stage] * increment;
+            }
+            workspace.perturbed_state[component] = 0.5
+                * (state[component]
+                    + candidate[component]
+                    + 0.5
+                        * (workspace.error[component]
+                            + 0.5
+                                * (workspace.stage_derivative[component]
+                                    + 0.5 * workspace.perturbed_derivative[component])));
+            workspace.right_hand_side[component] = 0.25
+                * (workspace.stage_derivative[component]
+                    + workspace.perturbed_derivative[component])
+                - state[component]
+                + candidate[component];
+            workspace.right_hand_side[component] /= step;
+        }
+        evaluate(
+            problem,
+            &mut workspace.stage_derivative,
+            &workspace.perturbed_state,
+            time + 0.5 * step,
+            stats,
+        )?;
+        let mut numerator = 0.0;
+        let mut denominator = 0.0;
+        for component in 0..dimension {
+            let residual =
+                workspace.right_hand_side[component] - workspace.stage_derivative[component];
+            let scale = options.absolute_tolerance
+                + options.relative_tolerance * workspace.perturbed_state[component].abs();
+            numerator += residual * residual;
+            denominator += scale * scale;
+        }
+        if denominator > 0.0 {
+            error_estimate = error_estimate.max((numerator / denominator).sqrt());
+        }
+    }
+    Ok(error_estimate)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1979,8 +2110,8 @@ mod tests {
     use std::rc::Rc;
 
     use super::{
-        Grk4a, Grk4t, Rodas3, Rodas4, Rodas4P, Rodas5P, Rodas23W, Ros2, Ros3, Ros3Pr, Ros3p,
-        Ros34Prw, Ros34Pw1b, Rosenbrock32, RosenbrockW6S4OS,
+        Grk4a, Grk4t, Rodas3, Rodas4, Rodas4P, Rodas5P, Rodas5Pr, Rodas23W, Ros2, Ros3, Ros3Pr,
+        Ros3p, Ros34Prw, Ros34Pw1b, Rosenbrock32, RosenbrockW6S4OS,
     };
     use crate::{CallbackAction, OdeProblem, SaveMode, SolveError, SolveOptions, solve};
 
@@ -2137,6 +2268,30 @@ mod tests {
         assert!(ratios[11] > 14.0);
         assert!(ratios[12] > 7.0);
         assert!(ratios[13] > 3.0 && ratios[13] < 5.5);
+    }
+
+    #[test]
+    fn rodas5pr_matches_rodas5p_on_regular_ode_paths() {
+        let fixed_options = SolveOptions {
+            adaptive: false,
+            initial_step: Some(0.1),
+            save: SaveMode::Endpoints,
+            ..SolveOptions::default()
+        };
+        let p = OdeProblem::new(
+            |du: &mut [f64], u: &[f64], _: &(), _: f64| du[0] = u[0],
+            vec![1.0],
+            (0.0, 1.0),
+            (),
+        );
+        let rodas5p = solve(&p, Rodas5P, &fixed_options).unwrap();
+        let rodas5pr = solve(&p, Rodas5Pr, &fixed_options).unwrap();
+        assert!((rodas5p.last_state()[0] - rodas5pr.last_state()[0]).abs() < 1.0e-14);
+
+        let adaptive = adaptive_options();
+        let rodas5pr = solve(&stiff_problem((0.0, 1.0), 1.0), Rodas5Pr, &adaptive).unwrap();
+        assert!((rodas5pr.last_state()[0] - 1.0_f64.cos()).abs() < 2.0e-6);
+        assert!(rodas5pr.stats().rhs_evaluations > 0);
     }
 
     #[test]
