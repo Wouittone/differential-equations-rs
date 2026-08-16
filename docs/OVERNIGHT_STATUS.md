@@ -133,7 +133,7 @@ Pinned upstream revision:
 | Stepanov5 family | Exact pinned seven-stage embedded adaptive (4,5) FSAL tableau | 97 library tests plus Stepanov5 integrations | Julia unavailable on worker/coordinator; pinned/full rerun blocked by `JULIA-PATH-20260809` | Rust-reviewed and merged as `7563e9d`; Julia retry required |
 | pRRK33 family | Native three-stage parametric relaxation SSPRK33 | 97 library tests plus pRRK33 integrations | Julia unavailable on worker/coordinator; pinned/full rerun blocked by `JULIA-PATH-20260809` | Rust-reviewed and merged as `6ac81ff`; Julia retry required |
 | KYK2014DGSSPRK_3S2 family | Native fixed-step second-order SSPRK Shu–Osher tableau | 97 library tests plus KYK convergence/backward/save_at/callback/allocation integrations | Julia unavailable on coordinator; pinned/full rerun blocked by `JULIA-PATH-20260809` | Rust-reviewed and merged as `586bf09` (source wave `3138c0a`); Julia retry required |
-| SIR54 family | Exact pinned embedded FSAL (5,4) low-order RK tableau | 98 library tests plus SIR54 convergence/save_at integrations | Julia unavailable on coordinator; pinned/full rerun blocked by `JULIA-PATH-20260809` | Rust-reviewed and merged as `bfda97d` (source wave `2fb3855`); Julia retry required |
+| SIR54 family | Exact pinned embedded FSAL (5,4) low-order RK tableau | 99 library tests plus SIR54 convergence/save_at integrations | Julia unavailable on coordinator; pinned/full rerun blocked by `JULIA-PATH-20260809` | Rust-reviewed and merged as `bfda97d` (source wave `2fb3855`); Julia retry required |
 
 ## Validation snapshot
 
