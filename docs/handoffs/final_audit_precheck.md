@@ -75,9 +75,11 @@ Remaining missing counts by family (all are still in scope) are:
 | Taylor series | 3 |
 | user-tableau explicit Runge-Kutta | 1 |
 
-The four explicit exclusions remain correctly justified: `DABDF2`, `DFBDF`,
-and `DImplicitEuler` are residual-form DAE algorithms; `FunctionMap` is a
-discrete map rather than a continuous IVP solver. Package-level SDE, DDE,
+The four explicit exclusions remain correctly justified: `DABDF2` (pinned
+`OrdinaryDiffEqBDF/src/algorithms.jl:689`), `DFBDF` (`:735`), and
+`DImplicitEuler` (`:647`) are residual-form DAE algorithms; `FunctionMap`
+(`OrdinaryDiffEqFunctionMap/src/algorithms.jl:13`) is a discrete map rather
+than a continuous IVP solver. Package-level SDE, DDE,
 BVP, PDE, steady-state, and external-wrapper exports are outside the native
 regular-ODE inventory by `docs/UPSTREAM_SCOPE.md`.
 
