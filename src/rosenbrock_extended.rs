@@ -70,6 +70,14 @@ pub struct Ros3p;
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Ros34Prw;
 
+/// The four-stage, fourth-order Rosenbrock-W method `ROS34PW3`.
+///
+/// The public Rust spelling follows the crate's type-name convention. This
+/// method is the strongly A-stable (Rinf approximately 0.63) W-method from
+/// the pinned OrdinaryDiffEq Rosenbrock tableau.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct Ros34Pw3;
+
 /// The four-stage, fourth-order A-stable GRK4A Rosenbrock method.
 ///
 /// This is the `GRK4ARodasTableau` from the pinned
@@ -379,6 +387,79 @@ const ROS34PRW_TABLEAU: RodasTableau = RodasTableau {
     time_weights: ROS34PRW_D,
     weights: ROS34PRW_B,
     error_weights: ROS34PRW_E,
+};
+
+// ROS34PW3RodasTableau(T, T2) from
+// lib/OrdinaryDiffEqRosenbrock/src/rosenbrock_tableaus.jl.
+const ROS34PW3_A: &[f64] = &[
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    2.3541034887609085,
+    0.0,
+    0.0,
+    0.0,
+    2.1274518517432335,
+    0.7018666706430658,
+    0.0,
+    0.0,
+    1.6573541366907125,
+    0.37998365119129385,
+    0.7677537933767512,
+    0.0,
+];
+const ROS34PW3_C: &[f64] = &[
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    -2.20302237067446,
+    0.0,
+    0.0,
+    0.0,
+    -2.750060114993467,
+    -0.8408569631081119,
+    0.0,
+    0.0,
+    -3.0077871973155896,
+    -0.7070774625618249,
+    -1.1874362749274354,
+    0.0,
+];
+const ROS34PW3_NODES: &[f64] = &[
+    0.0,
+    2.5155456020628817,
+    1.2577728010314408,
+    0.6288864005157204,
+];
+const ROS34PW3_D: &[f64] = &[
+    1.0685790213016289,
+    -1.4469665807612528,
+    -0.7714762485313431,
+    -0.29371172261080924,
+];
+const ROS34PW3_B: &[f64] = &[
+    2.5468758076906703,
+    0.5527809704437551,
+    0.920521963049926,
+    0.7201674983256354,
+];
+const ROS34PW3_E: &[f64] = &[
+    0.20632710213677674,
+    0.0026042321416049896,
+    0.006723394920071124,
+    0.7201674983256354,
+];
+const ROS34PW3_TABLEAU: RodasTableau = RodasTableau {
+    stages: 4,
+    gamma: 1.0685790213016289,
+    a: ROS34PW3_A,
+    c_matrix: ROS34PW3_C,
+    nodes: ROS34PW3_NODES,
+    time_weights: ROS34PW3_D,
+    weights: ROS34PW3_B,
+    error_weights: ROS34PW3_E,
 };
 
 // GRK4ARodasTableau(T, T2) from
@@ -1081,6 +1162,7 @@ algorithm!(Ros3);
 algorithm!(Ros3Pr);
 algorithm!(Ros3p);
 algorithm!(Ros34Prw);
+algorithm!(Ros34Pw3);
 algorithm!(Grk4a);
 algorithm!(Grk4t);
 algorithm!(Ros34Pw1b);
@@ -1145,6 +1227,7 @@ rodas_method!(Ros3, 3, ROS3_TABLEAU);
 rodas_method!(Ros3Pr, 3, ROS3PR_TABLEAU);
 rodas_method!(Ros3p, 3, ROS3P_TABLEAU);
 rodas_method!(Ros34Prw, 3, ROS34PRW_TABLEAU);
+rodas_method!(Ros34Pw3, 4, ROS34PW3_TABLEAU);
 rodas_method!(Grk4a, 4, GRK4A_TABLEAU);
 rodas_method!(Grk4t, 4, GRK4T_TABLEAU);
 rodas_method!(Ros34Pw1b, 3, ROS34PW1B_TABLEAU);

@@ -63,7 +63,7 @@ pub use qndf2::Qndf2;
 pub use rosenbrock::Rosenbrock23;
 pub use rosenbrock_extended::{
     Grk4a, Grk4t, Rodas3, Rodas4, Rodas5P, Ros2, Ros3, Ros3Pr, Ros3p, Ros34Prw, Ros34Pw1b,
-    Ros34Pw2, Rosenbrock32, RosenbrockW6S4OS,
+    Ros34Pw2, Ros34Pw3, Rosenbrock32, RosenbrockW6S4OS,
 };
 pub use sdirk::Sdirk2;
 pub use second_order::{
