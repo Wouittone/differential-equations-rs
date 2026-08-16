@@ -1,18 +1,15 @@
 //! Fixed-step two-register low-storage Runge--Kutta methods.
 //!
-//! This module implements the Williamson 2N recurrence used by the pinned
-//! `OrdinaryDiffEqLowStorageRK` source. The numerical recurrence and stage
-//! times are preserved. OrdinaryDiffEq's stage/step limiter, fused-array
-//! `williamson_condition`, and threading configuration are not exposed.
+//! This module implements the Williamson 2N recurrence used by the pinned `OrdinaryDiffEqLowStorageRK` source.
+//! The numerical recurrence and stage times are preserved.
+//! OrdinaryDiffEq's stage/step limiter, fused-array `williamson_condition`, and threading configuration are not exposed.
 
 // Preserve the pinned source's decimal coefficient literals exactly.
 #![allow(clippy::excessive_precision)]
 
 use std::marker::PhantomData;
 
-use crate::integrator::{
-    KernelCapabilities, StepEstimate, StepKernel, integrate as drive_integration,
-};
+use crate::integrator::{KernelCapabilities, StepEstimate, StepKernel, integrate as drive_integration};
 use crate::{OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions, SolverStats};
 
 trait LowStorage2N {
@@ -247,7 +244,7 @@ method!(
         -0.9770727190189062,
         -0.7581835342571139,
         -1.7977525470825499,
-        -2.691566797270077,
+        -2.6915667972700770,
         -4.6466798960268143,
         -0.1539613783825189,
         -0.5943293901830616,

@@ -161,13 +161,17 @@ Pinned upstream revision:
 | ROS34PW2 family | Native four-stage fourth-order Rosenbrock-W tableau | 106 library tests plus ROS34PW2 stiff/Jacobian/backward/callback/save_at/convergence integration | Julia unavailable on coordinator; pinned/full rerun blocked by `JULIA-PATH-20260809` | Rust-reviewed and merged as `018fcd8`; Julia retry required |
 | ROS34PW3 family | Native four-stage third-order Rosenbrock-W tableau | 106 library tests plus ROS34PW3 convergence/adaptive/Jacobian/backward/callback/save_at/allocation integrations | Julia unavailable on coordinator; pinned/full rerun blocked by `JULIA-PATH-20260809` | Rust-reviewed and conflict-resolved/merged as `5d65c14` + `b745fe5`; Julia retry required |
 | SSPRK932 family | Native adaptive/fixed nine-stage SSPRK932 with pinned embedded estimate | 107 library tests plus SSPRK932 focused convergence/backward/callback/save_at/allocation coverage | Julia unavailable on coordinator; pinned/full rerun blocked by `JULIA-PATH-20260809`; embedded upstream weight normalization documented in handoff | Rust-reviewed and merged as `04278bf`; Julia retry required |
+| Rodas4P2 family | Native Rosenbrock-W fourth-order regular-ODE tableau with pinned coefficients | 113 library tests plus Rodas4P2 fixed/adaptive/backward/Jacobian/callback/save_at/allocation coverage | Julia unavailable on coordinator; pinned/full rerun blocked by `JULIA-PATH-20260809` | Rust-reviewed and merged as `82d9e72`; Julia retry required |
+| Cash4 family | Native five-stage fourth-order SDIRK with pinned Cash tableau | 116 library tests plus Cash4 adaptive/fixed/Jacobian/callback/save_at coverage | Julia unavailable on coordinator; pinned/full rerun blocked by `JULIA-PATH-20260809` | Rust-reviewed and merged as `0af9a21d`; Julia retry required |
+| ROK4a family | Native fourth-order Rosenbrock-W tableau with pinned coefficients | 116 library tests plus ROK4a fixed/adaptive/backward coverage | Julia unavailable on coordinator; pinned/full rerun blocked by `JULIA-PATH-20260809` | Rust-reviewed and merged as `bf48d51e`; Julia retry required |
+| ROS3PRL2 family | Native third-order Rosenbrock-L2 tableau with pinned coefficients | 116 library tests plus ROS3PRL2 fixed/adaptive/backward/Jacobian/callback/save_at coverage | Julia unavailable on coordinator; pinned/full rerun blocked by `JULIA-PATH-20260809` | Rust-reviewed and merged as `0ad5474f`; Julia retry required |
 
 ## Validation snapshot
 
 ```text
 cargo fmt -- --check: pass
-cargo test --all-targets: pass (110 library tests plus integration tests/examples)
-cargo clippy --all-targets -- -D warnings: pass
+cargo test --all-targets: pass (116 library tests plus integration tests/examples)
+cargo clippy --all-targets -- -D warnings: blocked only by documented benchmark adapter `too_many_arguments` lint (`CLIPPY-BENCHMARK-DIRTY-20260816`); `--lib --tests` passes
 git diff --check: pass
 pinned Julia environment: pass and reproducible from tracked manifest (14 packages at pinned revision)
 Julia compliance: isolated AutoDP5 worker pass; integrated rerun blocked by `JULIA-PATH-20260809`

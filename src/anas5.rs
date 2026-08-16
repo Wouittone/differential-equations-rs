@@ -4,8 +4,8 @@ use crate::integrator::{
 use crate::solution::{BorrowedHermiteSegment, TrajectoryRecorder};
 use crate::{OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions, SolverStats};
 
-/// Anastassi–Simos optimized fifth-order Runge–Kutta method for periodic
-/// problems. `w` is the periodicity estimate used by the upstream method;
+/// Anastassi–Simos optimized fifth-order Runge–Kutta method for periodic problems.
+/// `w` is the periodicity estimate used by the upstream method;
 /// `Anas5::default()` uses the pinned default `w = 1`.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Anas5 {
