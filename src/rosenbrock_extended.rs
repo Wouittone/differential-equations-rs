@@ -149,6 +149,14 @@ pub struct Rodas4P;
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Rodas5P;
 
+/// The eight-stage, fifth-order stiffly accurate Rodas5 method.
+///
+/// This is the original Di Marzo RODAS5(4) tableau from the pinned
+/// OrdinaryDiffEqRosenbrockTableaus revision. It is distinct from the newer
+/// Rodas5P family despite sharing the stage count and order.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct Rodas5;
+
 /// The eight-stage, fifth-order L-stable Rodas5Pe method.
 ///
 /// Rodas5Pe shares Rodas5P's primary tableau and uses the pinned upstream
@@ -1213,6 +1221,183 @@ const RODAS4P_TABLEAU: RodasTableau = RodasTableau {
     time_weights: RODAS4P_D,
     weights: RODAS4P_B,
     error_weights: RODAS4P_E,
+};
+
+// Rodas5Tableau(T, T2) from
+// lib/OrdinaryDiffEqRosenbrockTableaus/src/rosenbrock_tableaus.jl at
+// 211142263781255a9aa2f910f6760b9f18ec29c8.
+const RODAS5_A: &[f64] = &[
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0, // stage 1
+    2.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0, // stage 2
+    3.040894194418781,
+    1.041747909077569,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0, // stage 3
+    2.576417536461461,
+    1.62208306077664,
+    -0.9089668560264532,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0, // stage 4
+    2.760842080225597,
+    1.446624659844071,
+    -0.3036980084553738,
+    0.2877498600325443,
+    0.0,
+    0.0,
+    0.0,
+    0.0, // stage 5
+    -14.09640773051259,
+    6.925207756232704,
+    -41.47510893210728,
+    2.343771018586405,
+    24.13215229196062,
+    0.0,
+    0.0,
+    0.0, // stage 6
+    -14.09640773051259,
+    6.925207756232704,
+    -41.47510893210728,
+    2.343771018586405,
+    24.13215229196062,
+    1.0,
+    0.0,
+    0.0, // stage 7
+    -14.09640773051259,
+    6.925207756232704,
+    -41.47510893210728,
+    2.343771018586405,
+    24.13215229196062,
+    1.0,
+    1.0,
+    0.0, // stage 8
+];
+const RODAS5_C: &[f64] = &[
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0, // stage 1
+    -10.31323885133993,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0, // stage 2
+    -21.04823117650003,
+    -7.234992135176716,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0, // stage 3
+    32.22751541853323,
+    -4.943732386540191,
+    19.44922031041879,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0, // stage 4
+    -20.69865579590063,
+    -8.816374604402768,
+    1.260436877740897,
+    -0.7495647613787146,
+    0.0,
+    0.0,
+    0.0,
+    0.0, // stage 5
+    -46.22004352711257,
+    -17.49534862857472,
+    -289.6389582892057,
+    93.60855400400906,
+    318.3822534212147,
+    0.0,
+    0.0,
+    0.0, // stage 6
+    34.20013733472935,
+    -14.1553540271769,
+    57.823356409884,
+    25.83362985412365,
+    1.408950972071624,
+    -6.551835421242162,
+    0.0,
+    0.0, // stage 7
+    42.57076742291101,
+    -13.80770672017997,
+    93.98938432427124,
+    18.77919633714503,
+    -31.5835918722337,
+    -6.685968952921985,
+    -5.810979938412932,
+    0.0, // stage 8
+];
+const RODAS5_NODES: &[f64] = &[
+    0.0,
+    0.38,
+    0.3878509998321533,
+    0.483971893787384,
+    0.457047700881958,
+    1.0,
+    1.0,
+    1.0,
+];
+const RODAS5_D: &[f64] = &[
+    0.19,
+    -0.18230792253337146,
+    -0.3192318321868749,
+    0.3449828624725343,
+    -0.37741756439208984,
+    0.0,
+    0.0,
+    0.0,
+];
+const RODAS5_B: &[f64] = &[
+    -14.09640773051259,
+    6.925207756232704,
+    -41.47510893210728,
+    2.343771018586405,
+    24.13215229196062,
+    1.0,
+    1.0,
+    1.0,
+];
+const RODAS5_E: &[f64] = &[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0];
+const RODAS5_TABLEAU: RodasTableau = RodasTableau {
+    stages: 8,
+    gamma: 0.19,
+    a: RODAS5_A,
+    c_matrix: RODAS5_C,
+    nodes: RODAS5_NODES,
+    time_weights: RODAS5_D,
+    weights: RODAS5_B,
+    error_weights: RODAS5_E,
 };
 
 const RODAS5P_A: &[f64] = &[
@@ -2479,6 +2664,7 @@ algorithm!(Ros34Pw2);
 algorithm!(Rodas4);
 algorithm!(Rodas42);
 algorithm!(Rodas4P);
+algorithm!(Rodas5);
 algorithm!(Rodas5P);
 algorithm!(Rodas5Pe);
 algorithm!(Rodas5Pr);
@@ -2553,6 +2739,7 @@ rodas_method!(Ros34Pw2, 3, ROS34PW2_TABLEAU);
 rodas_method!(Rodas4, 4, RODAS4_TABLEAU);
 rodas_method!(Rodas42, 4, RODAS42_TABLEAU);
 rodas_method!(Rodas4P, 4, RODAS4P_TABLEAU);
+rodas_method!(Rodas5, 5, RODAS5_TABLEAU);
 rodas_method!(Rodas5P, 5, RODAS5P_TABLEAU);
 rodas_method!(Rodas5Pe, 5, RODAS5PE_TABLEAU);
 rodas_method!(Rodas6P, 6, RODAS6P_TABLEAU);
