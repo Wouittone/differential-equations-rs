@@ -1,4 +1,4 @@
-using OrdinaryDiffEqRosenbrock: ROS2, Rodas3, Rodas4, Rodas5P, Rosenbrock32, RosenbrockW6S4OS
+using OrdinaryDiffEqRosenbrock: ROS2, ROS3, Rodas3, Rodas4, Rodas5P, Rosenbrock32, RosenbrockW6S4OS
 
 function rust_extended_rosenbrock_endpoints()
     manifest = joinpath(REPOSITORY_ROOT, "Cargo.toml")
@@ -59,6 +59,7 @@ end
         julia["$(name)_adaptive"] = extended_rosenbrock_reference(algorithm; adaptive = true)
         julia["$(name)_fixed"] = extended_rosenbrock_reference(algorithm; adaptive = false)
     end
+    julia["ros3_adaptive"] = extended_rosenbrock_reference(ROS3(); adaptive = true)
 
     @test Set(keys(rust)) == Set(keys(julia))
     for name in keys(julia)

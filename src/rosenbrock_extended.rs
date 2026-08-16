@@ -39,6 +39,12 @@ pub struct Ros2;
 /// interpolant; the shared recorder supplies trajectory samples.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Rodas3;
+/// The adaptive third-order, three-stage L-stable `ROS3` Rosenbrock method.
+///
+/// The embedded estimator is second order and strongly A-stable, matching the
+/// pinned `OrdinaryDiffEqRosenbrock` tableau.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct Ros3;
 
 /// The six-stage, fourth-order L-stable Rodas4 method.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -126,6 +132,39 @@ const RODAS3_TABLEAU: RodasTableau = RodasTableau {
     time_weights: RODAS3_D,
     weights: RODAS3_B,
     error_weights: RODAS3_E,
+};
+
+// ROS3RodasTableau(T, T2) from
+// lib/OrdinaryDiffEqRosenbrockTableaus/src/rosenbrock_tableaus.jl.
+const ROS3_A: &[f64] = &[
+    0.0, 0.0, 0.0, // stage 1
+    1.0, 0.0, 0.0, // stage 2
+    1.0, 1.0, 0.0, // stage 3
+];
+const ROS3_C: &[f64] = &[
+    0.0,
+    0.0,
+    0.0, // stage 1
+    -1.0156171083877703,
+    0.0,
+    0.0, // stage 2
+    4.07599564525377,
+    9.20767942983308,
+    0.0, // stage 3
+];
+const ROS3_NODES: &[f64] = &[0.0, 0.435866521508459, 0.435866521508459];
+const ROS3_D: &[f64] = &[0.435866521508459, 0.24291996454816805, 2.185138002766406];
+const ROS3_B: &[f64] = &[1.0000000000000002, 6.1697947043828245, -0.42772256543218573];
+const ROS3_E: &[f64] = &[0.49999999999999983, -2.907955871680547, 0.22354069897811568];
+const ROS3_TABLEAU: RodasTableau = RodasTableau {
+    stages: 3,
+    gamma: 0.435866521508459,
+    a: ROS3_A,
+    c_matrix: ROS3_C,
+    nodes: ROS3_NODES,
+    time_weights: ROS3_D,
+    weights: ROS3_B,
+    error_weights: ROS3_E,
 };
 
 const RODAS4_A: &[f64] = &[
@@ -555,6 +594,7 @@ macro_rules! algorithm {
 algorithm!(Rosenbrock32);
 algorithm!(Ros2);
 algorithm!(Rodas3);
+algorithm!(Ros3);
 algorithm!(Rodas4);
 algorithm!(Rodas5P);
 algorithm!(RosenbrockW6S4OS);
@@ -611,6 +651,7 @@ macro_rules! rodas_method {
 
 rodas_method!(Ros2, 2, ROS2_TABLEAU);
 rodas_method!(Rodas3, 3, RODAS3_TABLEAU);
+rodas_method!(Ros3, 3, ROS3_TABLEAU);
 rodas_method!(Rodas4, 4, RODAS4_TABLEAU);
 rodas_method!(Rodas5P, 5, RODAS5P_TABLEAU);
 
@@ -1144,7 +1185,7 @@ mod tests {
     use std::cell::Cell;
     use std::rc::Rc;
 
-    use super::{Rodas3, Rodas4, Rodas5P, Ros2, Rosenbrock32, RosenbrockW6S4OS};
+    use super::{Rodas3, Rodas4, Rodas5P, Ros2, Ros3, Rosenbrock32, RosenbrockW6S4OS};
     use crate::{CallbackAction, OdeProblem, SaveMode, SolveError, SolveOptions, solve};
 
     type TestRhs = fn(&mut [f64], &[f64], &(), f64);
@@ -1172,6 +1213,9 @@ mod tests {
                 .unwrap()
                 .last_state()[0],
             solve(&stiff_problem((0.0, 1.0), 1.0), Rodas3, &adaptive_options())
+                .unwrap()
+                .last_state()[0],
+            solve(&stiff_problem((0.0, 1.0), 1.0), Ros3, &adaptive_options())
                 .unwrap()
                 .last_state()[0],
             solve(
