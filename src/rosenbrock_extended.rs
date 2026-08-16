@@ -24,6 +24,14 @@ const MAX_FACTOR: f64 = 6.0;
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Rosenbrock32;
 
+/// The adaptive second-order, two-stage L-stable Rosenbrock method.
+///
+/// This is the `ROS2` tableau from the pinned `OrdinaryDiffEqRosenbrock`
+/// revision. The Rust spelling follows the crate's type-name convention;
+/// inventory matching normalizes it back to the upstream `ROS2` name.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct Ros2;
+
 /// The six-stage, fourth-order L-stable Rodas4 method.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Rodas4;
@@ -50,6 +58,26 @@ struct RodasTableau {
     weights: &'static [f64],
     error_weights: &'static [f64],
 }
+
+// ROS2RodasTableau(T, T2) from
+// lib/OrdinaryDiffEqRosenbrockTableaus/src/rosenbrock_tableaus.jl.
+const ROS2_A: &[f64] = &[0.0, 0.0, 0.585786437626905, 0.0];
+const ROS2_C: &[f64] = &[0.0, 0.0, -1.17157287525381, 0.0];
+const ROS2_NODES: &[f64] = &[0.0, 1.0];
+const ROS2_D: &[f64] = &[1.7071067811865475, -1.7071067811865475];
+const ROS2_B: &[f64] = &[0.8786796564403574, 0.2928932188134525];
+// OrdinaryDiffEq uses btilde directly for the embedded error estimate.
+const ROS2_E: &[f64] = &[0.2928932188134525, 0.2928932188134525];
+const ROS2_TABLEAU: RodasTableau = RodasTableau {
+    stages: 2,
+    gamma: 1.7071067811865475,
+    a: ROS2_A,
+    c_matrix: ROS2_C,
+    nodes: ROS2_NODES,
+    time_weights: ROS2_D,
+    weights: ROS2_B,
+    error_weights: ROS2_E,
+};
 
 const RODAS4_A: &[f64] = &[
     0.0,
@@ -476,6 +504,7 @@ macro_rules! algorithm {
 }
 
 algorithm!(Rosenbrock32);
+algorithm!(Ros2);
 algorithm!(Rodas4);
 algorithm!(Rodas5P);
 algorithm!(RosenbrockW6S4OS);
@@ -530,6 +559,7 @@ macro_rules! rodas_method {
     };
 }
 
+rodas_method!(Ros2, 2, ROS2_TABLEAU);
 rodas_method!(Rodas4, 4, RODAS4_TABLEAU);
 rodas_method!(Rodas5P, 5, RODAS5P_TABLEAU);
 
@@ -1063,7 +1093,7 @@ mod tests {
     use std::cell::Cell;
     use std::rc::Rc;
 
-    use super::{Rodas4, Rodas5P, Rosenbrock32, RosenbrockW6S4OS};
+    use super::{Rodas4, Rodas5P, Ros2, Rosenbrock32, RosenbrockW6S4OS};
     use crate::{CallbackAction, OdeProblem, SaveMode, SolveError, SolveOptions, solve};
 
     type TestRhs = fn(&mut [f64], &[f64], &(), f64);
@@ -1087,6 +1117,9 @@ mod tests {
     #[test]
     fn adaptive_methods_solve_a_stiff_nonautonomous_problem() {
         let endpoints = [
+            solve(&stiff_problem((0.0, 1.0), 1.0), Ros2, &adaptive_options())
+                .unwrap()
+                .last_state()[0],
             solve(
                 &stiff_problem((0.0, 1.0), 1.0),
                 Rosenbrock32,
@@ -1135,15 +1168,17 @@ mod tests {
     #[test]
     fn methods_have_their_expected_fixed_step_orders() {
         let ratios = [
+            convergence_ratio(Ros2, 0.1),
             convergence_ratio(Rosenbrock32, 0.1),
             convergence_ratio(Rodas4, 0.1),
             convergence_ratio(Rodas5P, 0.2),
             convergence_ratio(RosenbrockW6S4OS, 0.1),
         ];
-        assert!(ratios[0] > 7.0);
-        assert!(ratios[1] > 14.0);
-        assert!(ratios[2] > 25.0);
-        assert!(ratios[3] > 14.0);
+        assert!(ratios[0] > 3.0);
+        assert!(ratios[1] > 7.0);
+        assert!(ratios[2] > 14.0);
+        assert!(ratios[3] > 25.0);
+        assert!(ratios[4] > 14.0);
     }
 
     #[test]
@@ -1215,6 +1250,9 @@ mod tests {
             )
         };
         for endpoint in [
+            solve(&backward_problem(), Ros2, &adaptive_options())
+                .unwrap()
+                .last_state()[0],
             solve(&backward_problem(), Rosenbrock32, &adaptive_options())
                 .unwrap()
                 .last_state()[0],
@@ -1242,6 +1280,23 @@ mod tests {
         let analytic = solve(&analytic, Rodas4, &adaptive_options()).unwrap();
         assert!((numeric.last_state()[0] - analytic.last_state()[0]).abs() < 2.0e-10);
         assert!(analytic.stats().rhs_evaluations < numeric.stats().rhs_evaluations);
+
+        let numeric = solve(
+            &OdeProblem::new(rhs as Rhs, vec![1.0], (0.0, 0.2), ()),
+            Ros2,
+            &adaptive_options(),
+        )
+        .unwrap();
+        let analytic = solve(
+            &OdeProblem::new(rhs as Rhs, vec![1.0], (0.0, 0.2), ()).with_jacobian(
+                |jacobian: &mut [f64], _: &[f64], _: &(), _: f64| jacobian[0] = -1000.0,
+            ),
+            Ros2,
+            &adaptive_options(),
+        )
+        .unwrap();
+        assert!((numeric.last_state()[0] - analytic.last_state()[0]).abs() < 2.0e-10);
+        assert!(analytic.stats().rhs_evaluations < numeric.stats().rhs_evaluations);
     }
 
     #[test]
@@ -1263,6 +1318,12 @@ mod tests {
         assert!(solution.times().contains(&0.25));
         assert!(solution.times().contains(&0.5));
         assert!(solution.times().contains(&0.75));
+
+        let ros2_solution = solve(&problem, Ros2, &options).unwrap();
+        assert!(ros2_solution.stats().callback_invocations > 0);
+        assert!(ros2_solution.times().contains(&0.25));
+        assert!(ros2_solution.times().contains(&0.5));
+        assert!(ros2_solution.times().contains(&0.75));
     }
 
     #[test]

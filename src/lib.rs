@@ -60,7 +60,7 @@ pub use problem::{MassMatrixOdeProblem, OdeProblem, SplitOdeProblem};
 pub use qndf1::Qndf1;
 pub use qndf2::Qndf2;
 pub use rosenbrock::Rosenbrock23;
-pub use rosenbrock_extended::{Rodas4, Rodas5P, Rosenbrock32, RosenbrockW6S4OS};
+pub use rosenbrock_extended::{Rodas4, Rodas5P, Ros2, Rosenbrock32, RosenbrockW6S4OS};
 pub use sdirk::Sdirk2;
 pub use second_order::{
     LeapfrogDriftKickDrift, SecondOrderOdeAlgorithm, SecondOrderOdeProblem, SecondOrderSolution,

@@ -1,5 +1,5 @@
 use differential_equations::{
-    OdeAlgorithm, OdeProblem, Rodas4, Rodas5P, Rosenbrock32, RosenbrockW6S4OS, SaveMode,
+    OdeAlgorithm, OdeProblem, Rodas4, Rodas5P, Ros2, Rosenbrock32, RosenbrockW6S4OS, SaveMode,
     SolveOptions, solve,
 };
 
@@ -44,6 +44,7 @@ fn print_result<A: OdeAlgorithm + Copy>(name: &str, algorithm: A) {
 }
 
 fn main() {
+    print_result("ros2", Ros2);
     print_result("rosenbrock32", Rosenbrock32);
     print_result("rodas4", Rodas4);
     print_result("rodas5p", Rodas5P);

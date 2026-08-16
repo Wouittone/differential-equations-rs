@@ -2,7 +2,7 @@ use std::alloc::System;
 use std::hint::black_box;
 
 use differential_equations::{
-    OdeAlgorithm, OdeProblem, Rodas4, Rodas5P, Rosenbrock23, Rosenbrock32, RosenbrockW6S4OS,
+    OdeAlgorithm, OdeProblem, Rodas4, Rodas5P, Ros2, Rosenbrock23, Rosenbrock32, RosenbrockW6S4OS,
     SaveMode, SolveOptions, solve,
 };
 use stats_alloc::{INSTRUMENTED_SYSTEM, Region, StatsAlloc};
@@ -46,6 +46,7 @@ fn assert_allocation_invariant<A: OdeAlgorithm + Copy>(algorithm: A) {
 #[test]
 fn callback_free_rosenbrock_steps_do_not_allocate_per_step() {
     assert_allocation_invariant(Rosenbrock23);
+    assert_allocation_invariant(Ros2);
     assert_allocation_invariant(Rosenbrock32);
     assert_allocation_invariant(Rodas4);
     assert_allocation_invariant(Rodas5P);
