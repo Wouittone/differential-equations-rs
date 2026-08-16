@@ -139,7 +139,7 @@ Pinned upstream revision:
 
 ```text
 cargo fmt -- --check: pass
-cargo test --all-targets: pass (98 library tests plus integration tests/examples)
+cargo test --all-targets: pass (99 library tests plus integration tests/examples)
 cargo clippy --all-targets -- -D warnings: pass
 git diff --check: pass
 pinned Julia environment: pass and reproducible from tracked manifest (14 packages at pinned revision)
