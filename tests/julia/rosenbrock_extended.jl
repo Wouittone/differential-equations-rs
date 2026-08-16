@@ -1,4 +1,4 @@
-using OrdinaryDiffEqRosenbrock: ROS2, Rodas4, Rodas5P, Rosenbrock32, RosenbrockW6S4OS
+using OrdinaryDiffEqRosenbrock: ROS2, Rodas3, Rodas4, Rodas5P, Rosenbrock32, RosenbrockW6S4OS
 
 function rust_extended_rosenbrock_endpoints()
     manifest = joinpath(REPOSITORY_ROOT, "Cargo.toml")
@@ -44,6 +44,7 @@ end
     rust = rust_extended_rosenbrock_endpoints()
     algorithms = Dict(
         "ros2" => ROS2(),
+        "rodas3" => Rodas3(),
         "rosenbrock32" => Rosenbrock32(),
         "rodas4" => Rodas4(),
         "rodas5p" => Rodas5P(),

@@ -32,6 +32,14 @@ pub struct Rosenbrock32;
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Ros2;
 
+/// The four-stage, third-order A-stable Rodas3 method.
+///
+/// This is the hand-written `Rodas3RodasTableau` from the pinned
+/// `OrdinaryDiffEqRosenbrockTableaus` revision. It has no embedded dense
+/// interpolant; the shared recorder supplies trajectory samples.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct Rodas3;
+
 /// The six-stage, fourth-order L-stable Rodas4 method.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Rodas4;
@@ -77,6 +85,47 @@ const ROS2_TABLEAU: RodasTableau = RodasTableau {
     time_weights: ROS2_D,
     weights: ROS2_B,
     error_weights: ROS2_E,
+};
+
+// Rodas3RodasTableau(T, T2) from
+// lib/OrdinaryDiffEqRosenbrockTableaus/src/rosenbrock_tableaus.jl.
+const RODAS3_A: &[f64] = &[
+    0.0, 0.0, 0.0, 0.0, // stage 1
+    0.0, 0.0, 0.0, 0.0, // stage 2
+    2.0, 0.0, 0.0, 0.0, // stage 3
+    2.0, 0.0, 1.0, 0.0, // stage 4
+];
+const RODAS3_C: &[f64] = &[
+    0.0,
+    0.0,
+    0.0,
+    0.0, // stage 1
+    4.0,
+    0.0,
+    0.0,
+    0.0, // stage 2
+    1.0,
+    -1.0,
+    0.0,
+    0.0, // stage 3
+    1.0,
+    -1.0,
+    -8.0 / 3.0,
+    0.0, // stage 4
+];
+const RODAS3_NODES: &[f64] = &[0.0, 0.0, 1.0, 1.0];
+const RODAS3_D: &[f64] = &[0.5, 1.5, 0.0, 0.0];
+const RODAS3_B: &[f64] = &[2.0, 0.0, 1.0, 1.0];
+const RODAS3_E: &[f64] = &[0.0, 0.0, 0.0, 1.0];
+const RODAS3_TABLEAU: RodasTableau = RodasTableau {
+    stages: 4,
+    gamma: 0.5,
+    a: RODAS3_A,
+    c_matrix: RODAS3_C,
+    nodes: RODAS3_NODES,
+    time_weights: RODAS3_D,
+    weights: RODAS3_B,
+    error_weights: RODAS3_E,
 };
 
 const RODAS4_A: &[f64] = &[
@@ -505,6 +554,7 @@ macro_rules! algorithm {
 
 algorithm!(Rosenbrock32);
 algorithm!(Ros2);
+algorithm!(Rodas3);
 algorithm!(Rodas4);
 algorithm!(Rodas5P);
 algorithm!(RosenbrockW6S4OS);
@@ -560,6 +610,7 @@ macro_rules! rodas_method {
 }
 
 rodas_method!(Ros2, 2, ROS2_TABLEAU);
+rodas_method!(Rodas3, 3, RODAS3_TABLEAU);
 rodas_method!(Rodas4, 4, RODAS4_TABLEAU);
 rodas_method!(Rodas5P, 5, RODAS5P_TABLEAU);
 
@@ -1093,7 +1144,7 @@ mod tests {
     use std::cell::Cell;
     use std::rc::Rc;
 
-    use super::{Rodas4, Rodas5P, Ros2, Rosenbrock32, RosenbrockW6S4OS};
+    use super::{Rodas3, Rodas4, Rodas5P, Ros2, Rosenbrock32, RosenbrockW6S4OS};
     use crate::{CallbackAction, OdeProblem, SaveMode, SolveError, SolveOptions, solve};
 
     type TestRhs = fn(&mut [f64], &[f64], &(), f64);
@@ -1118,6 +1169,9 @@ mod tests {
     fn adaptive_methods_solve_a_stiff_nonautonomous_problem() {
         let endpoints = [
             solve(&stiff_problem((0.0, 1.0), 1.0), Ros2, &adaptive_options())
+                .unwrap()
+                .last_state()[0],
+            solve(&stiff_problem((0.0, 1.0), 1.0), Rodas3, &adaptive_options())
                 .unwrap()
                 .last_state()[0],
             solve(
@@ -1170,15 +1224,17 @@ mod tests {
         let ratios = [
             convergence_ratio(Ros2, 0.1),
             convergence_ratio(Rosenbrock32, 0.1),
+            convergence_ratio(Rodas3, 0.1),
             convergence_ratio(Rodas4, 0.1),
             convergence_ratio(Rodas5P, 0.2),
             convergence_ratio(RosenbrockW6S4OS, 0.1),
         ];
         assert!(ratios[0] > 3.0);
         assert!(ratios[1] > 7.0);
-        assert!(ratios[2] > 14.0);
-        assert!(ratios[3] > 25.0);
-        assert!(ratios[4] > 14.0);
+        assert!(ratios[2] > 7.0);
+        assert!(ratios[3] > 14.0);
+        assert!(ratios[4] > 25.0);
+        assert!(ratios[5] > 14.0);
     }
 
     #[test]
@@ -1253,6 +1309,9 @@ mod tests {
             solve(&backward_problem(), Ros2, &adaptive_options())
                 .unwrap()
                 .last_state()[0],
+            solve(&backward_problem(), Rodas3, &adaptive_options())
+                .unwrap()
+                .last_state()[0],
             solve(&backward_problem(), Rosenbrock32, &adaptive_options())
                 .unwrap()
                 .last_state()[0],
@@ -1278,6 +1337,23 @@ mod tests {
             .with_jacobian(|jacobian: &mut [f64], _: &[f64], _: &(), _: f64| jacobian[0] = -1000.0);
         let numeric = solve(&numeric, Rodas4, &adaptive_options()).unwrap();
         let analytic = solve(&analytic, Rodas4, &adaptive_options()).unwrap();
+        assert!((numeric.last_state()[0] - analytic.last_state()[0]).abs() < 2.0e-10);
+        assert!(analytic.stats().rhs_evaluations < numeric.stats().rhs_evaluations);
+
+        let numeric = solve(
+            &OdeProblem::new(rhs as Rhs, vec![1.0], (0.0, 0.2), ()),
+            Rodas3,
+            &adaptive_options(),
+        )
+        .unwrap();
+        let analytic = solve(
+            &OdeProblem::new(rhs as Rhs, vec![1.0], (0.0, 0.2), ()).with_jacobian(
+                |jacobian: &mut [f64], _: &[f64], _: &(), _: f64| jacobian[0] = -1000.0,
+            ),
+            Rodas3,
+            &adaptive_options(),
+        )
+        .unwrap();
         assert!((numeric.last_state()[0] - analytic.last_state()[0]).abs() < 2.0e-10);
         assert!(analytic.stats().rhs_evaluations < numeric.stats().rhs_evaluations);
 
@@ -1318,6 +1394,12 @@ mod tests {
         assert!(solution.times().contains(&0.25));
         assert!(solution.times().contains(&0.5));
         assert!(solution.times().contains(&0.75));
+
+        let rodas3_solution = solve(&problem, Rodas3, &options).unwrap();
+        assert!(rodas3_solution.stats().callback_invocations > 0);
+        assert!(rodas3_solution.times().contains(&0.25));
+        assert!(rodas3_solution.times().contains(&0.5));
+        assert!(rodas3_solution.times().contains(&0.75));
 
         let ros2_solution = solve(&problem, Ros2, &options).unwrap();
         assert!(ros2_solution.stats().callback_invocations > 0);

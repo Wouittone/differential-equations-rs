@@ -1,6 +1,6 @@
 use differential_equations::{
-    OdeAlgorithm, OdeProblem, Rodas4, Rodas5P, Ros2, Rosenbrock32, RosenbrockW6S4OS, SaveMode,
-    SolveOptions, solve,
+    OdeAlgorithm, OdeProblem, Rodas3, Rodas4, Rodas5P, Ros2, Rosenbrock32, RosenbrockW6S4OS,
+    SaveMode, SolveOptions, solve,
 };
 
 type TestRhs = fn(&mut [f64], &[f64], &(), f64);
@@ -45,6 +45,7 @@ fn print_result<A: OdeAlgorithm + Copy>(name: &str, algorithm: A) {
 
 fn main() {
     print_result("ros2", Ros2);
+    print_result("rodas3", Rodas3);
     print_result("rosenbrock32", Rosenbrock32);
     print_result("rodas4", Rodas4);
     print_result("rodas5p", Rodas5P);
