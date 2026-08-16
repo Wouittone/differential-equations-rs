@@ -86,6 +86,14 @@ pub struct Grk4a;
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Grk4t;
 
+/// The four-stage, third-order Rosenbrock-W method `ROS34PW1b`.
+///
+/// The upstream method has a fourth-order primary formula and a third-order
+/// embedded estimator. It is a W-method, so the shared regular-ODE kernel
+/// reuses the Jacobian factorization for all four stages.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct Ros34Pw1b;
+
 /// The six-stage, fourth-order L-stable Rodas4 method.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Rodas4;
@@ -499,6 +507,70 @@ const GRK4T_TABLEAU: RodasTableau = RodasTableau {
     time_weights: GRK4T_D,
     weights: GRK4T_B,
     error_weights: GRK4T_E,
+};
+
+// ROS34PW1bRodasTableau(T, T2) from
+// lib/OrdinaryDiffEqRosenbrockTableaus/src/rosenbrock_tableaus.jl at
+// 211142263781255a9aa2f910f6760b9f18ec29c8.
+const ROS34PW1B_A: &[f64] = &[
+    0.0,
+    0.0,
+    0.0,
+    0.0, // stage 1
+    5.0905205106702045,
+    0.0,
+    0.0,
+    0.0, // stage 2
+    5.0905205106702045,
+    0.0,
+    0.0,
+    0.0, // stage 3
+    4.976281110107875,
+    0.027726816471584953,
+    0.22942803602790418,
+    0.0, // stage 4
+];
+const ROS34PW1B_C: &[f64] = &[
+    0.0,
+    0.0,
+    0.0,
+    0.0, // stage 1
+    -11.679081231228288,
+    0.0,
+    0.0,
+    0.0, // stage 2
+    -16.40573264673668,
+    -0.27726816471584953,
+    0.0,
+    0.0, // stage 3
+    -8.38103960500476,
+    -0.8483284091993433,
+    0.28700986043310556,
+    0.0, // stage 4
+];
+const ROS34PW1B_NODES: &[f64] = &[0.0, 2.218787467653286, 2.218787467653286, 1.553923375357884];
+const ROS34PW1B_D: &[f64] = &[
+    0.435866521508459,
+    -1.7829209461448272,
+    -2.4654190049693425,
+    -0.8055299979063697,
+];
+const ROS34PW1B_B: &[f64] = &[
+    5.2258276123309395,
+    -0.5569711481541647,
+    0.35797946935364533,
+    1.7233739852106407,
+];
+const ROS34PW1B_E: &[f64] = &[-5.168452127840395, -1.2635194260384186, 0.0, 0.0];
+const ROS34PW1B_TABLEAU: RodasTableau = RodasTableau {
+    stages: 4,
+    gamma: 0.435866521508459,
+    a: ROS34PW1B_A,
+    c_matrix: ROS34PW1B_C,
+    nodes: ROS34PW1B_NODES,
+    time_weights: ROS34PW1B_D,
+    weights: ROS34PW1B_B,
+    error_weights: ROS34PW1B_E,
 };
 
 const RODAS4_A: &[f64] = &[
@@ -934,6 +1006,7 @@ algorithm!(Ros3p);
 algorithm!(Ros34Prw);
 algorithm!(Grk4a);
 algorithm!(Grk4t);
+algorithm!(Ros34Pw1b);
 algorithm!(Rodas4);
 algorithm!(Rodas5P);
 algorithm!(RosenbrockW6S4OS);
@@ -996,6 +1069,7 @@ rodas_method!(Ros3p, 3, ROS3P_TABLEAU);
 rodas_method!(Ros34Prw, 3, ROS34PRW_TABLEAU);
 rodas_method!(Grk4a, 4, GRK4A_TABLEAU);
 rodas_method!(Grk4t, 4, GRK4T_TABLEAU);
+rodas_method!(Ros34Pw1b, 3, ROS34PW1B_TABLEAU);
 rodas_method!(Rodas4, 4, RODAS4_TABLEAU);
 rodas_method!(Rodas5P, 5, RODAS5P_TABLEAU);
 
@@ -1530,8 +1604,8 @@ mod tests {
     use std::rc::Rc;
 
     use super::{
-        Grk4a, Grk4t, Rodas3, Rodas4, Rodas5P, Ros2, Ros3, Ros3Pr, Ros3p, Ros34Prw, Rosenbrock32,
-        RosenbrockW6S4OS,
+        Grk4a, Grk4t, Rodas3, Rodas4, Rodas5P, Ros2, Ros3, Ros3Pr, Ros3p, Ros34Prw, Ros34Pw1b,
+        Rosenbrock32, RosenbrockW6S4OS,
     };
     use crate::{CallbackAction, OdeProblem, SaveMode, SolveError, SolveOptions, solve};
 
@@ -1596,6 +1670,13 @@ mod tests {
                 .last_state()[0],
             solve(
                 &stiff_problem((0.0, 1.0), 1.0),
+                Ros34Pw1b,
+                &adaptive_options(),
+            )
+            .unwrap()
+            .last_state()[0],
+            solve(
+                &stiff_problem((0.0, 1.0), 1.0),
                 Rodas5P,
                 &adaptive_options(),
             )
@@ -1641,6 +1722,7 @@ mod tests {
             convergence_ratio(Rodas4, 0.1),
             convergence_ratio(Grk4a, 0.1),
             convergence_ratio(Grk4t, 0.1),
+            convergence_ratio(Ros34Pw1b, 0.1),
             convergence_ratio(Rodas5P, 0.2),
             convergence_ratio(RosenbrockW6S4OS, 0.1),
         ];
@@ -1656,8 +1738,9 @@ mod tests {
         // GRK4A is fourth order; Rodas5P is the fifth-order method in this
         // table and keeps the stronger ratio check below.
         assert!(ratios[7] > 14.0);
-        assert!(ratios[8] > 14.0);
+        assert!(ratios[8] > 7.0);
         assert!(ratios[9] > 14.0);
+        assert!(ratios[10] > 14.0);
     }
 
     #[test]
@@ -1736,6 +1819,40 @@ mod tests {
     }
 
     #[test]
+    fn ros34pw1b_supports_jacobian_callbacks_and_requested_samples() {
+        let problem = OdeProblem::new(
+            |du: &mut [f64], u: &[f64], _: &(), _: f64| du[0] = -u[0],
+            vec![1.0],
+            (0.0, 1.0),
+            (),
+        )
+        .with_jacobian(|jacobian: &mut [f64], _: &[f64], _: &(), _: f64| {
+            jacobian[0] = -1.0;
+        })
+        .with_discrete_callback(
+            |_, _, time| time == 0.5,
+            |state, _, _| {
+                state[0] += 0.25;
+                CallbackAction::Continue
+            },
+        );
+        let options = SolveOptions {
+            adaptive: false,
+            initial_step: Some(0.25),
+            save: SaveMode::Endpoints,
+            save_at: vec![0.25, 0.5, 0.75],
+            ..SolveOptions::default()
+        };
+        let solution = solve(&problem, Ros34Pw1b, &options).unwrap();
+        assert_eq!(solution.stats().callback_invocations, 1);
+        assert!(solution.stats().jacobian_evaluations > 0);
+        for time in options.save_at {
+            assert!(solution.times().contains(&time), "missing save_at={time}");
+        }
+        assert!(solution.last_state()[0] > 0.0);
+    }
+
+    #[test]
     fn methods_support_backward_integration() {
         let backward_problem = || {
             OdeProblem::new(
@@ -1792,6 +1909,20 @@ mod tests {
                 solve(&backward_problem(), Grk4a, &adaptive_options())
                     .unwrap()
                     .last_state()[0],
+            ),
+            (
+                "ros34pw1b",
+                solve(
+                    &backward_problem(),
+                    Ros34Pw1b,
+                    &SolveOptions {
+                        initial_step: Some(0.005),
+                        max_step: 0.005,
+                        ..adaptive_options()
+                    },
+                )
+                .unwrap()
+                .last_state()[0],
             ),
             (
                 "grk4t",

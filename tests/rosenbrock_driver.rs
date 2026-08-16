@@ -2,8 +2,8 @@ use std::alloc::System;
 use std::hint::black_box;
 
 use differential_equations::{
-    Grk4a, OdeAlgorithm, OdeProblem, Rodas3, Rodas4, Rodas5P, Ros2, Ros34Prw, Rosenbrock23,
-    Rosenbrock32, RosenbrockW6S4OS, SaveMode, SolveOptions, solve,
+    Grk4a, OdeAlgorithm, OdeProblem, Rodas3, Rodas4, Rodas5P, Ros2, Ros34Prw, Ros34Pw1b,
+    Rosenbrock23, Rosenbrock32, RosenbrockW6S4OS, SaveMode, SolveOptions, solve,
 };
 use stats_alloc::{INSTRUMENTED_SYSTEM, Region, StatsAlloc};
 
@@ -51,6 +51,7 @@ fn callback_free_rosenbrock_steps_do_not_allocate_per_step() {
     assert_allocation_invariant(Rodas3);
     assert_allocation_invariant(Rodas4);
     assert_allocation_invariant(Grk4a);
+    assert_allocation_invariant(Ros34Pw1b);
     assert_allocation_invariant(Rodas5P);
     assert_allocation_invariant(Ros34Prw);
     assert_allocation_invariant(RosenbrockW6S4OS);
