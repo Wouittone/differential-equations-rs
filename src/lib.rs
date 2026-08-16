@@ -31,6 +31,7 @@ mod solution;
 mod solver;
 mod ssprk_extended;
 mod ssprk_kyk2014;
+mod ssprk_kyk42;
 mod trbdf2;
 mod tsit5;
 mod variable_adams;
@@ -72,6 +73,7 @@ pub use ssprk_extended::{
     Prrk22, Prrk33, Prrk54, SspRk53, SspRk53H, SspRk53TwoN1, SspRk53TwoN2, SspRk54, SspRk63,
     SspRk73, SspRk83, SspRk104, SspRk432, pRRK22, pRRK33, pRRK54,
 };
+pub use ssprk_kyk42::{KYKSSPRK42, KykSsprk42};
 pub use ssprk_kyk2014::Kyk2014DgSsprk3S2;
 pub use trbdf2::Trbdf2;
 pub use tsit5::Tsit5;
