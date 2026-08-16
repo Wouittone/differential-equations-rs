@@ -126,6 +126,14 @@ pub struct Rodas4P;
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Rodas5P;
 
+/// The eight-stage, fifth-order L-stable Rodas5Pe method.
+///
+/// Rodas5Pe shares Rodas5P's primary tableau and uses the pinned upstream
+/// method's modified embedded weights for a more effective stiff error
+/// estimate.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct Rodas5Pe;
+
 /// The six-stage, fourth-order Rosenbrock-W method (fixed step only).
 ///
 /// Coefficients are from `RosenbrockW6S4OSRodasTableau` in the pinned
@@ -1120,6 +1128,30 @@ const RODAS5P_TABLEAU: RodasTableau = RodasTableau {
     error_weights: RODAS5P_E,
 };
 
+// Rodas5PeTableau(T, T2) from
+// lib/OrdinaryDiffEqRosenbrock/src/rosenbrock_tableaus.jl. Rodas5Pe uses
+// Rodas5P's primary tableau with a custom embedded estimator.
+const RODAS5PE_E: &[f64] = &[
+    0.2606326497975715,
+    -0.005158627295444251,
+    1.3038988631109731,
+    1.235000722062074,
+    -0.7931985603795049,
+    -1.005448461135913,
+    -0.18044626132120234,
+    0.17051519239113755,
+];
+const RODAS5PE_TABLEAU: RodasTableau = RodasTableau {
+    stages: 8,
+    gamma: 0.21193756319429014,
+    a: RODAS5P_A,
+    c_matrix: RODAS5P_C,
+    nodes: RODAS5P_NODES,
+    time_weights: RODAS5P_D,
+    weights: RODAS5P_B,
+    error_weights: RODAS5PE_E,
+};
+
 const ROSENBROCK_W6S4OS_A: &[f64] = &[
     0.0,
     0.0,
@@ -1345,6 +1377,7 @@ algorithm!(Ros34Pw2);
 algorithm!(Rodas4);
 algorithm!(Rodas4P);
 algorithm!(Rodas5P);
+algorithm!(Rodas5Pe);
 algorithm!(RosenbrockW6S4OS);
 algorithm!(Rodas23W);
 
@@ -1412,6 +1445,7 @@ rodas_method!(Ros34Pw2, 3, ROS34PW2_TABLEAU);
 rodas_method!(Rodas4, 4, RODAS4_TABLEAU);
 rodas_method!(Rodas4P, 4, RODAS4P_TABLEAU);
 rodas_method!(Rodas5P, 5, RODAS5P_TABLEAU);
+rodas_method!(Rodas5Pe, 5, RODAS5PE_TABLEAU);
 rodas_method!(Rodas23W, 3, RODAS23W_TABLEAU);
 
 impl ExtendedRosenbrockMethod for RosenbrockW6S4OS {
