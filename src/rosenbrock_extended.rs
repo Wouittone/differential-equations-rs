@@ -1264,6 +1264,8 @@ mod tests {
                 .unwrap()
                 .last_state()[0],
             solve(&stiff_problem((0.0, 1.0), 1.0), Ros3, &adaptive_options())
+                .unwrap()
+                .last_state()[0],
             solve(&stiff_problem((0.0, 1.0), 1.0), Ros3Pr, &adaptive_options())
                 .unwrap()
                 .last_state()[0],
