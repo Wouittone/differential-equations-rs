@@ -20,8 +20,8 @@ and [ode_algorithm_inventory.csv](ode_algorithm_inventory.csv).
 - In-scope regular ODE names: **345**
   (333 canonical/composite constructors and
   12 public aliases).
-- Implemented and detected in matched Julia tests: **96**.
-- Missing in-scope public names: **249**.
+- Implemented and detected in matched Julia tests: **98**.
+- Missing in-scope public names: **247**.
 - Explicitly excluded public names: **4**.
 
 Aliases are public parity obligations but do not require a second numerical kernel.
@@ -48,7 +48,7 @@ Aliases are public parity obligations but do not require a second numerical kern
 | parallel diagonally implicit Runge-Kutta | 1 | 0 | 1 |
 | parallel explicit Runge-Kutta | 1 | 0 | 1 |
 | QPRK explicit Runge-Kutta | 1 | 0 | 1 |
-| Rosenbrock and Rosenbrock-W | 40 | 5 | 35 |
+| Rosenbrock and Rosenbrock-W | 40 | 6 | 34 |
 | Runge-Kutta interval prediction | 1 | 0 | 1 |
 | Runge-Kutta-Nystrom | 17 | 0 | 17 |
 | SDIRK, ESDIRK, and additive IMEX RK | 39 | 5 | 34 |
@@ -56,7 +56,7 @@ Aliases are public parity obligations but do not require a second numerical kern
 | SIMD explicit Runge-Kutta | 3 | 0 | 3 |
 | stabilized explicit Runge-Kutta | 13 | 0 | 13 |
 | stabilized implicit Runge-Kutta | 1 | 0 | 1 |
-| strong-stability-preserving Runge-Kutta | 21 | 17 | 4 |
+| strong-stability-preserving Runge-Kutta | 21 | 18 | 3 |
 | symplectic and partitioned Runge-Kutta | 18 | 4 | 14 |
 | Taylor series | 3 | 0 | 3 |
 | user-tableau explicit Runge-Kutta | 1 | 0 | 1 |
@@ -243,7 +243,7 @@ the JSON/CSV records.
 
 - `QPRK98` — OrdinaryDiffEqQPRK; ODEProblem
 
-### Rosenbrock and Rosenbrock-W (35)
+### Rosenbrock and Rosenbrock-W (34)
 
 - `GRK4A` — OrdinaryDiffEqRosenbrock; ODEProblem
 - `GRK4T` — OrdinaryDiffEqRosenbrock; ODEProblem
@@ -261,7 +261,6 @@ the JSON/CSV records.
 - `Rodas5Pr` — OrdinaryDiffEqRosenbrock; ODEProblem
 - `Rodas6P` — OrdinaryDiffEqRosenbrock; ODEProblem
 - `ROK4a` — OrdinaryDiffEqRosenbrock; ODEProblem
-- `ROS2` — OrdinaryDiffEqRosenbrock; ODEProblem
 - `ROS2PR` — OrdinaryDiffEqRosenbrock; ODEProblem
 - `ROS2S` — OrdinaryDiffEqRosenbrock; ODEProblem
 - `ROS3` — OrdinaryDiffEqRosenbrock; ODEProblem
@@ -373,9 +372,8 @@ the JSON/CSV records.
 
 - `IRKC` — OrdinaryDiffEqStabilizedIRK; ODEProblem
 
-### strong-stability-preserving Runge-Kutta (4)
+### strong-stability-preserving Runge-Kutta (3)
 
-- `KYKSSPRK42` — OrdinaryDiffEqSSPRK; ODEProblem
 - `SSPRK932` — OrdinaryDiffEqSSPRK; ODEProblem
 - `SSPRKMSVS32` — OrdinaryDiffEqSSPRK; ODEProblem
 - `SSPRKMSVS43` — OrdinaryDiffEqSSPRK; ODEProblem
