@@ -38,7 +38,7 @@ Proposed resolution: restore the pinned Julia 1.12.6 executable/toolchain on PAT
 Retry condition: `Get-Command julia` resolves an executable, then rerun the reproducer and `julia --project=tests/julia tests/julia/runtests.jl`.
 Status: open; no source or package blocker identified.
 
-Latest verification: 2026-08-16T18:00:00+02:00 coordinator reran the pinned
+Latest verification: 2026-08-16T19:07:00+02:00 coordinator reran the pinned
 reproducer; PowerShell still reports that `julia` is not recognized. Rust
 gates and inventory regeneration continue independently, and the exact retry
 condition above is unchanged.
