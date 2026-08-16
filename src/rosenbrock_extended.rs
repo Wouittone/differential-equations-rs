@@ -130,6 +130,13 @@ pub struct Ros34Pw2;
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Rodas4;
 
+/// The six-stage, fourth-order L-stable Rodas42 method.
+///
+/// This is the alternative fourth-order Rodas tableau from the pinned
+/// `OrdinaryDiffEqRosenbrockTableaus` revision.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct Rodas42;
+
 /// The six-stage, fourth-order L-stable Rodas4P method.
 ///
 /// Rodas4P emphasizes stability for parabolic problems. Its coefficients are
@@ -1005,6 +1012,107 @@ const RODAS4_TABLEAU: RodasTableau = RodasTableau {
     time_weights: RODAS4_D,
     weights: RODAS4_B,
     error_weights: RODAS4_E,
+};
+
+// Rodas42Tableau(T, T2) from
+// lib/OrdinaryDiffEqRosenbrockTableaus/src/rosenbrock_tableaus.jl.
+const RODAS42_A: &[f64] = &[
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0, // stage 1
+    1.4028884,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0, // stage 2
+    0.6581212688557198,
+    -1.320936088384301,
+    0.0,
+    0.0,
+    0.0,
+    0.0, // stage 3
+    7.131197445744498,
+    16.02964143958207,
+    -5.561572550509766,
+    0.0,
+    0.0,
+    0.0,
+    // stage 4
+    22.73885722420363,
+    67.38147284535289,
+    -31.2187749303856,
+    0.7285641833203814,
+    0.0,
+    0.0, // stage 5
+    22.73885722420363,
+    67.38147284535289,
+    -31.2187749303856,
+    0.7285641833203814,
+    1.0,
+    0.0, // stage 6
+];
+const RODAS42_C: &[f64] = &[
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0, // stage 1
+    -5.1043536,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0, // stage 2
+    -2.899967805418783,
+    4.040399359702244,
+    0.0,
+    0.0,
+    0.0,
+    0.0, // stage 3
+    -32.64449927841361,
+    -99.35311008728094,
+    49.99119122405989,
+    0.0,
+    0.0,
+    0.0, // stage 4
+    -76.46023087151691,
+    -278.5942120829058,
+    153.9294840910643,
+    10.97101866258358,
+    0.0,
+    0.0, // stage 5
+    -76.29701586804983,
+    -294.2795630511232,
+    162.0029695867566,
+    23.6516690309527,
+    -7.652977706771382,
+    0.0, // stage 6
+];
+const RODAS42_NODES: &[f64] = &[0.0, 0.3507221, 0.2557041, 0.681779, 1.0, 1.0];
+const RODAS42_D: &[f64] = &[0.25, -0.0690221, -0.0009672, -0.087979, 0.0, 0.0];
+const RODAS42_B: &[f64] = &[
+    22.73885722420363,
+    67.38147284535289,
+    -31.2187749303856,
+    0.7285641833203814,
+    1.0,
+    1.0,
+];
+const RODAS42_E: &[f64] = &[0.0, 0.0, 0.0, 0.0, 0.0, 1.0];
+const RODAS42_TABLEAU: RodasTableau = RodasTableau {
+    stages: 6,
+    gamma: 0.25,
+    a: RODAS42_A,
+    c_matrix: RODAS42_C,
+    nodes: RODAS42_NODES,
+    time_weights: RODAS42_D,
+    weights: RODAS42_B,
+    error_weights: RODAS42_E,
 };
 
 // Rodas4PTableau(T, T2) from
@@ -2369,6 +2477,7 @@ algorithm!(Grk4t);
 algorithm!(Ros34Pw1b);
 algorithm!(Ros34Pw2);
 algorithm!(Rodas4);
+algorithm!(Rodas42);
 algorithm!(Rodas4P);
 algorithm!(Rodas5P);
 algorithm!(Rodas5Pe);
@@ -2442,6 +2551,7 @@ rodas_method!(Grk4t, 4, GRK4T_TABLEAU);
 rodas_method!(Ros34Pw1b, 3, ROS34PW1B_TABLEAU);
 rodas_method!(Ros34Pw2, 3, ROS34PW2_TABLEAU);
 rodas_method!(Rodas4, 4, RODAS4_TABLEAU);
+rodas_method!(Rodas42, 4, RODAS42_TABLEAU);
 rodas_method!(Rodas4P, 4, RODAS4P_TABLEAU);
 rodas_method!(Rodas5P, 5, RODAS5P_TABLEAU);
 rodas_method!(Rodas5Pe, 5, RODAS5PE_TABLEAU);
