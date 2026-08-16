@@ -1,7 +1,6 @@
 use differential_equations::{
     Grk4a, OdeAlgorithm, OdeProblem, Rodas3, Rodas4, Rodas5P, Ros2, Ros3, Ros3Pr, Ros3p,
-    Rosenbrock32,
-    RosenbrockW6S4OS, SaveMode, SolveOptions, solve,
+    Rosenbrock32, RosenbrockW6S4OS, SaveMode, SolveOptions, solve,
 };
 
 type TestRhs = fn(&mut [f64], &[f64], &(), f64);

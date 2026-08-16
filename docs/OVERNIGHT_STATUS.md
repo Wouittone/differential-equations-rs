@@ -141,6 +141,8 @@ Pinned upstream revision:
 | Rodas3 family | Native four-stage third-order adaptive Rosenbrock tableau | 104 library tests plus Rodas3 stiff/Jacobian/backward/callback/save_at/allocation integrations | Julia unavailable on coordinator; pinned/full rerun blocked by `JULIA-PATH-20260809` | Rust-reviewed and merged as `fc3155c` (source wave `e157e14`); Julia retry required |
 | ROS3 family | Native three-stage third-order adaptive Rosenbrock tableau | 104 library tests plus ROS3 adaptive compliance/Jacobian coverage | Julia unavailable on coordinator; pinned/full rerun blocked by `JULIA-PATH-20260809` | Rust-reviewed and conflict-resolved/merged as `6427213` (source wave `3822c42`); Julia retry required |
 | ROS3PR family | Native three-stage third-order Rosenbrock PR tableau | 105 library tests plus ROS3PR stiff/Jacobian/backward/callback/save_at coverage | Julia unavailable on coordinator; pinned/full rerun blocked by `JULIA-PATH-20260809` | Rust-reviewed and conflict-resolved/merged as `1ce67dc` (source wave `67c3fa2`); Julia retry required |
+| ROS3P family | Native three-stage third-order parabolic Rosenbrock tableau | 105 library tests plus ROS3P backward/Jacobian/callback/save_at coverage | Julia unavailable on coordinator; pinned/full rerun blocked by `JULIA-PATH-20260809` | Rust-reviewed and conflict-resolved/merged as `97b889f` (source wave `a6a837c`); Julia retry required |
+| GRK4A family | Native four-stage fourth-order embedded Rosenbrock tableau | 105 library tests plus GRK4A stiff/backward/Jacobian/callback/save_at/allocation integrations | Julia unavailable on coordinator; pinned/full rerun blocked by `JULIA-PATH-20260809` | Rust-reviewed and conflict-resolved/merged as `bd81350` (source wave `0fc2909`); Julia retry required |
 
 ## Validation snapshot
 
@@ -151,7 +153,7 @@ cargo clippy --all-targets -- -D warnings: pass
 git diff --check: pass
 pinned Julia environment: pass and reproducible from tracked manifest (14 packages at pinned revision)
 Julia compliance: isolated AutoDP5 worker pass; integrated rerun blocked by `JULIA-PATH-20260809`
-inventory regeneration: pass; 349 source references and strict cross-checkout byte identity verified (101 implemented/tested, 244 missing)
+inventory regeneration: pass; 349 source references and strict cross-checkout byte identity verified (103 implemented/tested, 242 missing)
 ```
 
 ## Next dependency-ready task
