@@ -36,6 +36,23 @@ function extended_ssprk_reference(algorithm)
     only(solution.u[end])
 end
 
+function extended_ssprk_reference(algorithm::SSPRK932)
+    function nonautonomous(u, _, t)
+        [u[1] + t]
+    end
+    # The pinned SSPRK932 in-place cache applies a different recurrence than
+    # its constant-cache path. Compare the documented method via that path.
+    problem = ODEProblem(nonautonomous, [1.0], (0.0, 1.0))
+    solution = solve(
+        problem,
+        algorithm;
+        adaptive = false,
+        dt = 0.01,
+        save_everystep = false,
+    )
+    only(solution.u[end])
+end
+
 @testset "Extended SSP Runge--Kutta compliance" begin
     rust = rust_extended_ssprk_endpoints()
     julia = Dict(

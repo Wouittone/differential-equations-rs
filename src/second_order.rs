@@ -1,7 +1,5 @@
-use std::error::Error;
-use std::fmt::{self, Display, Formatter};
-
 use crate::{CallbackAction, EventDirection, SaveMode, SolveError, SolveOptions, SolverStats};
+use thiserror::Error;
 
 type DiscreteCondition<P> = dyn Fn(&[f64], &[f64], &P, f64) -> bool;
 type ContinuousCondition<P> = dyn Fn(&[f64], &[f64], &P, f64) -> f64;
@@ -212,38 +210,18 @@ fn partition(values: &[f64], dimension: usize, index: usize) -> Option<&[f64]> {
 }
 
 /// Configuration or integration failure specific to partitioned ODE states.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Error, PartialEq)]
 pub enum SecondOrderSolveError {
     /// Position and velocity partitions do not have the same dimension.
+    #[error("position and velocity dimensions must match")]
     StateDimensionMismatch,
     /// A common ODE validation or integration error.
-    Solve(SolveError),
-}
-
-impl Display for SecondOrderSolveError {
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::StateDimensionMismatch => {
-                formatter.write_str("position and velocity dimensions must match")
-            }
-            Self::Solve(error) => Display::fmt(error, formatter),
-        }
-    }
-}
-
-impl Error for SecondOrderSolveError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        match self {
-            Self::StateDimensionMismatch => None,
-            Self::Solve(error) => Some(error),
-        }
-    }
-}
-
-impl From<SolveError> for SecondOrderSolveError {
-    fn from(error: SolveError) -> Self {
-        Self::Solve(error)
-    }
+    #[error("{0}")]
+    Solve(
+        #[from]
+        #[source]
+        SolveError,
+    ),
 }
 
 /// A fixed-step algorithm for `q' = v` second-order ODE problems.
@@ -360,6 +338,9 @@ fn validate<F, P>(
     }
     if options.max_steps == 0 {
         return Err(SolveError::InvalidMaxSteps.into());
+    }
+    if !options.event_tolerance.is_finite() || options.event_tolerance <= 0.0 {
+        return Err(SolveError::InvalidEventTolerance.into());
     }
     let direction = (end - start).signum();
     if !options.save_at.iter().all(|time| {
@@ -486,6 +467,7 @@ where
             &mut next_time,
             &mut workspace.previous_effect_velocity,
             &mut workspace.previous_effect_position,
+            options.event_tolerance,
         )?;
         stats.callback_invocations += callback.invocations;
         time = next_time;
@@ -756,6 +738,7 @@ fn apply_step_callbacks<F, P>(
     time: &mut f64,
     state_before_velocity: &mut [f64],
     state_before_position: &mut [f64],
+    event_tolerance: f64,
 ) -> Result<CallbackOutcome, SolveError> {
     if problem.callbacks.is_empty() {
         return Ok(CallbackOutcome::default());
@@ -789,6 +772,7 @@ fn apply_step_callbacks<F, P>(
                 state_before_velocity,
                 state_before_position,
                 &problem.parameters,
+                event_tolerance,
             )?;
             if root.is_none_or(|(_, earliest)| fraction < earliest) {
                 root = Some((index, fraction));
@@ -847,11 +831,12 @@ fn locate_root<P>(
     interpolation_velocity: &mut [f64],
     interpolation_position: &mut [f64],
     parameters: &P,
+    event_tolerance: f64,
 ) -> Result<f64, SolveError> {
     let mut left = 0.0;
     let mut right = 1.0;
     let mut left_value = before;
-    for _ in 0..52 {
+    for _ in 0..64 {
         let middle = 0.5 * (left + right);
         interpolate(velocity, previous_velocity, middle, interpolation_velocity);
         interpolate(position, previous_position, middle, interpolation_position);
@@ -873,6 +858,9 @@ fn locate_root<P>(
             left_value = value;
         } else {
             right = middle;
+        }
+        if (right - left) * (time - previous_time).abs() <= event_tolerance {
+            break;
         }
     }
     Ok(0.5 * (left + right))

@@ -1,4 +1,5 @@
 <!-- argyph:begin -->
+
 ## Code & context lookup
 
 This repo is indexed by Argyph (MCP). For any lookup of code, symbols, files,

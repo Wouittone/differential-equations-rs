@@ -286,6 +286,12 @@ struct RodasTableau {
     error_weights: &'static [f64],
 }
 
+#[derive(Clone, Copy)]
+enum AdaptiveErrorEstimator {
+    Embedded,
+    RichardsonStepDoubling { method_order: i32 },
+}
+
 // ROS2RodasTableau(T, T2) from
 // lib/OrdinaryDiffEqRosenbrockTableaus/src/rosenbrock_tableaus.jl.
 const ROS2_A: &[f64] = &[0.0, 0.0, 0.585786437626905, 0.0];
@@ -4033,9 +4039,30 @@ impl ExtendedRosenbrockMethod for Rosenbrock32 {
 
 macro_rules! rodas_method {
     ($name:ident, $order:literal, $tableau:ident) => {
-        rodas_method!($name, $order, $tableau, false);
+        rodas_method!(
+            $name,
+            $order,
+            $tableau,
+            false,
+            AdaptiveErrorEstimator::Embedded
+        );
     };
     ($name:ident, $order:literal, $tableau:ident, $residual_control:expr) => {
+        rodas_method!(
+            $name,
+            $order,
+            $tableau,
+            $residual_control,
+            AdaptiveErrorEstimator::Embedded
+        );
+    };
+    (
+        $name:ident,
+        $order:literal,
+        $tableau:ident,
+        $residual_control:expr,
+        $adaptive_error_estimator:expr
+    ) => {
         impl ExtendedRosenbrockMethod for $name {
             const ERROR_ORDER: usize = $order;
             const ADAPTIVE: bool = true;
@@ -4062,6 +4089,7 @@ macro_rules! rodas_method {
                     options,
                     &$tableau,
                     $residual_control,
+                    $adaptive_error_estimator,
                     workspace,
                     stats,
                 )
@@ -4098,13 +4126,41 @@ rodas_method!(Rodas23W, 3, RODAS23W_TABLEAU);
 rodas_method!(Rodas3P, 3, RODAS3P_TABLEAU);
 rodas_method!(Ros2Pr, 2, ROS2PR_TABLEAU);
 rodas_method!(Ros2S, 2, ROS2S_TABLEAU);
-rodas_method!(Ros34Pw1a, 3, RODAS3P_TABLEAU);
+rodas_method!(
+    Ros34Pw1a,
+    3,
+    ROS34PW1A_TABLEAU,
+    false,
+    AdaptiveErrorEstimator::RichardsonStepDoubling { method_order: 3 }
+);
 rodas_method!(Ros4LStab, 4, ROS4LSTAB_TABLEAU);
 rodas_method!(RosShamp4, 4, ROSSHAMP4_TABLEAU);
 rodas_method!(Scholz4_7, 4, SCHOLZ4_7_TABLEAU);
 rodas_method!(Veldd4, 4, VELDD4_TABLEAU);
 rodas_method!(Velds4, 4, VELDS4_TABLEAU);
-rodas_method!(HybridExplicitImplicitRK, 5, TSIT5DA_TABLEAU);
+
+impl ExtendedRosenbrockMethod for HybridExplicitImplicitRK {
+    const ERROR_ORDER: usize = 5;
+    const ADAPTIVE: bool = true;
+
+    fn perform_step<F, P>(
+        problem: &OdeProblem<F, P>,
+        state: &[f64],
+        time: f64,
+        step: f64,
+        candidate: &mut [f64],
+        options: &SolveOptions,
+        workspace: &mut Workspace,
+        stats: &mut SolverStats,
+    ) -> Result<f64, SolveError>
+    where
+        F: Fn(&mut [f64], &[f64], &P, f64),
+    {
+        perform_tsit5da(
+            problem, candidate, state, time, step, options, workspace, stats,
+        )
+    }
+}
 
 impl ExtendedRosenbrockMethod for Rodas5Pr {
     const ERROR_ORDER: usize = 5;
@@ -4132,6 +4188,7 @@ impl ExtendedRosenbrockMethod for Rodas5Pr {
             options,
             &RODAS5P_TABLEAU,
             true,
+            AdaptiveErrorEstimator::Embedded,
             workspace,
             stats,
         )
@@ -4164,6 +4221,7 @@ impl ExtendedRosenbrockMethod for RosenbrockW6S4OS {
             options,
             &ROSENBROCK_W6S4OS_TABLEAU,
             false,
+            AdaptiveErrorEstimator::Embedded,
             workspace,
             stats,
         )
@@ -4434,6 +4492,7 @@ fn perform_rodas<F, P>(
     options: &SolveOptions,
     tableau: &RodasTableau,
     residual_control: bool,
+    adaptive_error_estimator: AdaptiveErrorEstimator,
     workspace: &mut Workspace,
     stats: &mut SolverStats,
 ) -> Result<f64, SolveError>
@@ -4502,23 +4561,28 @@ where
         }
     }
     let mut error_estimate = if options.adaptive {
-        scaled_error_norm(state, candidate, &workspace.error, options)
+        match adaptive_error_estimator {
+            AdaptiveErrorEstimator::Embedded => {
+                scaled_error_norm(state, candidate, &workspace.error, options)
+            }
+            AdaptiveErrorEstimator::RichardsonStepDoubling { method_order } => {
+                richardson_step_doubling(
+                    problem,
+                    candidate,
+                    state,
+                    time,
+                    step,
+                    options,
+                    tableau,
+                    method_order,
+                    workspace,
+                    stats,
+                )?
+            }
+        }
     } else {
         0.0
     };
-
-    // A few upstream Rosenbrock-W embeddings cancel exactly for scalar linear
-    // problems, even though the primary update still has a nonzero defect.
-    // Keep the adaptive controller conservative in that degenerate case by
-    // falling back to the primary-vs-Euler defect.
-    if options.adaptive && error_estimate == 0.0 {
-        for component in 0..dimension {
-            workspace.error[component] = candidate[component]
-                - state[component]
-                - step * workspace.current_derivative[component];
-        }
-        error_estimate = scaled_error_norm(state, candidate, &workspace.error, options);
-    }
 
     // OrdinaryDiffEq's Rodas5Pr performs an additional residual check only
     // when the embedded estimate accepts the step. The three H rows are the
@@ -4574,6 +4638,162 @@ where
         }
     }
     Ok(error_estimate)
+}
+
+#[allow(clippy::too_many_arguments, clippy::needless_range_loop)]
+fn perform_tsit5da<F, P>(
+    problem: &OdeProblem<F, P>,
+    candidate: &mut [f64],
+    state: &[f64],
+    time: f64,
+    step: f64,
+    options: &SolveOptions,
+    workspace: &mut Workspace,
+    stats: &mut SolverStats,
+) -> Result<f64, SolveError>
+where
+    F: Fn(&mut [f64], &[f64], &P, f64),
+{
+    let tableau = &TSIT5DA_TABLEAU;
+    let dimension = state.len();
+
+    for stage in 0..tableau.stages {
+        workspace.stage_state.copy_from_slice(state);
+        for previous in 0..stage {
+            let coefficient = tableau.a[stage * tableau.stages + previous];
+            if coefficient != 0.0 {
+                for component in 0..dimension {
+                    workspace.stage_state[component] +=
+                        coefficient * workspace.stages[previous * dimension + component];
+                }
+            }
+        }
+
+        if stage == 0 {
+            workspace
+                .stage_derivative
+                .copy_from_slice(&workspace.current_derivative);
+        } else {
+            evaluate(
+                problem,
+                &mut workspace.stage_derivative,
+                &workspace.stage_state,
+                time + tableau.nodes[stage] * step,
+                stats,
+            )?;
+        }
+        for component in 0..dimension {
+            workspace.stages[stage * dimension + component] =
+                step * workspace.stage_derivative[component];
+        }
+    }
+
+    candidate.copy_from_slice(state);
+    workspace.error.fill(0.0);
+    for stage in 0..tableau.stages {
+        for component in 0..dimension {
+            let increment = workspace.stages[stage * dimension + component];
+            candidate[component] += tableau.weights[stage] * increment;
+            workspace.error[component] += tableau.error_weights[stage] * increment;
+        }
+    }
+
+    Ok(if options.adaptive {
+        scaled_error_norm(state, candidate, &workspace.error, options)
+    } else {
+        0.0
+    })
+}
+
+/// Estimates local error with two half steps when selected by a method.
+///
+/// For a method of order `p`, the difference between one full step and two
+/// half steps is `(2^p - 1)` times the local error of the refined solution to
+/// leading order. The refined solution is retained as the candidate, making
+/// this an asymptotically valid fallback rather than a lower-order defect
+/// heuristic. This path is intentionally selected per method. `ROS34PW1a`
+/// uses it consistently because its published embedded combination has a
+/// scalar-linear cancellation blind spot; consistently using Richardson also
+/// avoids switching estimators when numerical Jacobians perturb that zero.
+#[allow(clippy::too_many_arguments)]
+fn richardson_step_doubling<F, P>(
+    problem: &OdeProblem<F, P>,
+    candidate: &mut [f64],
+    state: &[f64],
+    time: f64,
+    step: f64,
+    options: &SolveOptions,
+    tableau: &RodasTableau,
+    method_order: i32,
+    workspace: &mut Workspace,
+    stats: &mut SolverStats,
+) -> Result<f64, SolveError>
+where
+    F: Fn(&mut [f64], &[f64], &P, f64),
+{
+    let dimension = state.len();
+    let half_step = step / 2.0;
+    let mut midpoint = vec![0.0; dimension];
+    let mut refined_candidate = vec![0.0; dimension];
+    let mut refinement_workspace = Workspace::new(dimension);
+    let mut fixed_options = options.clone();
+    fixed_options.adaptive = false;
+
+    evaluate(
+        problem,
+        &mut refinement_workspace.current_derivative,
+        state,
+        time,
+        stats,
+    )?;
+    perform_rodas(
+        problem,
+        &mut midpoint,
+        state,
+        time,
+        half_step,
+        &fixed_options,
+        tableau,
+        false,
+        AdaptiveErrorEstimator::Embedded,
+        &mut refinement_workspace,
+        stats,
+    )?;
+
+    refinement_workspace.differentiation_valid = false;
+    evaluate(
+        problem,
+        &mut refinement_workspace.current_derivative,
+        &midpoint,
+        time + half_step,
+        stats,
+    )?;
+    perform_rodas(
+        problem,
+        &mut refined_candidate,
+        &midpoint,
+        time + half_step,
+        half_step,
+        &fixed_options,
+        tableau,
+        false,
+        AdaptiveErrorEstimator::Embedded,
+        &mut refinement_workspace,
+        stats,
+    )?;
+
+    let richardson_denominator = 2.0_f64.powi(method_order) - 1.0;
+    for component in 0..dimension {
+        workspace.error[component] =
+            (refined_candidate[component] - candidate[component]) / richardson_denominator;
+    }
+    candidate.copy_from_slice(&refined_candidate);
+    Ok(scaled_error_norm(
+        state,
+        candidate,
+        &workspace.error,
+        options,
+    ))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -4739,9 +4959,9 @@ mod tests {
     use std::rc::Rc;
 
     use super::{
-        Grk4a, Grk4t, Rodas3, Rodas3d, Rodas4, Rodas4P, Rodas5P, Rodas5Pr, Rodas6P, Rodas23W, Ros2,
-        Ros3, Ros3Pr, Ros3Prl, Ros3Prl2, Ros3p, Ros34Prw, Ros34Pw1b, Rosenbrock32,
-        RosenbrockW6S4OS,
+        Grk4a, Grk4t, Rodas3, Rodas3P, Rodas3d, Rodas4, Rodas4P, Rodas5P, Rodas5Pr, Rodas6P,
+        Rodas23W, Ros2, Ros3, Ros3Pr, Ros3Prl, Ros3Prl2, Ros3p, Ros34Prw, Ros34Pw1a, Ros34Pw1b,
+        Rosenbrock32, RosenbrockW6S4OS,
     };
     use crate::{CallbackAction, OdeProblem, SaveMode, SolveError, SolveOptions, solve};
 
@@ -4886,6 +5106,44 @@ mod tests {
         let coarse = (fixed_endpoint(algorithm, step) - std::f64::consts::E).abs();
         let fine = (fixed_endpoint(algorithm, step / 2.0) - std::f64::consts::E).abs();
         coarse / fine
+    }
+
+    #[test]
+    fn ros34pw1a_uses_its_own_tableau() {
+        let ros34pw1a = fixed_endpoint(Ros34Pw1a, 0.25);
+        let rodas3p = fixed_endpoint(Rodas3P, 0.25);
+
+        assert!(
+            (ros34pw1a - rodas3p).abs() > 1.0e-8,
+            "ROS34PW1a unexpectedly reproduced the Rodas3P step: {ros34pw1a:.17e}"
+        );
+        assert!(convergence_ratio(Ros34Pw1a, 0.1) > 7.0);
+    }
+
+    #[test]
+    fn ros34pw1a_controls_a_zero_embedded_error_with_step_doubling() {
+        let problem = OdeProblem::new(
+            |du: &mut [f64], u: &[f64], _: &(), _: f64| du[0] = u[0],
+            vec![1.0],
+            (0.0, 1.0),
+            (),
+        );
+        let options = SolveOptions {
+            absolute_tolerance: 1.0e-9,
+            relative_tolerance: 1.0e-9,
+            initial_step: Some(1.0),
+            save: SaveMode::Endpoints,
+            ..SolveOptions::default()
+        };
+
+        let solution = solve(&problem, Ros34Pw1a, &options).unwrap();
+
+        assert!(
+            (solution.last_state()[0] - std::f64::consts::E).abs() < 2.0e-7,
+            "endpoint={:.17e}",
+            solution.last_state()[0]
+        );
+        assert!(solution.stats().rejected_steps > 0);
     }
 
     #[test]

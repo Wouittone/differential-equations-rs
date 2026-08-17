@@ -4,7 +4,10 @@
 //! OrdinaryDiffEqSymplecticRK.  A stage is a drift of the position by `bᵢ`
 //! followed by a kick of the velocity by `aᵢ`.
 
-use differential_equations::{SaveMode, SecondOrderOdeProblem, SolveError, SolveOptions};
+#![allow(clippy::excessive_precision)]
+
+use crate::{SaveMode, SecondOrderOdeProblem, SolveError, SolveOptions};
+use thiserror::Error;
 
 /// A pinned alternating drift/kick composition.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -53,6 +56,7 @@ macro_rules! symplectic_algorithm {
     };
 }
 
+#[allow(clippy::approx_constant)]
 const MCATE2_A: &[f64] = &[0.7071067811865476, 0.2928932188134524];
 const MCATE2_B: &[f64] = &[0.29289321881345254, 0.7071067811865475];
 
@@ -368,6 +372,21 @@ impl SymplecticSolution {
         &self.times
     }
 
+    /// Number of scalar components in each partition.
+    pub fn dimension(&self) -> usize {
+        self.dimension
+    }
+
+    /// All saved positions in contiguous row-major storage.
+    pub fn position_values(&self) -> &[f64] {
+        &self.positions
+    }
+
+    /// All saved velocities in contiguous row-major storage.
+    pub fn velocity_values(&self) -> &[f64] {
+        &self.velocities
+    }
+
     /// Last position partition.
     pub fn last_position(&self) -> &[f64] {
         let start = self.positions.len() - self.dimension;
@@ -382,14 +401,12 @@ impl SymplecticSolution {
 
     /// Position partition at a saved index.
     pub fn position(&self, index: usize) -> Option<&[f64]> {
-        let start = index.checked_mul(self.dimension)?;
-        self.positions.get(start..start + self.dimension)
+        partition(&self.positions, self.dimension, index)
     }
 
     /// Velocity partition at a saved index.
     pub fn velocity(&self, index: usize) -> Option<&[f64]> {
-        let start = index.checked_mul(self.dimension)?;
-        self.velocities.get(start..start + self.dimension)
+        partition(&self.velocities, self.dimension, index)
     }
 
     /// Number of acceleration evaluations.
@@ -398,19 +415,25 @@ impl SymplecticSolution {
     }
 }
 
-/// Failure specific to a fixed-step symplectic composition.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum SymplecticSolveError {
-    /// Position and velocity partitions differ in size.
-    StateDimensionMismatch,
-    /// A common solver validation or execution error.
-    Solve(SolveError),
+fn partition(values: &[f64], dimension: usize, index: usize) -> Option<&[f64]> {
+    let start = index.checked_mul(dimension)?;
+    let end = start.checked_add(dimension)?;
+    values.get(start..end)
 }
 
-impl From<SolveError> for SymplecticSolveError {
-    fn from(error: SolveError) -> Self {
-        Self::Solve(error)
-    }
+/// Failure specific to a fixed-step symplectic composition.
+#[derive(Clone, Copy, Debug, Eq, Error, PartialEq)]
+pub enum SymplecticSolveError {
+    /// Position and velocity partitions differ in size.
+    #[error("position and velocity dimensions must match")]
+    StateDimensionMismatch,
+    /// A common solver validation or execution error.
+    #[error("{0}")]
+    Solve(
+        #[from]
+        #[source]
+        SolveError,
+    ),
 }
 
 /// Solves a second-order problem with a pinned alternating drift/kick method.
@@ -424,6 +447,84 @@ where
     F: Fn(&mut [f64], &[f64], &[f64], &P, f64),
     A: SymplecticAlgorithm,
 {
+    validate(problem, options)?;
+    if options.adaptive {
+        return Err(SolveError::AdaptiveStepUnsupported.into());
+    }
+    let fixed_step = options
+        .initial_step
+        .ok_or(SolveError::InitialStepRequired)?;
+    let (start, end) = problem.time_span();
+    let tableau = A::tableau();
+    if tableau.a.is_empty()
+        || tableau.a.len() != tableau.b.len()
+        || !tableau
+            .a
+            .iter()
+            .chain(tableau.b)
+            .all(|coefficient| coefficient.is_finite())
+    {
+        return Err(SolveError::InvalidTableau.into());
+    }
+
+    let direction = (end - start).signum();
+    let step_size = fixed_step.min(options.max_step);
+    let dimension = problem.initial_position().len();
+    let mut position = problem.initial_position().to_vec();
+    let mut velocity = problem.initial_velocity().to_vec();
+    let mut candidate_position = position.clone();
+    let mut candidate_velocity = velocity.clone();
+    let mut acceleration = vec![0.0; dimension];
+    let mut recorder = SymplecticRecorder::new(&position, &velocity, start, options);
+    let mut time = start;
+    let mut steps = 0usize;
+    let mut rhs_evaluations = 0usize;
+
+    while direction * (end - time) > 0.0 {
+        if steps >= options.max_steps {
+            return Err(SolveError::MaxStepsExceeded.into());
+        }
+        let step = direction * step_size.min((end - time).abs());
+        if time + step == time {
+            return Err(SolveError::StepSizeUnderflow.into());
+        }
+        candidate_position.copy_from_slice(&position);
+        candidate_velocity.copy_from_slice(&velocity);
+        let previous_time = time;
+        rhs_evaluations += perform_step(
+            problem,
+            tableau,
+            &mut candidate_position,
+            &mut candidate_velocity,
+            &mut acceleration,
+            time,
+            step,
+        )?;
+        time += step;
+        if direction * (end - time) <= 0.0 {
+            time = end;
+        }
+        steps += 1;
+        recorder.record_step(
+            &position,
+            &velocity,
+            previous_time,
+            &candidate_position,
+            &candidate_velocity,
+            time,
+            time == end,
+        );
+        std::mem::swap(&mut position, &mut candidate_position);
+        std::mem::swap(&mut velocity, &mut candidate_velocity);
+    }
+
+    Ok(recorder.finish(rhs_evaluations))
+}
+
+fn validate<F, P>(
+    problem: &SecondOrderOdeProblem<F, P>,
+    options: &SolveOptions,
+) -> Result<(), SymplecticSolveError> {
     let position = problem.initial_position();
     let velocity = problem.initial_velocity();
     if position.is_empty() {
@@ -439,89 +540,192 @@ where
     {
         return Err(SolveError::NonFiniteInitialState.into());
     }
-    if options.adaptive {
-        return Err(SolveError::AdaptiveStepUnsupported.into());
+    let (start, end) = problem.time_span();
+    if !start.is_finite() || !end.is_finite() || start == end {
+        return Err(SolveError::InvalidTimeSpan.into());
     }
-    let initial_step = options
+    if !options.absolute_tolerance.is_finite()
+        || options.absolute_tolerance <= 0.0
+        || !options.relative_tolerance.is_finite()
+        || options.relative_tolerance <= 0.0
+    {
+        return Err(SolveError::InvalidTolerance.into());
+    }
+    if options
         .initial_step
-        .ok_or(SolveError::InitialStepRequired)?;
-    if !initial_step.is_finite() || initial_step == 0.0 {
+        .is_some_and(|step| !step.is_finite() || step <= 0.0)
+    {
         return Err(SolveError::InvalidInitialStep.into());
     }
     if options.max_step.is_nan() || options.max_step <= 0.0 {
         return Err(SolveError::InvalidMaxStep.into());
     }
-    let (start, end) = problem.time_span();
-    if !start.is_finite() || !end.is_finite() || start == end {
-        return Err(SolveError::InvalidTimeSpan.into());
+    if options.max_steps == 0 {
+        return Err(SolveError::InvalidMaxSteps.into());
     }
-    let tableau = A::tableau();
-    if tableau.a.is_empty() || tableau.a.len() != tableau.b.len() {
-        return Err(SolveError::InvalidTableau.into());
+    if !options.event_tolerance.is_finite() || options.event_tolerance <= 0.0 {
+        return Err(SolveError::InvalidEventTolerance.into());
     }
-
     let direction = (end - start).signum();
-    let step_size = initial_step.abs().min(options.max_step);
-    let dimension = position.len();
-    let mut position = position.to_vec();
-    let mut velocity = velocity.to_vec();
-    let mut acceleration = vec![0.0; dimension];
-    let mut times = vec![start];
-    let mut positions = position.clone();
-    let mut velocities = velocity.clone();
-    let mut time = start;
-    let mut steps = 0usize;
-    let mut rhs_evaluations = 0usize;
+    if !options.save_at.iter().all(|time| {
+        time.is_finite() && direction * (*time - start) >= 0.0 && direction * (end - *time) >= 0.0
+    }) || options
+        .save_at
+        .windows(2)
+        .any(|pair| direction * (pair[1] - pair[0]) <= 0.0)
+    {
+        return Err(SolveError::InvalidSaveAt.into());
+    }
+    Ok(())
+}
 
-    while direction * (end - time) > 0.0 {
-        if steps == options.max_steps {
-            return Err(SolveError::MaxStepsExceeded.into());
+#[allow(clippy::too_many_arguments)]
+fn perform_step<F, P>(
+    problem: &SecondOrderOdeProblem<F, P>,
+    tableau: SymplecticTableau,
+    position: &mut [f64],
+    velocity: &mut [f64],
+    acceleration: &mut [f64],
+    time: f64,
+    step: f64,
+) -> Result<usize, SolveError>
+where
+    F: Fn(&mut [f64], &[f64], &[f64], &P, f64),
+{
+    let mut stage_time = time;
+    for (stage, (&kick, &drift)) in tableau.a.iter().zip(tableau.b).enumerate() {
+        for (position, &velocity) in position.iter_mut().zip(&*velocity) {
+            *position += drift * step * velocity;
         }
-        let step = direction * step_size.min((end - time).abs());
-        if time + step == time {
-            return Err(SolveError::StepSizeUnderflow.into());
+        problem.evaluate_acceleration(acceleration, velocity, position, stage_time);
+        if !acceleration.iter().all(|value| value.is_finite()) {
+            return Err(SolveError::NonFiniteDerivative);
         }
-        let stage_start = time;
-        let mut stage_time = time;
-        for stage in 0..tableau.stages() {
-            // The recovered workflow uses b for the position drift and a for
-            // the velocity kick at the drifted position.
-            let drift = tableau.b[stage];
-            let kick = tableau.a[stage];
-            for (q, &v) in position.iter_mut().zip(&velocity) {
-                *q += drift * step * v;
-            }
-            problem.evaluate_acceleration(&mut acceleration, &velocity, &position, stage_time);
-            rhs_evaluations += 1;
-            if !acceleration.iter().all(|value| value.is_finite()) {
-                return Err(SolveError::NonFiniteDerivative.into());
-            }
-            for (v, &a_value) in velocity.iter_mut().zip(&acceleration) {
-                *v += kick * step * a_value;
-            }
-            if stage + 1 < tableau.stages() {
-                stage_time += kick * step;
-            }
+        for (velocity, &acceleration) in velocity.iter_mut().zip(&*acceleration) {
+            *velocity += kick * step * acceleration;
         }
-        time = stage_start + step;
-        steps += 1;
-        if options.save == SaveMode::EveryStep || time == end {
-            times.push(time);
-            positions.extend_from_slice(&position);
-            velocities.extend_from_slice(&velocity);
+        if stage + 1 < tableau.stages() {
+            stage_time += kick * step;
         }
     }
-    if times.last().copied() != Some(end) {
-        times.push(end);
-        positions.extend_from_slice(&position);
-        velocities.extend_from_slice(&velocity);
+    Ok(tableau.stages())
+}
+
+struct SymplecticRecorder<'a> {
+    times: Vec<f64>,
+    positions: Vec<f64>,
+    velocities: Vec<f64>,
+    dimension: usize,
+    save_at: &'a [f64],
+    next_save: usize,
+    save_mode: SaveMode,
+    interpolation_position: Vec<f64>,
+    interpolation_velocity: Vec<f64>,
+}
+
+impl<'a> SymplecticRecorder<'a> {
+    fn new(position: &[f64], velocity: &[f64], time: f64, options: &'a SolveOptions) -> Self {
+        let save_initial = options.save_at.is_empty() || options.save_at.first() == Some(&time);
+        let capacity = options.save_at.len().max(2);
+        let mut recorder = Self {
+            times: Vec::with_capacity(capacity),
+            positions: Vec::with_capacity(capacity * position.len()),
+            velocities: Vec::with_capacity(capacity * velocity.len()),
+            dimension: position.len(),
+            save_at: &options.save_at,
+            next_save: usize::from(!options.save_at.is_empty() && save_initial),
+            save_mode: options.save,
+            interpolation_position: if options.save_at.is_empty() {
+                Vec::new()
+            } else {
+                vec![0.0; position.len()]
+            },
+            interpolation_velocity: if options.save_at.is_empty() {
+                Vec::new()
+            } else {
+                vec![0.0; velocity.len()]
+            },
+        };
+        if save_initial {
+            recorder.push_unique(time, position, velocity);
+        }
+        recorder
     }
 
-    Ok(SymplecticSolution {
-        times,
-        positions,
-        velocities,
-        dimension,
-        rhs_evaluations,
-    })
+    #[allow(clippy::too_many_arguments)]
+    fn record_step(
+        &mut self,
+        previous_position: &[f64],
+        previous_velocity: &[f64],
+        previous_time: f64,
+        position: &[f64],
+        velocity: &[f64],
+        time: f64,
+        final_time: bool,
+    ) {
+        if self.save_at.is_empty() {
+            if self.save_mode == SaveMode::EveryStep || final_time {
+                self.push_unique(time, position, velocity);
+            }
+            return;
+        }
+
+        let direction = (time - previous_time).signum();
+        while let Some(&target) = self.save_at.get(self.next_save) {
+            if direction * (target - previous_time) <= 0.0 {
+                self.next_save += 1;
+                continue;
+            }
+            if direction * (time - target) < 0.0 {
+                break;
+            }
+            let fraction = (target - previous_time) / (time - previous_time);
+            interpolate(
+                position,
+                previous_position,
+                fraction,
+                &mut self.interpolation_position,
+            );
+            interpolate(
+                velocity,
+                previous_velocity,
+                fraction,
+                &mut self.interpolation_velocity,
+            );
+            self.times.push(target);
+            self.positions
+                .extend_from_slice(&self.interpolation_position);
+            self.velocities
+                .extend_from_slice(&self.interpolation_velocity);
+            self.next_save += 1;
+        }
+    }
+
+    fn push_unique(&mut self, time: f64, position: &[f64], velocity: &[f64]) {
+        if self.times.last() == Some(&time) {
+            let start = self.positions.len() - self.dimension;
+            self.positions[start..].copy_from_slice(position);
+            self.velocities[start..].copy_from_slice(velocity);
+        } else {
+            self.times.push(time);
+            self.positions.extend_from_slice(position);
+            self.velocities.extend_from_slice(velocity);
+        }
+    }
+
+    fn finish(self, rhs_evaluations: usize) -> SymplecticSolution {
+        SymplecticSolution {
+            times: self.times,
+            positions: self.positions,
+            velocities: self.velocities,
+            dimension: self.dimension,
+            rhs_evaluations,
+        }
+    }
+}
+
+fn interpolate(current: &[f64], previous: &[f64], fraction: f64, output: &mut [f64]) {
+    for ((output, previous), current) in output.iter_mut().zip(previous).zip(current) {
+        *output = previous + fraction * (current - previous);
+    }
 }

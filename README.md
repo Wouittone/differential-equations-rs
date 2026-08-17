@@ -1,6 +1,6 @@
 # differential-equations-rs
 
-An experimental Rust port of the ODE solvers in Julia's
+A beta Rust port of the ODE solvers in Julia's
 [DifferentialEquations.jl ecosystem](https://docs.sciml.ai/DiffEqDocs/stable/solvers/ode_solve/).
 
 ## Goals
@@ -146,4 +146,8 @@ copy/paste runner prompt is in
 
 ## Status
 
-Pre-alpha. The crate is not yet suitable for scientific or production use.
+Beta. Implemented algorithms now use method-specific kernels and are covered by
+Rust regression tests, with a growing set of comparisons against the pinned
+Julia SciML reference environment. The API may still change before 1.0, and
+users should validate solver choice and tolerances for scientific or production
+workloads.

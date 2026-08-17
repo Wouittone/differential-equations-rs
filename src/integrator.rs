@@ -308,6 +308,7 @@ where
                 &mut candidate,
                 &mut next_time,
                 &mut state_before_effect,
+                options.event_tolerance,
             )?;
             stats.callback_invocations += callbacks.invocations;
             stats.accepted_steps += 1;

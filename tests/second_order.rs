@@ -3,6 +3,7 @@ use differential_equations::{
     SecondOrderOdeProblem, SecondOrderSolveError, SolveError, SolveOptions, SymplecticEuler,
     VelocityVerlet, VerletLeapfrog, solve_second_order,
 };
+use std::error::Error as _;
 
 type Acceleration = fn(&mut [f64], &[f64], &[f64], &(), f64);
 
@@ -160,5 +161,19 @@ fn invalid_partition_and_fixed_step_options_are_reported() {
         Err(SecondOrderSolveError::Solve(
             SolveError::AdaptiveStepUnsupported
         ))
+    );
+}
+
+#[test]
+fn wrapped_second_order_errors_preserve_their_source() {
+    let error = SecondOrderSolveError::from(SolveError::InvalidInitialStep);
+
+    assert_eq!(
+        error.to_string(),
+        "the initial step must be finite and positive"
+    );
+    assert_eq!(
+        error.source().map(ToString::to_string),
+        Some("the initial step must be finite and positive".to_owned())
     );
 }

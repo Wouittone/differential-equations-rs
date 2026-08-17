@@ -1,7 +1,5 @@
-use std::error::Error;
-use std::fmt::{self, Display, Formatter};
-
 use crate::{OdeProblem, Solution};
+use thiserror::Error;
 
 /// Controls which accepted states are retained in a [`Solution`].
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -31,6 +29,8 @@ pub struct SolveOptions {
     pub max_step: f64,
     /// Maximum number of attempted steps.
     pub max_steps: usize,
+    /// Absolute time tolerance used when localizing continuous callback roots.
+    pub event_tolerance: f64,
     /// Accepted states retained in the solution.
     pub save: SaveMode,
     /// Requested output times. Empty means to follow [`save`](Self::save).
@@ -50,69 +50,119 @@ impl Default for SolveOptions {
             adaptive: true,
             max_step: f64::INFINITY,
             max_steps: 100_000,
+            event_tolerance: f64::EPSILON,
             save: SaveMode::EveryStep,
             save_at: Vec::new(),
         }
     }
 }
 
-/// A failure to configure or complete an ODE solve.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum SolveError {
-    EmptyState,
-    NonFiniteInitialState,
-    InvalidTimeSpan,
-    InvalidTolerance,
-    InvalidInitialStep,
-    InitialStepRequired,
-    AdaptiveStepUnsupported,
-    InvalidMaxStep,
-    InvalidMaxSteps,
-    InvalidTableau,
-    NonFiniteDerivative,
-    InvalidSaveAt,
-    NonFiniteCallbackCondition,
-    NonFiniteCallbackState,
-    NonlinearSolveFailed,
-    SingularLinearSystem,
-    StepSizeUnderflow,
-    MaxStepsExceeded,
-}
+impl SolveOptions {
+    /// Creates the default solver configuration for builder-style customization.
+    pub fn new() -> Self {
+        Self::default()
+    }
 
-impl Display for SolveError {
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
-        formatter.write_str(match self {
-            Self::EmptyState => "the initial state is empty",
-            Self::NonFiniteInitialState => "the initial state contains a non-finite value",
-            Self::InvalidTimeSpan => "the time span must contain distinct finite values",
-            Self::InvalidTolerance => {
-                "absolute and relative tolerances must be finite and positive"
-            }
-            Self::InvalidInitialStep => "the initial step must be finite and positive",
-            Self::InitialStepRequired => "fixed-step integration requires an initial step",
-            Self::AdaptiveStepUnsupported => {
-                "the selected algorithm does not support adaptive stepping"
-            }
-            Self::InvalidMaxStep => "the maximum step must be positive and not NaN",
-            Self::InvalidMaxSteps => "the maximum step count must be positive",
-            Self::InvalidTableau => "the explicit Runge–Kutta tableau is malformed",
-            Self::NonFiniteDerivative => "the right-hand side produced a non-finite derivative",
-            Self::InvalidSaveAt => {
-                "save-at times must be finite, ordered, and inside the time span"
-            }
-            Self::NonFiniteCallbackCondition => {
-                "a continuous callback condition produced a non-finite value"
-            }
-            Self::NonFiniteCallbackState => "a callback produced a non-finite state",
-            Self::NonlinearSolveFailed => "the implicit nonlinear solve did not converge",
-            Self::SingularLinearSystem => "the implicit linear system is singular",
-            Self::StepSizeUnderflow => "the adaptive step size underflowed",
-            Self::MaxStepsExceeded => "the solver exceeded its maximum attempted step count",
-        })
+    /// Sets the absolute and relative local-error tolerances.
+    #[must_use]
+    pub fn with_tolerances(mut self, absolute: f64, relative: f64) -> Self {
+        self.absolute_tolerance = absolute;
+        self.relative_tolerance = relative;
+        self
+    }
+
+    /// Sets the initial step-size magnitude.
+    #[must_use]
+    pub fn with_initial_step(mut self, step: f64) -> Self {
+        self.initial_step = Some(step);
+        self
+    }
+
+    /// Enables or disables adaptive step-size control.
+    #[must_use]
+    pub fn with_adaptive(mut self, adaptive: bool) -> Self {
+        self.adaptive = adaptive;
+        self
+    }
+
+    /// Sets the maximum step-size magnitude.
+    #[must_use]
+    pub fn with_max_step(mut self, max_step: f64) -> Self {
+        self.max_step = max_step;
+        self
+    }
+
+    /// Sets the maximum number of attempted steps.
+    #[must_use]
+    pub fn with_max_steps(mut self, max_steps: usize) -> Self {
+        self.max_steps = max_steps;
+        self
+    }
+
+    /// Sets the absolute time tolerance for continuous callback root localization.
+    #[must_use]
+    pub fn with_event_tolerance(mut self, tolerance: f64) -> Self {
+        self.event_tolerance = tolerance;
+        self
+    }
+
+    /// Sets the accepted-state saving mode.
+    #[must_use]
+    pub fn with_save(mut self, save: SaveMode) -> Self {
+        self.save = save;
+        self
+    }
+
+    /// Replaces the requested output times.
+    #[must_use]
+    pub fn with_save_at(mut self, times: impl IntoIterator<Item = f64>) -> Self {
+        self.save_at = times.into_iter().collect();
+        self
     }
 }
 
-impl Error for SolveError {}
+/// A failure to configure or complete an ODE solve.
+#[derive(Clone, Copy, Debug, Eq, Error, PartialEq)]
+pub enum SolveError {
+    #[error("the initial state is empty")]
+    EmptyState,
+    #[error("the initial state contains a non-finite value")]
+    NonFiniteInitialState,
+    #[error("the time span must contain distinct finite values")]
+    InvalidTimeSpan,
+    #[error("absolute and relative tolerances must be finite and positive")]
+    InvalidTolerance,
+    #[error("the initial step must be finite and positive")]
+    InvalidInitialStep,
+    #[error("fixed-step integration requires an initial step")]
+    InitialStepRequired,
+    #[error("the selected algorithm does not support adaptive stepping")]
+    AdaptiveStepUnsupported,
+    #[error("the maximum step must be positive and not NaN")]
+    InvalidMaxStep,
+    #[error("the maximum step count must be positive")]
+    InvalidMaxSteps,
+    #[error("the event-localization tolerance must be finite and positive")]
+    InvalidEventTolerance,
+    #[error("the explicit Runge–Kutta tableau is malformed")]
+    InvalidTableau,
+    #[error("the right-hand side produced a non-finite derivative")]
+    NonFiniteDerivative,
+    #[error("save-at times must be finite, ordered, and inside the time span")]
+    InvalidSaveAt,
+    #[error("a continuous callback condition produced a non-finite value")]
+    NonFiniteCallbackCondition,
+    #[error("a callback produced a non-finite state")]
+    NonFiniteCallbackState,
+    #[error("the implicit nonlinear solve did not converge")]
+    NonlinearSolveFailed,
+    #[error("the implicit linear system is singular")]
+    SingularLinearSystem,
+    #[error("the adaptive step size underflowed")]
+    StepSizeUnderflow,
+    #[error("the solver exceeded its maximum attempted step count")]
+    MaxStepsExceeded,
+}
 
 /// An ODE integration algorithm.
 pub trait OdeAlgorithm {
@@ -175,6 +225,9 @@ fn validate<F, P>(problem: &OdeProblem<F, P>, options: &SolveOptions) -> Result<
     if options.max_steps == 0 {
         return Err(SolveError::InvalidMaxSteps);
     }
+    if !options.event_tolerance.is_finite() || options.event_tolerance <= 0.0 {
+        return Err(SolveError::InvalidEventTolerance);
+    }
     let direction = (end - start).signum();
     if !options.save_at.iter().all(|time| {
         time.is_finite() && direction * (*time - start) >= 0.0 && direction * (end - *time) >= 0.0
@@ -231,8 +284,32 @@ mod tests {
 
         assert_eq!(options.absolute_tolerance, 1.0e-6);
         assert_eq!(options.relative_tolerance, 1.0e-3);
+        assert_eq!(options.event_tolerance, f64::EPSILON);
         assert!(options.adaptive);
         assert_eq!(options.save, SaveMode::EveryStep);
+    }
+
+    #[test]
+    fn builder_style_options_cover_the_public_configuration() {
+        let options = SolveOptions::new()
+            .with_tolerances(1.0e-9, 1.0e-7)
+            .with_initial_step(0.01)
+            .with_adaptive(false)
+            .with_max_step(0.1)
+            .with_max_steps(42)
+            .with_event_tolerance(1.0e-8)
+            .with_save(SaveMode::Endpoints)
+            .with_save_at([0.25, 0.5]);
+
+        assert_eq!(options.absolute_tolerance, 1.0e-9);
+        assert_eq!(options.relative_tolerance, 1.0e-7);
+        assert_eq!(options.initial_step, Some(0.01));
+        assert!(!options.adaptive);
+        assert_eq!(options.max_step, 0.1);
+        assert_eq!(options.max_steps, 42);
+        assert_eq!(options.event_tolerance, 1.0e-8);
+        assert_eq!(options.save, SaveMode::Endpoints);
+        assert_eq!(options.save_at, [0.25, 0.5]);
     }
 
     #[test]
@@ -281,6 +358,27 @@ mod tests {
         assert_eq!(
             solve(&problem(vec![1.0], (0.0, 1.0)), Noop, &options),
             Err(SolveError::InvalidInitialStep)
+        );
+
+        options = SolveOptions {
+            event_tolerance: f64::NAN,
+            ..SolveOptions::default()
+        };
+        assert_eq!(
+            solve(&problem(vec![1.0], (0.0, 1.0)), Noop, &options),
+            Err(SolveError::InvalidEventTolerance)
+        );
+    }
+
+    #[test]
+    fn errors_have_stable_human_readable_messages() {
+        assert_eq!(
+            SolveError::NonlinearSolveFailed.to_string(),
+            "the implicit nonlinear solve did not converge"
+        );
+        assert_eq!(
+            SolveError::MaxStepsExceeded.to_string(),
+            "the solver exceeded its maximum attempted step count"
         );
     }
 }

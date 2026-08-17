@@ -3,7 +3,10 @@
 //! These records describe solver data only; no declarative file is parsed on a solve path.
 //! Runtime caches and mutable history remain owned by kernels.
 
-#![allow(dead_code)]
+#![allow(
+    dead_code,
+    reason = "coefficient metadata is being adopted incrementally by solver families"
+)]
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) enum Scalar {

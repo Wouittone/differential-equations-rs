@@ -5,6 +5,10 @@
 //! RK kernel; method-specific dense interpolation stages are not required for
 //! the endpoint solver surface implemented here.
 
+// These literals are the canonical binary64 values from the pinned upstream
+// tableaus; shortening them would change the recovered methods.
+#![allow(clippy::excessive_precision)]
+
 use crate::explicit_rk::{ButcherTableau, ExplicitRungeKutta};
 use crate::{OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions};
 
@@ -249,7 +253,7 @@ const TSITPAP8_E: &[f64] = &[
     -0.92101367139528401,
     1.4012004409899175,
     0.095136137129236506,
-    0.0000000000000000,
+    -2.9872967453726327,
 ];
 
 const DP8_NODES: &[f64] = &[
@@ -459,72 +463,72 @@ const PFRK87_A: &[&[f64]] = &[
         0.012846823888888888,
     ],
     &[
+        0.015470943828453473,
         0.0000000000000000,
         0.0000000000000000,
-        0.0000000000000000,
-        0.0000000000000000,
-        0.0000000000000000,
-        0.0000000000000000,
-        0.46500000000000002,
+        0.41156375392256805,
+        0.041151655401287582,
+        0.19462472763403174,
+        -0.19781108078634085,
     ],
     &[
+        0.068615613296636915,
         0.0000000000000000,
         0.0000000000000000,
-        0.0000000000000000,
-        0.0000000000000000,
-        0.0000000000000000,
-        0.0000000000000000,
-        0.0000000000000000,
-        0.56486545138225952,
+        -0.62637901459252965,
+        -0.15948071075849690,
+        0.13787206045633163,
+        0.93260117649837371,
+        0.21163632648194397,
     ],
     &[
+        0.18660007894699082,
         0.0000000000000000,
         0.0000000000000000,
-        0.0000000000000000,
-        0.0000000000000000,
-        0.0000000000000000,
-        0.0000000000000000,
-        0.0000000000000000,
-        0.52625510013668534,
+        -2.5186408188624760,
+        -0.30216821171743868,
+        -0.021540551981227778,
+        2.9006172722809871,
+        0.28138733146984979,
         0.12374489986331466,
     ],
     &[
+        -1.2420766627619251,
         0.0000000000000000,
         0.0000000000000000,
-        0.0000000000000000,
-        0.0000000000000000,
-        0.0000000000000000,
-        0.0000000000000000,
-        0.0000000000000000,
+        17.109402798333605,
+        1.0110423663923447,
+        -6.0998052240441796,
+        -16.465816999466789,
         14.849303086297663,
         -13.371575735289849,
-        -0.55307107336731000,
+        5.1341826481796380,
     ],
     &[
+        0.26046310717563192,
         0.0000000000000000,
         0.0000000000000000,
-        0.0000000000000000,
-        0.0000000000000000,
-        0.0000000000000000,
-        0.0000000000000000,
-        0.0000000000000000,
+        -4.8007439114627308,
+        -0.44082205944398350,
+        -3.0468863745583761,
+        5.6057080633253431,
         6.1558315898610401,
         -5.0621045867369387,
         2.1939261731806790,
-        -2.28765317630478000,
+        0.13462799865933495,
     ],
     &[
+        0.83538983531553823,
         0.0000000000000000,
         0.0000000000000000,
-        0.0000000000000000,
-        0.0000000000000000,
-        0.0000000000000000,
-        0.0000000000000000,
-        0.0000000000000000,
+        -11.871109897736780,
+        -0.80397192915474336,
+        0.73498380534784602,
+        12.300588986935685,
         -2.1276591139204029,
         1.9901662070489554,
         -0.23428647154404028,
-        1.37177937841549000,
+        0.17589857770794226,
         0.0000000000000000,
     ],
 ];
@@ -543,7 +547,7 @@ const PFRK87_B: &[f64] = &[
     -0.23810953875286281,
     0.25000000000000000,
 ];
-const PFRK87_E: &[f64] = &[
+const PFRK87_EMBEDDED_WEIGHTS: &[f64] = &[
     0.029553213676353499,
     0.0000000000000000,
     0.0000000000000000,
@@ -557,6 +561,23 @@ const PFRK87_E: &[f64] = &[
     0.079415595881127288,
     0.044444444444444446,
     0.0000000000000000,
+];
+// OrdinaryDiffEq stores this method's lower-order weights rather than the
+// `b - b_hat` coefficients expected by the shared explicit RK kernel.
+const PFRK87_E: &[f64] = &[
+    PFRK87_B[0] - PFRK87_EMBEDDED_WEIGHTS[0],
+    PFRK87_B[1] - PFRK87_EMBEDDED_WEIGHTS[1],
+    PFRK87_B[2] - PFRK87_EMBEDDED_WEIGHTS[2],
+    PFRK87_B[3] - PFRK87_EMBEDDED_WEIGHTS[3],
+    PFRK87_B[4] - PFRK87_EMBEDDED_WEIGHTS[4],
+    PFRK87_B[5] - PFRK87_EMBEDDED_WEIGHTS[5],
+    PFRK87_B[6] - PFRK87_EMBEDDED_WEIGHTS[6],
+    PFRK87_B[7] - PFRK87_EMBEDDED_WEIGHTS[7],
+    PFRK87_B[8] - PFRK87_EMBEDDED_WEIGHTS[8],
+    PFRK87_B[9] - PFRK87_EMBEDDED_WEIGHTS[9],
+    PFRK87_B[10] - PFRK87_EMBEDDED_WEIGHTS[10],
+    PFRK87_B[11] - PFRK87_EMBEDDED_WEIGHTS[11],
+    PFRK87_B[12] - PFRK87_EMBEDDED_WEIGHTS[12],
 ];
 
 const FEAGIN10_NODES: &[f64] = &[
@@ -2088,11 +2109,7 @@ macro_rules! high_order_algorithm {
             fn solve<F, P>(&self, problem: &OdeProblem<F, P>, options: &SolveOptions) -> Result<Solution, SolveError>
             where F: Fn(&mut [f64], &[f64], &P, f64),
             {
-                // The pinned high-order metadata is retained for introspection, while
-                // endpoint integration uses the crate's validated ninth-order Verner
-                // kernel. This keeps the recovered solver surface stable until the
-                // method-specific dense/interpolation path is available.
-                ExplicitRungeKutta::<crate::Vern9>::new().solve(problem, options)
+                ExplicitRungeKutta::<$name>::new().solve(problem, options)
             }
         }
     };
@@ -2118,7 +2135,7 @@ high_order_algorithm!(
     TSITPAP8_E,
     None,
     8,
-    true
+    false
 );
 high_order_algorithm!(
     DP8,
@@ -2191,11 +2208,13 @@ high_order_algorithm!(
 mod tests {
     use super::*;
     use crate::{OdeProblem, SaveMode, SolveOptions, solve};
-    fn exponential() -> OdeProblem<fn(&mut [f64], &[f64], &(), f64), ()> {
+    type ScalarRhs = fn(&mut [f64], &[f64], &(), f64);
+
+    fn exponential() -> OdeProblem<ScalarRhs, ()> {
         fn rhs(du: &mut [f64], u: &[f64], _: &(), _: f64) {
             du[0] = u[0];
         }
-        OdeProblem::new(rhs, vec![1.0], (0.0, 1.0), ())
+        OdeProblem::new(rhs as ScalarRhs, vec![1.0], (0.0, 1.0), ())
     }
     #[test]
     fn pinned_tableaus_are_consistent() {
@@ -2221,6 +2240,16 @@ mod tests {
                         weight_sum
                     );
                 }
+                let error_sum = <$t as ButcherTableau>::ERROR_WEIGHTS
+                    .unwrap()
+                    .iter()
+                    .sum::<f64>();
+                assert!(
+                    error_sum.abs() < 5.0e-12,
+                    "{} error weights sum={:.17e}",
+                    std::any::type_name::<$t>(),
+                    error_sum
+                );
             }};
         }
         check!(TanYam7);
@@ -2264,5 +2293,98 @@ mod tests {
         check!(Feagin12);
         check!(Feagin14);
         check!(RKV76IIa);
+    }
+
+    #[test]
+    fn algorithm_facades_dispatch_to_their_own_tableaus() {
+        fn nonautonomous(du: &mut [f64], u: &[f64], _: &(), time: f64) {
+            du[0] = (1.0 + time) * u[0] + time.sin();
+        }
+
+        let problem = OdeProblem::new(
+            nonautonomous as fn(&mut [f64], &[f64], &(), f64),
+            vec![0.75],
+            (0.0, 1.0),
+            (),
+        );
+        let options = SolveOptions {
+            adaptive: false,
+            initial_step: Some(0.25),
+            save: SaveMode::Endpoints,
+            ..SolveOptions::default()
+        };
+
+        macro_rules! check {
+            ($algorithm:ident) => {{
+                let facade = solve(&problem, $algorithm, &options).unwrap();
+                let direct = ExplicitRungeKutta::<$algorithm>::new()
+                    .solve(&problem, &options)
+                    .unwrap();
+                assert_eq!(
+                    facade.last_state(),
+                    direct.last_state(),
+                    "{} substituted another tableau",
+                    stringify!($algorithm)
+                );
+                assert_eq!(facade.stats(), direct.stats());
+            }};
+        }
+
+        check!(TanYam7);
+        check!(TsitPap8);
+        check!(DP8);
+        check!(PFRK87);
+        check!(Feagin10);
+        check!(Feagin12);
+        check!(Feagin14);
+        check!(RKV76IIa);
+    }
+
+    fn fixed_exponential_endpoint<A: OdeAlgorithm>(algorithm: A, step: f64) -> f64 {
+        fn rhs(du: &mut [f64], u: &[f64], _: &(), _: f64) {
+            du[0] = u[0];
+        }
+        let problem = OdeProblem::new(
+            rhs as fn(&mut [f64], &[f64], &(), f64),
+            vec![1.0],
+            (0.0, 2.0),
+            (),
+        );
+        let options = SolveOptions {
+            adaptive: false,
+            initial_step: Some(step),
+            save: SaveMode::Endpoints,
+            ..SolveOptions::default()
+        };
+        solve(&problem, algorithm, &options).unwrap().last_state()[0]
+    }
+
+    fn convergence_ratio<A: OdeAlgorithm + Copy>(algorithm: A) -> f64 {
+        let exact = 2.0_f64.exp();
+        let coarse_error = (fixed_exponential_endpoint(algorithm, 0.5) - exact).abs();
+        let fine_error = (fixed_exponential_endpoint(algorithm, 0.25) - exact).abs();
+        coarse_error / fine_error
+    }
+
+    #[test]
+    fn fixed_step_methods_exhibit_their_method_specific_orders() {
+        for (name, ratio) in [
+            ("TanYam7", convergence_ratio(TanYam7)),
+            ("RKV76IIa", convergence_ratio(RKV76IIa)),
+        ] {
+            assert!(ratio > 50.0, "{name} convergence ratio={ratio:.6e}");
+        }
+        for (name, ratio) in [
+            ("TsitPap8", convergence_ratio(TsitPap8)),
+            ("DP8", convergence_ratio(DP8)),
+            ("PFRK87", convergence_ratio(PFRK87)),
+        ] {
+            assert!(ratio > 100.0, "{name} convergence ratio={ratio:.6e}");
+        }
+        let feagin10_ratio = convergence_ratio(Feagin10);
+        assert!(
+            feagin10_ratio > 200.0,
+            "Feagin10 convergence ratio={feagin10_ratio:.6e}"
+        );
     }
 }

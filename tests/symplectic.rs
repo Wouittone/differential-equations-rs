@@ -1,14 +1,18 @@
-#[path = "../src/symplectic.rs"]
-mod symplectic;
+use differential_equations::{
+    CalvoSanz4, CandyRoz4, KahanLi6, KahanLi8, McAte2, McAte3, McAte4, McAte5, McAte8, McAte42,
+    PseudoVerletLeapfrog, Ruth3, SaveMode, SecondOrderOdeProblem, SofSpa10, SolveError,
+    SolveOptions, SymplecticAlgorithm, SymplecticSolveError, Yoshida6, solve_symplectic,
+};
+use std::error::Error as _;
 
-use differential_equations::{SaveMode, SecondOrderOdeProblem, SolveOptions};
-use symplectic::{SymplecticAlgorithm, solve_symplectic};
+type Acceleration = fn(&mut [f64], &[f64], &[f64], &(), f64);
 
-fn oscillator() -> SecondOrderOdeProblem<impl Fn(&mut [f64], &[f64], &[f64], &(), f64), ()> {
+fn oscillator() -> SecondOrderOdeProblem<Acceleration, ()> {
+    fn acceleration(output: &mut [f64], _: &[f64], position: &[f64], _: &(), _: f64) {
+        output[0] = -position[0];
+    }
     SecondOrderOdeProblem::new(
-        |output: &mut [f64], _: &[f64], position: &[f64], _: &(), _: f64| {
-            output[0] = -position[0];
-        },
+        acceleration as Acceleration,
         vec![0.0],
         vec![1.0],
         (0.0, 1.0),
@@ -35,24 +39,20 @@ fn endpoint_error<A: SymplecticAlgorithm>(algorithm: A, step: f64) -> f64 {
 #[test]
 fn all_recovered_names_expose_pinned_tableaus() {
     let methods = [
-        (
-            "PseudoVerletLeapfrog",
-            symplectic::PseudoVerletLeapfrog::tableau(),
-            2,
-        ),
-        ("McAte2", symplectic::McAte2::tableau(), 2),
-        ("Ruth3", symplectic::Ruth3::tableau(), 3),
-        ("McAte3", symplectic::McAte3::tableau(), 3),
-        ("CandyRoz4", symplectic::CandyRoz4::tableau(), 4),
-        ("McAte4", symplectic::McAte4::tableau(), 4),
-        ("CalvoSanz4", symplectic::CalvoSanz4::tableau(), 5),
-        ("McAte42", symplectic::McAte42::tableau(), 5),
-        ("McAte5", symplectic::McAte5::tableau(), 6),
-        ("Yoshida6", symplectic::Yoshida6::tableau(), 8),
-        ("KahanLi6", symplectic::KahanLi6::tableau(), 10),
-        ("McAte8", symplectic::McAte8::tableau(), 16),
-        ("KahanLi8", symplectic::KahanLi8::tableau(), 18),
-        ("SofSpa10", symplectic::SofSpa10::tableau(), 36),
+        ("PseudoVerletLeapfrog", PseudoVerletLeapfrog::tableau(), 2),
+        ("McAte2", McAte2::tableau(), 2),
+        ("Ruth3", Ruth3::tableau(), 3),
+        ("McAte3", McAte3::tableau(), 3),
+        ("CandyRoz4", CandyRoz4::tableau(), 4),
+        ("McAte4", McAte4::tableau(), 4),
+        ("CalvoSanz4", CalvoSanz4::tableau(), 5),
+        ("McAte42", McAte42::tableau(), 5),
+        ("McAte5", McAte5::tableau(), 6),
+        ("Yoshida6", Yoshida6::tableau(), 8),
+        ("KahanLi6", KahanLi6::tableau(), 10),
+        ("McAte8", McAte8::tableau(), 16),
+        ("KahanLi8", KahanLi8::tableau(), 18),
+        ("SofSpa10", SofSpa10::tableau(), 36),
     ];
     for (name, tableau, stages) in methods {
         assert_eq!(tableau.stages(), stages, "{name} stage count");
@@ -70,12 +70,10 @@ fn all_recovered_names_expose_pinned_tableaus() {
 
 #[test]
 fn compositions_have_their_expected_orders() {
-    let ruth_ratio =
-        endpoint_error(symplectic::Ruth3, 0.05) / endpoint_error(symplectic::Ruth3, 0.025);
+    let ruth_ratio = endpoint_error(Ruth3, 0.05) / endpoint_error(Ruth3, 0.025);
     assert!(ruth_ratio > 7.0, "Ruth3 ratio was {ruth_ratio}");
 
-    let yoshida_ratio =
-        endpoint_error(symplectic::Yoshida6, 0.1) / endpoint_error(symplectic::Yoshida6, 0.05);
+    let yoshida_ratio = endpoint_error(Yoshida6, 0.1) / endpoint_error(Yoshida6, 0.05);
     assert!(yoshida_ratio > 35.0, "Yoshida6 ratio was {yoshida_ratio}");
 }
 
@@ -92,7 +90,7 @@ fn higher_order_method_preserves_bounded_oscillator_energy() {
     );
     let solution = solve_symplectic(
         &problem,
-        symplectic::KahanLi6,
+        KahanLi6,
         &SolveOptions {
             adaptive: false,
             initial_step: Some(0.1),
@@ -117,4 +115,57 @@ fn higher_order_method_preserves_bounded_oscillator_energy() {
         "maximum energy error was {maximum_error}"
     );
     assert!(solution.rhs_evaluations() > 1_000);
+}
+
+#[test]
+fn fixed_steps_work_backward_and_honor_save_at() {
+    let problem = SecondOrderOdeProblem::new(
+        |output: &mut [f64], _: &[f64], position: &[f64], _: &(), _: f64| {
+            output[0] = -position[0];
+        },
+        vec![-1.0_f64.sin()],
+        vec![1.0_f64.cos()],
+        (1.0, 0.0),
+        (),
+    );
+    let solution = solve_symplectic(
+        &problem,
+        Yoshida6,
+        &SolveOptions {
+            adaptive: false,
+            initial_step: Some(0.01),
+            max_step: 0.01,
+            save_at: vec![0.75, 0.5, 0.0],
+            ..SolveOptions::default()
+        },
+    )
+    .unwrap();
+
+    assert_eq!(solution.times(), &[0.75, 0.5, 0.0]);
+    assert!((solution.last_position()[0] - 1.0).abs() < 1.0e-10);
+    assert!(solution.last_velocity()[0].abs() < 1.0e-10);
+}
+
+#[test]
+fn work_count_is_one_acceleration_evaluation_per_stage() {
+    let solution = solve_symplectic(&oscillator(), McAte4, &options(0.25)).unwrap();
+
+    assert_eq!(solution.rhs_evaluations(), 4 * McAte4::tableau().stages());
+    assert_eq!(solution.dimension(), 1);
+    assert_eq!(solution.position_values().len(), 2);
+    assert_eq!(solution.velocity_values().len(), 2);
+}
+
+#[test]
+fn wrapped_errors_preserve_their_source() {
+    let error = SymplecticSolveError::from(SolveError::InvalidInitialStep);
+
+    assert_eq!(
+        error.to_string(),
+        "the initial step must be finite and positive"
+    );
+    assert_eq!(
+        error.source().unwrap().to_string(),
+        SolveError::InvalidInitialStep.to_string()
+    );
 }

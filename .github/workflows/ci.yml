@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTDOCFLAGS: -D warnings
+
+jobs:
+  quality:
+    name: Format, lint, test, and document
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Lint all targets
+        run: cargo clippy --all-targets --all-features -- -D warnings
+      - name: Test all targets
+        run: cargo test --all-targets --all-features
+      - name: Build documentation
+        run: cargo doc --no-deps --all-features
+      - name: Check generated coefficients
+        shell: pwsh
+        run: ./scripts/generate_coefficients.ps1 -Check
+
+  msrv:
+    name: Minimum supported Rust
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.85
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo check --all-targets --all-features
+
+  inventory:
+    name: Check solver inventory
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch pinned OrdinaryDiffEq source
+        run: |
+          git init "$RUNNER_TEMP/OrdinaryDiffEq.jl"
+          git -C "$RUNNER_TEMP/OrdinaryDiffEq.jl" remote add origin https://github.com/SciML/OrdinaryDiffEq.jl.git
+          git -C "$RUNNER_TEMP/OrdinaryDiffEq.jl" fetch --depth=1 origin 211142263781255a9aa2f910f6760b9f18ec29c8
+          git -C "$RUNNER_TEMP/OrdinaryDiffEq.jl" checkout --detach FETCH_HEAD
+      - name: Check generated inventory
+        shell: pwsh
+        run: ./scripts/generate_ode_inventory.ps1 -UpstreamPath "$env:RUNNER_TEMP/OrdinaryDiffEq.jl" -RepositoryPath . -OutputDirectory docs -Check

@@ -1,15 +1,21 @@
 use crate::{Dp5, OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions};
 
-/// Automatic low-order Dormand--Prince composite facade.
+/// Automatic low-order Dormand--Prince composite.
 ///
 /// OrdinaryDiffEq defines `AutoDP5(stiff_alg)` as
 /// `AutoAlgSwitch(DP5(), stiff_alg)`, which dynamically switches between the
-/// non-stiff DP5 method and the supplied stiff method.  The regular ODE driver
-/// currently has no stiffness detector or in-flight algorithm-switch state, so
-/// this facade preserves the native DP5 component's fixed/adaptive, callback,
-/// and dense-output semantics while retaining the requested stiff component
-/// for API compatibility.  Automatic switching is intentionally explicit as a
-/// deferred capability rather than silently selecting an external wrapper.
+/// non-stiff DP5 method and the supplied stiff method. The regular ODE driver
+/// does not yet expose the state needed for an in-flight algorithm switch, so
+/// this implementation uses a deterministic fallback instead: it first runs
+/// DP5 and, if DP5 reports a numerical failure that can indicate stiffness,
+/// restarts the problem from its initial state with the configured stiff
+/// algorithm.
+///
+/// The fallback is attempted for [`SolveError::NonFiniteDerivative`],
+/// [`SolveError::StepSizeUnderflow`], and [`SolveError::MaxStepsExceeded`].
+/// Configuration and callback errors are returned directly. A fallback is a
+/// full restart, so right-hand-side functions and callbacks with external side
+/// effects can be evaluated again.
 #[derive(Clone, Debug, PartialEq)]
 pub struct AutoDp5<A> {
     /// The stiff component requested by the upstream composite constructor.
@@ -28,7 +34,7 @@ impl<A> AutoDp5<A> {
     }
 }
 
-impl<A> OdeAlgorithm for AutoDp5<A> {
+impl<A: OdeAlgorithm> OdeAlgorithm for AutoDp5<A> {
     fn solve<F, P>(
         &self,
         problem: &OdeProblem<F, P>,
@@ -37,11 +43,22 @@ impl<A> OdeAlgorithm for AutoDp5<A> {
     where
         F: Fn(&mut [f64], &[f64], &P, f64),
     {
-        // Keep the field live so this remains a faithful configured facade;
-        // switching will consume it once the driver supports that capability.
-        let _ = &self.stiff_algorithm;
-        Dp5.solve(problem, options)
+        match Dp5.solve(problem, options) {
+            Err(error) if should_retry_with_stiff(error) => {
+                self.stiff_algorithm.solve(problem, options)
+            }
+            result => result,
+        }
     }
+}
+
+fn should_retry_with_stiff(error: SolveError) -> bool {
+    matches!(
+        error,
+        SolveError::NonFiniteDerivative
+            | SolveError::StepSizeUnderflow
+            | SolveError::MaxStepsExceeded
+    )
 }
 
 /// Uppercase acronym spelling used by the pinned Julia algorithm name.

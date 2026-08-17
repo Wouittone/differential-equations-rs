@@ -1,6 +1,3 @@
-/target/
-**/*.rs.bk
-*.profraw
-/benchmarks/results/
-/benchmarks/cloud/results/
-/.worktrees/
+.worktrees/
+.argyph/
+target/

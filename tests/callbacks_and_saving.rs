@@ -32,6 +32,24 @@ fn continuous_callback_localizes_and_terminates() {
 }
 
 #[test]
+fn continuous_callback_uses_the_configured_event_tolerance() {
+    let root = 0.123_456_789;
+    let problem = OdeProblem::new(unit_rate, vec![0.0], (0.0, 1.0), ()).with_continuous_callback(
+        move |state, _: &(), _| state[0] - root,
+        |_, _: &(), _| CallbackAction::Terminate,
+    );
+    let options = SolveOptions::new()
+        .with_adaptive(false)
+        .with_initial_step(1.0)
+        .with_event_tolerance(1.0e-8)
+        .with_save(SaveMode::Endpoints);
+
+    let solution = solve(&problem, Rk4, &options).unwrap();
+
+    assert!((solution.times()[1] - root).abs() <= options.event_tolerance);
+}
+
+#[test]
 fn direction_filter_ignores_the_opposite_crossing() {
     let problem = OdeProblem::new(unit_rate, vec![0.0], (0.0, 1.0), ())
         .with_continuous_callback_direction(

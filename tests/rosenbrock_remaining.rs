@@ -36,7 +36,8 @@ fn assert_fixed_endpoint<A: OdeAlgorithm + Copy>(algorithm: A) {
         .last_state()[0];
     assert!(
         (endpoint - std::f64::consts::E).abs() < 5.0e-5,
-        "endpoint={endpoint:.17e}"
+        "{} endpoint={endpoint:.17e}",
+        std::any::type_name::<A>()
     );
 }
 
@@ -60,27 +61,33 @@ fn remaining_rosenbrock_tableaus_support_adaptive_jacobians() {
         .with_jacobian(|jacobian: &mut [f64], _: &[f64], _: &(), _: f64| jacobian[0] = 1.0);
 
     macro_rules! assert_adaptive {
-        ($algorithm:expr) => {
-            let solution = solve(&problem, $algorithm, &adaptive_options()).unwrap();
+        ($algorithm:expr, $expects_jacobian:expr) => {
+            let solution = solve(&problem, $algorithm, &adaptive_options())
+                .unwrap_or_else(|error| panic!("{}: {error:?}", stringify!($algorithm)));
             assert!(
                 (solution.last_state()[0] - std::f64::consts::E).abs() < 2.0e-7,
                 "{} endpoint={:.17e}",
                 stringify!($algorithm),
                 solution.last_state()[0]
             );
-            assert!(solution.stats().jacobian_evaluations > 0);
+            assert_eq!(
+                solution.stats().jacobian_evaluations > 0,
+                $expects_jacobian,
+                "{} Jacobian usage",
+                stringify!($algorithm)
+            );
         };
     }
-    assert_adaptive!(Rodas3P);
-    assert_adaptive!(Ros2Pr);
-    assert_adaptive!(Ros2S);
-    assert_adaptive!(Ros34Pw1a);
-    assert_adaptive!(Ros4LStab);
-    assert_adaptive!(RosShamp4);
-    assert_adaptive!(Scholz4_7);
-    assert_adaptive!(Veldd4);
-    assert_adaptive!(Velds4);
-    assert_adaptive!(Tsit5DA);
+    assert_adaptive!(Rodas3P, true);
+    assert_adaptive!(Ros2Pr, true);
+    assert_adaptive!(Ros2S, true);
+    assert_adaptive!(Ros34Pw1a, true);
+    assert_adaptive!(Ros4LStab, true);
+    assert_adaptive!(RosShamp4, true);
+    assert_adaptive!(Scholz4_7, true);
+    assert_adaptive!(Veldd4, true);
+    assert_adaptive!(Velds4, true);
+    assert_adaptive!(Tsit5DA, false);
 }
 
 #[test]

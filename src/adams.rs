@@ -244,27 +244,26 @@ where
             );
         }
 
-        let used_corrector = if let Some(corrector_weights) = method.corrector_weights
-            && workspace.history_len >= method.order - 1
-        {
-            evaluate(
-                problem,
-                &mut workspace.predicted_derivative,
-                candidate,
-                time + step,
-                stats,
-            );
-            weighted_update(
-                candidate,
-                state,
-                step,
-                Some((&workspace.predicted_derivative, corrector_weights[0])),
-                &workspace.history[..workspace.history_len],
-                &corrector_weights[1..],
-            );
-            true
-        } else {
-            false
+        let used_corrector = match method.corrector_weights {
+            Some(corrector_weights) if workspace.history_len >= method.order - 1 => {
+                evaluate(
+                    problem,
+                    &mut workspace.predicted_derivative,
+                    candidate,
+                    time + step,
+                    stats,
+                );
+                weighted_update(
+                    candidate,
+                    state,
+                    step,
+                    Some((&workspace.predicted_derivative, corrector_weights[0])),
+                    &workspace.history[..workspace.history_len],
+                    &corrector_weights[1..],
+                );
+                true
+            }
+            _ => false,
         };
         if used_bootstrap || used_corrector {
             ensure_finite(candidate)?;

@@ -167,9 +167,9 @@ fn main() {
     run!("ImplicitMidpoint", &stiff, ImplicitMidpoint, &fixed);
     run!("Trapezoid", &stiff, Trapezoid, &fixed);
     run!("Rosenbrock23", &stiff, Rosenbrock23, &adaptive);
-    if let Some(algorithm) = selected_algorithm.as_deref()
-        && !ran
-    {
-        panic!("unknown benchmark algorithm: {algorithm}");
+    if !ran {
+        if let Some(algorithm) = selected_algorithm.as_deref() {
+            panic!("unknown benchmark algorithm: {algorithm}");
+        }
     }
 }

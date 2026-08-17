@@ -1,22 +1,32 @@
-//! Public automatic/default algorithm facades.
+//! Public automatic/default algorithms.
 //!
-//! The pinned OrdinaryDiffEq constructors in this module are composites whose
-//! runtime switching policy is not yet represented by the Rust driver. The
-//! facades retain the public algorithm names and delegate regular ODE solves
-//! to the corresponding native component while that capability is completed.
+//! The automatic algorithms run their native non-stiff component first. The
+//! Rust driver does not yet expose the state needed for an in-flight algorithm
+//! switch, so a numerical failure restarts the problem from its initial state
+//! with the configured stiff component. This deterministic fallback ensures
+//! the stiff branch is functional rather than retained as ignored metadata.
 
 use std::marker::PhantomData;
 
 use crate::{OdeAlgorithm, OdeProblem, Rodas5P, Solution, SolveError, SolveOptions, Tsit5};
 use crate::{Vern6, Vern7, Vern8, Vern9};
 
-/// Automatic Tsit5 facade over the native `Tsit5` component.
+fn should_retry_with_stiff(error: SolveError) -> bool {
+    matches!(
+        error,
+        SolveError::NonFiniteDerivative
+            | SolveError::StepSizeUnderflow
+            | SolveError::MaxStepsExceeded
+    )
+}
+
+/// Defines an automatic non-stiff-first algorithm with a stiff fallback.
 macro_rules! automatic_facade {
     ($name:ident, $component:ident, $documentation:literal) => {
         #[doc = $documentation]
         #[derive(Clone, Debug, PartialEq)]
         pub struct $name<A> {
-            /// Stiff component retained for future runtime switching.
+            /// Stiff component used after a recoverable numerical failure.
             pub stiff_algorithm: A,
             marker: PhantomData<fn() -> $component>,
         }
@@ -36,7 +46,7 @@ macro_rules! automatic_facade {
             }
         }
 
-        impl<A> OdeAlgorithm for $name<A> {
+        impl<A: OdeAlgorithm> OdeAlgorithm for $name<A> {
             fn solve<F, P>(
                 &self,
                 problem: &OdeProblem<F, P>,
@@ -45,8 +55,12 @@ macro_rules! automatic_facade {
             where
                 F: Fn(&mut [f64], &[f64], &P, f64),
             {
-                let _ = &self.stiff_algorithm;
-                $component.solve(problem, options)
+                match $component.solve(problem, options) {
+                    Err(error) if should_retry_with_stiff(error) => {
+                        self.stiff_algorithm.solve(problem, options)
+                    }
+                    result => result,
+                }
             }
         }
     };
@@ -55,27 +69,27 @@ macro_rules! automatic_facade {
 automatic_facade!(
     AutoTsit5,
     Tsit5,
-    "Automatic Tsit5 facade over the native `Tsit5` component."
+    "Runs `Tsit5` first and restarts with the configured stiff algorithm after a recoverable numerical failure. This is a full-solve fallback, not an in-flight switch; right-hand-side functions and callbacks with external side effects can be evaluated again."
 );
 automatic_facade!(
     AutoVern6,
     Vern6,
-    "Automatic Verner-6 facade over the native `Vern6` component."
+    "Runs `Vern6` first and restarts with the configured stiff algorithm after a recoverable numerical failure. This is a full-solve fallback, not an in-flight switch; right-hand-side functions and callbacks with external side effects can be evaluated again."
 );
 automatic_facade!(
     AutoVern7,
     Vern7,
-    "Automatic Verner-7 facade over the native `Vern7` component."
+    "Runs `Vern7` first and restarts with the configured stiff algorithm after a recoverable numerical failure. This is a full-solve fallback, not an in-flight switch; right-hand-side functions and callbacks with external side effects can be evaluated again."
 );
 automatic_facade!(
     AutoVern8,
     Vern8,
-    "Automatic Verner-8 facade over the native `Vern8` component."
+    "Runs `Vern8` first and restarts with the configured stiff algorithm after a recoverable numerical failure. This is a full-solve fallback, not an in-flight switch; right-hand-side functions and callbacks with external side effects can be evaluated again."
 );
 automatic_facade!(
     AutoVern9,
     Vern9,
-    "Automatic Verner-9 facade over the native `Vern9` component."
+    "Runs `Vern9` first and restarts with the configured stiff algorithm after a recoverable numerical failure. This is a full-solve fallback, not an in-flight switch; right-hand-side functions and callbacks with external side effects can be evaluated again."
 );
 
 /// Default nonstiff algorithm facade over `Tsit5`.
@@ -127,13 +141,13 @@ mod tests {
         OdeProblem, Rodas5P, SaveMode, SolveOptions, Tsit5, Vern6, Vern7, Vern8, Vern9, solve,
     };
 
-    fn problem() -> OdeProblem<impl Fn(&mut [f64], &[f64], &(), f64), ()> {
-        OdeProblem::new(
-            |du: &mut [f64], u: &[f64], _: &(), _: f64| du[0] = u[0],
-            vec![1.0],
-            (0.0, 1.0),
-            (),
-        )
+    type ScalarRhs = fn(&mut [f64], &[f64], &(), f64);
+
+    fn problem() -> OdeProblem<ScalarRhs, ()> {
+        fn rhs(du: &mut [f64], u: &[f64], _: &(), _: f64) {
+            du[0] = u[0];
+        }
+        OdeProblem::new(rhs as ScalarRhs, vec![1.0], (0.0, 1.0), ())
     }
 
     fn options() -> SolveOptions {

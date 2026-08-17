@@ -1,5 +1,6 @@
-// Preserve the pinned source's decimal coefficient literals exactly.
-#![allow(clippy::excessive_precision)]
+// Preserve the pinned source's decimal coefficient literals exactly. Precision
+// lint exceptions are attached only to the associated constants that contain
+// coefficient data; the integration kernels remain fully linted.
 
 use std::marker::PhantomData;
 
@@ -103,13 +104,33 @@ macro_rules! method {
     ($name:ident, $coefficients:ident, $doc:literal, $a:expr, $b:expr, $c:expr) => {
         #[doc = $doc]
         #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+        #[allow(
+            non_camel_case_types,
+            reason = "preserve the upstream low-storage algorithm name"
+        )]
         pub struct $name;
 
+        #[allow(
+            non_camel_case_types,
+            reason = "coefficient type follows the upstream algorithm name"
+        )]
         struct $coefficients;
 
         impl LowStorage2N for $coefficients {
+            #[allow(
+                clippy::excessive_precision,
+                reason = "pinned upstream f64 coefficient"
+            )]
             const A: &'static [f64] = $a;
+            #[allow(
+                clippy::excessive_precision,
+                reason = "pinned upstream f64 coefficient"
+            )]
             const B: &'static [f64] = $b;
+            #[allow(
+                clippy::excessive_precision,
+                reason = "pinned upstream f64 coefficient"
+            )]
             const C: &'static [f64] = $c;
         }
 
@@ -132,17 +153,53 @@ macro_rules! method_3s {
     ($name:ident, $coefficients:ident, $doc:literal, $gamma1:expr, $gamma2:expr, $gamma3:expr, $delta:expr, $beta1:expr, $beta2:expr, $c:expr) => {
         #[doc = $doc]
         #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+        #[allow(
+            non_camel_case_types,
+            reason = "preserve the upstream low-storage algorithm name"
+        )]
         pub struct $name;
 
+        #[allow(
+            non_camel_case_types,
+            reason = "coefficient type follows the upstream algorithm name"
+        )]
         struct $coefficients;
 
         impl LowStorage3S for $coefficients {
+            #[allow(
+                clippy::excessive_precision,
+                reason = "pinned upstream f64 coefficient"
+            )]
             const GAMMA1: &'static [f64] = $gamma1;
+            #[allow(
+                clippy::excessive_precision,
+                reason = "pinned upstream f64 coefficient"
+            )]
             const GAMMA2: &'static [f64] = $gamma2;
+            #[allow(
+                clippy::excessive_precision,
+                reason = "pinned upstream f64 coefficient"
+            )]
             const GAMMA3: &'static [f64] = $gamma3;
+            #[allow(
+                clippy::excessive_precision,
+                reason = "pinned upstream f64 coefficient"
+            )]
             const DELTA: &'static [f64] = $delta;
+            #[allow(
+                clippy::excessive_precision,
+                reason = "pinned upstream f64 coefficient"
+            )]
             const BETA1: f64 = $beta1;
+            #[allow(
+                clippy::excessive_precision,
+                reason = "pinned upstream f64 coefficient"
+            )]
             const BETA2: &'static [f64] = $beta2;
+            #[allow(
+                clippy::excessive_precision,
+                reason = "pinned upstream f64 coefficient"
+            )]
             const C: &'static [f64] = $c;
         }
 
@@ -165,13 +222,33 @@ macro_rules! method_2c {
     ($name:ident, $coefficients:ident, $doc:literal, $a:expr, $b:expr, $c:expr) => {
         #[doc = $doc]
         #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+        #[allow(
+            non_camel_case_types,
+            reason = "preserve the upstream low-storage algorithm name"
+        )]
         pub struct $name;
 
+        #[allow(
+            non_camel_case_types,
+            reason = "coefficient type follows the upstream algorithm name"
+        )]
         struct $coefficients;
 
         impl LowStorage2C for $coefficients {
+            #[allow(
+                clippy::excessive_precision,
+                reason = "pinned upstream f64 coefficient"
+            )]
             const A: &'static [f64] = $a;
+            #[allow(
+                clippy::excessive_precision,
+                reason = "pinned upstream f64 coefficient"
+            )]
             const B: &'static [f64] = $b;
+            #[allow(
+                clippy::excessive_precision,
+                reason = "pinned upstream f64 coefficient"
+            )]
             const C: &'static [f64] = $c;
         }
 
@@ -194,17 +271,53 @@ macro_rules! method_3sp {
     ($name:ident, $coefficients:ident, $doc:literal, $endpoint:expr, $gamma1:expr, $gamma2:expr, $gamma3:expr, $delta:expr, $beta1:expr, $beta2:expr, $c:expr) => {
         #[doc = $doc]
         #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+        #[allow(
+            non_camel_case_types,
+            reason = "preserve the upstream low-storage algorithm name"
+        )]
         pub struct $name;
 
+        #[allow(
+            non_camel_case_types,
+            reason = "coefficient type follows the upstream algorithm name"
+        )]
         struct $coefficients;
 
         impl LowStorage3S for $coefficients {
+            #[allow(
+                clippy::excessive_precision,
+                reason = "pinned upstream f64 coefficient"
+            )]
             const GAMMA1: &'static [f64] = $gamma1;
+            #[allow(
+                clippy::excessive_precision,
+                reason = "pinned upstream f64 coefficient"
+            )]
             const GAMMA2: &'static [f64] = $gamma2;
+            #[allow(
+                clippy::excessive_precision,
+                reason = "pinned upstream f64 coefficient"
+            )]
             const GAMMA3: &'static [f64] = $gamma3;
+            #[allow(
+                clippy::excessive_precision,
+                reason = "pinned upstream f64 coefficient"
+            )]
             const DELTA: &'static [f64] = $delta;
+            #[allow(
+                clippy::excessive_precision,
+                reason = "pinned upstream f64 coefficient"
+            )]
             const BETA1: f64 = $beta1;
+            #[allow(
+                clippy::excessive_precision,
+                reason = "pinned upstream f64 coefficient"
+            )]
             const BETA2: &'static [f64] = $beta2;
+            #[allow(
+                clippy::excessive_precision,
+                reason = "pinned upstream f64 coefficient"
+            )]
             const C: &'static [f64] = $c;
             const EVALUATE_ENDPOINT: bool = $endpoint;
         }
@@ -228,14 +341,38 @@ macro_rules! method_rp {
     ($name:ident, $coefficients:ident, $doc:literal, $history:expr, $a:expr, $b:expr, $c:expr) => {
         #[doc = $doc]
         #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+        #[allow(
+            non_camel_case_types,
+            reason = "preserve the upstream low-storage algorithm name"
+        )]
         pub struct $name;
 
+        #[allow(
+            non_camel_case_types,
+            reason = "coefficient type follows the upstream algorithm name"
+        )]
         struct $coefficients;
 
         impl LowStorageRP for $coefficients {
+            #[allow(
+                clippy::excessive_precision,
+                reason = "pinned upstream f64 coefficient"
+            )]
             const A: &'static [&'static [f64]] = $a;
+            #[allow(
+                clippy::excessive_precision,
+                reason = "pinned upstream f64 coefficient"
+            )]
             const B: &'static [f64] = $b;
+            #[allow(
+                clippy::excessive_precision,
+                reason = "pinned upstream f64 coefficient"
+            )]
             const B_FINAL: f64 = rp_final!($name);
+            #[allow(
+                clippy::excessive_precision,
+                reason = "pinned upstream f64 coefficient"
+            )]
             const C: &'static [f64] = $c;
             const HISTORY_STATES: usize = $history;
         }
@@ -259,16 +396,48 @@ macro_rules! method_alternating_2n {
     ($name:ident, $coefficients:ident, $doc:literal, $a1:expr, $b1:expr, $c1:expr, $a2:expr, $b2:expr, $c2:expr) => {
         #[doc = $doc]
         #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+        #[allow(
+            non_camel_case_types,
+            reason = "preserve the upstream low-storage algorithm name"
+        )]
         pub struct $name;
 
+        #[allow(
+            non_camel_case_types,
+            reason = "coefficient type follows the upstream algorithm name"
+        )]
         struct $coefficients;
 
         impl LowStorageAlternating2N for $coefficients {
+            #[allow(
+                clippy::excessive_precision,
+                reason = "pinned upstream f64 coefficient"
+            )]
             const A1: &'static [f64] = $a1;
+            #[allow(
+                clippy::excessive_precision,
+                reason = "pinned upstream f64 coefficient"
+            )]
             const B1: &'static [f64] = $b1;
+            #[allow(
+                clippy::excessive_precision,
+                reason = "pinned upstream f64 coefficient"
+            )]
             const C1: &'static [f64] = $c1;
+            #[allow(
+                clippy::excessive_precision,
+                reason = "pinned upstream f64 coefficient"
+            )]
             const A2: &'static [f64] = $a2;
+            #[allow(
+                clippy::excessive_precision,
+                reason = "pinned upstream f64 coefficient"
+            )]
             const B2: &'static [f64] = $b2;
+            #[allow(
+                clippy::excessive_precision,
+                reason = "pinned upstream f64 coefficient"
+            )]
             const C2: &'static [f64] = $c2;
         }
 
@@ -1662,7 +1831,7 @@ method_rp!(
         7142524119.0 / 20567653057.0,
         1997.0 / 5000.0,
         199.0 / 200.0,
-        1.0 / 1.0
+        1.0
     ]
 );
 method_rp!(
@@ -1761,8 +1930,7 @@ method_rp!(
             / 871432942801472160798333604371480303171919616321325.0,
         6030664727234996630401450278844701818157369618311237.0
             / 8305630304762506786823923305099106403075216590053000.0,
-        190737487565451971541550207118478711767748834018874068552898297.0
-            / 190737487565451971541550204260359567420033302718711745345318816.0,
+        1.0,
         194373043039840208108258122050794558876.0 / 388106905684556737922360607016380520227.0
     ]
 );
@@ -1821,8 +1989,7 @@ method_rp!(
             / 2620260981179174237577004881164696841381017975634264.0,
         4745866356039511505795256436748010529615723318082554645080208661.0
             / 46784744516176933667763632070461960177241008032286254911869725672.0,
-        309879595293732553069368807532997606922999693101104106883289601491.0
-            / 309879595293732553069368804305686805880909932549908997963514738540.0
+        1.0
     ]
 );
 

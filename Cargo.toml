@@ -1,14 +1,16 @@
 [package]
 name = "differential-equations"
-version = "0.1.0"
+version = "0.1.0-beta.1"
 edition = "2024"
-description = "A proof-of-concept port of Julia SciML ODE solvers to Rust"
+rust-version = "1.85"
+description = "Beta Rust implementations of Julia SciML ODE solvers"
 publish = false
 
 [features]
 allocation-metrics = []
 
 [dependencies]
+thiserror = "2.0.20"
 
 [dev-dependencies]
 stats_alloc = "0.1.10"

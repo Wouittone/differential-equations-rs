@@ -3,6 +3,10 @@
 //! This module currently contains the two-stage adaptive SDIRK2/ESDIRK
 //! method from the pinned OrdinaryDiffEqSDIRK tableau.
 
+// The pinned SDIRK/ESDIRK catalogue intentionally preserves upstream decimal
+// literals, including values with more written digits than f64 can represent.
+#![allow(clippy::excessive_precision)]
+
 use crate::generated_coefficients::{SDIRK2_A, SDIRK2_B, SDIRK2_B_EMBEDDED, SDIRK2_STAGE_TIMES};
 use crate::integrator::{
     ControllerConfig, KernelCapabilities, StepEstimate, StepKernel, integrate as drive_integration,
@@ -1010,10 +1014,6 @@ fn extended_tableau(kind: ExtendedKind) -> ExtendedTableau {
         ExtendedKind::KenCarp5 => kencarp5_tableau(),
         ExtendedKind::KenCarp47 => kencarp47_tableau(),
         ExtendedKind::KenCarp58 => kencarp58_tableau(),
-        // The remaining constructors are filled by the pinned catalogue
-        // below.  Keeping the dispatch exhaustive makes accidental omission
-        // of a public inventory name a compile-time error.
-        _ => kvaerno3_tableau(),
     }
 }
 

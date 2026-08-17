@@ -309,6 +309,7 @@ impl<F, P> OdeProblem<F, P> {
         state: &mut [f64],
         time: &mut f64,
         state_before_effect: &mut [f64],
+        event_tolerance: f64,
     ) -> Result<CallbackOutcome, SolveError> {
         if self.callbacks.is_empty() {
             return Ok(CallbackOutcome::default());
@@ -337,6 +338,7 @@ impl<F, P> OdeProblem<F, P> {
                     before,
                     state_before_effect,
                     &self.parameters,
+                    event_tolerance,
                 )?;
                 if root.is_none_or(|(_, earliest)| fraction < earliest) {
                     root = Some((index, fraction));
@@ -394,11 +396,12 @@ fn locate_root<P>(
     before: f64,
     interpolation: &mut [f64],
     parameters: &P,
+    event_tolerance: f64,
 ) -> Result<f64, SolveError> {
     let mut left = 0.0;
     let mut right = 1.0;
     let mut left_value = before;
-    for _ in 0..52 {
+    for _ in 0..64 {
         let middle = 0.5 * (left + right);
         interpolate(segment.state, segment.previous_state, middle, interpolation);
         let middle_time = segment.previous_time + middle * (segment.time - segment.previous_time);
@@ -414,6 +417,9 @@ fn locate_root<P>(
             left_value = value;
         } else {
             right = middle;
+        }
+        if (right - left) * (segment.time - segment.previous_time).abs() <= event_tolerance {
+            break;
         }
     }
     Ok(0.5 * (left + right))

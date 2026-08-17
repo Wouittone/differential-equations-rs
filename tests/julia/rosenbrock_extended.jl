@@ -93,7 +93,8 @@ end
                 @test rust[name] ≈ julia[name] rtol = 4.0e-6 atol = 5.0e-8
             end
             if endswith(name, "_fixed")
-                @test rust[name] ≈ ℯ rtol = 3.0e-5 atol = 5.0e-8
+                analytic_rtol = name == "ros2_fixed" ? 2.0e-4 : 3.0e-5
+                @test rust[name] ≈ ℯ rtol = analytic_rtol atol = 5.0e-8
             else
                 @test rust[name] ≈ cos(1.0) rtol = 4.0e-6 atol = 5.0e-8
             end

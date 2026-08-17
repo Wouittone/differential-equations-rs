@@ -1,5 +1,8 @@
+use std::cell::Cell;
+
 use differential_equations::{
-    AutoDp5, CallbackAction, Dp5, OdeProblem, Rodas5P, SaveMode, SolveOptions, solve,
+    AutoDp5, CallbackAction, Dp5, OdeAlgorithm, OdeProblem, Rodas5P, SaveMode, Solution,
+    SolveError, SolveOptions, solve,
 };
 
 type TestRhs = fn(&mut [f64], &[f64], &(), f64);
@@ -18,6 +21,28 @@ fn fixed(step: f64) -> SolveOptions {
         initial_step: Some(step),
         save: SaveMode::Endpoints,
         ..SolveOptions::default()
+    }
+}
+
+struct RecordingStiff<'a> {
+    calls: &'a Cell<usize>,
+}
+
+impl OdeAlgorithm for RecordingStiff<'_> {
+    fn solve<F, P>(
+        &self,
+        problem: &OdeProblem<F, P>,
+        options: &SolveOptions,
+    ) -> Result<Solution, SolveError>
+    where
+        F: Fn(&mut [f64], &[f64], &P, f64),
+    {
+        self.calls.set(self.calls.get() + 1);
+        let mut recovery_options = options.clone();
+        recovery_options.initial_step = None;
+        recovery_options.max_step = f64::INFINITY;
+        recovery_options.max_steps = SolveOptions::default().max_steps;
+        Rodas5P.solve(problem, &recovery_options)
     }
 }
 
@@ -104,4 +129,31 @@ fn fifth_order_convergence_is_retained() {
     let coarse_error = (endpoint(0.1) - std::f64::consts::E).abs();
     let fine_error = (endpoint(0.05) - std::f64::consts::E).abs();
     assert!(coarse_error / fine_error > 20.0);
+}
+
+#[test]
+fn numerical_failure_restarts_with_the_configured_stiff_algorithm() {
+    let calls = Cell::new(0);
+    let constrained = SolveOptions {
+        initial_step: Some(1.0e-6),
+        max_step: 1.0e-6,
+        max_steps: 1,
+        save: SaveMode::Endpoints,
+        ..SolveOptions::default()
+    };
+
+    assert_eq!(
+        solve(&exponential(1.0, (0.0, 1.0)), Dp5, &constrained),
+        Err(SolveError::MaxStepsExceeded)
+    );
+
+    let recovered = solve(
+        &exponential(1.0, (0.0, 1.0)),
+        AutoDp5::new(RecordingStiff { calls: &calls }),
+        &constrained,
+    )
+    .unwrap();
+
+    assert_eq!(calls.get(), 1);
+    assert!((recovered.last_state()[0] - std::f64::consts::E).abs() < 1.0e-3);
 }

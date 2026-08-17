@@ -1,6 +1,32 @@
-//! Deterministic compile-time coefficient fixtures emitted by the Phase 4 generator.
+//! Canonical compile-time coefficient fixtures used by the coefficient generator.
+//!
+//! The machine-readable method records below generate the checked-in manifest.
+//! Run `scripts/generate_coefficients.ps1` after changing this file and use
+//! `scripts/generate_coefficients.ps1 -Check` to detect drift.
 
-#![allow(dead_code)]
+#![allow(
+    dead_code,
+    reason = "not every canonical fixture is wired into a solver yet"
+)]
+#![allow(
+    clippy::excessive_precision,
+    reason = "canonical upstream f64 coefficient literals"
+)]
+
+// coefficient-method: method=AB3|family=multistep|order=3|variable-step=false
+// coefficient-method: method=ABDF2|family=multistep|order=2|variable-step=true
+// coefficient-method: method=BS3|family=explicit|order=3|embedded-order=2|fsal=true
+// coefficient-method: method=DP5|family=explicit|order=5|embedded-order=4|fsal=true
+// coefficient-method: method=Euler|family=explicit|order=1|embedded-order=none
+// coefficient-method: method=Heun|family=explicit|order=2|embedded-order=1
+// coefficient-method: method=Midpoint|family=explicit|order=2|embedded-order=1
+// coefficient-method: method=RK4|family=explicit|order=4|embedded-order=none
+// coefficient-method: method=SDIRK2|family=sdirk|order=2|embedded-order=1
+// coefficient-method: method=VelocityVerlet|family=symplectic|order=2|embedded-order=none
+// coefficient-method: method=Vern6|family=explicit|order=6|embedded-order=5|fsal=true
+// coefficient-method: method=Vern7|family=explicit|order=7|embedded-order=6|fsal=true
+// coefficient-method: method=Vern8|family=explicit|order=8|embedded-order=7|fsal=true
+// coefficient-method: method=Vern9|family=explicit|order=9|embedded-order=8|fsal=true
 
 pub(crate) const EULER_STAGE_TIMES: [f64; 1] = [0.0];
 pub(crate) const EULER_A: [[f64; 1]; 1] = [[0.0]];

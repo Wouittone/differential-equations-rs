@@ -1,13 +1,17 @@
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory = $true)]
+    [Parameter(Mandatory = $true, ParameterSetName = 'Generate')]
     [string] $UpstreamPath,
 
     [string] $RepositoryPath,
 
     [string] $OutputDirectory,
 
-    [switch] $Check
+    [Parameter(ParameterSetName = 'Generate')]
+    [switch] $Check,
+
+    [Parameter(Mandatory = $true, ParameterSetName = 'Detection')]
+    [switch] $DetectionOnly
 )
 
 Set-StrictMode -Version Latest
@@ -25,9 +29,173 @@ if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
     $OutputDirectory = Join-Path $RepositoryPath 'docs'
 }
 
+function Normalize-AlgorithmName {
+    param([string] $Name)
+    # Rust spells identifier fragments such as `_2N` as the idiomatic `TwoN`.
+    return (($Name -replace '_', '').ToUpperInvariant() -replace 'TWON', '2N')
+}
+
+function Get-RustPublicNames {
+    param(
+        [string] $RepoPath,
+        [switch] $ExcludeCompatibilityFacades
+    )
+
+    $sourcePath = Join-Path $RepoPath 'src'
+    $libPath = Join-Path $sourcePath 'lib.rs'
+    $text = Get-Content -LiteralPath $libPath -Raw
+    $names = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+
+    foreach ($match in [regex]::Matches($text, '(?ms)^\s*pub\s+(?:struct|enum|type|trait|const|fn)\s+(?<name>[A-Za-z_][A-Za-z0-9_]*)')) {
+        [void] $names.Add($match.Groups['name'].Value)
+    }
+
+    foreach ($match in [regex]::Matches($text, '(?ms)^\s*pub use\s+(?<body>[^;]+);')) {
+        $body = $match.Groups['body'].Value.Trim()
+        if ($ExcludeCompatibilityFacades -and $body -match '^compatibility::') { continue }
+        if ($body -match '^(?<module>[A-Za-z_][A-Za-z0-9_]*)::\*$') {
+            $moduleName = $Matches['module']
+            $modulePath = Join-Path $sourcePath "$moduleName.rs"
+            if (-not (Test-Path -LiteralPath $modulePath -PathType Leaf)) {
+                $modulePath = Join-Path $sourcePath "$moduleName/mod.rs"
+            }
+            if (-not (Test-Path -LiteralPath $modulePath -PathType Leaf)) {
+                throw "Cannot resolve public glob module '$moduleName' from $libPath"
+            }
+            $moduleText = Get-Content -LiteralPath $modulePath -Raw
+            foreach ($item in [regex]::Matches($moduleText, '(?m)^\s*pub\s+(?:struct|enum|type|trait|const|fn)\s+(?<name>[A-Za-z_][A-Za-z0-9_]*)')) {
+                [void] $names.Add($item.Groups['name'].Value)
+            }
+            continue
+        }
+
+        if ($body -match '(?s)\{(?<items>.*?)\}') {
+            foreach ($item in $Matches['items'] -split ',') {
+                $trimmed = $item.Trim()
+                if ([string]::IsNullOrWhiteSpace($trimmed)) { continue }
+                if ($trimmed -match '\bas\s+(?<alias>[A-Za-z_][A-Za-z0-9_]*)$') {
+                    [void] $names.Add($Matches['alias'])
+                } elseif ($trimmed -match '(?<name>[A-Za-z_][A-Za-z0-9_]*)$') {
+                    [void] $names.Add($Matches['name'])
+                }
+            }
+        } elseif ($body -match '\bas\s+(?<alias>[A-Za-z_][A-Za-z0-9_]*)$') {
+            [void] $names.Add($Matches['alias'])
+        } elseif ($body -match '::(?<name>[A-Za-z_][A-Za-z0-9_]*)$') {
+            [void] $names.Add($Matches['name'])
+        }
+    }
+    return $names
+}
+
+function Get-RustAlgorithmImplementationNames {
+    param([string] $RepoPath)
+
+    $names = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+    $aliases = [System.Collections.Generic.List[object]]::new()
+    $files = @(Get-ChildItem -LiteralPath (Join-Path $RepoPath 'src') -Recurse -File -Filter '*.rs' |
+        Sort-Object FullName)
+
+    foreach ($file in $files) {
+        $text = Get-Content -LiteralPath $file.FullName -Raw
+        foreach ($match in [regex]::Matches(
+                $text,
+                '(?s)\bimpl(?:\s*<[^>{}]*>)?\s+(?:[A-Za-z_][A-Za-z0-9_]*::)*[A-Za-z_][A-Za-z0-9_]*Algorithm(?:\s*<[^>{}]*>)?\s+for\s+(?<name>[A-Za-z_][A-Za-z0-9_]*)'
+            )) {
+            [void] $names.Add($match.Groups['name'].Value)
+        }
+
+        foreach ($macro in [regex]::Matches(
+                $text,
+                '(?ms)^\s*macro_rules!\s*(?<macro>[A-Za-z_][A-Za-z0-9_]*)\s*\{(?<body>.*?)(?=^\})^\}'
+            )) {
+            $implementation = [regex]::Match(
+                $macro.Groups['body'].Value,
+                '(?s)\bimpl(?:\s*<[^>{}]*>)?\s+(?:[A-Za-z_][A-Za-z0-9_]*::)*[A-Za-z_][A-Za-z0-9_]*Algorithm(?:\s*<[^>{}]*>)?\s+for\s+\$(?<parameter>[A-Za-z_][A-Za-z0-9_]*)'
+            )
+            if (-not $implementation.Success) { continue }
+
+            $macroName = [regex]::Escape($macro.Groups['macro'].Value)
+            foreach ($invocation in [regex]::Matches(
+                    $text,
+                    "(?m)^\s*$macroName!\s*\(\s*(?<name>[A-Za-z_][A-Za-z0-9_]*)"
+                )) {
+                [void] $names.Add($invocation.Groups['name'].Value)
+            }
+        }
+
+        # Compatibility aliases intentionally expose substitute algorithms and
+        # are public API names, not method implementations. Legitimate spelling
+        # aliases in method modules inherit the implementation of their target.
+        if ($file.Name -ne 'compatibility.rs') {
+            foreach ($alias in [regex]::Matches(
+                    $text,
+                    '(?m)^\s*pub\s+type\s+(?<alias>[A-Za-z_][A-Za-z0-9_]*)(?:\s*<[^;=]+>)?\s*=\s*(?<target>[A-Za-z_][A-Za-z0-9_]*)'
+                )) {
+                $aliases.Add([pscustomobject]@{
+                    alias = $alias.Groups['alias'].Value
+                    target = $alias.Groups['target'].Value
+                })
+            }
+        }
+    }
+
+    do {
+        $changed = $false
+        foreach ($alias in $aliases) {
+            if ($names.Contains($alias.target) -and $names.Add($alias.alias)) {
+                $changed = $true
+            }
+        }
+    } while ($changed)
+
+    return $names
+}
+
+function Get-JuliaComplianceNames {
+    param([string] $RepoPath)
+
+    $names = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+    $testPath = Join-Path $RepoPath 'tests/julia'
+    if (-not (Test-Path -LiteralPath $testPath -PathType Container)) { return $names }
+
+    foreach ($file in Get-ChildItem -LiteralPath $testPath -File -Filter '*.jl') {
+        $text = Get-Content -LiteralPath $file.FullName -Raw
+        $importPattern = '(?ms)^using\s+OrdinaryDiffEq[A-Za-z0-9_]*\s*:\s*(?<body>.*?)(?=^\S|\z)'
+        $imports = [regex]::Matches($text, $importPattern)
+        if ($imports.Count -eq 0) { continue }
+
+        $executableText = [regex]::Replace($text, $importPattern, '')
+        foreach ($import in $imports) {
+            foreach ($identifier in [regex]::Matches($import.Groups['body'].Value, '\b[A-Za-z][A-Za-z0-9_]*\b')) {
+                $name = $identifier.Value
+                if ([regex]::IsMatch($executableText, '(?m)(?<![A-Za-z0-9_!])' + [regex]::Escape($name) + '\s*\(')) {
+                    [void] $names.Add($name)
+                }
+            }
+        }
+    }
+    return $names
+}
+
+$resolvedRepository = (Resolve-Path -LiteralPath $RepositoryPath).Path
+if ($DetectionOnly) {
+    $publicNames = Get-RustPublicNames -RepoPath $resolvedRepository
+    $nativePublicNames = Get-RustPublicNames -RepoPath $resolvedRepository -ExcludeCompatibilityFacades
+    $implementationNames = Get-RustAlgorithmImplementationNames -RepoPath $resolvedRepository
+    $implementedPublicNames = @($nativePublicNames | Where-Object { $implementationNames.Contains($_) } | Sort-Object)
+    [pscustomobject][ordered]@{
+        rust_public_names = @($publicNames | Sort-Object)
+        rust_native_public_names = @($nativePublicNames | Sort-Object)
+        rust_algorithm_implementation_names = @($implementationNames | Sort-Object)
+        rust_implemented_public_names = $implementedPublicNames
+        julia_compliance_names = @(Get-JuliaComplianceNames -RepoPath $resolvedRepository | Sort-Object)
+    } | ConvertTo-Json -Depth 3
+    return
+}
+
 $expectedRevision = '211142263781255a9aa2f910f6760b9f18ec29c8'
 $resolvedUpstream = (Resolve-Path -LiteralPath $UpstreamPath).Path
-$resolvedRepository = (Resolve-Path -LiteralPath $RepositoryPath).Path
 $comparisonDirectory = $null
 $temporaryOutputDirectory = $null
 if ($Check) {
@@ -437,53 +605,28 @@ function Convert-ToRelativeUnixPath {
     return [System.Uri]::UnescapeDataString($baseUri.MakeRelativeUri($pathUri).ToString()) -replace '/', '/'
 }
 
-function Normalize-AlgorithmName {
-    param([string] $Name)
-    # Rust spells identifier fragments such as `_2N` as the idiomatic `TwoN`.
-    return (($Name -replace '_', '').ToUpperInvariant() -replace 'TWON', '2N')
-}
-
-function Get-RustPublicNames {
-    param([string] $RepoPath)
-    $libPath = Join-Path $RepoPath 'src/lib.rs'
-    $text = Get-Content -LiteralPath $libPath -Raw
-    $names = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
-    foreach ($match in [regex]::Matches($text, '(?ms)^pub use\s+[^;]+;')) {
-        $statement = $match.Value
-        if ($statement -match '(?s)\{(?<body>.*?)\}') {
-            foreach ($identifier in [regex]::Matches($Matches.body, '\b[A-Z][A-Za-z0-9_]*\b')) {
-                [void] $names.Add($identifier.Value)
-            }
-        } elseif ($statement -match '::(?<name>[A-Z][A-Za-z0-9_]*)\s*;') {
-            [void] $names.Add($Matches.name)
-        }
-    }
-    return $names
-}
-
-function Get-JuliaComplianceNames {
-    param([string] $RepoPath)
-    $names = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
-    foreach ($file in Get-ChildItem -LiteralPath (Join-Path $RepoPath 'tests/julia') -File -Filter '*.jl') {
-        $text = Get-Content -LiteralPath $file.FullName -Raw
-        foreach ($match in [regex]::Matches($text, '(?ms)^using\s+OrdinaryDiffEq[A-Za-z0-9_]*\s*:\s*(?<body>.*?)(?=^\S|\z)')) {
-            # Julia exports include both conventional uppercase names and
-            # lowercase-prefixed constructors such as `pRRK22`.  Restricting
-            # this scan to an uppercase initial silently loses those matched
-            # compliance fixtures and misclassifies an otherwise implemented
-            # public algorithm.
-            foreach ($identifier in [regex]::Matches($match.Groups['body'].Value, '\b[A-Za-z][A-Za-z0-9_]*\b')) {
-                [void] $names.Add($identifier.Value)
-            }
-        }
-    }
-    return $names
-}
-
 $rustPublicNames = Get-RustPublicNames -RepoPath $resolvedRepository
+$rustNativePublicNames = Get-RustPublicNames -RepoPath $resolvedRepository -ExcludeCompatibilityFacades
+$rustImplementationNames = Get-RustAlgorithmImplementationNames -RepoPath $resolvedRepository
+$rustImplementedPublicNames = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+foreach ($name in $rustNativePublicNames) {
+    if ($rustImplementationNames.Contains($name)) { [void] $rustImplementedPublicNames.Add($name) }
+}
 $juliaComplianceNames = Get-JuliaComplianceNames -RepoPath $resolvedRepository
+$rustPublicByNormalizedName = @{}
+foreach ($name in @($rustPublicNames | Sort-Object)) {
+    $normalized = Normalize-AlgorithmName $name
+    if (-not $rustPublicByNormalizedName.ContainsKey($normalized)) {
+        $rustPublicByNormalizedName[$normalized] = $name
+    }
+}
 $rustByNormalizedName = @{}
-foreach ($name in $rustPublicNames) { $rustByNormalizedName[(Normalize-AlgorithmName $name)] = $name }
+foreach ($name in @($rustImplementedPublicNames | Sort-Object)) {
+    $normalized = Normalize-AlgorithmName $name
+    if (-not $rustByNormalizedName.ContainsKey($normalized)) {
+        $rustByNormalizedName[$normalized] = $name
+    }
+}
 $juliaByNormalizedName = @{}
 foreach ($name in $juliaComplianceNames) { $juliaByNormalizedName[(Normalize-AlgorithmName $name)] = $name }
 
@@ -549,7 +692,20 @@ foreach ($packageEntry in $packageMetadata.GetEnumerator()) {
             -StepControl $stepControl -Name $export.name -BaseType $baseType
 
         $normalized = Normalize-AlgorithmName $export.name
-        $rustName = if ($rustByNormalizedName.ContainsKey($normalized)) { $rustByNormalizedName[$normalized] } else { $null }
+        $rustPublicName = if ($rustPublicNames.Contains($export.name)) {
+            $export.name
+        } elseif ($rustPublicByNormalizedName.ContainsKey($normalized)) {
+            $rustPublicByNormalizedName[$normalized]
+        } else {
+            $null
+        }
+        $rustName = if ($rustImplementedPublicNames.Contains($export.name)) {
+            $export.name
+        } elseif ($rustByNormalizedName.ContainsKey($normalized)) {
+            $rustByNormalizedName[$normalized]
+        } else {
+            $null
+        }
         $hasCompliance = $juliaByNormalizedName.ContainsKey($normalized)
         $juliaStatus = if ($scope -eq 'excluded') {
             'not-applicable'
@@ -591,6 +747,9 @@ foreach ($packageEntry in $packageMetadata.GetEnumerator()) {
             required_features = @($features)
             rust_status = $rustStatus
             rust_name = $rustName
+            rust_public_name = $rustPublicName
+            rust_public_export_detected = $null -ne $rustPublicName
+            rust_algorithm_implementation_detected = $null -ne $rustName
             julia_status = $juliaStatus
             julia_compliance_detected = $hasCompliance
             upstream_source = Convert-ToRelativeUnixPath -BasePath $resolvedUpstream -Path $definition.path
@@ -611,6 +770,19 @@ function Write-CanonicalUtf8Text {
     [System.IO.File]::WriteAllText($Path, $normalized, $utf8NoBom)
 }
 
+function Get-Sha256Hash {
+    param([string] $Path)
+
+    $stream = [System.IO.File]::OpenRead($Path)
+    $sha256 = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        return ([System.BitConverter]::ToString($sha256.ComputeHash($stream))).Replace('-', '')
+    } finally {
+        $sha256.Dispose()
+        $stream.Dispose()
+    }
+}
+
 
 $unseenNonAlgorithmExports = @($nonAlgorithmExports.Keys | Where-Object { -not $seenNonAlgorithmExports.Contains($_) })
 if ($unseenNonAlgorithmExports.Count -gt 0) {
@@ -619,6 +791,7 @@ if ($unseenNonAlgorithmExports.Count -gt 0) {
 
 $inventory = @($inventory | Sort-Object upstream_package, name)
 $implemented = @($inventory | Where-Object rust_status -eq 'implemented-and-julia-tested')
+$implementedWithoutJulia = @($inventory | Where-Object rust_status -eq 'implemented-without-detected-julia-test')
 $included = @($inventory | Where-Object scope -eq 'included')
 $excluded = @($inventory | Where-Object scope -eq 'excluded')
 $aliasEntries = @($included | Where-Object kind -like '*-alias')
@@ -655,9 +828,12 @@ foreach ($entry in $inventory) {
 if ($implemented.Count -lt 25) {
     throw "Expected to detect at least the baseline 25 Julia-tested Rust algorithms, found $($implemented.Count): $($implemented.name -join ', ')"
 }
+if (($implemented.Count + $implementedWithoutJulia.Count + $missing.Count) -ne $included.Count) {
+    throw "In-scope status counts do not sum to the included total"
+}
 
 $summary = [pscustomobject][ordered]@{
-    schema_version = 2
+    schema_version = 3
     upstream_repository = 'https://github.com/SciML/OrdinaryDiffEq.jl'
     upstream_revision = $actualRevision
     scope_document = 'docs/UPSTREAM_SCOPE.md'
@@ -668,13 +844,15 @@ $summary = [pscustomobject][ordered]@{
         included_aliases = $aliasEntries.Count
         excluded_names = $excluded.Count
         implemented_and_julia_tested = $implemented.Count
+        implemented_without_detected_julia_test = $implementedWithoutJulia.Count
         missing_included_names = $missing.Count
     }
     uncertainties = @(
         'The inventory treats package exports as the public algorithm surface; internal, unexported experimental types are not parity targets.',
         'ETD1 is the only exact exported type alias found at the pinned revision. Named functions that return a configured canonical algorithm are recorded as configured aliases. Auto* and Default* names are composite constructors.',
         'AMF is counted as a native wrapper constructor because it dispatches back into OrdinaryDiffEq with native Rosenbrock-W methods.',
-        'Rust status is detected by normalized public Rust type name plus a corresponding OrdinaryDiffEq import in tests/julia; numerical test quality remains a review concern.',
+        'Rust status requires both a public crate export and a concrete implementation of an algorithm trait. Compatibility aliases to substitute kernels do not count as implementations.',
+        'Julia compliance requires an imported OrdinaryDiffEq constructor to be invoked outside its using block; imports alone do not count as tests. Numerical assertion quality remains a review concern.',
         'Implemented status measures public algorithm-name coverage only. It does not establish parity for every upstream problem representation or shared feature; consult problem_representation, required_features, and FEATURE_COVERAGE.md separately.',
         'Nonsingular mass-matrix behavior of dual ODE/DAE methods is included, while residual-form DAE constructors and singular-mass-matrix behavior are excluded.'
     )
@@ -723,14 +901,18 @@ $csvLines = $inventory | Select-Object name, kind, alias_of, upstream_package, f
     problem_representation, fixed_adaptive_behavior, jacobian_requirement, linear_solver_requirement,
     dense_output_requirement, controller_requirement,
     @{ n = 'required_features'; e = { $_.required_features -join '; ' } },
-    rust_status, rust_name, julia_status, julia_compliance_detected, upstream_source, upstream_line |
+    rust_status, rust_name, rust_public_name, rust_public_export_detected,
+    rust_algorithm_implementation_detected, julia_status, julia_compliance_detected,
+    upstream_source, upstream_line |
     ConvertTo-Csv -NoTypeInformation
 Write-CanonicalUtf8Text -Path $csvPath -Content ($csvLines -join "`n")
 
 $familyRows = $included | Group-Object family | Sort-Object Name | ForEach-Object {
     $familyEntries = @($_.Group)
     $familyImplemented = @($familyEntries | Where-Object rust_status -eq 'implemented-and-julia-tested').Count
-    "| $($_.Name) | $($familyEntries.Count) | $familyImplemented | $($familyEntries.Count - $familyImplemented) |"
+    $familyImplementedWithoutJulia = @($familyEntries | Where-Object rust_status -eq 'implemented-without-detected-julia-test').Count
+    $familyMissing = @($familyEntries | Where-Object rust_status -eq 'missing').Count
+    "| $($_.Name) | $($familyEntries.Count) | $familyImplemented | $familyImplementedWithoutJulia | $familyMissing |"
 }
 $excludedRows = $excluded | Sort-Object name | ForEach-Object {
     "| ``$($_.name)`` | $($_.upstream_package) | $($_.exclusion_reason) |"
@@ -748,6 +930,12 @@ $nonAlgorithmExportRows = $summary.non_algorithm_exports | ForEach-Object {
 $missingSections = $missing | Group-Object family | Sort-Object Name | ForEach-Object {
     $entries = @($_.Group | Sort-Object name | ForEach-Object {
         ("- " + [char]96 + $_.name + [char]96 + " " + [char]0x2014 + " " + $_.upstream_package + "; " + $_.problem_representation)
+    })
+    "### $($_.Name) ($($_.Count))`n`n$($entries -join "`n")"
+}
+$implementedWithoutJuliaSections = $implementedWithoutJulia | Group-Object family | Sort-Object Name | ForEach-Object {
+    $entries = @($_.Group | Sort-Object name | ForEach-Object {
+        ("- " + [char]96 + $_.name + [char]96 + " " + [char]0x2014 + " Rust " + [char]96 + $_.rust_name + [char]96 + "; " + $_.upstream_package)
     })
     "### $($_.Name) ($($_.Count))`n`n$($entries -join "`n")"
 }
@@ -776,6 +964,7 @@ and [`ode_algorithm_inventory.csv`](ode_algorithm_inventory.csv).
   ($($summary.counts.included_canonical_or_composite) canonical/composite constructors and
   $($summary.counts.included_aliases) public aliases).
 - Implemented and detected in matched Julia tests: **$($summary.counts.implemented_and_julia_tested)**.
+- Implemented without a detected matched Julia test: **$($summary.counts.implemented_without_detected_julia_test)**.
 - Missing in-scope public names: **$($summary.counts.missing_included_names)**.
 - Explicitly excluded public names: **$($summary.counts.excluded_names)**.
 
@@ -783,18 +972,24 @@ Aliases are public parity obligations but do not require a second numerical kern
 
 ## Family status
 
-| Family | In scope | Implemented + Julia-tested | Missing names |
-| --- | ---: | ---: | ---: |
+| Family | In scope | Implemented + Julia-tested | Implemented, Julia test not detected | Missing Rust implementation |
+| --- | ---: | ---: | ---: | ---: |
 $($familyRows -join "`n")
 
-## Remaining solver names by family
+## Missing Rust solver names by family
 
 This is the implementation handoff list. Each entry remains in scope and lacks
-either a public Rust implementation or a detected matched Julia compliance
-case. Required features and exact upstream source locations are available in
-the JSON/CSV records.
+a detected public Rust algorithm implementation. Required features and exact
+upstream source locations are available in the JSON/CSV records.
 
 $($missingSections -join "`n`n")
+
+## Rust implementations without detected Julia compliance
+
+These public Rust implementations remain outside the Julia-tested coverage
+count until a matched compliance invocation is detected.
+
+$($implementedWithoutJuliaSections -join "`n`n")
 
 ## Aliases
 
@@ -840,8 +1035,8 @@ if ($Check) {
             $mismatches.Add("missing artifact $expectedPath")
             continue
         }
-        $expectedHash = (Get-FileHash -LiteralPath $expectedPath -Algorithm SHA256).Hash
-        $generatedHash = (Get-FileHash -LiteralPath $generatedPath -Algorithm SHA256).Hash
+        $expectedHash = Get-Sha256Hash -Path $expectedPath
+        $generatedHash = Get-Sha256Hash -Path $generatedPath
         if ($expectedHash -ne $generatedHash) {
             $mismatches.Add("stale artifact $expectedPath (expected generated SHA256 $generatedHash, found $expectedHash)")
         }

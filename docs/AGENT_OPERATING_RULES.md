@@ -95,4 +95,3 @@ targeted verification, merges or rejects the branch, updates
 `docs/OVERNIGHT_STATUS.md`, regenerates the inventory when public names change,
 and spawns the next dependency-ready task. Stop only at final parity, a
 documented hard environmental blocker, or an explicit safety condition.
-
