@@ -1,17 +1,17 @@
 //! Explicit symplectic composition methods for partitioned second-order problems.
 //!
 //! The coefficient vectors are pinned copies of the `SymplecticTableau` data in
-//! OrdinaryDiffEqSymplecticRK.  A stage is a drift of the position by `aᵢ`
-//! followed by a kick of the velocity by `bᵢ`.
+//! OrdinaryDiffEqSymplecticRK.  A stage is a drift of the position by `bᵢ`
+//! followed by a kick of the velocity by `aᵢ`.
 
 use differential_equations::{SaveMode, SecondOrderOdeProblem, SolveError, SolveOptions};
 
 /// A pinned alternating drift/kick composition.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct SymplecticTableau {
-    /// Position (drift) coefficients.
-    pub a: &'static [f64],
     /// Velocity (kick) coefficients.
+    pub a: &'static [f64],
+    /// Position (drift) coefficients.
     pub b: &'static [f64],
 }
 
@@ -170,8 +170,8 @@ const KAHAN_LI6_B: &[f64] = &[
     0.3623802903983367889394994,
     -0.18682351788413996060510809,
     -0.31201628813204427978923719,
-    0.4403782936141903818111176,
-    0.4403782936141903818111176,
+    0.4403787936141903818111176,
+    0.4403787936141903818111176,
     -0.31201628813204427978923719,
     -0.18682351788413996060510809,
     0.3623802903983367889394994,
@@ -415,11 +415,8 @@ impl From<SolveError> for SymplecticSolveError {
 
 /// Solves a second-order problem with a pinned alternating drift/kick method.
 ///
-/// The acceleration is passed separately because the shared second-order
-/// problem deliberately keeps its callback field private.
 pub fn solve_symplectic<F, P, A>(
     problem: &SecondOrderOdeProblem<F, P>,
-    acceleration: &F,
     _algorithm: A,
     options: &SolveOptions,
 ) -> Result<SymplecticSolution, SymplecticSolveError>
@@ -486,24 +483,24 @@ where
         }
         let stage_start = time;
         let mut stage_time = time;
-        for (&a, &b) in tableau.a.iter().zip(tableau.b) {
+        for stage in 0..tableau.stages() {
+            // The recovered workflow uses b for the position drift and a for
+            // the velocity kick at the drifted position.
+            let drift = tableau.b[stage];
+            let kick = tableau.a[stage];
             for (q, &v) in position.iter_mut().zip(&velocity) {
-                *q += a * step * v;
+                *q += drift * step * v;
             }
-            stage_time += a * step;
-            acceleration(
-                &mut acceleration,
-                &velocity,
-                &position,
-                problem.parameters(),
-                stage_time,
-            );
+            problem.evaluate_acceleration(&mut acceleration, &velocity, &position, stage_time);
             rhs_evaluations += 1;
             if !acceleration.iter().all(|value| value.is_finite()) {
                 return Err(SolveError::NonFiniteDerivative.into());
             }
             for (v, &a_value) in velocity.iter_mut().zip(&acceleration) {
-                *v += b * step * a_value;
+                *v += kick * step * a_value;
+            }
+            if stage + 1 < tableau.stages() {
+                stage_time += kick * step;
             }
         }
         time = stage_start + step;

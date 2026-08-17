@@ -39,6 +39,10 @@ pub struct ExplicitRungeKutta<T> {
     marker: PhantomData<fn() -> T>,
 }
 
+/// Upstream-compatible name for a user-supplied explicit Runge--Kutta
+/// tableau marker.
+pub type ExplicitRK<T> = ExplicitRungeKutta<T>;
+
 impl<T> ExplicitRungeKutta<T> {
     pub const fn new() -> Self {
         Self {

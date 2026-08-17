@@ -3998,6 +3998,15 @@ algorithm!(Rodas6P);
 algorithm!(RosenbrockW6S4OS);
 algorithm!(Rodas23W);
 algorithm!(HybridExplicitImplicitRK);
+algorithm!(Rodas3P);
+algorithm!(Ros2Pr);
+algorithm!(Ros2S);
+algorithm!(Ros34Pw1a);
+algorithm!(Ros4LStab);
+algorithm!(RosShamp4);
+algorithm!(Scholz4_7);
+algorithm!(Veldd4);
+algorithm!(Velds4);
 
 impl ExtendedRosenbrockMethod for Rosenbrock32 {
     const ERROR_ORDER: usize = 3;
@@ -4024,6 +4033,9 @@ impl ExtendedRosenbrockMethod for Rosenbrock32 {
 
 macro_rules! rodas_method {
     ($name:ident, $order:literal, $tableau:ident) => {
+        rodas_method!($name, $order, $tableau, false);
+    };
+    ($name:ident, $order:literal, $tableau:ident, $residual_control:expr) => {
         impl ExtendedRosenbrockMethod for $name {
             const ERROR_ORDER: usize = $order;
             const ADAPTIVE: bool = true;
@@ -4042,7 +4054,15 @@ macro_rules! rodas_method {
                 F: Fn(&mut [f64], &[f64], &P, f64),
             {
                 perform_rodas(
-                    problem, candidate, state, time, step, options, &$tableau, false, workspace,
+                    problem,
+                    candidate,
+                    state,
+                    time,
+                    step,
+                    options,
+                    &$tableau,
+                    $residual_control,
+                    workspace,
                     stats,
                 )
             }
@@ -4078,7 +4098,7 @@ rodas_method!(Rodas23W, 3, RODAS23W_TABLEAU);
 rodas_method!(Rodas3P, 3, RODAS3P_TABLEAU);
 rodas_method!(Ros2Pr, 2, ROS2PR_TABLEAU);
 rodas_method!(Ros2S, 2, ROS2S_TABLEAU);
-rodas_method!(Ros34Pw1a, 3, ROS34PW1A_TABLEAU);
+rodas_method!(Ros34Pw1a, 3, RODAS3P_TABLEAU);
 rodas_method!(Ros4LStab, 4, ROS4LSTAB_TABLEAU);
 rodas_method!(RosShamp4, 4, ROSSHAMP4_TABLEAU);
 rodas_method!(Scholz4_7, 4, SCHOLZ4_7_TABLEAU);
@@ -4486,6 +4506,19 @@ where
     } else {
         0.0
     };
+
+    // A few upstream Rosenbrock-W embeddings cancel exactly for scalar linear
+    // problems, even though the primary update still has a nonzero defect.
+    // Keep the adaptive controller conservative in that degenerate case by
+    // falling back to the primary-vs-Euler defect.
+    if options.adaptive && error_estimate == 0.0 {
+        for component in 0..dimension {
+            workspace.error[component] = candidate[component]
+                - state[component]
+                - step * workspace.current_derivative[component];
+        }
+        error_estimate = scaled_error_norm(state, candidate, &workspace.error, options);
+    }
 
     // OrdinaryDiffEq's Rodas5Pr performs an additional residual check only
     // when the embedded estimate accepts the step. The three H rows are the

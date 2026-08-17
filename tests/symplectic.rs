@@ -28,36 +28,43 @@ fn options(step: f64) -> SolveOptions {
 
 fn endpoint_error<A: SymplecticAlgorithm>(algorithm: A, step: f64) -> f64 {
     let problem = oscillator();
-    let acceleration = |output: &mut [f64], _: &[f64], position: &[f64], _: &(), _: f64| {
-        output[0] = -position[0];
-    };
-    let solution = solve_symplectic(&problem, &acceleration, algorithm, &options(step)).unwrap();
+    let solution = solve_symplectic(&problem, algorithm, &options(step)).unwrap();
     (solution.last_position()[0] - 1.0_f64.cos()).hypot(solution.last_velocity()[0] + 1.0_f64.sin())
 }
 
 #[test]
 fn all_recovered_names_expose_pinned_tableaus() {
     let methods = [
-        (symplectic::PseudoVerletLeapfrog::tableau(), 2),
-        (symplectic::McAte2::tableau(), 2),
-        (symplectic::Ruth3::tableau(), 3),
-        (symplectic::McAte3::tableau(), 3),
-        (symplectic::CandyRoz4::tableau(), 4),
-        (symplectic::McAte4::tableau(), 4),
-        (symplectic::CalvoSanz4::tableau(), 5),
-        (symplectic::McAte42::tableau(), 5),
-        (symplectic::McAte5::tableau(), 6),
-        (symplectic::Yoshida6::tableau(), 8),
-        (symplectic::KahanLi6::tableau(), 10),
-        (symplectic::McAte8::tableau(), 16),
-        (symplectic::KahanLi8::tableau(), 18),
-        (symplectic::SofSpa10::tableau(), 36),
+        (
+            "PseudoVerletLeapfrog",
+            symplectic::PseudoVerletLeapfrog::tableau(),
+            2,
+        ),
+        ("McAte2", symplectic::McAte2::tableau(), 2),
+        ("Ruth3", symplectic::Ruth3::tableau(), 3),
+        ("McAte3", symplectic::McAte3::tableau(), 3),
+        ("CandyRoz4", symplectic::CandyRoz4::tableau(), 4),
+        ("McAte4", symplectic::McAte4::tableau(), 4),
+        ("CalvoSanz4", symplectic::CalvoSanz4::tableau(), 5),
+        ("McAte42", symplectic::McAte42::tableau(), 5),
+        ("McAte5", symplectic::McAte5::tableau(), 6),
+        ("Yoshida6", symplectic::Yoshida6::tableau(), 8),
+        ("KahanLi6", symplectic::KahanLi6::tableau(), 10),
+        ("McAte8", symplectic::McAte8::tableau(), 16),
+        ("KahanLi8", symplectic::KahanLi8::tableau(), 18),
+        ("SofSpa10", symplectic::SofSpa10::tableau(), 36),
     ];
-    for (tableau, stages) in methods {
-        assert_eq!(tableau.stages(), stages);
+    for (name, tableau, stages) in methods {
+        assert_eq!(tableau.stages(), stages, "{name} stage count");
         assert_eq!(tableau.a.len(), tableau.b.len());
-        assert!((tableau.a.iter().sum::<f64>() - 1.0).abs() < 5.0e-12);
-        assert!((tableau.b.iter().sum::<f64>() - 1.0).abs() < 5.0e-12);
+        assert!(
+            (tableau.a.iter().sum::<f64>() - 1.0).abs() < 5.0e-12,
+            "{name} a sum"
+        );
+        assert!(
+            (tableau.b.iter().sum::<f64>() - 1.0).abs() < 5.0e-12,
+            "{name} b sum"
+        );
     }
 }
 
@@ -83,12 +90,8 @@ fn higher_order_method_preserves_bounded_oscillator_energy() {
         (0.0, 200.0),
         (),
     );
-    let acceleration = |output: &mut [f64], _: &[f64], position: &[f64], _: &(), _: f64| {
-        output[0] = -position[0];
-    };
     let solution = solve_symplectic(
         &problem,
-        &acceleration,
         symplectic::KahanLi6,
         &SolveOptions {
             adaptive: false,

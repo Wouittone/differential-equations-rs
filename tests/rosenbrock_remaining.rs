@@ -62,7 +62,12 @@ fn remaining_rosenbrock_tableaus_support_adaptive_jacobians() {
     macro_rules! assert_adaptive {
         ($algorithm:expr) => {
             let solution = solve(&problem, $algorithm, &adaptive_options()).unwrap();
-            assert!((solution.last_state()[0] - std::f64::consts::E).abs() < 2.0e-7);
+            assert!(
+                (solution.last_state()[0] - std::f64::consts::E).abs() < 2.0e-7,
+                "{} endpoint={:.17e}",
+                stringify!($algorithm),
+                solution.last_state()[0]
+            );
             assert!(solution.stats().jacobian_evaluations > 0);
         };
     }

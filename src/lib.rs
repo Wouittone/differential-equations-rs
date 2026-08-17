@@ -12,9 +12,12 @@ mod anas5;
 mod autodp5;
 mod callback;
 mod coefficients;
+mod compatibility;
+mod composites;
 mod explicit_rk;
 mod frk65;
 mod generated_coefficients;
+mod high_order;
 mod implicit;
 mod integrator;
 mod linear;
@@ -44,12 +47,19 @@ pub use adams::{Ab3, Ab4, Ab5, Abm32, Abm43, Abm54};
 pub use anas5::Anas5;
 pub use autodp5::{AutoDP5, AutoDp5};
 pub use callback::{CallbackAction, EventDirection};
+pub use compatibility::*;
+pub use composites::{
+    AutoTsit5, AutoVern6, AutoVern7, AutoVern8, AutoVern9, DefaultImplicitODEAlgorithm,
+    DefaultODEAlgorithm,
+};
 pub use explicit_rk::{
-    Alshina2, Alshina3, Alshina6, Bs3, Bs5, ButcherTableau, Dp5, Euler, ExplicitRungeKutta, Heun,
-    Midpoint, Msrk5, Msrk6, OwrenZen3, OwrenZen4, OwrenZen5, Psrk3p5q4, Psrk3p6q5, Psrk4p7q6,
-    Ralston, Ralston4, Rk4, Rkm, Rko65, Sir54, SspRk22, SspRk33, SspRk43, Stepanov5,
+    Alshina2, Alshina3, Alshina6, Bs3, Bs5, ButcherTableau, Dp5, Euler, ExplicitRK,
+    ExplicitRungeKutta, Heun, Midpoint, Msrk5, Msrk6, OwrenZen3, OwrenZen4, OwrenZen5, Psrk3p5q4,
+    Psrk3p6q5, Psrk4p7q6, Ralston, Ralston4, Rk4, Rkm, Rko65, Sir54, SspRk22, SspRk33, SspRk43,
+    Stepanov5,
 };
 pub use frk65::Frk65;
+pub use high_order::{DP8, Feagin10, Feagin12, Feagin14, PFRK87, RKV76IIa, TanYam7, TsitPap8};
 pub use implicit::{ImplicitEuler, ImplicitMidpoint, Trapezoid};
 pub use low_storage_rk::{
     CarpenterKennedy2N54, Dglddrk73C, Dglddrk84C, Dglddrk84F, Ndblsrk124, Ndblsrk134, Ndblsrk144,
@@ -65,8 +75,9 @@ pub use qndf2::Qndf2;
 pub use rosenbrock::Rosenbrock23;
 pub use rosenbrock_extended::{
     Grk4a, Grk4t, Rodas3, Rodas3d, Rodas4, Rodas4P, Rodas4P2, Rodas4PW, Rodas5, Rodas5P, Rodas5Pe,
-    Rodas5Pr, Rodas6P, Rodas23W, Rodas42, Rok4a, Ros2, Ros3, Ros3Pr, Ros3Prl, Ros3Prl2, Ros3p,
-    Ros34Prw, Ros34Pw1b, Ros34Pw2, Ros34Pw3, Rosenbrock32, RosenbrockW6S4OS,
+    Rodas5Pr, Rodas6P, Rodas23W, Rodas42, Rok4a, Ros2, Ros2Pr, Ros2S, Ros3, Ros3Pr, Ros3Prl,
+    Ros3Prl2, Ros3p, Ros34Prw, Ros34Pw1a, Ros34Pw1b, Ros34Pw2, Ros34Pw3, Rosenbrock32,
+    RosenbrockW6S4OS,
 };
 pub use sdirk::Sdirk2;
 pub use sdirk_cash4::Cash4;

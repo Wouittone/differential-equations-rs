@@ -129,6 +129,20 @@ impl<F, P> SecondOrderOdeProblem<F, P> {
     pub fn parameters(&self) -> &P {
         &self.parameters
     }
+
+    /// Evaluates the acceleration callback for a specialized partitioned
+    /// solver without exposing the problem's internal storage.
+    pub fn evaluate_acceleration(
+        &self,
+        output: &mut [f64],
+        velocity: &[f64],
+        position: &[f64],
+        time: f64,
+    ) where
+        F: Fn(&mut [f64], &[f64], &[f64], &P, f64),
+    {
+        (self.acceleration)(output, velocity, position, &self.parameters, time);
+    }
 }
 
 /// A saved trajectory for a second-order ODE.
