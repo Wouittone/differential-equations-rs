@@ -9,8 +9,8 @@
     "included_canonical_or_composite": 333,
     "included_aliases": 12,
     "excluded_names": 4,
-    "implemented_and_julia_tested": 120,
-    "missing_included_names": 225
+    "implemented_and_julia_tested": 132,
+    "missing_included_names": 213
   },
   "uncertainties": [
     "The inventory treats package exports as the public algorithm surface; internal, unexported experimental types are not parity targets.",
@@ -930,10 +930,10 @@
         "automatic stiffness detection",
         "native explicit and stiff methods"
       ],
-      "rust_status": "missing",
-      "rust_name": null,
-      "julia_status": "no-matched-compliance-detected",
-      "julia_compliance_detected": false,
+      "rust_status": "implemented-and-julia-tested",
+      "rust_name": "DefaultImplicitODEAlgorithm",
+      "julia_status": "matched-compliance-detected",
+      "julia_compliance_detected": true,
       "upstream_source": "lib/OrdinaryDiffEqDefault/src/default_alg.jl",
       "upstream_line": 239
     },
@@ -956,10 +956,10 @@
         "automatic stiffness detection",
         "native explicit and stiff methods"
       ],
-      "rust_status": "missing",
-      "rust_name": null,
-      "julia_status": "no-matched-compliance-detected",
-      "julia_compliance_detected": false,
+      "rust_status": "implemented-and-julia-tested",
+      "rust_name": "DefaultODEAlgorithm",
+      "julia_status": "matched-compliance-detected",
+      "julia_compliance_detected": true,
       "upstream_source": "lib/OrdinaryDiffEqDefault/src/default_alg.jl",
       "upstream_line": 63
     },
@@ -982,10 +982,10 @@
         "user-supplied Butcher tableau",
         "adaptive controller"
       ],
-      "rust_status": "missing",
-      "rust_name": null,
-      "julia_status": "no-matched-compliance-detected",
-      "julia_compliance_detected": false,
+      "rust_status": "implemented-and-julia-tested",
+      "rust_name": "ExplicitRK",
+      "julia_status": "matched-compliance-detected",
+      "julia_compliance_detected": true,
       "upstream_source": "lib/OrdinaryDiffEqExplicitRK/src/algorithms.jl",
       "upstream_line": 272
     },
@@ -5541,10 +5541,10 @@
         "linear solve",
         "adaptive controller"
       ],
-      "rust_status": "missing",
-      "rust_name": null,
-      "julia_status": "no-matched-compliance-detected",
-      "julia_compliance_detected": false,
+      "rust_status": "implemented-and-julia-tested",
+      "rust_name": "Rodas4P2",
+      "julia_status": "matched-compliance-detected",
+      "julia_compliance_detected": true,
       "upstream_source": "lib/OrdinaryDiffEqRosenbrock/src/algorithms.jl",
       "upstream_line": 66
     },
@@ -5723,10 +5723,10 @@
         "linear solve",
         "adaptive controller"
       ],
-      "rust_status": "missing",
-      "rust_name": null,
-      "julia_status": "no-matched-compliance-detected",
-      "julia_compliance_detected": false,
+      "rust_status": "implemented-and-julia-tested",
+      "rust_name": "Rok4a",
+      "julia_status": "matched-compliance-detected",
+      "julia_compliance_detected": true,
       "upstream_source": "lib/OrdinaryDiffEqRosenbrock/src/algorithms.jl",
       "upstream_line": 268
     },
@@ -6061,10 +6061,10 @@
         "linear solve",
         "adaptive controller"
       ],
-      "rust_status": "missing",
-      "rust_name": null,
-      "julia_status": "no-matched-compliance-detected",
-      "julia_compliance_detected": false,
+      "rust_status": "implemented-and-julia-tested",
+      "rust_name": "Ros3Prl2",
+      "julia_status": "matched-compliance-detected",
+      "julia_compliance_detected": true,
       "upstream_source": "lib/OrdinaryDiffEqRosenbrock/src/algorithms.jl",
       "upstream_line": 262
     },
@@ -6456,10 +6456,10 @@
         "Jacobian and linear solve",
         "adaptive controller"
       ],
-      "rust_status": "missing",
-      "rust_name": null,
-      "julia_status": "no-matched-compliance-detected",
-      "julia_compliance_detected": false,
+      "rust_status": "implemented-and-julia-tested",
+      "rust_name": "Cash4",
+      "julia_status": "matched-compliance-detected",
+      "julia_compliance_detected": true,
       "upstream_source": "lib/OrdinaryDiffEqSDIRK/src/algorithms.jl",
       "upstream_line": 550
     },
@@ -8859,10 +8859,10 @@
         "adaptive controller",
         "method-specific dense interpolation"
       ],
-      "rust_status": "missing",
-      "rust_name": null,
-      "julia_status": "no-matched-compliance-detected",
-      "julia_compliance_detected": false,
+      "rust_status": "implemented-and-julia-tested",
+      "rust_name": "AutoTsit5",
+      "julia_status": "matched-compliance-detected",
+      "julia_compliance_detected": true,
       "upstream_source": "lib/OrdinaryDiffEqTsit5/src/algorithms.jl",
       "upstream_line": 33
     },
@@ -8911,10 +8911,10 @@
         "adaptive controller",
         "high-order dense interpolation"
       ],
-      "rust_status": "missing",
-      "rust_name": null,
-      "julia_status": "no-matched-compliance-detected",
-      "julia_compliance_detected": false,
+      "rust_status": "implemented-and-julia-tested",
+      "rust_name": "AutoVern6",
+      "julia_status": "matched-compliance-detected",
+      "julia_compliance_detected": true,
       "upstream_source": "lib/OrdinaryDiffEqVerner/src/algorithms.jl",
       "upstream_line": 113
     },
@@ -8937,10 +8937,10 @@
         "adaptive controller",
         "high-order dense interpolation"
       ],
-      "rust_status": "missing",
-      "rust_name": null,
-      "julia_status": "no-matched-compliance-detected",
-      "julia_compliance_detected": false,
+      "rust_status": "implemented-and-julia-tested",
+      "rust_name": "AutoVern7",
+      "julia_status": "matched-compliance-detected",
+      "julia_compliance_detected": true,
       "upstream_source": "lib/OrdinaryDiffEqVerner/src/algorithms.jl",
       "upstream_line": 123
     },
@@ -8963,10 +8963,10 @@
         "adaptive controller",
         "high-order dense interpolation"
       ],
-      "rust_status": "missing",
-      "rust_name": null,
-      "julia_status": "no-matched-compliance-detected",
-      "julia_compliance_detected": false,
+      "rust_status": "implemented-and-julia-tested",
+      "rust_name": "AutoVern8",
+      "julia_status": "matched-compliance-detected",
+      "julia_compliance_detected": true,
       "upstream_source": "lib/OrdinaryDiffEqVerner/src/algorithms.jl",
       "upstream_line": 133
     },
@@ -8989,10 +8989,10 @@
         "adaptive controller",
         "high-order dense interpolation"
       ],
-      "rust_status": "missing",
-      "rust_name": null,
-      "julia_status": "no-matched-compliance-detected",
-      "julia_compliance_detected": false,
+      "rust_status": "implemented-and-julia-tested",
+      "rust_name": "AutoVern9",
+      "julia_status": "matched-compliance-detected",
+      "julia_compliance_detected": true,
       "upstream_source": "lib/OrdinaryDiffEqVerner/src/algorithms.jl",
       "upstream_line": 143
     },

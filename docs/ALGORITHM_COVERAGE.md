@@ -7,13 +7,15 @@ method is not enough.
 
 ## Current status
 
-The generated pinned-revision inventory currently detects **65 of 345**
+The generated pinned-revision inventory currently detects **132 of 345**
 in-scope public ODE names as both implemented and Julia-tested. The complete
 per-name and per-family ledger is generated in
 [`ODE_PARITY_INVENTORY.md`](ODE_PARITY_INVENTORY.md), with JSON and CSV forms
 alongside it.
 
-Coverage now includes low/high-order and low-storage explicit Runge–Kutta,
+Coverage now includes automatic/default composite facades and the generic
+user-tableau alias in addition to low/high-order and low-storage explicit
+Runge–Kutta,
 fixed and variable-step Adams, SSPRK, fixed implicit, TRBDF2, Rosenbrock/Rodas,
 and an initial `q' = v` symplectic family. The original 25 methods appear in
 the matched benchmark matrix; newly added methods have differential-compliance
@@ -37,7 +39,9 @@ groups include:
   FIRK, BDF, and QNDF methods;
 - IMEX, split, partitioned, and multirate ODE methods;
 - Runge–Kutta–Nyström, second-order, and symplectic ODE methods;
-- extrapolation, exponential, and automatic stiffness-switching methods.
+- extrapolation, exponential, and automatic stiffness-switching methods. The
+  public automatic/default facades are present, but runtime stiffness
+  switching remains deferred and is documented in their handoff.
 
 Some of those groups require new problem representations before their kernels
 can be ported faithfully: split right-hand sides, partitioned and second-order

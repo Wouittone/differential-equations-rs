@@ -165,6 +165,7 @@ Pinned upstream revision:
 | Cash4 family | Native five-stage fourth-order SDIRK with pinned Cash tableau | 116 library tests plus Cash4 adaptive/fixed/Jacobian/callback/save_at coverage | Julia unavailable on coordinator; pinned/full rerun blocked by `JULIA-PATH-20260809` | Rust-reviewed and merged as `0af9a21d`; Julia retry required |
 | ROK4a family | Native fourth-order Rosenbrock-W tableau with pinned coefficients | 116 library tests plus ROK4a fixed/adaptive/backward coverage | Julia unavailable on coordinator; pinned/full rerun blocked by `JULIA-PATH-20260809` | Rust-reviewed and merged as `bf48d51e`; Julia retry required |
 | ROS3PRL2 family | Native third-order Rosenbrock-L2 tableau with pinned coefficients | 116 library tests plus ROS3PRL2 fixed/adaptive/backward/Jacobian/callback/save_at coverage | Julia unavailable on coordinator; pinned/full rerun blocked by `JULIA-PATH-20260809` | Rust-reviewed and merged as `0ad5474f`; Julia retry required |
+| Automatic/default composites + ExplicitRK | Configured automatic/default facades over native components plus the user-tableau public alias | 2 focused integration tests, 1 focused library test, and compliance example | Julia fixture added; execution blocked by `JULIA-PATH-20260809` | Rust-focused wave completed; handoff in `docs/handoffs/default_composites_wave.md` |
 
 ## Validation snapshot
 
@@ -175,13 +176,17 @@ cargo clippy --all-targets -- -D warnings: blocked only by documented benchmark 
 git diff --check: pass
 pinned Julia environment: pass and reproducible from tracked manifest (14 packages at pinned revision)
 Julia compliance: isolated AutoDP5 worker pass; integrated rerun blocked by `JULIA-PATH-20260809`
-inventory regeneration: pass; 349 source references and strict cross-checkout byte identity verified (120 implemented/tested, 225 missing)
+inventory regeneration: pass; 349 source references verified (132 implemented/tested, 213 missing)
 ```
 
 ## Next dependency-ready task
 
-After restoring Julia, rerun the integrated pinned/full suite for SSPRK432, Parsani 3S32/3S53/3S82/3S94/3S105/3S173/3S184/3S205, Alshina6, Anas5, MSRK5, MSRK6, FRK65, PSRK3p5q4/3p6q5/4p7q6, RKO65, AutoDP5, Stepanov5, and pRRK33, then continue with the next dependency-ready regular-ODE family or generated-coefficient slice while wiring accepted-stage dense segments into one solver. SBDF2 remains excluded until split/IMEX parity is implemented.
+After restoring Julia, rerun the integrated pinned/full suite for the previously
+queued families and this wave's composite fixture. Continue with the next
+dependency-ready regular-ODE family or generated-coefficient slice while
+wiring accepted-stage dense segments into one solver. SBDF2 remains excluded
+until split/IMEX parity is implemented.
 
 ## Last decision
 
-The shared first-order driver is frozen and all queued first-order families (explicit, implicit/TRBDF2, Rosenbrock/Rodas, low-storage, and Adams) pass. The Phase 2 audit found only `src/integrator.rs:228` as the first-order lifecycle loop; `src/second_order.rs:440` is an explicit exclusion. Phase 3 checked views, revisioned dense LU, Jacobian/operator seams, nonsingular mass operators, and one implicit caller proof are merged with unchanged compliance and allocations. Phase 4 schema/generated fixtures and Phase 5 representation foundations are merged. Phase 6 now has domain-checked Hermite segments, an accepted-step recorder service, and callback controller-history reset; solver stage-data wiring remains queued. Phase 7 now includes SDIRK2, ABDF2, MEBDF2, QNDF1/2, Verner6-9, pRRK22, SSPRK432, SSPRKMSVS32, Parsani 3S32/3S53/3S82/3S94/3S105/3S173/3S184/3S205, Alshina6, Anas5, MSRK5/6, FRK65, PSRK3p5q4/3p6q5/4p7q6, RKO65, AutoDP5, Stepanov5, pRRK33, ROS2/ROS3/ROS3P/ROS3PR/ROS3PRL, ROS34PRw/ROS34PW1b/ROS34PW2/ROS34PW3, Rodas3/Rodas3d/Rodas23W/Rodas4P/Rodas4PW/Rodas5/Rodas5Pe/Rodas5Pr/Rodas6P/Rodas42, GRK4A, GRK4T, and SSPRK932; 225 in-scope public constructors remain. Phase 8 is blocked only by the missing Julia executable and still has documented dense/controller and low-order tolerance gaps.
+The shared first-order driver is frozen and all queued first-order families (explicit, implicit/TRBDF2, Rosenbrock/Rodas, low-storage, and Adams) pass. The Phase 2 audit found only `src/integrator.rs:228` as the first-order lifecycle loop; `src/second_order.rs:440` is an explicit exclusion. Phase 3 checked views, revisioned dense LU, Jacobian/operator seams, nonsingular mass operators, and one implicit caller proof are merged with unchanged compliance and allocations. Phase 4 schema/generated fixtures and Phase 5 representation foundations are merged. Phase 6 now has domain-checked Hermite segments, an accepted-step recorder service, and callback controller-history reset; solver stage-data wiring remains queued. Phase 7 now includes the previously listed solver families plus the automatic/default composite facades and `ExplicitRK`; 213 in-scope public constructors remain. Runtime stiffness switching for the new facades is explicitly deferred. Phase 8 is blocked only by the missing Julia executable and still has documented dense/controller and low-order tolerance gaps.

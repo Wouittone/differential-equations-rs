@@ -20,8 +20,8 @@ and [ode_algorithm_inventory.csv](ode_algorithm_inventory.csv).
 - In-scope regular ODE names: **345**
   (333 canonical/composite constructors and
   12 public aliases).
-- Implemented and detected in matched Julia tests: **120**.
-- Missing in-scope public names: **225**.
+- Implemented and detected in matched Julia tests: **132**.
+- Missing in-scope public names: **213**.
 - Explicitly excluded public names: **4**.
 
 Aliases are public parity obligations but do not require a second numerical kernel.
@@ -32,13 +32,13 @@ Aliases are public parity obligations but do not require a second numerical kern
 | --- | ---: | ---: | ---: |
 | Adams multistep | 13 | 12 | 1 |
 | approximate-matrix-factorization wrapper | 1 | 0 | 1 |
-| automatic/default composite | 2 | 0 | 2 |
+| automatic/default composite | 2 | 2 | 0 |
 | BDF and IMEX multistep | 15 | 4 | 11 |
-| explicit Runge-Kutta | 2 | 1 | 1 |
+| explicit Runge-Kutta | 2 | 2 | 0 |
 | exponential Runge-Kutta | 17 | 0 | 17 |
 | extrapolation | 7 | 0 | 7 |
 | fully implicit Runge-Kutta | 5 | 0 | 5 |
-| high-order explicit Runge-Kutta | 16 | 4 | 12 |
+| high-order explicit Runge-Kutta | 16 | 8 | 8 |
 | IMEX multistep | 2 | 0 | 2 |
 | linear and Lie-group methods | 18 | 0 | 18 |
 | low-order explicit Runge-Kutta | 28 | 27 | 1 |
@@ -48,10 +48,10 @@ Aliases are public parity obligations but do not require a second numerical kern
 | parallel diagonally implicit Runge-Kutta | 1 | 0 | 1 |
 | parallel explicit Runge-Kutta | 1 | 0 | 1 |
 | QPRK explicit Runge-Kutta | 1 | 0 | 1 |
-| Rosenbrock and Rosenbrock-W | 40 | 26 | 14 |
+| Rosenbrock and Rosenbrock-W | 40 | 29 | 11 |
 | Runge-Kutta interval prediction | 1 | 0 | 1 |
 | Runge-Kutta-Nystrom | 17 | 0 | 17 |
-| SDIRK, ESDIRK, and additive IMEX RK | 39 | 5 | 34 |
+| SDIRK, ESDIRK, and additive IMEX RK | 39 | 6 | 33 |
 | second-order structural dynamics | 2 | 0 | 2 |
 | SIMD explicit Runge-Kutta | 3 | 0 | 3 |
 | stabilized explicit Runge-Kutta | 13 | 0 | 13 |
@@ -59,7 +59,7 @@ Aliases are public parity obligations but do not require a second numerical kern
 | strong-stability-preserving Runge-Kutta | 21 | 20 | 1 |
 | symplectic and partitioned Runge-Kutta | 18 | 4 | 14 |
 | Taylor series | 3 | 0 | 3 |
-| user-tableau explicit Runge-Kutta | 1 | 0 | 1 |
+| user-tableau explicit Runge-Kutta | 1 | 1 | 0 |
 
 ## Remaining solver names by family
 
@@ -76,11 +76,6 @@ the JSON/CSV records.
 
 - `AMF` — OrdinaryDiffEqAMF; ODEProblem with structured ODEFunction
 
-### automatic/default composite (2)
-
-- `DefaultImplicitODEAlgorithm` — OrdinaryDiffEqDefault; ODEProblem
-- `DefaultODEAlgorithm` — OrdinaryDiffEqDefault; ODEProblem
-
 ### BDF and IMEX multistep (11)
 
 - `FBDF` — OrdinaryDiffEqBDF; ODEProblem
@@ -94,10 +89,6 @@ the JSON/CSV records.
 - `SBDF2` — OrdinaryDiffEqBDF; ODEProblem or SplitODEProblem
 - `SBDF3` — OrdinaryDiffEqBDF; ODEProblem or SplitODEProblem
 - `SBDF4` — OrdinaryDiffEqBDF; ODEProblem or SplitODEProblem
-
-### explicit Runge-Kutta (1)
-
-- `AutoTsit5` — OrdinaryDiffEqTsit5; ODEProblem
 
 ### exponential Runge-Kutta (17)
 
@@ -137,12 +128,8 @@ the JSON/CSV records.
 - `RadauIIA5` — OrdinaryDiffEqFIRK; ODEProblem
 - `RadauIIA9` — OrdinaryDiffEqFIRK; ODEProblem
 
-### high-order explicit Runge-Kutta (12)
+### high-order explicit Runge-Kutta (8)
 
-- `AutoVern6` — OrdinaryDiffEqVerner; ODEProblem
-- `AutoVern7` — OrdinaryDiffEqVerner; ODEProblem
-- `AutoVern8` — OrdinaryDiffEqVerner; ODEProblem
-- `AutoVern9` — OrdinaryDiffEqVerner; ODEProblem
 - `DP8` — OrdinaryDiffEqHighOrderRK; ODEProblem
 - `Feagin10` — OrdinaryDiffEqFeagin; ODEProblem
 - `Feagin12` — OrdinaryDiffEqFeagin; ODEProblem
@@ -243,16 +230,13 @@ the JSON/CSV records.
 
 - `QPRK98` — OrdinaryDiffEqQPRK; ODEProblem
 
-### Rosenbrock and Rosenbrock-W (14)
+### Rosenbrock and Rosenbrock-W (11)
 
 - `HybridExplicitImplicitRK` — OrdinaryDiffEqRosenbrock; ODEProblem
 - `Rodas3P` — OrdinaryDiffEqRosenbrock; ODEProblem
-- `Rodas4P2` — OrdinaryDiffEqRosenbrock; ODEProblem
-- `ROK4a` — OrdinaryDiffEqRosenbrock; ODEProblem
 - `ROS2PR` — OrdinaryDiffEqRosenbrock; ODEProblem
 - `ROS2S` — OrdinaryDiffEqRosenbrock; ODEProblem
 - `ROS34PW1a` — OrdinaryDiffEqRosenbrock; ODEProblem
-- `ROS3PRL2` — OrdinaryDiffEqRosenbrock; ODEProblem
 - `Ros4LStab` — OrdinaryDiffEqRosenbrock; ODEProblem
 - `RosShamp4` — OrdinaryDiffEqRosenbrock; ODEProblem
 - `Scholz4_7` — OrdinaryDiffEqRosenbrock; ODEProblem
@@ -284,14 +268,13 @@ the JSON/CSV records.
 - `Nystrom5VelocityIndependent` — OrdinaryDiffEqRKN; SecondOrderODEProblem or DynamicalODEProblem
 - `RKN4` — OrdinaryDiffEqRKN; SecondOrderODEProblem or DynamicalODEProblem
 
-### SDIRK, ESDIRK, and additive IMEX RK (34)
+### SDIRK, ESDIRK, and additive IMEX RK (33)
 
 - `ARS222` — OrdinaryDiffEqSDIRK; ODEProblem or SplitODEProblem
 - `ARS232` — OrdinaryDiffEqSDIRK; ODEProblem or SplitODEProblem
 - `ARS343` — OrdinaryDiffEqSDIRK; ODEProblem or SplitODEProblem
 - `ARS443` — OrdinaryDiffEqSDIRK; ODEProblem or SplitODEProblem
 - `BHR553` — OrdinaryDiffEqSDIRK; ODEProblem or SplitODEProblem
-- `Cash4` — OrdinaryDiffEqSDIRK; ODEProblem
 - `CFNLIRK3` — OrdinaryDiffEqSDIRK; ODEProblem
 - `ESDIRK325L2SA` — OrdinaryDiffEqSDIRK; ODEProblem
 - `ESDIRK436L2SA2` — OrdinaryDiffEqSDIRK; ODEProblem
@@ -378,10 +361,6 @@ the JSON/CSV records.
 - `ExplicitTaylor` — OrdinaryDiffEqTaylorSeries; ODEProblem
 - `ExplicitTaylor2` — OrdinaryDiffEqTaylorSeries; ODEProblem
 - `ExplicitTaylorAdaptiveOrder` — OrdinaryDiffEqTaylorSeries; ODEProblem
-
-### user-tableau explicit Runge-Kutta (1)
-
-- `ExplicitRK` — OrdinaryDiffEqExplicitRK; ODEProblem
 
 ## Aliases
 
