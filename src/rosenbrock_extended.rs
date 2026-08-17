@@ -230,6 +230,51 @@ pub struct RosenbrockW6S4OS;
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Rodas23W;
 
+/// The five-stage, third-order parabolic Rodas3P method.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct Rodas3P;
+
+/// The three-stage, second-order stiffly accurate ROS2PR method.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct Ros2Pr;
+
+/// The three-stage, second-order Rosenbrock-W ROS2S method.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct Ros2S;
+
+/// The four-stage, fourth-order ROS34PW1a Rosenbrock-W method.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct Ros34Pw1a;
+
+/// The four-stage, fourth-order L-stable Ros4LStab method.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct Ros4LStab;
+
+/// The four-stage, fourth-order A-stable Shampine Rosenbrock method.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct RosShamp4;
+
+/// The three-stage Scholz4_7 Rosenbrock method.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct Scholz4_7;
+
+/// The four-stage, fourth-order D-stable Veldd4 Rosenbrock method.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct Veldd4;
+
+/// The four-stage, fourth-order A-stable Velds4 Rosenbrock-W method.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct Velds4;
+
+/// The generic hybrid explicit/linear-implicit Rosenbrock method.
+///
+/// The native regular-ODE instantiation is [`Tsit5DA`].
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct HybridExplicitImplicitRK;
+
+/// The Tsit5DA fifth-order hybrid explicit/linear-implicit method.
+pub type Tsit5DA = HybridExplicitImplicitRK;
+
 struct RodasTableau {
     stages: usize,
     gamma: f64,
@@ -3096,6 +3141,794 @@ const RODAS23W_TABLEAU: RodasTableau = RodasTableau {
     error_weights: RODAS23W_E,
 };
 
+// Rodas3PRodasTableau(T, T2), ROS2PRRodasTableau(T, T2), and the remaining
+// tableaus below are from the pinned OrdinaryDiffEq Rosenbrock sources.
+const RODAS3P_A: &[f64] = &[
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    4.0 / 3.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    2.90625,
+    3.375,
+    0.40625,
+    0.0,
+    0.0,
+    2.90625,
+    3.375,
+    0.40625,
+    0.0,
+    0.0,
+];
+const RODAS3P_C: &[f64] = &[
+    0.0, 0.0, 0.0, 0.0, 0.0, -4.0, 0.0, 0.0, 0.0, 0.0, 8.25, 6.75, 0.0, 0.0, 0.0, 1.21875, -5.0625,
+    -1.96875, 0.0, 0.0, 4.03125, -15.1875, -4.03125, 6.0, 0.0,
+];
+const RODAS3P_NODES: &[f64] = &[0.0, 4.0 / 9.0, 0.0, 1.0, 1.0];
+const RODAS3P_D: &[f64] = &[1.0 / 3.0, -1.0 / 9.0, 1.0, 0.0, 0.0];
+const RODAS3P_B: &[f64] = &[2.90625, 3.375, 0.40625, 0.0, 1.0];
+const RODAS3P_E: &[f64] = &[0.0, 0.0, 0.0, -1.0, 1.0];
+const RODAS3P_TABLEAU: RodasTableau = RodasTableau {
+    stages: 5,
+    gamma: 1.0 / 3.0,
+    a: RODAS3P_A,
+    c_matrix: RODAS3P_C,
+    nodes: RODAS3P_NODES,
+    time_weights: RODAS3P_D,
+    weights: RODAS3P_B,
+    error_weights: RODAS3P_E,
+};
+
+const ROS2PR_A: &[f64] = &[
+    0.0,
+    0.0,
+    0.0,
+    4.382975767906234,
+    0.0,
+    0.0,
+    4.382975767906234,
+    4.382975767906234,
+    0.0,
+];
+const ROS2PR_C: &[f64] = &[
+    0.0,
+    0.0,
+    0.0,
+    -4.382975767906234,
+    0.0,
+    0.0,
+    -4.382975767906234,
+    -16.827500814147,
+    0.0,
+];
+const ROS2PR_NODES: &[f64] = &[0.0, 1.0, 1.0];
+const ROS2PR_D: &[f64] = &[0.228155493653962, 0.0, -2.7755575615628914e-17];
+const ROS2PR_B: &[f64] = &[4.382975767906234, 4.382975767906234, 1.0];
+const ROS2PR_E: &[f64] = &[-9.968705307220848e-18, 3.3829757679062333, 1.0];
+const ROS2PR_TABLEAU: RodasTableau = RodasTableau {
+    stages: 3,
+    gamma: 0.228155493653962,
+    a: ROS2PR_A,
+    c_matrix: ROS2PR_C,
+    nodes: ROS2PR_NODES,
+    time_weights: ROS2PR_D,
+    weights: ROS2PR_B,
+    error_weights: ROS2PR_E,
+};
+
+const ROS2S_A: &[f64] = &[
+    0.0,
+    0.0,
+    0.0,
+    2.0000000000000036,
+    0.0,
+    0.0,
+    6.828427124746214,
+    3.4142135623731007,
+    0.0,
+];
+const ROS2S_C: &[f64] = &[
+    0.0,
+    0.0,
+    0.0,
+    -6.828427124746214,
+    0.0,
+    0.0,
+    -10.949747468305889,
+    -7.535533905932761,
+    0.0,
+];
+const ROS2S_NODES: &[f64] = &[0.0, 0.585786437626905, 1.0];
+const ROS2S_D: &[f64] = &[
+    0.292893218813452,
+    -0.292893218813453,
+    -5.551115123125783e-17,
+];
+const ROS2S_B: &[f64] = &[6.828427124746214, 3.414213562373101, 1.0];
+const ROS2S_E: &[f64] = &[
+    -0.23570226039551292,
+    -0.23570226039551567,
+    -0.13807118745769906,
+];
+const ROS2S_TABLEAU: RodasTableau = RodasTableau {
+    stages: 3,
+    gamma: 0.292893218813452,
+    a: ROS2S_A,
+    c_matrix: ROS2S_C,
+    nodes: ROS2S_NODES,
+    time_weights: ROS2S_D,
+    weights: ROS2S_B,
+    error_weights: ROS2S_E,
+};
+
+const ROS34PW1A_A: &[f64] = &[
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    5.0905205106702045,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    4.005173696367865,
+    0.19316470237944158,
+    1.147140180139521,
+    0.0,
+];
+const ROS34PW1A_C: &[f64] = &[
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    -11.679081231228288,
+    0.0,
+    0.0,
+    0.0,
+    -0.7100952636543062,
+    -0.04165460771675499,
+    0.0,
+    0.0,
+    -11.979557762226603,
+    -0.48054400523894975,
+    1.4350493021655284,
+    0.0,
+];
+const ROS34PW1A_NODES: &[f64] = &[0.0, 2.218787467653286, 0.0, 1.7837037931914073];
+const ROS34PW1A_D: &[f64] = &[
+    0.435866521508459,
+    -1.7829209461448272,
+    0.33333333333333337,
+    -1.258070496147625,
+];
+const ROS34PW1A_B: &[f64] = &[
+    6.1538321465310215,
+    -0.8364233759732359,
+    -0.8614792120957679,
+    2.294280360279042,
+];
+const ROS34PW1A_E: &[f64] = &[-5.429679341539398, -1.3273810331413745, 0.0, 0.0];
+const ROS34PW1A_TABLEAU: RodasTableau = RodasTableau {
+    stages: 4,
+    gamma: 0.435866521508459,
+    a: ROS34PW1A_A,
+    c_matrix: ROS34PW1A_C,
+    nodes: ROS34PW1A_NODES,
+    time_weights: ROS34PW1A_D,
+    weights: ROS34PW1A_B,
+    error_weights: ROS34PW1A_E,
+};
+
+const ROS4LSTAB_A: &[f64] = &[
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    2.0,
+    0.0,
+    0.0,
+    0.0,
+    1.867943637803922,
+    0.2344449711399156,
+    0.0,
+    0.0,
+    1.867943637803922,
+    0.2344449711399156,
+    0.0,
+    0.0,
+];
+const ROS4LSTAB_C: &[f64] = &[
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    -7.13761503641231,
+    0.0,
+    0.0,
+    0.0,
+    2.580708087951457,
+    0.6515950076447975,
+    0.0,
+    0.0,
+    -2.137148994382534,
+    -0.3214669691237626,
+    -0.6949742501781779,
+    0.0,
+];
+const ROS4LSTAB_NODES: &[f64] = &[0.0, 1.14564, 0.65521686381559, 0.65521686381559];
+const ROS4LSTAB_D: &[f64] = &[
+    0.57282,
+    -1.769193891319233,
+    0.7592633437920482,
+    -0.104902108710045,
+];
+const ROS4LSTAB_B: &[f64] = &[
+    2.255570073418735,
+    0.2870493262186792,
+    0.435317943184018,
+    1.093502252409163,
+];
+const ROS4LSTAB_E: &[f64] = &[
+    -0.2815431932141155,
+    -0.0727619912493892,
+    -0.1082196201495311,
+    -1.093502252409163,
+];
+const ROS4LSTAB_TABLEAU: RodasTableau = RodasTableau {
+    stages: 4,
+    gamma: 0.57282,
+    a: ROS4LSTAB_A,
+    c_matrix: ROS4LSTAB_C,
+    nodes: ROS4LSTAB_NODES,
+    time_weights: ROS4LSTAB_D,
+    weights: ROS4LSTAB_B,
+    error_weights: ROS4LSTAB_E,
+};
+
+const ROSSHAMP4_A: &[f64] = &[
+    0.0, 0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 1.92, 0.24, 0.0, 0.0, 1.92, 0.24, 0.0, 0.0,
+];
+const ROSSHAMP4_C: &[f64] = &[
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    -8.0,
+    0.0,
+    0.0,
+    0.0,
+    372.0 / 25.0,
+    12.0 / 5.0,
+    0.0,
+    0.0,
+    -112.0 / 125.0,
+    -54.0 / 125.0,
+    -2.0 / 5.0,
+    0.0,
+];
+const ROSSHAMP4_NODES: &[f64] = &[0.0, 1.0, 0.6, 0.6];
+const ROSSHAMP4_D: &[f64] = &[0.5, -1.5, 121.0 / 50.0, 29.0 / 250.0];
+const ROSSHAMP4_B: &[f64] = &[19.0 / 9.0, 0.5, 25.0 / 108.0, 125.0 / 108.0];
+const ROSSHAMP4_E: &[f64] = &[17.0 / 54.0, 7.0 / 36.0, 0.0, 125.0 / 108.0];
+const ROSSHAMP4_TABLEAU: RodasTableau = RodasTableau {
+    stages: 4,
+    gamma: 0.5,
+    a: ROSSHAMP4_A,
+    c_matrix: ROSSHAMP4_C,
+    nodes: ROSSHAMP4_NODES,
+    time_weights: ROSSHAMP4_D,
+    weights: ROSSHAMP4_B,
+    error_weights: ROSSHAMP4_E,
+};
+
+const SCHOLZ4_7_A: &[f64] = &[
+    0.0,
+    0.0,
+    0.0,
+    3.0,
+    0.0,
+    0.0,
+    4.120834875401151,
+    1.2679491924311226,
+    0.0,
+];
+const SCHOLZ4_7_C: &[f64] = &[
+    0.0,
+    0.0,
+    0.0,
+    -3.80384757729337,
+    0.0,
+    0.0,
+    -6.310062633644914,
+    -1.7746264440079669,
+    0.0,
+];
+const SCHOLZ4_7_NODES: &[f64] = &[0.0, 2.36602540378444, 1.25];
+const SCHOLZ4_7_D: &[f64] = &[0.788675134594813, -1.577350269189627, -0.928571905524962];
+const SCHOLZ4_7_B: &[f64] = &[4.096775673951863, 0.953252779460065, 0.7833659121534696];
+const SCHOLZ4_7_E: &[f64] = &[
+    0.3028225394953986,
+    -0.06093909935296366,
+    0.36071618134309585,
+];
+const SCHOLZ4_7_TABLEAU: RodasTableau = RodasTableau {
+    stages: 3,
+    gamma: 0.788675134594813,
+    a: SCHOLZ4_7_A,
+    c_matrix: SCHOLZ4_7_C,
+    nodes: SCHOLZ4_7_NODES,
+    time_weights: SCHOLZ4_7_D,
+    weights: SCHOLZ4_7_B,
+    error_weights: SCHOLZ4_7_E,
+};
+
+const VELDD4_A: &[f64] = &[
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    2.0,
+    0.0,
+    0.0,
+    0.0,
+    4.812234362695436,
+    4.578146956747842,
+    0.0,
+    0.0,
+    4.812234362695436,
+    4.578146956747842,
+    0.0,
+    0.0,
+];
+const VELDD4_C: &[f64] = &[
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    -5.333333333333331,
+    0.0,
+    0.0,
+    0.0,
+    6.100529678848254,
+    1.804736797378427,
+    0.0,
+    0.0,
+    -2.540515456634749,
+    -9.443746328915205,
+    -1.988471753215993,
+    0.0,
+];
+const VELDD4_NODES: &[f64] = &[
+    0.0,
+    0.4514162296451364,
+    0.8755928946018455,
+    0.8755928946018455,
+];
+const VELDD4_D: &[f64] = &[
+    0.2257081148225682,
+    -0.04599403502680582,
+    0.5177590504944076,
+    -0.03805623938054428,
+];
+const VELDD4_B: &[f64] = &[
+    4.289339254654537,
+    5.036098482851414,
+    0.6085736420673917,
+    1.355958941201148,
+];
+const VELDD4_E: &[f64] = &[
+    2.175672787531755,
+    2.950911222575741,
+    -0.785974454488743,
+    -1.355958941201148,
+];
+const VELDD4_TABLEAU: RodasTableau = RodasTableau {
+    stages: 4,
+    gamma: 0.2257081148225682,
+    a: VELDD4_A,
+    c_matrix: VELDD4_C,
+    nodes: VELDD4_NODES,
+    time_weights: VELDD4_D,
+    weights: VELDD4_B,
+    error_weights: VELDD4_E,
+};
+
+const VELDS4_A: &[f64] = &[
+    0.0, 0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 1.75, 0.25, 0.0, 0.0, 1.75, 0.25, 0.0, 0.0,
+];
+const VELDS4_C: &[f64] = &[
+    0.0, 0.0, 0.0, 0.0, -8.0, 0.0, 0.0, 0.0, -8.0, -1.0, 0.0, 0.0, 0.5, -0.5, 2.0, 0.0,
+];
+const VELDS4_NODES: &[f64] = &[0.0, 1.0, 0.5, 0.5];
+const VELDS4_D: &[f64] = &[0.5, -1.5, -0.75, 0.25];
+const VELDS4_B: &[f64] = &[4.0 / 3.0, 2.0 / 3.0, -4.0 / 3.0, 4.0 / 3.0];
+const VELDS4_E: &[f64] = &[-1.0 / 3.0, -1.0 / 3.0, 0.0, -4.0 / 3.0];
+const VELDS4_TABLEAU: RodasTableau = RodasTableau {
+    stages: 4,
+    gamma: 0.5,
+    a: VELDS4_A,
+    c_matrix: VELDS4_C,
+    nodes: VELDS4_NODES,
+    time_weights: VELDS4_D,
+    weights: VELDS4_B,
+    error_weights: VELDS4_E,
+};
+
+// Tsit5DATableau(T, T2) reduced to the regular ODE path. The hybrid tableau
+// has an explicit A matrix and a lower-triangular Gamma matrix; the shared
+// Rosenbrock driver uses the same representation for its ODE specialization.
+const TSIT5DA_A: &[f64] = &[
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.3,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.4,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.161,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    -0.008480655492356989,
+    0.0,
+    0.0,
+    0.335480655492357,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    2.8971530571054935,
+    0.0,
+    0.0,
+    -6.359448489975075,
+    4.3622954328695815,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    5.325864828439257,
+    0.0,
+    0.0,
+    -11.748883564062828,
+    7.4955393428898365,
+    -0.09249506636175525,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    5.86145544294642,
+    0.0,
+    0.0,
+    -12.92096931784711,
+    8.159367898576159,
+    -0.071584973281401,
+    -0.028269050394068383,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.09646076681806523,
+    0.0,
+    0.0,
+    0.01,
+    0.4798896504144996,
+    1.379008574103742,
+    -3.290069515436081,
+    2.324710524099774,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.09468075576583945,
+    0.0,
+    0.0,
+    0.009183565540343254,
+    0.4877705284247616,
+    1.234297566930479,
+    -2.7077123499835256,
+    1.866628418170587,
+    0.015151515151515152,
+    0.0,
+    0.0,
+    0.0,
+    0.09646076681806523,
+    0.0,
+    0.0,
+    0.01,
+    0.4798896504144996,
+    1.379008574103742,
+    -3.290069515436081,
+    2.324710524099774,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.09468075576583945,
+    0.0,
+    0.0,
+    0.009183565540343254,
+    0.4877705284247616,
+    1.234297566930479,
+    -2.7077123499835256,
+    1.866628418170587,
+    -0.13484848484848483,
+    0.0,
+    0.15,
+    0.0,
+];
+const TSIT5DA_C: &[f64] = &[
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.5470689774431368,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    -0.0723537422175421,
+    0.0666666666666667,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    -0.11997574346406034,
+    -0.20497635844374418,
+    0.1257585188328081,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.3751214208728726,
+    -0.6896518858336065,
+    0.355777003175544,
+    0.09308620463102296,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    -2.339423457351162,
+    -1.8924202822866893,
+    1.3476713525236836,
+    7.143916166630147,
+    -3.8352059902547007,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    -4.632327787862374,
+    -0.9275563213580595,
+    1.3114822266754764,
+    12.288465257549579,
+    -7.550172308571812,
+    0.11237010207373185,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    -5.308384000531637,
+    -1.235796359903477,
+    1.4327893840055572,
+    13.611173348816065,
+    -8.203424318957262,
+    0.23478742833475824,
+    -0.06966253474809248,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.6035096617978578,
+    3.7030920005107406,
+    9.236101686975612,
+    1.1223090015867678,
+    -8.707588403514192,
+    -10.01583191268519,
+    3.226138565592647,
+    3.563871912389068,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.5358920454864625,
+    0.5149989566328188,
+    -2.906166595272873,
+    0.28758667283221606,
+    0.4409793917839428,
+    -1.2462207699816854,
+    2.8597299754852776,
+    -1.7759657086671305,
+    0.7624212212647992,
+    0.0,
+    0.0,
+    0.0,
+    -0.0017800110522257773,
+    0.0,
+    0.0,
+    -0.0008164344596567463,
+    0.007880878010261994,
+    -0.1447110071732629,
+    0.5823571654525552,
+    -0.45808210592918686,
+    -0.13484848484848483,
+    0.0,
+    0.0,
+    0.0,
+    0.0017800110522257773,
+    0.0,
+    0.0,
+    0.0008164344596567463,
+    -0.007880878010261994,
+    0.1447110071732629,
+    -0.5823571654525552,
+    0.45808210592918686,
+    0.13484848484848483,
+    -0.15,
+    -0.15,
+    0.0,
+];
+const TSIT5DA_NODES: &[f64] = &[
+    0.0,
+    0.3,
+    0.4,
+    0.161,
+    0.327,
+    0.9,
+    0.9800255409045114,
+    0.9999990000000002,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+];
+const TSIT5DA_D: &[f64] = &[
+    0.15,
+    0.6970689774431368,
+    0.1443129244491246,
+    -0.04919358307499642,
+    0.2843274226367331,
+    0.5745377892612785,
+    0.7522611681065419,
+    0.6114829470159118,
+    2.881602512653311,
+    -0.376744810436172,
+    0.0,
+    0.0,
+];
+const TSIT5DA_B: &[f64] = &[
+    0.09646076681806523,
+    0.0,
+    0.0,
+    0.01,
+    0.4798896504144996,
+    1.379008574103742,
+    -3.290069515436081,
+    2.324710524099774,
+    0.0,
+    -0.15,
+    0.0,
+    0.15,
+];
+const TSIT5DA_E: &[f64] = &[
+    0.0017800110522257773,
+    0.0,
+    0.0,
+    0.0008164344596567463,
+    -0.007880878010261994,
+    0.1447110071732629,
+    -0.5823571654525552,
+    0.45808210592918686,
+    0.13484848484848483,
+    -0.15,
+    -0.15,
+    0.15,
+];
+const TSIT5DA_TABLEAU: RodasTableau = RodasTableau {
+    stages: 12,
+    gamma: 0.15,
+    a: TSIT5DA_A,
+    c_matrix: TSIT5DA_C,
+    nodes: TSIT5DA_NODES,
+    time_weights: TSIT5DA_D,
+    weights: TSIT5DA_B,
+    error_weights: TSIT5DA_E,
+};
+
 #[allow(clippy::too_many_arguments)]
 trait ExtendedRosenbrockMethod {
     const ERROR_ORDER: usize;
@@ -3164,6 +3997,7 @@ algorithm!(Rodas5Pr);
 algorithm!(Rodas6P);
 algorithm!(RosenbrockW6S4OS);
 algorithm!(Rodas23W);
+algorithm!(HybridExplicitImplicitRK);
 
 impl ExtendedRosenbrockMethod for Rosenbrock32 {
     const ERROR_ORDER: usize = 3;
@@ -3241,6 +4075,16 @@ rodas_method!(Rodas5P, 5, RODAS5P_TABLEAU);
 rodas_method!(Rodas5Pe, 5, RODAS5PE_TABLEAU);
 rodas_method!(Rodas6P, 6, RODAS6P_TABLEAU);
 rodas_method!(Rodas23W, 3, RODAS23W_TABLEAU);
+rodas_method!(Rodas3P, 3, RODAS3P_TABLEAU);
+rodas_method!(Ros2Pr, 2, ROS2PR_TABLEAU);
+rodas_method!(Ros2S, 2, ROS2S_TABLEAU);
+rodas_method!(Ros34Pw1a, 3, ROS34PW1A_TABLEAU);
+rodas_method!(Ros4LStab, 4, ROS4LSTAB_TABLEAU);
+rodas_method!(RosShamp4, 4, ROSSHAMP4_TABLEAU);
+rodas_method!(Scholz4_7, 4, SCHOLZ4_7_TABLEAU);
+rodas_method!(Veldd4, 4, VELDD4_TABLEAU);
+rodas_method!(Velds4, 4, VELDS4_TABLEAU);
+rodas_method!(HybridExplicitImplicitRK, 5, TSIT5DA_TABLEAU);
 
 impl ExtendedRosenbrockMethod for Rodas5Pr {
     const ERROR_ORDER: usize = 5;
