@@ -26,9 +26,11 @@ The working goals are:
 The solver target is native OrdinaryDiffEq.jl **ODE algorithm parity**.
 SDEs, RODEs, DDEs, DAEs, boundary-value problems, and external solver wrappers
 are explicitly out of scope. Basic discrete and continuous event callbacks and
-`save_at` sampling are implemented; dense high-order interpolation, arbitrary
-numeric types, and sensitivities remain separate API features and are not
-implied by algorithm parity.
+`save_at` sampling are implemented. Tsit5 and DPRKN6 have method-specific
+high-order interpolation, with retained post-solve Tsit5 segments; dense
+extensions for the other method families, arbitrary numeric types, and
+sensitivities remain separate API features and are not implied by algorithm
+parity.
 
 ## Method
 
@@ -97,7 +99,7 @@ If the pin check fails after cloning or changing Julia dependencies, run the
 same `pinned_environment.jl` command without `--check` once to bind the full
 OrdinaryDiffEq subpackage closure to the reference Git revision.
 
-Run the matched steady-state benchmark matrix with:
+Run the matched 31-algorithm steady-state benchmark matrix with:
 
 ```powershell
 ./benchmarks/run.ps1 -Repetitions 20
@@ -131,11 +133,13 @@ policy and interpretation are in
 - [x] Expand to variable Adams, Verner, low-storage/SSP RK, TRBDF2,
       Rosenbrock/Rodas, and initial second-order symplectic families.
 - [ ] Port all remaining native OrdinaryDiffEq.jl ODE algorithm families.
-- [ ] Establish matched runtime and peak-memory benchmarks.
+- [x] Establish matched runtime/allocation benchmarks and a reproducible
+      peak-RSS cloud harness.
 - [x] Add basic discrete/continuous callbacks and save-at behavior.
-- [ ] Add method-specific high-order dense output.
-- [ ] Select a stiff solver based on benchmark coverage, likely
-      `Rosenbrock23` or `Rodas5P`.
+- [ ] Complete method-specific high-order dense output, continuous-root
+      interpolation, and retained post-solve dense segments.
+- [x] Select `Rodas5P` as the default stiff solver for the current regular-ODE
+      scope from the matched stiff-candidate benchmark slice.
 
 The unattended implementation runbook is in
 [`docs/OVERNIGHT_EXECUTION_PLAN.md`](docs/OVERNIGHT_EXECUTION_PLAN.md). Agent

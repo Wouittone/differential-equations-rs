@@ -20,9 +20,9 @@ and [ode_algorithm_inventory.csv](ode_algorithm_inventory.csv).
 - In-scope regular ODE names: **345**
   (333 canonical/composite constructors and
   12 public aliases).
-- Implemented and detected in matched Julia tests: **140**.
-- Implemented without a detected matched Julia test: **91**.
-- Missing in-scope public names: **114**.
+- Implemented and detected in matched Julia tests: **264**.
+- Implemented without a detected matched Julia test: **0**.
+- Missing in-scope public names: **81**.
 - Explicitly excluded public names: **4**.
 
 Aliases are public parity obligations but do not require a second numerical kernel.
@@ -34,7 +34,7 @@ Aliases are public parity obligations but do not require a second numerical kern
 | Adams multistep | 13 | 12 | 0 | 1 |
 | approximate-matrix-factorization wrapper | 1 | 0 | 0 | 1 |
 | automatic/default composite | 2 | 2 | 0 | 0 |
-| BDF and IMEX multistep | 15 | 4 | 0 | 11 |
+| BDF and IMEX multistep | 15 | 9 | 0 | 6 |
 | explicit Runge-Kutta | 2 | 2 | 0 | 0 |
 | exponential Runge-Kutta | 17 | 0 | 0 | 17 |
 | extrapolation | 7 | 0 | 0 | 7 |
@@ -42,23 +42,23 @@ Aliases are public parity obligations but do not require a second numerical kern
 | high-order explicit Runge-Kutta | 16 | 16 | 0 | 0 |
 | IMEX multistep | 2 | 0 | 0 | 2 |
 | linear and Lie-group methods | 18 | 0 | 0 | 18 |
-| low-order explicit Runge-Kutta | 28 | 27 | 0 | 1 |
-| low-storage explicit Runge-Kutta | 44 | 17 | 27 | 0 |
+| low-order explicit Runge-Kutta | 28 | 28 | 0 | 0 |
+| low-storage explicit Runge-Kutta | 44 | 44 | 0 | 0 |
 | multirate and MRI-GARK | 9 | 0 | 0 | 9 |
 | Nordsieck variable-order multistep | 4 | 0 | 0 | 4 |
 | parallel diagonally implicit Runge-Kutta | 1 | 0 | 0 | 1 |
-| parallel explicit Runge-Kutta | 1 | 0 | 0 | 1 |
-| QPRK explicit Runge-Kutta | 1 | 0 | 0 | 1 |
-| Rosenbrock and Rosenbrock-W | 40 | 29 | 11 | 0 |
+| parallel explicit Runge-Kutta | 1 | 1 | 0 | 0 |
+| QPRK explicit Runge-Kutta | 1 | 1 | 0 | 0 |
+| Rosenbrock and Rosenbrock-W | 40 | 40 | 0 | 0 |
 | Runge-Kutta interval prediction | 1 | 0 | 0 | 1 |
-| Runge-Kutta-Nystrom | 17 | 0 | 0 | 17 |
-| SDIRK, ESDIRK, and additive IMEX RK | 39 | 6 | 33 | 0 |
+| Runge-Kutta-Nystrom | 17 | 17 | 0 | 0 |
+| SDIRK, ESDIRK, and additive IMEX RK | 39 | 39 | 0 | 0 |
 | second-order structural dynamics | 2 | 0 | 0 | 2 |
 | SIMD explicit Runge-Kutta | 3 | 0 | 0 | 3 |
-| stabilized explicit Runge-Kutta | 13 | 0 | 6 | 7 |
+| stabilized explicit Runge-Kutta | 13 | 13 | 0 | 0 |
 | stabilized implicit Runge-Kutta | 1 | 0 | 0 | 1 |
-| strong-stability-preserving Runge-Kutta | 21 | 20 | 0 | 1 |
-| symplectic and partitioned Runge-Kutta | 18 | 4 | 14 | 0 |
+| strong-stability-preserving Runge-Kutta | 21 | 21 | 0 | 0 |
+| symplectic and partitioned Runge-Kutta | 18 | 18 | 0 | 0 |
 | Taylor series | 3 | 0 | 0 | 3 |
 | user-tableau explicit Runge-Kutta | 1 | 1 | 0 | 0 |
 
@@ -76,15 +76,10 @@ upstream source locations are available in the JSON/CSV records.
 
 - `AMF` — OrdinaryDiffEqAMF; ODEProblem with structured ODEFunction
 
-### BDF and IMEX multistep (11)
+### BDF and IMEX multistep (6)
 
-- `FBDF` — OrdinaryDiffEqBDF; ODEProblem
 - `IMEXEuler` — OrdinaryDiffEqBDF; ODEProblem or SplitODEProblem
 - `IMEXEulerARK` — OrdinaryDiffEqBDF; ODEProblem or SplitODEProblem
-- `QBDF` — OrdinaryDiffEqBDF; ODEProblem
-- `QBDF1` — OrdinaryDiffEqBDF; ODEProblem
-- `QBDF2` — OrdinaryDiffEqBDF; ODEProblem
-- `QNDF` — OrdinaryDiffEqBDF; ODEProblem
 - `SBDF` — OrdinaryDiffEqBDF; ODEProblem or SplitODEProblem
 - `SBDF2` — OrdinaryDiffEqBDF; ODEProblem or SplitODEProblem
 - `SBDF3` — OrdinaryDiffEqBDF; ODEProblem or SplitODEProblem
@@ -154,10 +149,6 @@ upstream source locations are available in the JSON/CSV records.
 - `RKMK2` — OrdinaryDiffEqLinear; ODEProblem with linear/operator ODEFunction
 - `RKMK4` — OrdinaryDiffEqLinear; ODEProblem with linear/operator ODEFunction
 
-### low-order explicit Runge-Kutta (1)
-
-- `SplitEuler` — OrdinaryDiffEqLowOrderRK; ODEProblem or SplitODEProblem
-
 ### multirate and MRI-GARK (9)
 
 - `MIS` — OrdinaryDiffEqMultirate; SplitODEProblem
@@ -181,37 +172,9 @@ upstream source locations are available in the JSON/CSV records.
 
 - `PDIRK44` — OrdinaryDiffEqPDIRK; ODEProblem
 
-### parallel explicit Runge-Kutta (1)
-
-- `KuttaPRK2p5` — OrdinaryDiffEqPRK; ODEProblem
-
-### QPRK explicit Runge-Kutta (1)
-
-- `QPRK98` — OrdinaryDiffEqQPRK; ODEProblem
-
 ### Runge-Kutta interval prediction (1)
 
 - `RKIP` — OrdinaryDiffEqRKIP; ODEProblem
-
-### Runge-Kutta-Nystrom (17)
-
-- `DPRKN12` — OrdinaryDiffEqRKN; SecondOrderODEProblem or DynamicalODEProblem
-- `DPRKN4` — OrdinaryDiffEqRKN; SecondOrderODEProblem or DynamicalODEProblem
-- `DPRKN5` — OrdinaryDiffEqRKN; SecondOrderODEProblem or DynamicalODEProblem
-- `DPRKN6` — OrdinaryDiffEqRKN; SecondOrderODEProblem or DynamicalODEProblem
-- `DPRKN6FM` — OrdinaryDiffEqRKN; SecondOrderODEProblem or DynamicalODEProblem
-- `DPRKN8` — OrdinaryDiffEqRKN; SecondOrderODEProblem or DynamicalODEProblem
-- `ERKN4` — OrdinaryDiffEqRKN; SecondOrderODEProblem or DynamicalODEProblem
-- `ERKN5` — OrdinaryDiffEqRKN; SecondOrderODEProblem or DynamicalODEProblem
-- `ERKN7` — OrdinaryDiffEqRKN; SecondOrderODEProblem or DynamicalODEProblem
-- `FineRKN4` — OrdinaryDiffEqRKN; SecondOrderODEProblem or DynamicalODEProblem
-- `FineRKN5` — OrdinaryDiffEqRKN; SecondOrderODEProblem or DynamicalODEProblem
-- `IRKN3` — OrdinaryDiffEqRKN; SecondOrderODEProblem or DynamicalODEProblem
-- `IRKN4` — OrdinaryDiffEqRKN; SecondOrderODEProblem or DynamicalODEProblem
-- `Nystrom4` — OrdinaryDiffEqRKN; SecondOrderODEProblem or DynamicalODEProblem
-- `Nystrom4VelocityIndependent` — OrdinaryDiffEqRKN; SecondOrderODEProblem or DynamicalODEProblem
-- `Nystrom5VelocityIndependent` — OrdinaryDiffEqRKN; SecondOrderODEProblem or DynamicalODEProblem
-- `RKN4` — OrdinaryDiffEqRKN; SecondOrderODEProblem or DynamicalODEProblem
 
 ### second-order structural dynamics (2)
 
@@ -224,23 +187,9 @@ upstream source locations are available in the JSON/CSV records.
 - `MER6v2` — OrdinaryDiffEqSIMDRK; ODEProblem
 - `RK6v4` — OrdinaryDiffEqSIMDRK; ODEProblem
 
-### stabilized explicit Runge-Kutta (7)
-
-- `ESERK4` — OrdinaryDiffEqStabilizedRK; ODEProblem
-- `ESERK5` — OrdinaryDiffEqStabilizedRK; ODEProblem
-- `ROCK2` — OrdinaryDiffEqStabilizedRK; ODEProblem
-- `ROCK4` — OrdinaryDiffEqStabilizedRK; ODEProblem
-- `SERK2` — OrdinaryDiffEqStabilizedRK; ODEProblem
-- `TSRKC2` — OrdinaryDiffEqStabilizedRK; ODEProblem
-- `TSRKC3` — OrdinaryDiffEqStabilizedRK; ODEProblem
-
 ### stabilized implicit Runge-Kutta (1)
 
 - `IRKC` — OrdinaryDiffEqStabilizedIRK; ODEProblem
-
-### strong-stability-preserving Runge-Kutta (1)
-
-- `SSPRKMSVS43` — OrdinaryDiffEqSSPRK; ODEProblem
 
 ### Taylor series (3)
 
@@ -253,111 +202,7 @@ upstream source locations are available in the JSON/CSV records.
 These public Rust implementations remain outside the Julia-tested coverage
 count until a matched compliance invocation is detected.
 
-### low-storage explicit Runge-Kutta (27)
 
-- `CFRLDDRK64` — Rust `CFRLDDRK64`; OrdinaryDiffEqLowStorageRK
-- `CKLLSRK43_2` — Rust `CKLLSRK43_2`; OrdinaryDiffEqLowStorageRK
-- `CKLLSRK54_3C` — Rust `CKLLSRK54_3C`; OrdinaryDiffEqLowStorageRK
-- `CKLLSRK54_3C_3R` — Rust `CKLLSRK54_3C_3R`; OrdinaryDiffEqLowStorageRK
-- `CKLLSRK54_3M_3R` — Rust `CKLLSRK54_3M_3R`; OrdinaryDiffEqLowStorageRK
-- `CKLLSRK54_3M_4R` — Rust `CKLLSRK54_3M_4R`; OrdinaryDiffEqLowStorageRK
-- `CKLLSRK54_3N_3R` — Rust `CKLLSRK54_3N_3R`; OrdinaryDiffEqLowStorageRK
-- `CKLLSRK54_3N_4R` — Rust `CKLLSRK54_3N_4R`; OrdinaryDiffEqLowStorageRK
-- `CKLLSRK65_4M_4R` — Rust `CKLLSRK65_4M_4R`; OrdinaryDiffEqLowStorageRK
-- `CKLLSRK75_4M_5R` — Rust `CKLLSRK75_4M_5R`; OrdinaryDiffEqLowStorageRK
-- `CKLLSRK85_4C_3R` — Rust `CKLLSRK85_4C_3R`; OrdinaryDiffEqLowStorageRK
-- `CKLLSRK85_4FM_4R` — Rust `CKLLSRK85_4FM_4R`; OrdinaryDiffEqLowStorageRK
-- `CKLLSRK85_4M_3R` — Rust `CKLLSRK85_4M_3R`; OrdinaryDiffEqLowStorageRK
-- `CKLLSRK85_4P_3R` — Rust `CKLLSRK85_4P_3R`; OrdinaryDiffEqLowStorageRK
-- `CKLLSRK95_4C` — Rust `CKLLSRK95_4C`; OrdinaryDiffEqLowStorageRK
-- `CKLLSRK95_4M` — Rust `CKLLSRK95_4M`; OrdinaryDiffEqLowStorageRK
-- `CKLLSRK95_4S` — Rust `CKLLSRK95_4S`; OrdinaryDiffEqLowStorageRK
-- `RDPK3Sp35` — Rust `RDPK3Sp35`; OrdinaryDiffEqLowStorageRK
-- `RDPK3Sp49` — Rust `RDPK3Sp49`; OrdinaryDiffEqLowStorageRK
-- `RDPK3Sp510` — Rust `RDPK3Sp510`; OrdinaryDiffEqLowStorageRK
-- `RDPK3SpFSAL35` — Rust `RDPK3SpFSAL35`; OrdinaryDiffEqLowStorageRK
-- `RDPK3SpFSAL49` — Rust `RDPK3SpFSAL49`; OrdinaryDiffEqLowStorageRK
-- `RDPK3SpFSAL510` — Rust `RDPK3SpFSAL510`; OrdinaryDiffEqLowStorageRK
-- `RK46NL` — Rust `RK46NL`; OrdinaryDiffEqLowStorageRK
-- `SHLDDRK_2N` — Rust `SHLDDRK_2N`; OrdinaryDiffEqLowStorageRK
-- `SHLDDRK52` — Rust `SHLDDRK52`; OrdinaryDiffEqLowStorageRK
-- `TSLDDRK74` — Rust `TSLDDRK74`; OrdinaryDiffEqLowStorageRK
-
-### Rosenbrock and Rosenbrock-W (11)
-
-- `HybridExplicitImplicitRK` — Rust `HybridExplicitImplicitRK`; OrdinaryDiffEqRosenbrock
-- `Rodas3P` — Rust `Rodas3P`; OrdinaryDiffEqRosenbrock
-- `ROS2PR` — Rust `Ros2Pr`; OrdinaryDiffEqRosenbrock
-- `ROS2S` — Rust `Ros2S`; OrdinaryDiffEqRosenbrock
-- `ROS34PW1a` — Rust `Ros34Pw1a`; OrdinaryDiffEqRosenbrock
-- `Ros4LStab` — Rust `Ros4LStab`; OrdinaryDiffEqRosenbrock
-- `RosShamp4` — Rust `RosShamp4`; OrdinaryDiffEqRosenbrock
-- `Scholz4_7` — Rust `Scholz4_7`; OrdinaryDiffEqRosenbrock
-- `Tsit5DA` — Rust `Tsit5DA`; OrdinaryDiffEqRosenbrock
-- `Veldd4` — Rust `Veldd4`; OrdinaryDiffEqRosenbrock
-- `Velds4` — Rust `Velds4`; OrdinaryDiffEqRosenbrock
-
-### SDIRK, ESDIRK, and additive IMEX RK (33)
-
-- `ARS222` — Rust `Ars222`; OrdinaryDiffEqSDIRK
-- `ARS232` — Rust `Ars232`; OrdinaryDiffEqSDIRK
-- `ARS343` — Rust `Ars343`; OrdinaryDiffEqSDIRK
-- `ARS443` — Rust `Ars443`; OrdinaryDiffEqSDIRK
-- `BHR553` — Rust `Bhr553`; OrdinaryDiffEqSDIRK
-- `CFNLIRK3` — Rust `Cfnlirk3`; OrdinaryDiffEqSDIRK
-- `ESDIRK325L2SA` — Rust `Esdirk325L2Sa`; OrdinaryDiffEqSDIRK
-- `ESDIRK436L2SA2` — Rust `Esdirk436L2Sa2`; OrdinaryDiffEqSDIRK
-- `ESDIRK437L2SA` — Rust `Esdirk437L2Sa`; OrdinaryDiffEqSDIRK
-- `ESDIRK547L2SA2` — Rust `Esdirk547L2Sa2`; OrdinaryDiffEqSDIRK
-- `ESDIRK54I8L2SA` — Rust `Esdirk54I8L2Sa`; OrdinaryDiffEqSDIRK
-- `ESDIRK659L2SA` — Rust `Esdirk659L2Sa`; OrdinaryDiffEqSDIRK
-- `Hairer4` — Rust `Hairer4`; OrdinaryDiffEqSDIRK
-- `Hairer42` — Rust `Hairer42`; OrdinaryDiffEqSDIRK
-- `IMEXSSP222` — Rust `ImexSsp222`; OrdinaryDiffEqSDIRK
-- `IMEXSSP2322` — Rust `ImexSsp2322`; OrdinaryDiffEqSDIRK
-- `IMEXSSP3332` — Rust `ImexSsp3332`; OrdinaryDiffEqSDIRK
-- `IMEXSSP3433` — Rust `ImexSsp3433`; OrdinaryDiffEqSDIRK
-- `KenCarp3` — Rust `KenCarp3`; OrdinaryDiffEqSDIRK
-- `KenCarp4` — Rust `KenCarp4`; OrdinaryDiffEqSDIRK
-- `KenCarp47` — Rust `KenCarp47`; OrdinaryDiffEqSDIRK
-- `KenCarp5` — Rust `KenCarp5`; OrdinaryDiffEqSDIRK
-- `KenCarp58` — Rust `KenCarp58`; OrdinaryDiffEqSDIRK
-- `Kvaerno3` — Rust `Kvaerno3`; OrdinaryDiffEqSDIRK
-- `Kvaerno4` — Rust `Kvaerno4`; OrdinaryDiffEqSDIRK
-- `Kvaerno5` — Rust `Kvaerno5`; OrdinaryDiffEqSDIRK
-- `SDIRK22` — Rust `Sdirk22`; OrdinaryDiffEqSDIRK
-- `SFSDIRK4` — Rust `Sfsdirk4`; OrdinaryDiffEqSDIRK
-- `SFSDIRK5` — Rust `Sfsdirk5`; OrdinaryDiffEqSDIRK
-- `SFSDIRK6` — Rust `Sfsdirk6`; OrdinaryDiffEqSDIRK
-- `SFSDIRK7` — Rust `Sfsdirk7`; OrdinaryDiffEqSDIRK
-- `SFSDIRK8` — Rust `Sfsdirk8`; OrdinaryDiffEqSDIRK
-- `SSPSDIRK2` — Rust `SspSdirk2`; OrdinaryDiffEqSDIRK
-
-### stabilized explicit Runge-Kutta (6)
-
-- `RKC` — Rust `RKC`; OrdinaryDiffEqStabilizedRK
-- `RKG1` — Rust `RKG1`; OrdinaryDiffEqStabilizedRK
-- `RKG2` — Rust `RKG2`; OrdinaryDiffEqStabilizedRK
-- `RKL1` — Rust `RKL1`; OrdinaryDiffEqStabilizedRK
-- `RKL2` — Rust `RKL2`; OrdinaryDiffEqStabilizedRK
-- `RKMC2` — Rust `RKMC2`; OrdinaryDiffEqStabilizedRK
-
-### symplectic and partitioned Runge-Kutta (14)
-
-- `CalvoSanz4` — Rust `CalvoSanz4`; OrdinaryDiffEqSymplecticRK
-- `CandyRoz4` — Rust `CandyRoz4`; OrdinaryDiffEqSymplecticRK
-- `KahanLi6` — Rust `KahanLi6`; OrdinaryDiffEqSymplecticRK
-- `KahanLi8` — Rust `KahanLi8`; OrdinaryDiffEqSymplecticRK
-- `McAte2` — Rust `McAte2`; OrdinaryDiffEqSymplecticRK
-- `McAte3` — Rust `McAte3`; OrdinaryDiffEqSymplecticRK
-- `McAte4` — Rust `McAte4`; OrdinaryDiffEqSymplecticRK
-- `McAte42` — Rust `McAte42`; OrdinaryDiffEqSymplecticRK
-- `McAte5` — Rust `McAte5`; OrdinaryDiffEqSymplecticRK
-- `McAte8` — Rust `McAte8`; OrdinaryDiffEqSymplecticRK
-- `PseudoVerletLeapfrog` — Rust `PseudoVerletLeapfrog`; OrdinaryDiffEqSymplecticRK
-- `Ruth3` — Rust `Ruth3`; OrdinaryDiffEqSymplecticRK
-- `SofSpa10` — Rust `SofSpa10`; OrdinaryDiffEqSymplecticRK
-- `Yoshida6` — Rust `Yoshida6`; OrdinaryDiffEqSymplecticRK
 
 ## Aliases
 
