@@ -1,10 +1,5 @@
-use differential_equations::{
-    Ars222, Ars232, Ars343, Ars443, Bhr553, Cfnlirk3, Esdirk54I8L2Sa, Esdirk325L2Sa,
-    Esdirk436L2Sa2, Esdirk437L2Sa, Esdirk547L2Sa2, Esdirk659L2Sa, Hairer4, Hairer42, ImexSsp222,
-    ImexSsp2322, ImexSsp3332, ImexSsp3433, KenCarp3, KenCarp4, KenCarp5, KenCarp47, KenCarp58,
-    Kvaerno3, Kvaerno4, Kvaerno5, OdeAlgorithm, OdeProblem, SaveMode, Sdirk22, Sfsdirk4, Sfsdirk5,
-    Sfsdirk6, Sfsdirk7, Sfsdirk8, SolveOptions, SspSdirk2, solve,
-};
+use differential_equations::algorithms::*;
+use differential_equations::*;
 
 type TestRhs = fn(&mut [f64], &[f64], &(), f64);
 

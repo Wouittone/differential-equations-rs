@@ -413,7 +413,8 @@ mod tests {
     use std::cell::Cell;
     use std::rc::Rc;
 
-    use crate::{CallbackAction, OdeProblem, Rosenbrock23, SaveMode, SolveOptions, solve};
+    use super::Rosenbrock23;
+    use crate::{CallbackAction, OdeProblem, SaveMode, SolveOptions, solve};
 
     #[test]
     fn solves_a_stiff_nonautonomous_problem() {

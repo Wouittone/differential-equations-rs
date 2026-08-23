@@ -1,10 +1,5 @@
-use differential_equations::{
-    Grk4a, Grk4t, HybridExplicitImplicitRK, OdeAlgorithm, OdeProblem, Rodas3, Rodas3P, Rodas3d,
-    Rodas4, Rodas4P, Rodas4P2, Rodas4PW, Rodas5, Rodas5P, Rodas5Pe, Rodas5Pr, Rodas6P, Rodas23W,
-    Rodas42, Rok4a, Ros2, Ros2Pr, Ros2S, Ros3, Ros3Pr, Ros3Prl, Ros3Prl2, Ros3p, Ros4LStab,
-    Ros34Prw, Ros34Pw1a, Ros34Pw1b, Ros34Pw2, RosShamp4, Rosenbrock32, RosenbrockW6S4OS, SaveMode,
-    Scholz4_7, SolveOptions, Tsit5DA, Veldd4, Velds4, solve,
-};
+use differential_equations::algorithms::*;
+use differential_equations::*;
 
 type TestRhs = fn(&mut [f64], &[f64], &(), f64);
 

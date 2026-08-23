@@ -1,7 +1,5 @@
-use differential_equations::{
-    Ab3, CallbackAction, EventDirection, ImplicitEuler, OdeAlgorithm, OdeProblem, Rk4,
-    Rosenbrock23, SaveMode, SolveError, SolveOptions, Tsit5, solve,
-};
+use differential_equations::algorithms::*;
+use differential_equations::*;
 
 fn unit_rate(du: &mut [f64], _: &[f64], _: &(), _: f64) {
     du[0] = 1.0;

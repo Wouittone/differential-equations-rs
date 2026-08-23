@@ -1,6 +1,5 @@
-use differential_equations::{
-    KuttaPRK2p5, OdeAlgorithm, OdeProblem, QPRK98, SaveMode, SolveOptions, solve,
-};
+use differential_equations::algorithms::*;
+use differential_equations::*;
 
 type ScalarRhs = fn(&mut [f64], &[f64], &(), f64);
 type VectorRhs = fn(&mut [f64], &[f64], &(), f64);

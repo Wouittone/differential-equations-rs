@@ -464,10 +464,8 @@ mod tests {
     use std::cell::Cell;
     use std::rc::Rc;
 
-    use crate::{
-        CallbackAction, ImplicitEuler, ImplicitMidpoint, OdeProblem, SaveMode, SolveOptions,
-        Trapezoid, solve,
-    };
+    use super::{ImplicitEuler, ImplicitMidpoint, Trapezoid};
+    use crate::{CallbackAction, OdeProblem, SaveMode, SolveOptions, solve};
 
     type TestRhs = fn(&mut [f64], &[f64], &(), f64);
 

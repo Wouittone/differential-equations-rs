@@ -1,4 +1,5 @@
-use differential_equations::{OdeProblem, SaveMode, Sdirk2, SolveOptions, solve};
+use differential_equations::algorithms::*;
+use differential_equations::*;
 
 fn main() {
     let problem = OdeProblem::new(

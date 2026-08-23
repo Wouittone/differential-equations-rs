@@ -1,6 +1,5 @@
-use differential_equations::{
-    OdeProblem, SaveMode, SolveOptions, Vcab3, Vcab4, Vcab5, Vcabm3, Vcabm4, Vcabm5, solve,
-};
+use differential_equations::algorithms::*;
+use differential_equations::*;
 
 fn main() {
     let options = SolveOptions {

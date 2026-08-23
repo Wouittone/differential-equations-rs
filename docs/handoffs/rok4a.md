@@ -7,7 +7,7 @@ The native implementation uses the exact four-stage `ROK4aRodasTableau` from
 `lib/OrdinaryDiffEqRosenbrockTableaus/src/rosenbrock_tableaus.jl` and the
 shared adaptive/fixed-step Rosenbrock driver. The primary fourth-order method
 and its third-order embedded estimator are exposed as
-`differential_equations::Rok4a`.
+`differential_equations::algorithms::rosenbrock::Rok4a`.
 
 Coverage includes fixed and adaptive regular ODE integration, backward
 integration, the compliance example endpoint, and the pinned Julia fixture.

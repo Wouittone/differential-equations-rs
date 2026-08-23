@@ -1,8 +1,5 @@
-use differential_equations::{
-    OdeAlgorithm, OdeProblem, SaveMode, SolveOptions, SspRk53, SspRk53H, SspRk53TwoN1,
-    SspRk53TwoN2, SspRk54, SspRk63, SspRk73, SspRk83, SspRk104, SspRk932, SspRkMsvs32, SspRkMsvs43,
-    solve,
-};
+use differential_equations::algorithms::*;
+use differential_equations::*;
 
 type TestRhs = fn(&mut [f64], &[f64], &(), f64);
 

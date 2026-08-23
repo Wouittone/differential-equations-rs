@@ -45,6 +45,17 @@ Julia tests use an isolated project under `tests/julia`. Rust tests remain
 usable without Julia; cross-language compliance tests are explicit so normal
 `cargo test` runs stay fast and deterministic.
 
+Core problem, solution, and driver types are exported at the crate root.
+Concrete solvers are organized under `differential_equations::algorithms`:
+
+```rust
+use differential_equations::algorithms::explicit::Tsit5;
+use differential_equations::{OdeProblem, SolveOptions, solve};
+```
+
+Family-specific paths are preferred for focused applications, while
+`differential_equations::algorithms::*` imports every implemented method.
+
 Stiff problems may optionally provide an analytic state Jacobian. Implicit and
 Rosenbrock methods use it directly; otherwise they fall back to finite
 differences. The callback must fill a row-major `dimension × dimension`
@@ -135,6 +146,7 @@ policy and interpretation are in
 - [ ] Port all remaining native OrdinaryDiffEq.jl ODE algorithm families.
 - [x] Establish matched runtime/allocation benchmarks and a reproducible
       peak-RSS cloud harness.
+- [ ] Add Rayon-backed APIs for parallel independent solve and ensemble cases.
 - [x] Add basic discrete/continuous callbacks and save-at behavior.
 - [ ] Complete method-specific high-order dense output, continuous-root
       interpolation, and retained post-solve dense segments.

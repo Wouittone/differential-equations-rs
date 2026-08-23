@@ -1,8 +1,5 @@
-use differential_equations::{
-    Dprkn4, Dprkn5, Dprkn6, Dprkn6Fm, Dprkn8, Dprkn12, Erkn4, Erkn5, Erkn7, FineRkn4, FineRkn5,
-    Irkn3, Irkn4, Nystrom4, Nystrom4VelocityIndependent, Nystrom5VelocityIndependent, Rkn4,
-    SaveMode, SecondOrderOdeAlgorithm, SecondOrderOdeProblem, SolveOptions, solve_second_order,
-};
+use differential_equations::algorithms::*;
+use differential_equations::*;
 
 type Acceleration = fn(&mut [f64], &[f64], &[f64], &(), f64);
 

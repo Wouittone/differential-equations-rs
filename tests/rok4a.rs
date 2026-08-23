@@ -1,4 +1,5 @@
-use differential_equations::{OdeProblem, Rok4a, SaveMode, SolveOptions, solve};
+use differential_equations::algorithms::*;
+use differential_equations::*;
 
 fn options(adaptive: bool, step: Option<f64>) -> SolveOptions {
     SolveOptions {

@@ -1,4 +1,5 @@
-use differential_equations::{Bs3, OdeProblem, SaveMode, SolveOptions, solve};
+use differential_equations::algorithms::*;
+use differential_equations::*;
 
 type TestRhs = fn(&mut [f64], &[f64], &(), f64);
 

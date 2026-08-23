@@ -2,13 +2,8 @@ use std::any::TypeId;
 use std::collections::HashSet;
 use std::fmt::Debug;
 
-use differential_equations::{
-    CFRLDDRK64, CKLLSRK43_2, CKLLSRK54_3C, CKLLSRK54_3C_3R, CKLLSRK54_3M_3R, CKLLSRK54_3M_4R,
-    CKLLSRK54_3N_3R, CKLLSRK54_3N_4R, CKLLSRK65_4M_4R, CKLLSRK75_4M_5R, CKLLSRK85_4C_3R,
-    CKLLSRK85_4FM_4R, CKLLSRK85_4M_3R, CKLLSRK85_4P_3R, CKLLSRK95_4C, CKLLSRK95_4M, CKLLSRK95_4S,
-    OdeAlgorithm, OdeProblem, RDPK3Sp35, RDPK3Sp49, RDPK3Sp510, RDPK3SpFSAL35, RDPK3SpFSAL49,
-    RDPK3SpFSAL510, RK46NL, SHLDDRK_2N, SHLDDRK52, SaveMode, SolveOptions, TSLDDRK74, solve,
-};
+use differential_equations::algorithms::*;
+use differential_equations::*;
 
 fn exercise_public_algorithm<A>(name: &'static str, algorithm: A, identities: &mut HashSet<TypeId>)
 where

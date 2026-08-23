@@ -1,7 +1,5 @@
-use differential_equations::{
-    ButcherTableau, KuttaPRK2p5, KuttaPrk2p5Tableau, OdeAlgorithm, OdeProblem, QPRK98,
-    Qprk98Tableau, SaveMode, SolveError, SolveOptions, solve,
-};
+use differential_equations::algorithms::*;
+use differential_equations::*;
 
 type ScalarRhs = fn(&mut [f64], &[f64], &(), f64);
 

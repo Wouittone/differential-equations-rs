@@ -1,8 +1,5 @@
-use differential_equations::{
-    Nystrom4, Nystrom4VelocityIndependent, Nystrom5VelocityIndependent, Rkn4, SaveMode,
-    SecondOrderOdeAlgorithm, SecondOrderOdeProblem, SecondOrderSolveError, SolveError,
-    SolveOptions, solve_second_order,
-};
+use differential_equations::algorithms::*;
+use differential_equations::*;
 
 type Acceleration = fn(&mut [f64], &[f64], &[f64], &(), f64);
 

@@ -1,4 +1,5 @@
-use differential_equations::{OdeProblem, SaveMode, Solution, SolveOptions, Tsit5, solve};
+use differential_equations::algorithms::*;
+use differential_equations::*;
 
 fn options() -> SolveOptions {
     SolveOptions {

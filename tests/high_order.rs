@@ -1,7 +1,5 @@
-use differential_equations::{
-    DP8, Feagin10, Feagin12, Feagin14, OdeAlgorithm, OdeProblem, PFRK87, RKV76IIa, SaveMode,
-    SolveOptions, TanYam7, TsitPap8, solve,
-};
+use differential_equations::algorithms::*;
+use differential_equations::*;
 
 type ScalarRhs = fn(&mut [f64], &[f64], &(), f64);
 

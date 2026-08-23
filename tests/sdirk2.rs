@@ -1,7 +1,8 @@
 use std::cell::Cell;
 use std::rc::Rc;
 
-use differential_equations::{CallbackAction, OdeProblem, SaveMode, Sdirk2, SolveOptions, solve};
+use differential_equations::algorithms::*;
+use differential_equations::*;
 
 #[test]
 fn nonautonomous_rhs_and_backward_time() {

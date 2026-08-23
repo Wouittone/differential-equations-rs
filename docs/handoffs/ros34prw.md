@@ -20,7 +20,7 @@ the shared callback/save-at lifecycle.
 
 ## Public API
 
-`differential_equations::Ros34Prw`.
+`differential_equations::algorithms::rosenbrock::Ros34Prw`.
 
 ## Upstream source and revision
 

@@ -425,10 +425,8 @@ mod tests {
     use std::cell::Cell;
     use std::f64::consts::E;
 
-    use crate::{
-        Ab3, Ab4, Ab5, Abm32, Abm43, Abm54, CallbackAction, OdeProblem, SaveMode, SolveError,
-        SolveOptions, solve,
-    };
+    use super::{Ab3, Ab4, Ab5, Abm32, Abm43, Abm54};
+    use crate::{CallbackAction, OdeProblem, SaveMode, SolveError, SolveOptions, solve};
 
     type TestRhs = fn(&mut [f64], &[f64], &(), f64);
 

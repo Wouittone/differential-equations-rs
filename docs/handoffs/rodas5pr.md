@@ -25,7 +25,7 @@ Pinned source: `211142263781255a9aa2f910f6760b9f18ec29c8`
 
 ## Rust surface
 
-- Public type: `differential_equations::Rodas5Pr`.
+- Public type: `differential_equations::algorithms::rosenbrock::Rodas5Pr`.
 - Native implementation: `src/rosenbrock_extended.rs`.
 - Focused test: `rodas5pr_matches_rodas5p_on_regular_ode_paths` covers fixed
   tableau identity, adaptive stiff integration, and RHS activity.

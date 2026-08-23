@@ -1,9 +1,5 @@
-use differential_equations::{
-    CalvoSanz4, CandyRoz4, KahanLi6, KahanLi8, LeapfrogDriftKickDrift, McAte2, McAte3, McAte4,
-    McAte5, McAte8, McAte42, PseudoVerletLeapfrog, Ruth3, SaveMode, SecondOrderOdeProblem,
-    SofSpa10, SolveOptions, SymplecticAlgorithm, SymplecticEuler, VelocityVerlet, VerletLeapfrog,
-    Yoshida6, solve_second_order, solve_symplectic,
-};
+use differential_equations::algorithms::*;
+use differential_equations::*;
 
 type Acceleration = fn(&mut [f64], &[f64], &[f64], &(), f64);
 

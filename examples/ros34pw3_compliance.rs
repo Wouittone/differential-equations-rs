@@ -1,4 +1,5 @@
-use differential_equations::{OdeProblem, Ros34Pw3, SaveMode, SolveOptions, solve};
+use differential_equations::algorithms::*;
+use differential_equations::*;
 
 fn main() {
     let stiff = OdeProblem::new(

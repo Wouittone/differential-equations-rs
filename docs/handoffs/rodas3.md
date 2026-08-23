@@ -15,7 +15,7 @@ driver and the exact four-stage tableau from the pinned upstream revision.
 
 ## Public API
 
-- `differential_equations::Rodas3`
+- `differential_equations::algorithms::rosenbrock::Rodas3`
 
 ## Upstream source and revision
 

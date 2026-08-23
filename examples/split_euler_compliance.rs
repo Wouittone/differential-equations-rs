@@ -1,6 +1,5 @@
-use differential_equations::{
-    SaveMode, SolveOptions, SplitEuler, SplitOdeProblem, solve_split_euler,
-};
+use differential_equations::algorithms::*;
+use differential_equations::*;
 
 fn main() {
     let problem = SplitOdeProblem::new(

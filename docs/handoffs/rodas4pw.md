@@ -13,7 +13,7 @@ Files changed:
 - `tests/julia/rosenbrock_extended.jl`: Julia reference fixture row.
 - `tests/rodas4pw_allocations.rs`: callback-free step allocation regression.
 
-Public APIs added: `differential_equations::Rodas4PW`.
+Public APIs added: `differential_equations::algorithms::rosenbrock::Rodas4PW`.
 
 Upstream source and revision: `lib/OrdinaryDiffEqRosenbrockTableaus/src/
 rosenbrock_tableaus.jl`, `Rodas4PWTableau`, revision

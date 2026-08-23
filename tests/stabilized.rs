@@ -1,7 +1,5 @@
-use differential_equations::{
-    OdeAlgorithm, OdeProblem, RKC, RKG1, RKG2, RKL1, RKL2, RKMC2, Rk4, SaveMode, SolveOptions,
-    solve,
-};
+use differential_equations::algorithms::*;
+use differential_equations::*;
 
 type TestRhs = fn(&mut [f64], &[f64], &(), f64);
 

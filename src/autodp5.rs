@@ -1,4 +1,5 @@
-use crate::{Dp5, OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions};
+use crate::explicit_rk::Dp5;
+use crate::{OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions};
 
 /// Automatic low-order Dormand--Prince composite.
 ///

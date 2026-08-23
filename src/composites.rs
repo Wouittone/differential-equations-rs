@@ -8,8 +8,10 @@
 
 use std::marker::PhantomData;
 
-use crate::{OdeAlgorithm, OdeProblem, Rodas5P, Solution, SolveError, SolveOptions, Tsit5};
-use crate::{Vern6, Vern7, Vern8, Vern9};
+use crate::rosenbrock_extended::Rodas5P;
+use crate::tsit5::Tsit5;
+use crate::verner::{Vern6, Vern7, Vern8, Vern9};
+use crate::{OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions};
 
 fn should_retry_with_stiff(error: SolveError) -> bool {
     matches!(
@@ -137,9 +139,10 @@ pub type DefaultImplicitODEAlgorithm = DefaultImplicitOdeAlgorithm;
 #[cfg(test)]
 mod tests {
     use super::{AutoTsit5, AutoVern6, AutoVern7, AutoVern8, AutoVern9};
-    use crate::{
-        OdeProblem, Rodas5P, SaveMode, SolveOptions, Tsit5, Vern6, Vern7, Vern8, Vern9, solve,
-    };
+    use crate::rosenbrock_extended::Rodas5P;
+    use crate::tsit5::Tsit5;
+    use crate::verner::{Vern6, Vern7, Vern8, Vern9};
+    use crate::{OdeProblem, SaveMode, SolveOptions, solve};
 
     type ScalarRhs = fn(&mut [f64], &[f64], &(), f64);
 

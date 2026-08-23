@@ -19,7 +19,7 @@ backward integration, callbacks, `save_at`, and endpoint recording.
 
 ## Public APIs added:
 
-- `differential_equations::Rodas4P2`
+- `differential_equations::algorithms::rosenbrock::Rodas4P2`
 
 ## Upstream source and revision:
 

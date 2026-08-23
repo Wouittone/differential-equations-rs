@@ -18,7 +18,7 @@ workspace.
 
 ## Public API added
 
-- `differential_equations::Ros3Prl2`
+- `differential_equations::algorithms::rosenbrock::Ros3Prl2`
 
 ## Upstream source and revision
 

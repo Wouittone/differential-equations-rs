@@ -1,6 +1,5 @@
-use differential_equations::{
-    CallbackAction, OdeProblem, Prrk22, Prrk33, Prrk54, SaveMode, SolveError, SolveOptions, solve,
-};
+use differential_equations::algorithms::*;
+use differential_equations::*;
 
 type TestRhs = fn(&mut [f64], &[f64], &(), f64);
 

@@ -1,7 +1,5 @@
-use differential_equations::{
-    ESERK4, ESERK5, OdeAlgorithm, OdeProblem, RKC, RKG1, RKG2, RKL1, RKL2, RKMC2, ROCK2, ROCK4,
-    SERK2, SaveMode, SolveOptions, TSRKC2, TSRKC3, solve,
-};
+use differential_equations::algorithms::*;
+use differential_equations::*;
 
 type ScalarRhs = fn(&mut [f64], &[f64], &(), f64);
 

@@ -53,7 +53,7 @@ macro_rules! fixed_ssprk {
 }
 
 /// Adaptive SSPRK432 uses the same four-stage, third-order main method as
-/// [`crate::SspRk43`], but retains the full third/second-order embedded residual
+/// [`crate::algorithms::explicit::SspRk43`], but retains the full third/second-order embedded residual
 /// from OrdinaryDiffEqSSPRK's dedicated constructor.  The shared explicit
 /// kernel applies this tableau for both fixed and adaptive stepping.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]

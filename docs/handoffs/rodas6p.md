@@ -1,7 +1,7 @@
 # Rodas6P handoff
 
 Rodas6P is implemented in `src/rosenbrock_extended.rs` and exported from the
-crate root as `differential_equations::Rodas6P`. The regular ODE tableau is
+algorithm namespace as `differential_equations::algorithms::rosenbrock::Rodas6P`. The regular ODE tableau is
 the pinned `Rodas6PTableau` from OrdinaryDiffEq revision
 `211142263781255a9aa2f910f6760b9f18ec29c8`, with 19 stages, `gamma = 0.26`,
 and the upstream primary/embedded weights (`btilde` is the sixteenth stage).

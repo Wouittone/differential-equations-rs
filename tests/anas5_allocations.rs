@@ -1,7 +1,8 @@
 use std::alloc::System;
 use std::hint::black_box;
 
-use differential_equations::{Anas5, OdeProblem, SaveMode, SolveOptions, solve};
+use differential_equations::algorithms::*;
+use differential_equations::*;
 use stats_alloc::{INSTRUMENTED_SYSTEM, Region, StatsAlloc};
 
 #[global_allocator]

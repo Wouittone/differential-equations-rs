@@ -1,4 +1,5 @@
-use differential_equations::{CallbackAction, OdeProblem, Ros34Pw2, SaveMode, SolveOptions, solve};
+use differential_equations::algorithms::*;
+use differential_equations::*;
 
 fn fixed_options(step: f64) -> SolveOptions {
     SolveOptions {

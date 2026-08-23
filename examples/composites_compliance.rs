@@ -1,7 +1,5 @@
-use differential_equations::{
-    AutoTsit5, AutoVern6, AutoVern7, AutoVern8, AutoVern9, DefaultImplicitODEAlgorithm,
-    DefaultODEAlgorithm, Dp5, ExplicitRK, OdeProblem, Rodas5P, SaveMode, SolveOptions, solve,
-};
+use differential_equations::algorithms::*;
+use differential_equations::*;
 
 type TestRhs = fn(&mut [f64], &[f64], &(), f64);
 

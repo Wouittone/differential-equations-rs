@@ -1,4 +1,5 @@
-use differential_equations::{FBDF, OdeProblem, QBDF, QNDF, SaveMode, SolveOptions, solve};
+use differential_equations::algorithms::*;
+use differential_equations::*;
 
 fn fixed(step: f64) -> SolveOptions {
     SolveOptions {

@@ -5,47 +5,41 @@ fn assert_algorithm<T: OdeAlgorithm>() {}
 fn assert_same_type<T>(_: T, _: T) {}
 
 #[test]
-fn family_namespaces_reexport_the_concrete_root_types() {
+fn family_namespaces_reexport_the_flat_algorithm_types() {
+    assert_same_type(algorithms::Tsit5, algorithms::explicit::general::Tsit5);
     assert_same_type(
-        differential_equations::Tsit5,
-        algorithms::explicit::general::Tsit5,
-    );
-    assert_same_type(
-        differential_equations::RDPK3Sp35,
+        algorithms::RDPK3Sp35,
         algorithms::explicit::low_storage::RDPK3Sp35,
     );
     assert_same_type(
-        differential_equations::Kvaerno5,
+        algorithms::Kvaerno5,
         algorithms::implicit::diagonally_implicit::Kvaerno5,
     );
+    assert_same_type(algorithms::Rodas3P, algorithms::rosenbrock::Rodas3P);
     assert_same_type(
-        differential_equations::Rodas3P,
-        algorithms::rosenbrock::Rodas3P,
-    );
-    assert_same_type(
-        differential_equations::VelocityVerlet,
+        algorithms::VelocityVerlet,
         algorithms::second_order::VelocityVerlet,
     );
     assert_same_type(
-        differential_equations::SspRkMsvs43,
+        algorithms::SspRkMsvs43,
         algorithms::explicit::ssp::SspRkMsvs43,
     );
 }
 
 #[test]
-fn recovered_root_exports_are_real_ode_algorithms() {
-    assert_algorithm::<differential_equations::CKLLSRK54_3C>();
-    assert_algorithm::<differential_equations::RDPK3SpFSAL510>();
-    assert_algorithm::<differential_equations::Esdirk436L2Sa2>();
-    assert_algorithm::<differential_equations::KenCarp4>();
-    assert_algorithm::<differential_equations::Kvaerno5>();
-    assert_algorithm::<differential_equations::Rodas3P>();
-    assert_algorithm::<differential_equations::Ros4LStab>();
-    assert_algorithm::<differential_equations::Tsit5DA>();
-    assert_algorithm::<differential_equations::SSPRKMSVS43>();
-    assert_algorithm::<differential_equations::QNDF>();
-    assert_algorithm::<differential_equations::QBDF>();
-    assert_algorithm::<differential_equations::FBDF>();
+fn namespaced_exports_are_real_ode_algorithms() {
+    assert_algorithm::<algorithms::CKLLSRK54_3C>();
+    assert_algorithm::<algorithms::RDPK3SpFSAL510>();
+    assert_algorithm::<algorithms::Esdirk436L2Sa2>();
+    assert_algorithm::<algorithms::KenCarp4>();
+    assert_algorithm::<algorithms::Kvaerno5>();
+    assert_algorithm::<algorithms::Rodas3P>();
+    assert_algorithm::<algorithms::Ros4LStab>();
+    assert_algorithm::<algorithms::Tsit5DA>();
+    assert_algorithm::<algorithms::SSPRKMSVS43>();
+    assert_algorithm::<algorithms::QNDF>();
+    assert_algorithm::<algorithms::QBDF>();
+    assert_algorithm::<algorithms::FBDF>();
 }
 
 #[test]

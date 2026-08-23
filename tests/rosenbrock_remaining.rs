@@ -1,7 +1,5 @@
-use differential_equations::{
-    HybridExplicitImplicitRK, OdeAlgorithm, OdeProblem, Rodas3P, Ros2Pr, Ros2S, Ros4LStab,
-    Ros34Pw1a, RosShamp4, Scholz4_7, SolveOptions, Tsit5DA, Veldd4, Velds4, solve,
-};
+use differential_equations::algorithms::*;
+use differential_equations::*;
 
 type ScalarRhs = fn(&mut [f64], &[f64], &(), f64);
 

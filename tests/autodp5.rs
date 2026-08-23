@@ -1,9 +1,7 @@
 use std::cell::Cell;
 
-use differential_equations::{
-    AutoDp5, CallbackAction, Dp5, OdeAlgorithm, OdeProblem, Rodas5P, SaveMode, Solution,
-    SolveError, SolveOptions, solve,
-};
+use differential_equations::algorithms::*;
+use differential_equations::*;
 
 type TestRhs = fn(&mut [f64], &[f64], &(), f64);
 

@@ -52,6 +52,28 @@ function Get-RustPublicNames {
 
     foreach ($match in [regex]::Matches($text, '(?ms)^\s*pub use\s+(?<body>[^;]+);')) {
         $body = $match.Groups['body'].Value.Trim()
+        if ($body -eq 'compatibility::algorithms') {
+            $modulePath = Join-Path $sourcePath 'compatibility.rs'
+            $moduleText = Get-Content -LiteralPath $modulePath -Raw
+
+            foreach ($item in [regex]::Matches($moduleText, '(?m)^\s*pub\s+const\s+(?<name>[A-Za-z_][A-Za-z0-9_]*)')) {
+                [void] $names.Add($item.Groups['name'].Value)
+            }
+            foreach ($export in [regex]::Matches($moduleText, '(?ms)^\s*pub use\s+(?<body>[^;]+);')) {
+                $exportBody = $export.Groups['body'].Value.Trim()
+                if ($exportBody -notmatch '(?s)\{(?<items>.*?)\}') { continue }
+                foreach ($item in $Matches['items'] -split ',') {
+                    $trimmed = $item.Trim()
+                    if ([string]::IsNullOrWhiteSpace($trimmed)) { continue }
+                    if ($trimmed -match '\bas\s+(?<alias>[A-Za-z_][A-Za-z0-9_]*)$') {
+                        [void] $names.Add($Matches['alias'])
+                    } elseif ($trimmed -match '(?<name>[A-Za-z_][A-Za-z0-9_]*)$') {
+                        [void] $names.Add($Matches['name'])
+                    }
+                }
+            }
+            continue
+        }
         if ($ExcludeCompatibilityFacades -and $body -match '^compatibility::') { continue }
         if ($body -match '^(?<module>[A-Za-z_][A-Za-z0-9_]*)::\*$') {
             $moduleName = $Matches['module']

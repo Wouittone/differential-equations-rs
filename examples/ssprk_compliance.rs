@@ -1,7 +1,5 @@
-use differential_equations::{
-    KYKSSPRK42, Kyk2014DgSsprk3S2, OdeProblem, Prrk22, Prrk33, Prrk54, SaveMode, SolveOptions,
-    SspRk22, SspRk33, SspRk43, SspRk432, solve,
-};
+use differential_equations::algorithms::*;
+use differential_equations::*;
 
 type TestRhs = fn(&mut [f64], &[f64], &(), f64);
 

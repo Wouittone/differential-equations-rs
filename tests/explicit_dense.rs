@@ -1,6 +1,5 @@
-use differential_equations::{
-    CallbackAction, OdeProblem, Rk4, SaveMode, SolveOptions, Tsit5, solve,
-};
+use differential_equations::algorithms::*;
+use differential_equations::*;
 
 fn cubic_rate(derivative: &mut [f64], _: &[f64], _: &(), time: f64) {
     derivative[0] = 3.0 * time * time;

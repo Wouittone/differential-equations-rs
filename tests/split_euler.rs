@@ -1,6 +1,5 @@
-use differential_equations::{
-    SaveMode, SolveError, SolveOptions, SplitEuler, SplitOdeProblem, solve_split_euler,
-};
+use differential_equations::algorithms::*;
+use differential_equations::*;
 
 #[test]
 fn split_euler_advances_both_typed_components() {

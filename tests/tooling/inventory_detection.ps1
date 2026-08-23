@@ -36,8 +36,8 @@ try {
 mod compatibility;
 mod native;
 
-pub use compatibility::*;
-pub use native::{MacroMethod, NativeAlias, NativeMethod};
+pub use compatibility::algorithms;
+pub use compatibility::{CollidingMethod, FacadeOnly};
 '@, $utf8NoBom)
 
     [System.IO.File]::WriteAllText((Join-Path $sourceRoot 'native.rs'), @'
@@ -60,6 +60,10 @@ pub type NativeAlias = NativeMethod;
 '@, $utf8NoBom)
 
     [System.IO.File]::WriteAllText((Join-Path $sourceRoot 'compatibility.rs'), @'
+pub mod algorithms {
+    pub use crate::native::{MacroMethod, NativeAlias, NativeMethod};
+}
+
 pub type FacadeOnly = NativeMethod;
 pub type CollidingMethod = NativeMethod;
 '@, $utf8NoBom)
@@ -74,10 +78,12 @@ tested = NativeMethod()
 
     $detected = & $generator -DetectionOnly -RepositoryPath $fixtureRoot | ConvertFrom-Json
 
-    Assert-Contains $detected.rust_public_names 'FacadeOnly' 'A public glob export was not detected.'
+    Assert-Contains $detected.rust_public_names 'FacadeOnly' 'A public facade export was not detected.'
     Assert-Contains $detected.rust_public_names 'CollidingMethod' 'The facade collision was not detected as public.'
+    Assert-Contains $detected.rust_public_names 'NativeMethod' 'A namespaced algorithm export was not detected.'
     Assert-NotContains $detected.rust_native_public_names 'FacadeOnly' 'A compatibility facade was treated as a native export.'
     Assert-NotContains $detected.rust_native_public_names 'CollidingMethod' 'A compatibility name collision was treated as a native export.'
+    Assert-Contains $detected.rust_native_public_names 'NativeMethod' 'A namespaced algorithm export was treated as a facade.'
 
     Assert-Contains $detected.rust_algorithm_implementation_names 'NativeMethod' 'A direct trait implementation was not detected.'
     Assert-Contains $detected.rust_algorithm_implementation_names 'MacroMethod' 'A macro-generated trait implementation was not detected.'

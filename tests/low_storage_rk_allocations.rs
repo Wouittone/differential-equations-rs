@@ -1,12 +1,8 @@
 use std::alloc::System;
 use std::hint::black_box;
 
-use differential_equations::{
-    CarpenterKennedy2N54, OdeAlgorithm, OdeProblem, ParsaniKetchesonDeconinck3S32,
-    ParsaniKetchesonDeconinck3S53, ParsaniKetchesonDeconinck3S82, ParsaniKetchesonDeconinck3S94,
-    ParsaniKetchesonDeconinck3S105, ParsaniKetchesonDeconinck3S173, ParsaniKetchesonDeconinck3S184,
-    ParsaniKetchesonDeconinck3S205, SaveMode, SolveOptions, solve,
-};
+use differential_equations::algorithms::*;
+use differential_equations::*;
 use stats_alloc::{INSTRUMENTED_SYSTEM, Region, StatsAlloc};
 
 #[global_allocator]

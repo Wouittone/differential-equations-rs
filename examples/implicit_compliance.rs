@@ -1,6 +1,5 @@
-use differential_equations::{
-    ImplicitEuler, ImplicitMidpoint, OdeProblem, SaveMode, SolveOptions, Trapezoid, solve,
-};
+use differential_equations::algorithms::*;
+use differential_equations::*;
 
 type TestRhs = fn(&mut [f64], &[f64], &(), f64);
 

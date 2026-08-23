@@ -1,10 +1,8 @@
 use std::alloc::System;
 use std::hint::black_box;
 
-use differential_equations::{
-    Grk4a, OdeAlgorithm, OdeProblem, Rodas3, Rodas3d, Rodas4, Rodas5P, Ros2, Ros3Prl, Ros34Prw,
-    Ros34Pw1b, Rosenbrock23, Rosenbrock32, RosenbrockW6S4OS, SaveMode, SolveOptions, solve,
-};
+use differential_equations::algorithms::*;
+use differential_equations::*;
 use stats_alloc::{INSTRUMENTED_SYSTEM, Region, StatsAlloc};
 
 #[global_allocator]

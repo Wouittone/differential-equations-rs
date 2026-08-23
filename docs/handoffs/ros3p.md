@@ -17,7 +17,7 @@ second-order embedded estimator.
 
 ## Public API
 
-`differential_equations::Ros3p` implements `OdeAlgorithm` and supports the
+`differential_equations::algorithms::rosenbrock::Ros3p` implements `OdeAlgorithm` and supports the
 shared regular `OdeProblem` interface, finite-difference or analytic Jacobians,
 adaptive and fixed stepping, callbacks, backward integration, and `save_at`.
 

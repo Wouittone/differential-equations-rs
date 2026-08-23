@@ -41,7 +41,7 @@ pub trait ButcherTableau {
 
 /// The centralized explicit Runge–Kutta solver for a [`ButcherTableau`].
 ///
-/// Named algorithms such as [`Rk4`](crate::Rk4) are lightweight facades over
+/// Named algorithms such as [`Rk4`](crate::algorithms::explicit::Rk4) are lightweight facades over
 /// this type. It can also be instantiated with a user-defined tableau marker.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ExplicitRungeKutta<T> {
@@ -1735,11 +1735,12 @@ fn error_norm(
 mod tests {
     use std::f64::consts::E;
 
-    use super::{Bs5, ButcherTableau, ExplicitRungeKutta, OwrenZen3, OwrenZen4, OwrenZen5};
-    use crate::{
-        Alshina2, Alshina3, Alshina6, Bs3, Dp5, Euler, Heun, Midpoint, OdeProblem, Ralston,
-        Ralston4, Rk4, Rkm, SaveMode, SolveError, SolveOptions, SspRk22, SspRk33, SspRk43, solve,
+    use super::{
+        Alshina2, Alshina3, Alshina6, Bs3, Dp5, Euler, Heun, Midpoint, Ralston, Ralston4, Rk4, Rkm,
+        SspRk22, SspRk33, SspRk43,
     };
+    use super::{Bs5, ButcherTableau, ExplicitRungeKutta, OwrenZen3, OwrenZen4, OwrenZen5};
+    use crate::{OdeProblem, SaveMode, SolveError, SolveOptions, solve};
 
     type TestRhs = fn(&mut [f64], &[f64], &(), f64);
 

@@ -1,4 +1,5 @@
-use differential_equations::{Alshina6, CallbackAction, OdeProblem, SaveMode, SolveOptions, solve};
+use differential_equations::algorithms::*;
+use differential_equations::*;
 
 fn unit_rate(du: &mut [f64], _: &[f64], _: &(), _: f64) {
     du[0] = 1.0;

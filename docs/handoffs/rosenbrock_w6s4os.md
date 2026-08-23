@@ -18,7 +18,7 @@ kernel used by the Rosenbrock/Rodas family.
 
 ## Public API
 
-`differential_equations::RosenbrockW6S4OS` implements `OdeAlgorithm` and
+`differential_equations::algorithms::rosenbrock::RosenbrockW6S4OS` implements `OdeAlgorithm` and
 requires `SolveOptions { adaptive: false, initial_step: Some(...) }`.
 
 ## Upstream source and revision

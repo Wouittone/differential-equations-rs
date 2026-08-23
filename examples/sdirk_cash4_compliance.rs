@@ -1,4 +1,5 @@
-use differential_equations::{Cash4, OdeProblem, SaveMode, SolveOptions, solve};
+use differential_equations::algorithms::*;
+use differential_equations::*;
 
 fn main() {
     let problem = OdeProblem::new(

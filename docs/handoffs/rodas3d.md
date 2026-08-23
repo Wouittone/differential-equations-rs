@@ -7,7 +7,7 @@ driver and the exact four-stage tableau from the pinned upstream revision.
 
 ## Public API and files
 
-- `differential_equations::Rodas3d` is exported from `src/lib.rs`.
+- `differential_equations::algorithms::rosenbrock::Rodas3d` is publicly exported.
 - Tableau and perform-step wiring are in `src/rosenbrock_extended.rs`.
 - Compliance output is in `examples/rosenbrock_extended_compliance.rs` and
   `tests/julia/rosenbrock_extended.jl`.

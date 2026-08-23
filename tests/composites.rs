@@ -1,11 +1,7 @@
 use std::cell::Cell;
 
-use differential_equations::{
-    AutoTsit5, AutoVern6, AutoVern7, AutoVern8, AutoVern9, ButcherTableau,
-    DefaultImplicitODEAlgorithm, DefaultODEAlgorithm, Dp5, ExplicitRK, OdeAlgorithm, OdeProblem,
-    Rodas5P, SaveMode, Solution, SolveError, SolveOptions, Tsit5, Vern6, Vern7, Vern8, Vern9,
-    solve,
-};
+use differential_equations::algorithms::*;
+use differential_equations::*;
 
 type TestRhs = fn(&mut [f64], &[f64], &(), f64);
 

@@ -1,6 +1,7 @@
 //! First-order Euler integration for typed split ODE problems.
 
-use crate::{Euler, OdeProblem, Solution, SolveError, SolveOptions, SplitOdeProblem, solve};
+use crate::explicit_rk::Euler;
+use crate::{OdeProblem, Solution, SolveError, SolveOptions, SplitOdeProblem, solve};
 use std::cell::RefCell;
 
 /// Explicit Euler applied to the sum of a split problem's two right-hand sides.

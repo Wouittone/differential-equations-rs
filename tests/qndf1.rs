@@ -1,6 +1,5 @@
-use differential_equations::{
-    CallbackAction, OdeProblem, Qbdf1, Qndf1, SaveMode, SolveError, SolveOptions, solve,
-};
+use differential_equations::algorithms::*;
+use differential_equations::*;
 
 fn fixed(step: f64) -> SolveOptions {
     SolveOptions {

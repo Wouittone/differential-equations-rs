@@ -124,7 +124,8 @@ mod tests {
     use std::cell::Cell;
     use std::f64::consts::{E, TAU};
 
-    use crate::{OdeProblem, SaveMode, SolveError, SolveOptions, Tsit5, solve};
+    use super::Tsit5;
+    use crate::{OdeProblem, SaveMode, SolveError, SolveOptions, solve};
 
     #[test]
     fn solves_scalar_exponential_growth() {

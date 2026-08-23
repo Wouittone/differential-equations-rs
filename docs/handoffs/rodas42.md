@@ -13,7 +13,7 @@ OrdinaryDiffEq.jl revision `211142263781255a9aa2f910f6760b9f18ec29c8`.
   numerical or supplied Jacobians, callbacks, `save_at`, backward integration,
   and accepted-segment recording. DAE residual behavior and wrappers are not
   included.
-- Public constructor: `differential_equations::Rodas42`.
+- Public constructor: `differential_equations::algorithms::rosenbrock::Rodas42`.
 
 ## Verification
 

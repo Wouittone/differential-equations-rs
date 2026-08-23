@@ -17,7 +17,7 @@ through the shared driver.
 
 ## Public API
 
-- `differential_equations::Cash4`
+- `differential_equations::algorithms::implicit::Cash4`
 
 ## Upstream source and revision
 

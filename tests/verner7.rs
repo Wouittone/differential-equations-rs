@@ -1,4 +1,5 @@
-use differential_equations::{CallbackAction, OdeProblem, SaveMode, SolveOptions, Vern7, solve};
+use differential_equations::algorithms::*;
+use differential_equations::*;
 
 type TestRhs = fn(&mut [f64], &[f64], &(), f64);
 

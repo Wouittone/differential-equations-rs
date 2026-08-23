@@ -1,8 +1,5 @@
-use differential_equations::{
-    Alshina2, Alshina3, Alshina6, Anas5, AutoDp5, Bs3, Dp5, Euler, Frk65, Heun, Midpoint, Msrk5,
-    Msrk6, OdeProblem, Psrk3p5q4, Psrk3p6q5, Psrk4p7q6, Ralston, Ralston4, Rk4, Rkm, Rko65,
-    Rodas5P, SaveMode, Sir54, SolveOptions, Stepanov5, solve,
-};
+use differential_equations::algorithms::*;
+use differential_equations::*;
 
 type TestRhs = fn(&mut [f64], &[f64], &(), f64);
 

@@ -3,12 +3,8 @@ use std::alloc::System;
 use std::hint::black_box;
 use std::time::Instant;
 
-use differential_equations::{
-    Ab3, Ab4, Ab5, Abm32, Abm43, Abm54, Alshina2, Alshina3, Bs3, Dp5, Euler, Heun, ImplicitEuler,
-    ImplicitMidpoint, KenCarp5, Kvaerno5, Midpoint, OdeAlgorithm, OdeProblem, Ralston, Ralston4,
-    Rk4, Rkm, Rodas4P, Rodas5P, Rodas5Pr, Rosenbrock23, SaveMode, SolveOptions, SspRk22, SspRk33,
-    SspRk43, Trapezoid, Trbdf2, Tsit5, solve,
-};
+use differential_equations::algorithms::*;
+use differential_equations::*;
 #[cfg(feature = "allocation-metrics")]
 use stats_alloc::{INSTRUMENTED_SYSTEM, Region, StatsAlloc};
 

@@ -1,4 +1,5 @@
-use differential_equations::{CallbackAction, OdeProblem, Rk4, SaveMode, SolveOptions, solve};
+use differential_equations::algorithms::*;
+use differential_equations::*;
 
 fn main() {
     let event_problem = OdeProblem::new(
