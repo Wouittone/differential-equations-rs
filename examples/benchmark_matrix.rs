@@ -5,8 +5,9 @@ use std::time::Instant;
 
 use differential_equations::{
     Ab3, Ab4, Ab5, Abm32, Abm43, Abm54, Alshina2, Alshina3, Bs3, Dp5, Euler, Heun, ImplicitEuler,
-    ImplicitMidpoint, Midpoint, OdeAlgorithm, OdeProblem, Ralston, Ralston4, Rk4, Rkm,
-    Rosenbrock23, SaveMode, SolveOptions, SspRk22, SspRk33, SspRk43, Trapezoid, Tsit5, solve,
+    ImplicitMidpoint, KenCarp5, Kvaerno5, Midpoint, OdeAlgorithm, OdeProblem, Ralston, Ralston4,
+    Rk4, Rkm, Rodas4P, Rodas5P, Rodas5Pr, Rosenbrock23, SaveMode, SolveOptions, SspRk22, SspRk33,
+    SspRk43, Trapezoid, Trbdf2, Tsit5, solve,
 };
 #[cfg(feature = "allocation-metrics")]
 use stats_alloc::{INSTRUMENTED_SYSTEM, Region, StatsAlloc};
@@ -167,6 +168,12 @@ fn main() {
     run!("ImplicitMidpoint", &stiff, ImplicitMidpoint, &fixed);
     run!("Trapezoid", &stiff, Trapezoid, &fixed);
     run!("Rosenbrock23", &stiff, Rosenbrock23, &adaptive);
+    run!("TRBDF2", &stiff, Trbdf2, &adaptive);
+    run!("Kvaerno5", &stiff, Kvaerno5, &adaptive);
+    run!("KenCarp5", &stiff, KenCarp5, &adaptive);
+    run!("Rodas4P", &stiff, Rodas4P, &adaptive);
+    run!("Rodas5P", &stiff, Rodas5P, &adaptive);
+    run!("Rodas5Pr", &stiff, Rodas5Pr, &adaptive);
     if !ran {
         if let Some(algorithm) = selected_algorithm.as_deref() {
             panic!("unknown benchmark algorithm: {algorithm}");

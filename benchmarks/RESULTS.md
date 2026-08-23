@@ -1,4 +1,47 @@
-# Preliminary 25-solver benchmark results
+# Matched benchmark results
+
+## 2026-08-23 local stiff-candidate slice (31-algorithm matrix)
+
+The matched Rust/Julia matrix now covers 31 algorithms. The table below records
+the seven stiff candidates from a local 20-repetition run after warm-up, using
+the matrix's 8-component stiff linear-decay problem, endpoint-only storage, and
+`abstol = reltol = 1e-7`. Timing and allocation measurements were collected in
+separate runs. Ratios are Rust divided by Julia, so values below one favor Rust.
+
+| Algorithm    | Rust ns | Julia ns | Time ratio | Rust bytes | Julia bytes | Allocation ratio |
+| ------------ | ------: | -------: | ---------: | ---------: | ----------: | ---------------: |
+| Rosenbrock23 |  277205 |   535705 |      0.517 |       2064 |       23712 |            0.087 |
+| TRBDF2       |  390775 |   146210 |      2.673 |       1616 |       11120 |            0.145 |
+| Kvaerno5     |  197700 |   214235 |      0.923 |     116744 |       13552 |            8.615 |
+| KenCarp5     |  132005 |   171750 |      0.769 |      83592 |       15968 |            5.235 |
+| Rodas4P      |  135610 |   242560 |      0.559 |       3088 |       16128 |            0.191 |
+| Rodas5P      |   78980 |   145140 |      0.544 |       3088 |       14656 |            0.211 |
+| Rodas5Pr     |  242055 |   139460 |      1.736 |       3088 |       14656 |            0.211 |
+
+For the crate's current regular-ODE scope, **Rodas5P is the selected default
+stiff solver**. It is the fastest Rust candidate in this matched slice, retains
+low allocation traffic, and already backs `DefaultImplicitODEAlgorithm`. This
+is a scoped default, not a claim that Rodas5P is universally best.
+
+Limitations of this selection:
+
+- this is one small diagonal stiff problem at one tolerance, not a
+  work-precision study;
+- the candidates may take different accepted/rejected step sequences;
+- the problem does not supply an analytic Jacobian, so this slice exercises
+  finite-difference Jacobian paths;
+- twenty solves provide a useful local comparison but not robust
+  cross-machine statistics;
+- allocated bytes are cumulative allocation traffic, not peak live memory or
+  process RSS;
+- nonlinear, sparse, large-dimensional, event-heavy, and application-specific
+  workloads may favor another method.
+
+The next stiff-selection benchmark wave should add work-precision curves,
+analytic-versus-finite-difference Jacobian lanes, representative nonlinear
+problems such as Robertson and Van der Pol, and process-RSS measurements.
+
+## 2026-07-30 preliminary 25-solver baseline
 
 Measured on 2026-07-30 with:
 

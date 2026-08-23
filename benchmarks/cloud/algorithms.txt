@@ -24,3 +24,9 @@ ImplicitEuler
 ImplicitMidpoint
 Trapezoid
 Rosenbrock23
+TRBDF2
+Kvaerno5
+KenCarp5
+Rodas4P
+Rodas5P
+Rodas5Pr

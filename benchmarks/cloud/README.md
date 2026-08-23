@@ -4,7 +4,7 @@ This harness runs the currently implemented Rust and Julia benchmark lanes on
 Google Compute Engine. It deliberately uses one disposable VM per
 algorithm/mode pair, so independent cases can run concurrently without
 cross-case CPU, allocator, or page-cache interference. By default the manifest
-contains 100 benchmark VMs (25 algorithms × 2 languages × timing/allocation)
+contains 124 benchmark VMs (31 algorithms × 2 languages × timing/allocation)
 plus one correctness-test VM.
 
 No cloud command is run by the repository scripts until you invoke them.
@@ -98,7 +98,7 @@ passwordless `sudo`; pass `--drop-caches 0` directly to `run_case.sh` if a
 kernel image does not permit it. The benchmark metadata records the git
 revision, hostname, VM-side tool versions, and dirty-tree state.
 
-The current harness covers the 25 solver configurations already implemented
+The current harness covers the 31 solver configurations already implemented
 by `examples/benchmark_matrix.rs` and `benchmarks/julia_matrix.jl`. Future
 language adapters can reuse `measure.sh` and emit the same CSV header; the
 collector will preserve their engine-specific columns automatically.

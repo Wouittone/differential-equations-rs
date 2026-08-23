@@ -2,8 +2,9 @@ using SciMLBase: ODEProblem, solve
 using OrdinaryDiffEqAdamsBashforthMoulton: AB3, AB4, AB5, ABM32, ABM43, ABM54
 using OrdinaryDiffEqLowOrderRK:
     Alshina2, Alshina3, Euler, Midpoint, Heun, Ralston, Ralston4, RK4, RKM, BS3, DP5
-using OrdinaryDiffEqRosenbrock: Rosenbrock23
-using OrdinaryDiffEqSDIRK: ImplicitEuler, ImplicitMidpoint, Trapezoid
+using OrdinaryDiffEqRosenbrock: Rodas4P, Rodas5P, Rodas5Pr, Rosenbrock23
+using OrdinaryDiffEqSDIRK:
+    ImplicitEuler, ImplicitMidpoint, KenCarp5, Kvaerno5, TRBDF2, Trapezoid
 using OrdinaryDiffEqSSPRK: SSPRK22, SSPRK33, SSPRK43
 using OrdinaryDiffEqTsit5: Tsit5
 
@@ -119,6 +120,12 @@ function main()
     ran |= maybe("ImplicitMidpoint", stiff, ImplicitMidpoint(); adaptive = false)
     ran |= maybe("Trapezoid", stiff, Trapezoid(); adaptive = false)
     ran |= maybe("Rosenbrock23", stiff, Rosenbrock23(); adaptive = true)
+    ran |= maybe("TRBDF2", stiff, TRBDF2(); adaptive = true)
+    ran |= maybe("Kvaerno5", stiff, Kvaerno5(); adaptive = true)
+    ran |= maybe("KenCarp5", stiff, KenCarp5(); adaptive = true)
+    ran |= maybe("Rodas4P", stiff, Rodas4P(); adaptive = true)
+    ran |= maybe("Rodas5P", stiff, Rodas5P(); adaptive = true)
+    ran |= maybe("Rodas5Pr", stiff, Rodas5Pr(); adaptive = true)
     !isnothing(selected) && !ran && error("unknown benchmark algorithm: $selected")
 end
 
