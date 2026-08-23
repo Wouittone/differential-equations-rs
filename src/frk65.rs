@@ -301,6 +301,7 @@ where
         prev: &[f64],
         s: &[f64],
         pt: f64,
+        _: f64,
         t: f64,
         fin: bool,
         r: &mut TrajectoryRecorder<'_>,

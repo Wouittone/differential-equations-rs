@@ -52,6 +52,34 @@ pub(crate) struct BorrowedHermiteSegment<'a> {
     end_derivative: &'a [f64],
 }
 
+/// Borrowed Runge--Kutta continuous extension for one accepted step.
+///
+/// Each coefficient row describes one stage weight as
+/// `theta * (r0 + r1*theta + r2*theta^2 + ...)`. This matches the continuous
+/// extension representation used by OrdinaryDiffEq's explicit RK methods.
+pub(crate) struct BorrowedRungeKuttaSegment<'a> {
+    start_time: f64,
+    end_time: f64,
+    start_state: &'a [f64],
+    end_state: &'a [f64],
+    stages: &'a [f64],
+    dimension: usize,
+    coefficients: &'static [&'static [f64]],
+}
+
+/// Owning Runge--Kutta continuous extension retained after a solve.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct RungeKuttaSegment {
+    start_time: f64,
+    end_time: f64,
+    bound_time: f64,
+    start_state: Vec<f64>,
+    end_state: Vec<f64>,
+    stages: Vec<f64>,
+    dimension: usize,
+    coefficients: &'static [&'static [f64]],
+}
+
 #[allow(dead_code)]
 impl HermiteSegment {
     pub(crate) fn new(
@@ -143,6 +171,101 @@ impl<'a> BorrowedHermiteSegment<'a> {
     }
 }
 
+impl<'a> BorrowedRungeKuttaSegment<'a> {
+    pub(crate) fn new(
+        start_time: f64,
+        end_time: f64,
+        start_state: &'a [f64],
+        end_state: &'a [f64],
+        stages: &'a [f64],
+        coefficients: &'static [&'static [f64]],
+    ) -> Result<Self, &'static str> {
+        let dimension = start_state.len();
+        if !start_time.is_finite()
+            || !end_time.is_finite()
+            || end_time == start_time
+            || dimension == 0
+            || end_state.len() != dimension
+            || coefficients.is_empty()
+            || stages.len() != coefficients.len() * dimension
+            || coefficients
+                .iter()
+                .any(|row| row.is_empty() || row.iter().any(|coefficient| !coefficient.is_finite()))
+            || !start_state.iter().all(|value| value.is_finite())
+            || !end_state.iter().all(|value| value.is_finite())
+            || !stages.iter().all(|value| value.is_finite())
+        {
+            return Err("invalid Runge--Kutta dense segment data");
+        }
+        Ok(Self {
+            start_time,
+            end_time,
+            start_state,
+            end_state,
+            stages,
+            dimension,
+            coefficients,
+        })
+    }
+
+    fn contains(&self, time: f64) -> bool {
+        if !time.is_finite() {
+            return false;
+        }
+        if self.start_time < self.end_time {
+            (self.start_time..=self.end_time).contains(&time)
+        } else {
+            (self.end_time..=self.start_time).contains(&time)
+        }
+    }
+}
+
+impl RungeKuttaSegment {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        start_time: f64,
+        end_time: f64,
+        bound_time: f64,
+        start_state: &[f64],
+        end_state: &[f64],
+        stages: &[f64],
+        coefficients: &'static [&'static [f64]],
+    ) -> Result<Self, &'static str> {
+        let borrowed = BorrowedRungeKuttaSegment::new(
+            start_time,
+            end_time,
+            start_state,
+            end_state,
+            stages,
+            coefficients,
+        )?;
+        if !borrowed.contains(bound_time) {
+            return Err("invalid Runge--Kutta dense segment bound");
+        }
+        Ok(Self {
+            start_time,
+            end_time,
+            bound_time,
+            start_state: start_state.to_vec(),
+            end_state: end_state.to_vec(),
+            stages: stages.to_vec(),
+            dimension: start_state.len(),
+            coefficients,
+        })
+    }
+
+    fn contains(&self, time: f64) -> bool {
+        if !time.is_finite() {
+            return false;
+        }
+        if self.start_time < self.bound_time {
+            (self.start_time..=self.bound_time).contains(&time)
+        } else {
+            (self.bound_time..=self.start_time).contains(&time)
+        }
+    }
+}
+
 #[allow(dead_code)]
 impl DenseSegment for HermiteSegment {
     fn interpolate(&self, time: f64, output: &mut [f64]) -> Result<(), &'static str> {
@@ -178,6 +301,95 @@ impl DenseSegment for BorrowedHermiteSegment<'_> {
             output,
         )
     }
+}
+
+impl DenseSegment for BorrowedRungeKuttaSegment<'_> {
+    fn interpolate(&self, time: f64, output: &mut [f64]) -> Result<(), &'static str> {
+        if !self.contains(time) || output.len() != self.dimension {
+            return Err("dense output dimension or time mismatch");
+        }
+        if time == self.start_time {
+            output.copy_from_slice(self.start_state);
+            return Ok(());
+        }
+        if time == self.end_time {
+            output.copy_from_slice(self.end_state);
+            return Ok(());
+        }
+
+        interpolate_runge_kutta(
+            self.start_time,
+            self.end_time,
+            self.start_state,
+            self.stages,
+            self.coefficients,
+            time,
+            output,
+        )
+    }
+}
+
+impl DenseSegment for RungeKuttaSegment {
+    fn interpolate(&self, time: f64, output: &mut [f64]) -> Result<(), &'static str> {
+        if !self.contains(time) || output.len() != self.dimension {
+            return Err("dense output dimension or time mismatch");
+        }
+        if time == self.start_time {
+            output.copy_from_slice(&self.start_state);
+            return Ok(());
+        }
+        if time == self.end_time {
+            output.copy_from_slice(&self.end_state);
+            return Ok(());
+        }
+        interpolate_runge_kutta(
+            self.start_time,
+            self.end_time,
+            &self.start_state,
+            &self.stages,
+            self.coefficients,
+            time,
+            output,
+        )
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn interpolate_runge_kutta(
+    start_time: f64,
+    end_time: f64,
+    start_state: &[f64],
+    stages: &[f64],
+    coefficients: &'static [&'static [f64]],
+    time: f64,
+    output: &mut [f64],
+) -> Result<(), &'static str> {
+    let dimension = start_state.len();
+    if !time.is_finite()
+        || output.len() != dimension
+        || end_time == start_time
+        || stages.len() != coefficients.len() * dimension
+    {
+        return Err("dense output dimension or time mismatch");
+    }
+    let step = end_time - start_time;
+    let theta = (time - start_time) / step;
+    output.copy_from_slice(start_state);
+    for (stage_index, coefficients) in coefficients.iter().enumerate() {
+        let polynomial = coefficients
+            .iter()
+            .rev()
+            .fold(0.0, |value, coefficient| value * theta + coefficient);
+        let weight = step * theta * polynomial;
+        let stage_start = stage_index * dimension;
+        for (value, derivative) in output
+            .iter_mut()
+            .zip(&stages[stage_start..stage_start + dimension])
+        {
+            *value += weight * derivative;
+        }
+    }
+    Ok(())
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -229,6 +441,8 @@ pub(crate) struct TrajectoryRecorder<'a> {
     next_save: usize,
     save_mode: SaveMode,
     interpolation: Vec<f64>,
+    dense_segments: Vec<RungeKuttaSegment>,
+    retain_dense_output: bool,
 }
 
 impl<'a> TrajectoryRecorder<'a> {
@@ -257,6 +471,8 @@ impl<'a> TrajectoryRecorder<'a> {
             } else {
                 vec![0.0; state.len()]
             },
+            dense_segments: Vec::new(),
+            retain_dense_output: options.retain_dense_output,
         }
     }
 
@@ -339,7 +555,30 @@ impl<'a> TrajectoryRecorder<'a> {
     }
 
     pub(crate) fn finish(self, stats: SolverStats) -> Solution {
-        Solution::new(self.times, self.values, self.dimension, stats)
+        if self.dense_segments.is_empty() {
+            Solution::new(self.times, self.values, self.dimension, stats)
+        } else {
+            Solution::new_with_dense(
+                self.times,
+                self.values,
+                self.dimension,
+                stats,
+                self.dense_segments,
+            )
+        }
+    }
+
+    pub(crate) fn retains_dense_output(&self) -> bool {
+        self.retain_dense_output
+    }
+
+    pub(crate) fn needs_dense_sampling(&self) -> bool {
+        !self.save_at.is_empty()
+    }
+
+    pub(crate) fn retain_runge_kutta_segment(&mut self, segment: RungeKuttaSegment) {
+        debug_assert!(self.retain_dense_output);
+        self.dense_segments.push(segment);
     }
 
     pub(crate) fn force_state(&mut self, time: f64, state: &[f64]) {
@@ -367,6 +606,7 @@ pub struct Solution {
     values: Vec<f64>,
     dimension: usize,
     stats: SolverStats,
+    dense_segments: Vec<RungeKuttaSegment>,
 }
 
 impl Solution {
@@ -382,6 +622,24 @@ impl Solution {
             values,
             dimension,
             stats,
+            dense_segments: Vec::new(),
+        }
+    }
+
+    fn new_with_dense(
+        times: Vec<f64>,
+        values: Vec<f64>,
+        dimension: usize,
+        stats: SolverStats,
+        dense_segments: Vec<RungeKuttaSegment>,
+    ) -> Self {
+        debug_assert_eq!(values.len(), times.len() * dimension);
+        Self {
+            times,
+            values,
+            dimension,
+            stats,
+            dense_segments,
         }
     }
 
@@ -419,8 +677,17 @@ impl Solution {
         if !time.is_finite() || self.times.is_empty() {
             return None;
         }
-        if time == self.times[0] {
-            return Some(self.state(0)?.to_vec());
+        for (index, &saved_time) in self.times.iter().enumerate() {
+            if time == saved_time {
+                return Some(self.state(index)?.to_vec());
+            }
+        }
+        for segment in &self.dense_segments {
+            if segment.contains(time) {
+                let mut output = vec![0.0; self.dimension];
+                segment.interpolate(time, &mut output).ok()?;
+                return Some(output);
+            }
         }
         for index in 1..self.times.len() {
             let left = self.times[index - 1];

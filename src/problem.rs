@@ -18,6 +18,7 @@ pub struct OdeProblem<F, P> {
 }
 
 type JacobianFunction<P> = dyn Fn(&mut [f64], &[f64], &P, f64);
+type StepInterpolator<'a> = dyn FnMut(f64, &mut [f64]) -> Result<(), SolveError> + 'a;
 
 /// A split/IMEX ODE representation retaining explicit and implicit components.
 ///
@@ -302,6 +303,7 @@ impl<F, P> OdeProblem<F, P> {
         Ok(outcome)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn apply_step_callbacks(
         &self,
         previous_state: &[f64],
@@ -310,6 +312,7 @@ impl<F, P> OdeProblem<F, P> {
         time: &mut f64,
         state_before_effect: &mut [f64],
         event_tolerance: f64,
+        mut interpolator: Option<&mut StepInterpolator<'_>>,
     ) -> Result<CallbackOutcome, SolveError> {
         if self.callbacks.is_empty() {
             return Ok(CallbackOutcome::default());
@@ -339,6 +342,7 @@ impl<F, P> OdeProblem<F, P> {
                     state_before_effect,
                     &self.parameters,
                     event_tolerance,
+                    &mut interpolator,
                 )?;
                 if root.is_none_or(|(_, earliest)| fraction < earliest) {
                     root = Some((index, fraction));
@@ -348,9 +352,14 @@ impl<F, P> OdeProblem<F, P> {
 
         if let Some((index, fraction)) = root {
             let end_time = *time;
-            interpolate(state, previous_state, fraction, state_before_effect);
+            let root_time = previous_time + fraction * (end_time - previous_time);
+            if let Some(interpolator) = interpolator.as_mut() {
+                interpolator(root_time, state_before_effect)?;
+            } else {
+                interpolate(state, previous_state, fraction, state_before_effect);
+            }
             state.copy_from_slice(state_before_effect);
-            *time = previous_time + fraction * (end_time - previous_time);
+            *time = root_time;
             let Callback::Continuous(callback) = &self.callbacks[index] else {
                 unreachable!();
             };
@@ -397,14 +406,19 @@ fn locate_root<P>(
     interpolation: &mut [f64],
     parameters: &P,
     event_tolerance: f64,
+    interpolator: &mut Option<&mut StepInterpolator<'_>>,
 ) -> Result<f64, SolveError> {
     let mut left = 0.0;
     let mut right = 1.0;
     let mut left_value = before;
     for _ in 0..64 {
         let middle = 0.5 * (left + right);
-        interpolate(segment.state, segment.previous_state, middle, interpolation);
         let middle_time = segment.previous_time + middle * (segment.time - segment.previous_time);
+        if let Some(interpolator) = interpolator.as_mut() {
+            interpolator(middle_time, interpolation)?;
+        } else {
+            interpolate(segment.state, segment.previous_state, middle, interpolation);
+        }
         let value = (callback.condition)(interpolation, parameters, middle_time);
         if !value.is_finite() {
             return Err(SolveError::NonFiniteCallbackCondition);

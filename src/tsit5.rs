@@ -51,6 +51,44 @@ const ERROR_WEIGHTS: &[f64] = &[
     0.015_151_515_151_515_152,
 ];
 
+// Pinned OrdinaryDiffEqTsit5 fourth-order free continuous extension. Each
+// stage row is the polynomial inside `theta * (r0 + r1*theta + ...)`.
+const DENSE_1: &[f64] = &[
+    1.0,
+    -2.763_706_197_274_826,
+    2.913_255_461_821_912_6,
+    -1.053_088_497_729_021_6,
+];
+const DENSE_2: &[f64] = &[0.0, 0.131_699_999_999_999_98, -0.2234, 0.1017];
+const DENSE_3: &[f64] = &[
+    0.0,
+    3.930_296_236_894_751_6,
+    -5.941_033_872_131_505,
+    2.490_627_285_651_253,
+];
+const DENSE_4: &[f64] = &[
+    0.0,
+    -12.411_077_166_933_676,
+    30.338_188_630_282_32,
+    -16.548_102_889_244_902,
+];
+const DENSE_5: &[f64] = &[
+    0.0,
+    37.509_313_416_511_04,
+    -88.178_904_894_766_4,
+    47.379_521_962_819_28,
+];
+const DENSE_6: &[f64] = &[
+    0.0,
+    -27.896_526_289_197_286,
+    65.091_894_674_793_66,
+    -34.870_657_861_496_61,
+];
+const DENSE_7: &[f64] = &[0.0, 1.5, -4.0, 2.5];
+const DENSE_COEFFICIENTS: &[&[f64]] = &[
+    DENSE_1, DENSE_2, DENSE_3, DENSE_4, DENSE_5, DENSE_6, DENSE_7,
+];
+
 /// The Tsitouras 5/4 explicit Runge-Kutta method.
 ///
 /// `Tsit5` is an adaptive, FSAL (first-same-as-last) method intended for non-stiff ODEs at medium tolerances.
@@ -65,6 +103,7 @@ impl ButcherTableau for Tsit5 {
     const ERROR_WEIGHTS: Option<&'static [f64]> = Some(ERROR_WEIGHTS);
     const ORDER: usize = 5;
     const FSAL: bool = true;
+    const DENSE_COEFFICIENTS: Option<&'static [&'static [f64]]> = Some(DENSE_COEFFICIENTS);
 }
 
 impl OdeAlgorithm for Tsit5 {

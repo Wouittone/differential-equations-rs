@@ -296,6 +296,7 @@ where
         previous_state: &[f64],
         state: &[f64],
         previous_time: f64,
+        _: f64,
         time: f64,
         final_time: bool,
         recorder: &mut TrajectoryRecorder<'_>,

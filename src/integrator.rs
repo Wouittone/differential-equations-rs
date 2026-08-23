@@ -1,3 +1,4 @@
+use crate::callback::CallbackOutcome;
 use crate::solution::TrajectoryRecorder;
 use crate::{OdeProblem, Solution, SolveError, SolveOptions, SolverStats};
 
@@ -164,6 +165,30 @@ where
         stats: &mut SolverStats,
     ) -> Result<StepEstimate, SolveError>;
 
+    /// Applies callbacks using the kernel's accepted-step interpolant when one
+    /// is available. The default preserves endpoint-linear localization.
+    #[allow(clippy::too_many_arguments)]
+    fn apply_step_callbacks(
+        &mut self,
+        problem: &OdeProblem<F, P>,
+        previous_state: &[f64],
+        previous_time: f64,
+        state: &mut [f64],
+        time: &mut f64,
+        state_before_effect: &mut [f64],
+        event_tolerance: f64,
+    ) -> Result<CallbackOutcome, SolveError> {
+        problem.apply_step_callbacks(
+            previous_state,
+            previous_time,
+            state,
+            time,
+            state_before_effect,
+            event_tolerance,
+            None,
+        )
+    }
+
     /// Samples `save_at` through an accepted method-specific dense segment.
     ///
     /// The hook runs after callbacks have identified any truncated endpoint,
@@ -175,6 +200,7 @@ where
         _: &OdeProblem<F, P>,
         _: &[f64],
         _: &[f64],
+        _: f64,
         _: f64,
         _: f64,
         _: bool,
@@ -302,7 +328,9 @@ where
             if direction * (end - next_time) <= 0.0 {
                 next_time = end;
             }
-            let callbacks = problem.apply_step_callbacks(
+            let attempted_time = next_time;
+            let callbacks = kernel.apply_step_callbacks(
+                problem,
                 &state,
                 previous_time,
                 &mut candidate,
@@ -313,7 +341,7 @@ where
             stats.callback_invocations += callbacks.invocations;
             stats.accepted_steps += 1;
 
-            let dense_recorded = if !options.save_at.is_empty() {
+            let dense_recorded = if !options.save_at.is_empty() || options.retain_dense_output {
                 let dense_state = if callbacks.invocations == 0 {
                     &candidate
                 } else {
@@ -324,6 +352,7 @@ where
                     &state,
                     dense_state,
                     previous_time,
+                    attempted_time,
                     next_time,
                     next_time == end,
                     &mut recorder,

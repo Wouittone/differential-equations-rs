@@ -39,6 +39,12 @@ pub struct SolveOptions {
     /// integration direction. As in SciML, supplying values overrides the
     /// ordinary start/end/every-step saving controlled by [`save`](Self::save).
     pub save_at: Vec<f64>,
+    /// Retain accepted-step method-specific dense segments for post-solve queries.
+    ///
+    /// This is opt-in because retaining stage data allocates per accepted step.
+    /// When disabled, [`Solution::interpolate`](crate::Solution::interpolate)
+    /// keeps its stable linear fallback between saved states.
+    pub retain_dense_output: bool,
 }
 
 impl Default for SolveOptions {
@@ -53,6 +59,7 @@ impl Default for SolveOptions {
             event_tolerance: f64::EPSILON,
             save: SaveMode::EveryStep,
             save_at: Vec::new(),
+            retain_dense_output: false,
         }
     }
 }
@@ -117,6 +124,13 @@ impl SolveOptions {
     #[must_use]
     pub fn with_save_at(mut self, times: impl IntoIterator<Item = f64>) -> Self {
         self.save_at = times.into_iter().collect();
+        self
+    }
+
+    /// Enables or disables retention of method-specific accepted-step segments.
+    #[must_use]
+    pub fn with_dense_output(mut self, retain: bool) -> Self {
+        self.retain_dense_output = retain;
         self
     }
 }

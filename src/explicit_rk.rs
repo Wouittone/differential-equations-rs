@@ -1,3 +1,4 @@
+use crate::callback::CallbackOutcome;
 use crate::generated_coefficients::{
     BS3_A_ROWS, BS3_B as GENERATED_BS3_B, BS3_E as GENERATED_BS3_E, BS3_STAGE_TIMES, DP5_A_ROWS,
     DP5_B as GENERATED_DP5_B, DP5_E as GENERATED_DP5_E, DP5_STAGE_TIMES, EULER_A_ROWS,
@@ -9,7 +10,10 @@ use crate::generated_coefficients::{
 use crate::integrator::{
     KernelCapabilities, StepEstimate, StepKernel, integrate as drive_integration,
 };
-use crate::solution::{BorrowedHermiteSegment, TrajectoryRecorder};
+use crate::solution::{
+    BorrowedHermiteSegment, BorrowedRungeKuttaSegment, RungeKuttaSegment, TrajectoryRecorder,
+    interpolate_runge_kutta,
+};
 use crate::{OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions, SolverStats};
 use std::marker::PhantomData;
 
@@ -28,6 +32,11 @@ pub trait ButcherTableau {
     const SECOND_ERROR_WEIGHTS: Option<&'static [f64]> = None;
     const ORDER: usize;
     const FSAL: bool;
+    /// Optional method-specific continuous-extension coefficients.
+    ///
+    /// Each row corresponds to one RK stage and stores `r0, r1, ...` for the
+    /// stage weight `theta * (r0 + r1*theta + ...)`.
+    const DENSE_COEFFICIENTS: Option<&'static [&'static [f64]]> = None;
 }
 
 /// The centralized explicit Runge–Kutta solver for a [`ButcherTableau`].
@@ -1228,6 +1237,12 @@ fn validate_tableau<T: ButcherTableau>() -> Result<(), SolveError> {
         && T::ERROR_WEIGHTS.is_none_or(|weights| weights.iter().all(|value| value.is_finite()));
     let second_error_estimator_finite =
         T::SECOND_ERROR_WEIGHTS.is_none_or(|weights| weights.iter().all(|value| value.is_finite()));
+    let dense_coefficients_valid = T::DENSE_COEFFICIENTS.is_none_or(|rows| {
+        rows.len() == stage_count
+            && rows
+                .iter()
+                .all(|row| !row.is_empty() && row.iter().all(|coefficient| coefficient.is_finite()))
+    });
     let fsal_valid = !T::FSAL
         || (stage_count > 0
             && T::NODES.last() == Some(&1.0)
@@ -1240,6 +1255,7 @@ fn validate_tableau<T: ButcherTableau>() -> Result<(), SolveError> {
         && error_estimators_valid
         && coefficients_finite
         && second_error_estimator_finite
+        && dense_coefficients_valid
         && fsal_valid)
         .then_some(())
         .ok_or(SolveError::InvalidTableau)
@@ -1387,41 +1403,126 @@ where
         Ok(StepEstimate::new(error))
     }
 
+    fn apply_step_callbacks(
+        &mut self,
+        problem: &OdeProblem<F, P>,
+        previous_state: &[f64],
+        previous_time: f64,
+        state: &mut [f64],
+        time: &mut f64,
+        state_before_effect: &mut [f64],
+        event_tolerance: f64,
+    ) -> Result<CallbackOutcome, SolveError> {
+        let Some(coefficients) = T::DENSE_COEFFICIENTS else {
+            return problem.apply_step_callbacks(
+                previous_state,
+                previous_time,
+                state,
+                time,
+                state_before_effect,
+                event_tolerance,
+                None,
+            );
+        };
+        let attempted_time = *time;
+        let stages = &self.workspace.stages;
+        let mut interpolate = |sample_time: f64, output: &mut [f64]| {
+            interpolate_runge_kutta(
+                previous_time,
+                attempted_time,
+                previous_state,
+                stages,
+                coefficients,
+                sample_time,
+                output,
+            )
+            .map_err(|_| SolveError::NonFiniteDerivative)
+        };
+        problem.apply_step_callbacks(
+            previous_state,
+            previous_time,
+            state,
+            time,
+            state_before_effect,
+            event_tolerance,
+            Some(&mut interpolate),
+        )
+    }
+
     fn record_dense_step(
         &mut self,
         problem: &OdeProblem<F, P>,
         previous_state: &[f64],
         state: &[f64],
         previous_time: f64,
+        attempted_time: f64,
         time: f64,
         final_time: bool,
         recorder: &mut TrajectoryRecorder<'_>,
         stats: &mut SolverStats,
     ) -> Result<bool, SolveError> {
-        // The initial stage is the derivative at the accepted step's left
-        // endpoint. Reuse the workspace error scratch for the right-endpoint
-        // derivative so dense save-at adds no per-step allocation.
-        evaluate(problem, &mut self.workspace.temporary, state, time, stats);
-        ensure_finite(&self.workspace.temporary)?;
-        let segment = BorrowedHermiteSegment::new(
-            previous_time,
-            time,
-            previous_state,
-            state,
-            self.workspace.stage(0),
-            &self.workspace.temporary,
-        )
-        .map_err(|_| SolveError::NonFiniteDerivative)?;
-        recorder
-            .record_step_dense(
-                previous_state,
+        if let Some(coefficients) = T::DENSE_COEFFICIENTS {
+            let segment = BorrowedRungeKuttaSegment::new(
                 previous_time,
+                attempted_time,
+                previous_state,
                 state,
-                time,
-                final_time,
-                &segment,
+                &self.workspace.stages,
+                coefficients,
             )
             .map_err(|_| SolveError::NonFiniteDerivative)?;
+            recorder
+                .record_step_dense(
+                    previous_state,
+                    previous_time,
+                    state,
+                    time,
+                    final_time,
+                    &segment,
+                )
+                .map_err(|_| SolveError::NonFiniteDerivative)?;
+            if recorder.retains_dense_output() {
+                let segment = RungeKuttaSegment::new(
+                    previous_time,
+                    attempted_time,
+                    time,
+                    previous_state,
+                    state,
+                    &self.workspace.stages,
+                    coefficients,
+                )
+                .map_err(|_| SolveError::NonFiniteDerivative)?;
+                recorder.retain_runge_kutta_segment(segment);
+            }
+        } else {
+            if !recorder.needs_dense_sampling() {
+                return Ok(false);
+            }
+            // The initial stage is the derivative at the accepted step's left
+            // endpoint. Reuse the workspace error scratch for the right-endpoint
+            // derivative so dense save-at adds no per-step allocation.
+            evaluate(problem, &mut self.workspace.temporary, state, time, stats);
+            ensure_finite(&self.workspace.temporary)?;
+            let segment = BorrowedHermiteSegment::new(
+                previous_time,
+                time,
+                previous_state,
+                state,
+                self.workspace.stage(0),
+                &self.workspace.temporary,
+            )
+            .map_err(|_| SolveError::NonFiniteDerivative)?;
+            recorder
+                .record_step_dense(
+                    previous_state,
+                    previous_time,
+                    state,
+                    time,
+                    final_time,
+                    &segment,
+                )
+                .map_err(|_| SolveError::NonFiniteDerivative)?;
+        }
         Ok(true)
     }
 
@@ -1710,6 +1811,18 @@ mod tests {
         const FSAL: bool = false;
     }
 
+    struct MalformedDenseTableau;
+
+    impl ButcherTableau for MalformedDenseTableau {
+        const NODES: &'static [f64] = &[0.0];
+        const COEFFICIENTS: &'static [&'static [f64]] = &[&[]];
+        const WEIGHTS: &'static [f64] = &[1.0];
+        const ERROR_WEIGHTS: Option<&'static [f64]> = None;
+        const ORDER: usize = 1;
+        const FSAL: bool = false;
+        const DENSE_COEFFICIENTS: Option<&'static [&'static [f64]]> = Some(&[&[]]);
+    }
+
     fn exponential() -> OdeProblem<TestRhs, ()> {
         fn rhs(du: &mut [f64], u: &[f64], _: &(), _: f64) {
             du[0] = u[0];
@@ -1919,6 +2032,14 @@ mod tests {
                 &problem,
                 ExplicitRungeKutta::<MalformedSecondEstimator>::new(),
                 &adaptive_options(),
+            ),
+            Err(SolveError::InvalidTableau)
+        );
+        assert_eq!(
+            solve(
+                &problem,
+                ExplicitRungeKutta::<MalformedDenseTableau>::new(),
+                &options,
             ),
             Err(SolveError::InvalidTableau)
         );
