@@ -1,9 +1,10 @@
 //! Shu--Osher multistep SSP methods from OrdinaryDiffEqSSPRK.
 //!
-//! `SSPRKMSVS32` is a three-step, second-order method.  Although the pinned
-//! Julia type carries the adaptive-algorithm marker, its documentation and
-//! implementation provide no error estimator and require a fixed time step.
-//! This port therefore deliberately exposes fixed-step integration only.
+//! `SSPRKMSVS32` and `SSPRKMSVS43` are respectively three-step, second-order
+//! and four-step, third-order methods. Although the pinned Julia types carry
+//! the adaptive-algorithm marker, their documentation and implementations
+//! provide no error estimator and require a fixed time step. This port
+//! therefore deliberately exposes fixed-step integration only.
 
 use crate::integrator::{KernelCapabilities, StepEstimate, StepKernel, integrate};
 use crate::{OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions, SolverStats};
@@ -18,6 +19,17 @@ pub struct SspRkMsvs32;
 /// naming convention.
 #[allow(non_camel_case_types)]
 pub type SSPRKMSVS32 = SspRkMsvs32;
+
+/// The third-order, four-step strong-stability-preserving linear multistep
+/// method `SSPRKMSVS43`.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct SspRkMsvs43;
+
+/// Upper-case spelling retained for callers matching the upstream algorithm
+/// name. The canonical Rust type follows the crate's existing `SspRk*`
+/// naming convention.
+#[allow(non_camel_case_types)]
+pub type SSPRKMSVS43 = SspRkMsvs43;
 
 struct Msvs32Kernel {
     /// Derivative at the accepted state at the start of the trial step.
@@ -36,6 +48,27 @@ struct Msvs32Kernel {
     last_step: f64,
 }
 
+struct Msvs43Kernel {
+    /// Derivative at the accepted state at the start of the trial step.
+    derivative: Vec<f64>,
+    /// Derivative at the candidate endpoint, retained for the next step.
+    next_derivative: Vec<f64>,
+    /// Temporary Euler state used by the two-stage startup procedure.
+    euler_state: Vec<f64>,
+    /// Accepted states one, two, and three steps behind the current state.
+    u_1: Vec<f64>,
+    u_2: Vec<f64>,
+    u_3: Vec<f64>,
+    /// Derivatives paired with the three stored history states.
+    k1: Vec<f64>,
+    k2: Vec<f64>,
+    k3: Vec<f64>,
+    /// Number of accepted kernel steps, including startup steps.
+    step: usize,
+    /// Magnitude of the previous accepted step, for a clipped final step.
+    last_step: f64,
+}
+
 impl Msvs32Kernel {
     fn new(dimension: usize) -> Self {
         Self {
@@ -44,6 +77,45 @@ impl Msvs32Kernel {
             euler_state: vec![0.0; dimension],
             u_2: vec![0.0; dimension],
             u_1: vec![0.0; dimension],
+            step: 1,
+            last_step: 0.0,
+        }
+    }
+
+    fn evaluate<F, P>(
+        problem: &OdeProblem<F, P>,
+        derivative: &mut [f64],
+        state: &[f64],
+        time: f64,
+        stats: &mut SolverStats,
+    ) where
+        F: Fn(&mut [f64], &[f64], &P, f64),
+    {
+        (problem.rhs)(derivative, state, problem.parameters(), time);
+        stats.rhs_evaluations += 1;
+    }
+
+    fn ensure_finite(values: &[f64]) -> Result<(), SolveError> {
+        values
+            .iter()
+            .all(|value| value.is_finite())
+            .then_some(())
+            .ok_or(SolveError::NonFiniteDerivative)
+    }
+}
+
+impl Msvs43Kernel {
+    fn new(dimension: usize) -> Self {
+        Self {
+            derivative: vec![0.0; dimension],
+            next_derivative: vec![0.0; dimension],
+            euler_state: vec![0.0; dimension],
+            u_1: vec![0.0; dimension],
+            u_2: vec![0.0; dimension],
+            u_3: vec![0.0; dimension],
+            k1: vec![0.0; dimension],
+            k2: vec![0.0; dimension],
+            k3: vec![0.0; dimension],
             step: 1,
             last_step: 0.0,
         }
@@ -222,6 +294,171 @@ where
     fn reject_step(&mut self) {}
 }
 
+impl<F, P> StepKernel<F, P> for Msvs43Kernel
+where
+    F: Fn(&mut [f64], &[f64], &P, f64),
+{
+    fn capabilities(&self) -> KernelCapabilities {
+        // The pinned constructor has no error estimator and explicitly
+        // requires fixed timestep operation.
+        KernelCapabilities::new(false, 3)
+    }
+
+    fn initialize(
+        &mut self,
+        problem: &OdeProblem<F, P>,
+        state: &[f64],
+        time: f64,
+        stats: &mut SolverStats,
+    ) -> Result<(), SolveError> {
+        Self::evaluate(problem, &mut self.derivative, state, time, stats);
+        Self::ensure_finite(&self.derivative)?;
+        self.u_1.copy_from_slice(state);
+        self.u_2.copy_from_slice(state);
+        self.u_3.copy_from_slice(state);
+        self.k1.fill(0.0);
+        self.k2.fill(0.0);
+        self.k3.fill(0.0);
+        self.step = 1;
+        self.last_step = 0.0;
+        Ok(())
+    }
+
+    fn estimate_initial_step(
+        &mut self,
+        _: &OdeProblem<F, P>,
+        _: &[f64],
+        _: f64,
+        _: f64,
+        maximum_step: f64,
+        _: &mut [f64],
+        _: &SolveOptions,
+        _: &mut SolverStats,
+    ) -> Result<f64, SolveError> {
+        Ok(maximum_step)
+    }
+
+    fn attempt_step(
+        &mut self,
+        problem: &OdeProblem<F, P>,
+        state: &[f64],
+        time: f64,
+        step: f64,
+        candidate: &mut [f64],
+        _: &SolveOptions,
+        stats: &mut SolverStats,
+    ) -> Result<StepEstimate, SolveError> {
+        // The pinned algorithm starts with three SSPRK22 steps. A tiny clipped
+        // final interval cannot use constant-step multistep history either.
+        let startup = self.step < 4 || (self.last_step > 0.0 && step.abs() < 0.5 * self.last_step);
+        if startup {
+            for ((output, value), derivative) in
+                self.euler_state.iter_mut().zip(state).zip(&self.derivative)
+            {
+                *output = *value + step * derivative;
+            }
+            Self::ensure_finite(&self.euler_state)?;
+            Self::evaluate(
+                problem,
+                &mut self.next_derivative,
+                &self.euler_state,
+                time + step,
+                stats,
+            );
+            Self::ensure_finite(&self.next_derivative)?;
+            for (((output, value), euler), derivative) in candidate
+                .iter_mut()
+                .zip(state)
+                .zip(&self.euler_state)
+                .zip(&self.next_derivative)
+            {
+                *output = (*value + *euler + step * derivative) * 0.5;
+            }
+        } else {
+            // Pinned constant-step recurrence:
+            // 16/27 * (u_n + 3 h f_n) + 11/27 * (u_{n-3} + 12/11 h f_{n-3}).
+            for ((((output, value), derivative), old), old_derivative) in candidate
+                .iter_mut()
+                .zip(state)
+                .zip(&self.derivative)
+                .zip(&self.u_3)
+                .zip(&self.k3)
+            {
+                *output = (16.0 / 27.0) * (*value + 3.0 * step * derivative)
+                    + (11.0 / 27.0) * (*old + (12.0 / 11.0) * step * old_derivative);
+            }
+        }
+        Self::ensure_finite(candidate)?;
+
+        Self::evaluate(
+            problem,
+            &mut self.next_derivative,
+            candidate,
+            time + step,
+            stats,
+        );
+        Self::ensure_finite(&self.next_derivative)?;
+        Ok(StepEstimate::new(0.0))
+    }
+
+    fn accept_step(
+        &mut self,
+        problem: &OdeProblem<F, P>,
+        previous_state: &[f64],
+        state: &[f64],
+        time: f64,
+        accepted_step: f64,
+        callback_applied: bool,
+        stats: &mut SolverStats,
+    ) -> Result<(), SolveError> {
+        if callback_applied {
+            self.u_1.copy_from_slice(state);
+            self.u_2.copy_from_slice(state);
+            self.u_3.copy_from_slice(state);
+            self.k1.fill(0.0);
+            self.k2.fill(0.0);
+            self.k3.fill(0.0);
+            self.step = 1;
+            self.last_step = 0.0;
+            Self::evaluate(problem, &mut self.derivative, state, time, stats);
+            Self::ensure_finite(&self.derivative)?;
+            return Ok(());
+        }
+
+        match self.step {
+            1 => {
+                self.u_3.copy_from_slice(previous_state);
+                Self::evaluate(problem, &mut self.k3, previous_state, time, stats);
+                Self::ensure_finite(&self.k3)?;
+            }
+            2 => {
+                self.u_2.copy_from_slice(previous_state);
+                Self::evaluate(problem, &mut self.k2, previous_state, time, stats);
+                Self::ensure_finite(&self.k2)?;
+            }
+            3 => {
+                self.u_1.copy_from_slice(previous_state);
+                Self::evaluate(problem, &mut self.k1, previous_state, time, stats);
+                Self::ensure_finite(&self.k1)?;
+            }
+            _ => {
+                self.u_3.copy_from_slice(&self.u_2);
+                self.u_2.copy_from_slice(&self.u_1);
+                self.u_1.copy_from_slice(previous_state);
+                self.k3.copy_from_slice(&self.k2);
+                self.k2.copy_from_slice(&self.k1);
+                self.k1.copy_from_slice(&self.derivative);
+            }
+        }
+        self.derivative.copy_from_slice(&self.next_derivative);
+        self.last_step = accepted_step.abs();
+        self.step += 1;
+        Ok(())
+    }
+
+    fn reject_step(&mut self) {}
+}
+
 impl OdeAlgorithm for SspRkMsvs32 {
     fn solve<F, P>(
         &self,
@@ -239,9 +476,26 @@ impl OdeAlgorithm for SspRkMsvs32 {
     }
 }
 
+impl OdeAlgorithm for SspRkMsvs43 {
+    fn solve<F, P>(
+        &self,
+        problem: &OdeProblem<F, P>,
+        options: &SolveOptions,
+    ) -> Result<Solution, SolveError>
+    where
+        F: Fn(&mut [f64], &[f64], &P, f64),
+    {
+        integrate(
+            problem,
+            options,
+            Msvs43Kernel::new(problem.initial_state().len()),
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::SspRkMsvs32;
+    use super::{SspRkMsvs32, SspRkMsvs43};
     use crate::{CallbackAction, OdeProblem, SaveMode, SolveError, SolveOptions, solve};
 
     type TestRhs = fn(&mut [f64], &[f64], &(), f64);
@@ -276,6 +530,18 @@ mod tests {
     }
 
     #[test]
+    fn msvs43_is_third_order_after_startup() {
+        let coarse = solve(&exponential(), SspRkMsvs43, &fixed(0.1)).unwrap();
+        let fine = solve(&exponential(), SspRkMsvs43, &fixed(0.05)).unwrap();
+        let coarse_error = (coarse.last_state()[0] - 1.0_f64.exp()).abs();
+        let fine_error = (fine.last_state()[0] - 1.0_f64.exp()).abs();
+        assert!(
+            fine_error < coarse_error / 7.0,
+            "{coarse_error} -> {fine_error}"
+        );
+    }
+
+    #[test]
     fn msvs32_supports_backward_and_rejects_adaptive_mode() {
         let problem = OdeProblem::new(exponential_rhs, vec![1.0_f64.exp()], (1.0, 0.0), ());
         let mut options = fixed(0.05);
@@ -288,6 +554,21 @@ mod tests {
         );
         assert_eq!(
             solve(&exponential(), SspRkMsvs32, &SolveOptions::default()),
+            Err(SolveError::AdaptiveStepUnsupported)
+        );
+    }
+
+    #[test]
+    fn msvs43_supports_backward_and_rejects_adaptive_mode() {
+        let problem = OdeProblem::new(exponential_rhs, vec![1.0_f64.exp()], (1.0, 0.0), ());
+        let solution = solve(&problem, SspRkMsvs43, &fixed(0.05)).unwrap();
+        assert!(
+            (solution.last_state()[0] - 1.0).abs() < 5.0e-4,
+            "backward endpoint = {}",
+            solution.last_state()[0]
+        );
+        assert_eq!(
+            solve(&exponential(), SspRkMsvs43, &SolveOptions::default()),
             Err(SolveError::AdaptiveStepUnsupported)
         );
     }

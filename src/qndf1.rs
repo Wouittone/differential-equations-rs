@@ -10,7 +10,7 @@ use crate::integrator::{
 use crate::linear::{DenseLu, LinearError, StateLayout, factorize, solve_factorized};
 use crate::{OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions, SolverStats};
 
-const KAPPA: f64 = -37.0 / 200.0;
+const DEFAULT_KAPPA: f64 = -37.0 / 200.0;
 const MAX_NEWTON_ITERATIONS: usize = 12;
 const NEWTON_TOLERANCE: f64 = 1.0e-12;
 // The shared driver's proportional controller uses a conservative safety
@@ -20,6 +20,10 @@ const CONTROLLER: ControllerConfig = ControllerConfig::proportional(2, 0.9, 0.2,
 /// Adaptive first-order quasi-constant-step NDF method for regular ODEs.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Qndf1;
+
+/// First-order quasi-constant-step BDF method (`QNDF1(kappa = 0)`).
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct Qbdf1;
 
 impl OdeAlgorithm for Qndf1 {
     fn solve<F, P>(
@@ -33,7 +37,24 @@ impl OdeAlgorithm for Qndf1 {
         drive_integration(
             problem,
             options,
-            Qndf1Kernel::new(problem.initial_state().len()),
+            Qndf1Kernel::new(problem.initial_state().len(), DEFAULT_KAPPA),
+        )
+    }
+}
+
+impl OdeAlgorithm for Qbdf1 {
+    fn solve<F, P>(
+        &self,
+        problem: &OdeProblem<F, P>,
+        options: &SolveOptions,
+    ) -> Result<Solution, SolveError>
+    where
+        F: Fn(&mut [f64], &[f64], &P, f64),
+    {
+        drive_integration(
+            problem,
+            options,
+            Qndf1Kernel::new(problem.initial_state().len(), 0.0),
         )
     }
 }
@@ -81,12 +102,14 @@ impl Workspace {
 
 struct Qndf1Kernel {
     workspace: Workspace,
+    kappa: f64,
 }
 
 impl Qndf1Kernel {
-    fn new(dimension: usize) -> Self {
+    fn new(dimension: usize, kappa: f64) -> Self {
         Self {
             workspace: Workspace::new(dimension),
+            kappa,
         }
     }
 }
@@ -148,7 +171,7 @@ where
     ) -> Result<StepEstimate, SolveError> {
         self.workspace.factorization_ready = false;
         let startup = self.workspace.last_step.is_none();
-        let kappa = if startup { 0.0 } else { KAPPA };
+        let kappa = if startup { 0.0 } else { self.kappa };
         if startup {
             self.workspace.extrapolated_state.copy_from_slice(state);
         } else {
@@ -192,7 +215,7 @@ where
             .zip(&self.workspace.history_state)
             .map(|((&next, &now), &previous)| {
                 let d = next - now - rho * (now - previous);
-                (KAPPA + 0.5) * d
+                (self.kappa + 0.5) * d
             });
         Ok(StepEstimate::new(rms_scaled(
             difference, candidate, state, options,

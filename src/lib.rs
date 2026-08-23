@@ -10,6 +10,7 @@ mod abdf2;
 mod adams;
 mod anas5;
 mod autodp5;
+mod bdf;
 mod callback;
 mod coefficients;
 mod compatibility;
@@ -20,12 +21,16 @@ mod generated_coefficients;
 mod high_order;
 mod implicit;
 mod integrator;
+mod irkn_coefficients;
 mod linear;
 mod low_storage_rk;
 mod mebdf2;
+mod prk;
 mod problem;
 mod qndf1;
 mod qndf2;
+mod qprk;
+mod rkn_adaptive_coefficients;
 mod rosenbrock;
 mod rosenbrock_extended;
 mod sdirk;
@@ -33,11 +38,13 @@ mod sdirk_cash4;
 mod second_order;
 mod solution;
 mod solver;
+mod split_euler;
 mod ssprk_extended;
 mod ssprk_kyk2014;
 mod ssprk_kyk42;
 mod ssprk_msvs;
 mod stabilized;
+mod stabilized_coefficients;
 mod symplectic;
 mod trbdf2;
 mod tsit5;
@@ -48,6 +55,7 @@ pub use abdf2::Abdf2;
 pub use adams::{Ab3, Ab4, Ab5, Abm32, Abm43, Abm54};
 pub use anas5::Anas5;
 pub use autodp5::{AutoDP5, AutoDp5};
+pub use bdf::{FBDF, Fbdf, QBDF, QNDF, Qbdf, Qndf};
 pub use callback::{CallbackAction, EventDirection};
 pub use compatibility::{Tsit5DA, algorithms};
 pub use composites::{
@@ -75,9 +83,11 @@ pub use low_storage_rk::{
     SHLDDRK_2N, SHLDDRK52, Shlddrk64, TSLDDRK74,
 };
 pub use mebdf2::Mebdf2;
+pub use prk::{KuttaPRK2p5, KuttaPrk2p5Tableau};
 pub use problem::{MassMatrixOdeProblem, OdeProblem, SplitOdeProblem};
-pub use qndf1::Qndf1;
-pub use qndf2::Qndf2;
+pub use qndf1::{Qbdf1, Qndf1};
+pub use qndf2::{Qbdf2, Qndf2};
+pub use qprk::{QPRK98, Qprk98Tableau};
 pub use rosenbrock::Rosenbrock23;
 pub use rosenbrock_extended::{
     Grk4a, Grk4t, HybridExplicitImplicitRK, Rodas3, Rodas3P, Rodas3d, Rodas4, Rodas4P, Rodas4P2,
@@ -95,19 +105,26 @@ pub use sdirk::{
 };
 pub use sdirk_cash4::Cash4;
 pub use second_order::{
-    LeapfrogDriftKickDrift, SecondOrderOdeAlgorithm, SecondOrderOdeProblem, SecondOrderSolution,
-    SecondOrderSolveError, SymplecticEuler, VelocityVerlet, VerletLeapfrog, solve_second_order,
+    DPRKN4, DPRKN5, DPRKN6, DPRKN6FM, DPRKN8, DPRKN12, Dprkn4, Dprkn5, Dprkn6, Dprkn6Fm, Dprkn8,
+    Dprkn12, ERKN4, ERKN5, ERKN7, Erkn4, Erkn5, Erkn7, FineRKN4, FineRKN5, FineRkn4, FineRkn5,
+    IRKN3, IRKN4, Irkn3, Irkn4, LeapfrogDriftKickDrift, Nystrom4, Nystrom4VelocityIndependent,
+    Nystrom5VelocityIndependent, Rkn4, SecondOrderOdeAlgorithm, SecondOrderOdeProblem,
+    SecondOrderSolution, SecondOrderSolveError, SymplecticEuler, VelocityVerlet, VerletLeapfrog,
+    solve_second_order,
 };
 pub use solution::{Solution, SolverStats};
 pub use solver::{OdeAlgorithm, SaveMode, SolveError, SolveOptions, solve};
+pub use split_euler::{SplitEuler, SplitOdeAlgorithm, solve_split_euler};
 pub use ssprk_extended::{
     Prrk22, Prrk33, Prrk54, SspRk53, SspRk53H, SspRk53TwoN1, SspRk53TwoN2, SspRk54, SspRk63,
     SspRk73, SspRk83, SspRk104, SspRk432, SspRk932, pRRK22, pRRK33, pRRK54,
 };
 pub use ssprk_kyk42::{KYKSSPRK42, KykSsprk42};
 pub use ssprk_kyk2014::Kyk2014DgSsprk3S2;
-pub use ssprk_msvs::{SSPRKMSVS32, SspRkMsvs32};
-pub use stabilized::{RKC, RKG1, RKG2, RKL1, RKL2, RKMC2};
+pub use ssprk_msvs::{SSPRKMSVS32, SSPRKMSVS43, SspRkMsvs32, SspRkMsvs43};
+pub use stabilized::{
+    ESERK4, ESERK5, RKC, RKG1, RKG2, RKL1, RKL2, RKMC2, ROCK2, ROCK4, SERK2, TSRKC2, TSRKC3,
+};
 pub use symplectic::{
     CalvoSanz4, CandyRoz4, KahanLi6, KahanLi8, McAte2, McAte3, McAte4, McAte5, McAte8, McAte42,
     PseudoVerletLeapfrog, Ruth3, SofSpa10, SymplecticAlgorithm, SymplecticSolution,

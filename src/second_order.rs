@@ -1,9 +1,14 @@
+use crate::integrator::{ControllerConfig, ControllerState};
+use crate::irkn_coefficients::*;
+use crate::rkn_adaptive_coefficients::*;
 use crate::{CallbackAction, EventDirection, SaveMode, SolveError, SolveOptions, SolverStats};
 use thiserror::Error;
 
 type DiscreteCondition<P> = dyn Fn(&[f64], &[f64], &P, f64) -> bool;
 type ContinuousCondition<P> = dyn Fn(&[f64], &[f64], &P, f64) -> f64;
 type Affect<P> = dyn Fn(&mut [f64], &mut [f64], &P, f64) -> CallbackAction;
+type PartitionedInterpolator<'a> =
+    dyn FnMut(f64, &mut [f64], &mut [f64]) -> Result<(), SolveError> + 'a;
 
 struct DiscreteCallback<P> {
     condition: Box<DiscreteCondition<P>>,
@@ -268,6 +273,383 @@ pub struct VerletLeapfrog;
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct LeapfrogDriftKickDrift;
 
+/// Fourth-order Runge--Kutta--Nystrom method for velocity-dependent acceleration.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct Nystrom4;
+
+/// Fourth-order Runge--Kutta--Nystrom method for acceleration independent of velocity.
+///
+/// The acceleration callback must ignore its velocity argument. This restriction
+/// matches the pinned upstream algorithm.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct Nystrom4VelocityIndependent;
+
+/// Fifth-order Runge--Kutta--Nystrom method for acceleration independent of velocity.
+///
+/// The acceleration callback must ignore its velocity argument. This restriction
+/// matches the pinned upstream algorithm.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct Nystrom5VelocityIndependent;
+
+/// Three-stage RKN method for second-order linear inhomogeneous problems.
+///
+/// The pinned method is fourth order on that problem class and generally only
+/// second order outside it.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct Rkn4;
+
+/// Dormand--Prince fourth-order adaptive Runge--Kutta--Nystrom method.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct Dprkn4;
+
+/// Dormand--Prince fifth-order adaptive Runge--Kutta--Nystrom method.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct Dprkn5;
+
+/// Dormand--Prince sixth-order adaptive RKN method with free sixth-order dense output.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct Dprkn6;
+
+/// Fine--Montagnier sixth-order adaptive Runge--Kutta--Nystrom method.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct Dprkn6Fm;
+
+/// Dormand--Prince eighth-order adaptive Runge--Kutta--Nystrom method.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct Dprkn8;
+
+/// Dormand--Prince twelfth-order adaptive Runge--Kutta--Nystrom method.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct Dprkn12;
+
+/// Embedded fourth-order Runge--Kutta--Nystrom method.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct Erkn4;
+
+/// Embedded fifth-order Runge--Kutta--Nystrom method with position-only error control.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct Erkn5;
+
+/// Embedded seventh-order Runge--Kutta--Nystrom method.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct Erkn7;
+
+/// Fine's fourth-order adaptive RKN method for velocity-dependent acceleration.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct FineRkn4;
+
+/// Fine's fifth-order adaptive RKN method for velocity-dependent acceleration.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct FineRkn5;
+
+/// Third-order fixed-step improved Runge--Kutta--Nystrom two-step method.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct Irkn3;
+
+/// Fourth-order fixed-step improved Runge--Kutta--Nystrom two-step method.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct Irkn4;
+
+/// SciML-compatible constructor spelling for [`Dprkn4`].
+pub type DPRKN4 = Dprkn4;
+/// SciML-compatible constructor spelling for [`Dprkn5`].
+pub type DPRKN5 = Dprkn5;
+/// SciML-compatible constructor spelling for [`Dprkn6`].
+pub type DPRKN6 = Dprkn6;
+/// SciML-compatible constructor spelling for [`Dprkn6Fm`].
+pub type DPRKN6FM = Dprkn6Fm;
+/// SciML-compatible constructor spelling for [`Dprkn8`].
+pub type DPRKN8 = Dprkn8;
+/// SciML-compatible constructor spelling for [`Dprkn12`].
+pub type DPRKN12 = Dprkn12;
+/// SciML-compatible constructor spelling for [`Erkn4`].
+pub type ERKN4 = Erkn4;
+/// SciML-compatible constructor spelling for [`Erkn5`].
+pub type ERKN5 = Erkn5;
+/// SciML-compatible constructor spelling for [`Erkn7`].
+pub type ERKN7 = Erkn7;
+/// SciML-compatible constructor spelling for [`FineRkn4`].
+pub type FineRKN4 = FineRkn4;
+/// SciML-compatible constructor spelling for [`FineRkn5`].
+pub type FineRKN5 = FineRkn5;
+/// SciML-compatible constructor spelling for [`Irkn3`].
+pub type IRKN3 = Irkn3;
+/// SciML-compatible constructor spelling for [`Irkn4`].
+pub type IRKN4 = Irkn4;
+
+#[allow(non_upper_case_globals)]
+pub const DPRKN4: Dprkn4 = Dprkn4;
+#[allow(non_upper_case_globals)]
+pub const DPRKN5: Dprkn5 = Dprkn5;
+#[allow(non_upper_case_globals)]
+pub const DPRKN6: Dprkn6 = Dprkn6;
+#[allow(non_upper_case_globals)]
+pub const DPRKN6FM: Dprkn6Fm = Dprkn6Fm;
+#[allow(non_upper_case_globals)]
+pub const DPRKN8: Dprkn8 = Dprkn8;
+#[allow(non_upper_case_globals)]
+pub const DPRKN12: Dprkn12 = Dprkn12;
+#[allow(non_upper_case_globals)]
+pub const ERKN4: Erkn4 = Erkn4;
+#[allow(non_upper_case_globals)]
+pub const ERKN5: Erkn5 = Erkn5;
+#[allow(non_upper_case_globals)]
+pub const ERKN7: Erkn7 = Erkn7;
+#[allow(non_upper_case_globals)]
+pub const FineRKN4: FineRkn4 = FineRkn4;
+#[allow(non_upper_case_globals)]
+pub const FineRKN5: FineRkn5 = FineRkn5;
+#[allow(non_upper_case_globals)]
+pub const IRKN3: Irkn3 = Irkn3;
+#[allow(non_upper_case_globals)]
+pub const IRKN4: Irkn4 = Irkn4;
+
+struct RknTableau {
+    nodes: &'static [f64],
+    position_coefficients: &'static [&'static [f64]],
+    velocity_coefficients: Option<&'static [&'static [f64]]>,
+    position_weights: &'static [f64],
+    velocity_weights: &'static [f64],
+}
+
+struct AdaptiveRknTableau {
+    position_coefficients: &'static [f64],
+    velocity_coefficients: Option<&'static [f64]>,
+    position_weights: &'static [f64],
+    velocity_weights: &'static [f64],
+    position_error_weights: &'static [f64],
+    velocity_error_weights: &'static [f64],
+    nodes: &'static [f64],
+    order: usize,
+    position_only_error: bool,
+    dense_position_coefficients: Option<&'static [f64]>,
+    dense_velocity_coefficients: Option<&'static [f64]>,
+}
+
+macro_rules! adaptive_rkn_tableau {
+    ($name:ident, $a:ident, $b:ident, $bp:ident, $bt:ident, $bpt:ident, $c:ident, $order:ident, $pos_only:ident) => {
+        const $name: AdaptiveRknTableau = AdaptiveRknTableau {
+            position_coefficients: $a,
+            velocity_coefficients: None,
+            position_weights: $b,
+            velocity_weights: $bp,
+            position_error_weights: $bt,
+            velocity_error_weights: $bpt,
+            nodes: $c,
+            order: $order,
+            position_only_error: $pos_only,
+            dense_position_coefficients: None,
+            dense_velocity_coefficients: None,
+        };
+    };
+}
+
+adaptive_rkn_tableau!(
+    DPRKN4_ADAPTIVE_TABLEAU,
+    DPRKN4_A,
+    DPRKN4_B,
+    DPRKN4_BP,
+    DPRKN4_BTILDE,
+    DPRKN4_BPTILDE,
+    DPRKN4_C,
+    DPRKN4_ORDER,
+    DPRKN4_POS_ONLY_ERROR
+);
+
+macro_rules! adaptive_velocity_dependent_rkn_tableau {
+    ($name:ident, $a:ident, $abar:ident, $b:ident, $bp:ident, $bt:ident, $bpt:ident, $c:ident, $order:ident, $pos_only:ident) => {
+        const $name: AdaptiveRknTableau = AdaptiveRknTableau {
+            position_coefficients: $a,
+            velocity_coefficients: Some($abar),
+            position_weights: $b,
+            velocity_weights: $bp,
+            position_error_weights: $bt,
+            velocity_error_weights: $bpt,
+            nodes: $c,
+            order: $order,
+            position_only_error: $pos_only,
+            dense_position_coefficients: None,
+            dense_velocity_coefficients: None,
+        };
+    };
+}
+
+adaptive_velocity_dependent_rkn_tableau!(
+    FINERKN4_ADAPTIVE_TABLEAU,
+    FINERKN4_A,
+    FINERKN4_ABAR,
+    FINERKN4_B,
+    FINERKN4_BP,
+    FINERKN4_BTILDE,
+    FINERKN4_BPTILDE,
+    FINERKN4_C,
+    FINERKN4_ORDER,
+    FINERKN4_POS_ONLY_ERROR
+);
+adaptive_velocity_dependent_rkn_tableau!(
+    FINERKN5_ADAPTIVE_TABLEAU,
+    FINERKN5_A,
+    FINERKN5_ABAR,
+    FINERKN5_B,
+    FINERKN5_BP,
+    FINERKN5_BTILDE,
+    FINERKN5_BPTILDE,
+    FINERKN5_C,
+    FINERKN5_ORDER,
+    FINERKN5_POS_ONLY_ERROR
+);
+
+const DPRKN6_ADAPTIVE_TABLEAU: AdaptiveRknTableau = AdaptiveRknTableau {
+    position_coefficients: DPRKN6_A,
+    velocity_coefficients: None,
+    position_weights: DPRKN6_B,
+    velocity_weights: DPRKN6_BP,
+    position_error_weights: DPRKN6_BTILDE,
+    velocity_error_weights: DPRKN6_BPTILDE,
+    nodes: DPRKN6_C,
+    order: DPRKN6_ORDER,
+    position_only_error: DPRKN6_POS_ONLY_ERROR,
+    dense_position_coefficients: Some(DPRKN6_R),
+    dense_velocity_coefficients: Some(DPRKN6_RP),
+};
+adaptive_rkn_tableau!(
+    DPRKN5_ADAPTIVE_TABLEAU,
+    DPRKN5_A,
+    DPRKN5_B,
+    DPRKN5_BP,
+    DPRKN5_BTILDE,
+    DPRKN5_BPTILDE,
+    DPRKN5_C,
+    DPRKN5_ORDER,
+    DPRKN5_POS_ONLY_ERROR
+);
+adaptive_rkn_tableau!(
+    DPRKN6FM_ADAPTIVE_TABLEAU,
+    DPRKN6FM_A,
+    DPRKN6FM_B,
+    DPRKN6FM_BP,
+    DPRKN6FM_BTILDE,
+    DPRKN6FM_BPTILDE,
+    DPRKN6FM_C,
+    DPRKN6FM_ORDER,
+    DPRKN6FM_POS_ONLY_ERROR
+);
+adaptive_rkn_tableau!(
+    DPRKN8_ADAPTIVE_TABLEAU,
+    DPRKN8_A,
+    DPRKN8_B,
+    DPRKN8_BP,
+    DPRKN8_BTILDE,
+    DPRKN8_BPTILDE,
+    DPRKN8_C,
+    DPRKN8_ORDER,
+    DPRKN8_POS_ONLY_ERROR
+);
+adaptive_rkn_tableau!(
+    DPRKN12_ADAPTIVE_TABLEAU,
+    DPRKN12_A,
+    DPRKN12_B,
+    DPRKN12_BP,
+    DPRKN12_BTILDE,
+    DPRKN12_BPTILDE,
+    DPRKN12_C,
+    DPRKN12_ORDER,
+    DPRKN12_POS_ONLY_ERROR
+);
+adaptive_rkn_tableau!(
+    ERKN4_ADAPTIVE_TABLEAU,
+    ERKN4_A,
+    ERKN4_B,
+    ERKN4_BP,
+    ERKN4_BTILDE,
+    ERKN4_BPTILDE,
+    ERKN4_C,
+    ERKN4_ORDER,
+    ERKN4_POS_ONLY_ERROR
+);
+adaptive_rkn_tableau!(
+    ERKN5_ADAPTIVE_TABLEAU,
+    ERKN5_A,
+    ERKN5_B,
+    ERKN5_BP,
+    ERKN5_BTILDE,
+    ERKN5_BPTILDE,
+    ERKN5_C,
+    ERKN5_ORDER,
+    ERKN5_POS_ONLY_ERROR
+);
+adaptive_rkn_tableau!(
+    ERKN7_ADAPTIVE_TABLEAU,
+    ERKN7_A,
+    ERKN7_B,
+    ERKN7_BP,
+    ERKN7_BTILDE,
+    ERKN7_BPTILDE,
+    ERKN7_C,
+    ERKN7_ORDER,
+    ERKN7_POS_ONLY_ERROR
+);
+
+const EMPTY_ROW: &[f64] = &[];
+const NYSTROM4_VI_A2: &[f64] = &[1.0 / 8.0];
+const NYSTROM4_VI_A3: &[f64] = &[0.0, 1.0 / 2.0];
+const NYSTROM4_VI_A: &[&[f64]] = &[EMPTY_ROW, NYSTROM4_VI_A2, NYSTROM4_VI_A3];
+const NYSTROM4_VI_NODES: &[f64] = &[0.0, 1.0 / 2.0, 1.0];
+const NYSTROM4_VI_B: &[f64] = &[1.0 / 6.0, 2.0 / 6.0, 0.0];
+const NYSTROM4_VI_BP: &[f64] = &[1.0 / 6.0, 4.0 / 6.0, 1.0 / 6.0];
+const NYSTROM4_VI_TABLEAU: RknTableau = RknTableau {
+    nodes: NYSTROM4_VI_NODES,
+    position_coefficients: NYSTROM4_VI_A,
+    velocity_coefficients: None,
+    position_weights: NYSTROM4_VI_B,
+    velocity_weights: NYSTROM4_VI_BP,
+};
+
+const NYSTROM5_VI_A2: &[f64] = &[1.0 / 50.0];
+const NYSTROM5_VI_A3: &[f64] = &[-1.0 / 27.0, 7.0 / 27.0];
+const NYSTROM5_VI_A4: &[f64] = &[3.0 / 10.0, -2.0 / 35.0, 9.0 / 35.0];
+const NYSTROM5_VI_A: &[&[f64]] = &[EMPTY_ROW, NYSTROM5_VI_A2, NYSTROM5_VI_A3, NYSTROM5_VI_A4];
+const NYSTROM5_VI_NODES: &[f64] = &[0.0, 1.0 / 5.0, 2.0 / 3.0, 1.0];
+const NYSTROM5_VI_B: &[f64] = &[14.0 / 336.0, 100.0 / 336.0, 54.0 / 336.0, 0.0];
+const NYSTROM5_VI_BP: &[f64] = &[14.0 / 336.0, 125.0 / 336.0, 162.0 / 336.0, 35.0 / 336.0];
+const NYSTROM5_VI_TABLEAU: RknTableau = RknTableau {
+    nodes: NYSTROM5_VI_NODES,
+    position_coefficients: NYSTROM5_VI_A,
+    velocity_coefficients: None,
+    position_weights: NYSTROM5_VI_B,
+    velocity_weights: NYSTROM5_VI_BP,
+};
+
+const NYSTROM4_A2: &[f64] = &[1.0 / 8.0];
+const NYSTROM4_A3: &[f64] = &[1.0 / 8.0, 0.0];
+const NYSTROM4_A4: &[f64] = &[0.0, 0.0, 1.0 / 2.0];
+const NYSTROM4_A: &[&[f64]] = &[EMPTY_ROW, NYSTROM4_A2, NYSTROM4_A3, NYSTROM4_A4];
+const NYSTROM4_ABAR2: &[f64] = &[1.0 / 2.0];
+const NYSTROM4_ABAR3: &[f64] = &[0.0, 1.0 / 2.0];
+const NYSTROM4_ABAR4: &[f64] = &[0.0, 0.0, 1.0];
+const NYSTROM4_ABAR: &[&[f64]] = &[EMPTY_ROW, NYSTROM4_ABAR2, NYSTROM4_ABAR3, NYSTROM4_ABAR4];
+const NYSTROM4_NODES: &[f64] = &[0.0, 1.0 / 2.0, 1.0 / 2.0, 1.0];
+const NYSTROM4_B: &[f64] = &[1.0 / 6.0, 1.0 / 6.0, 1.0 / 6.0, 0.0];
+const NYSTROM4_BP: &[f64] = &[1.0 / 6.0, 2.0 / 6.0, 2.0 / 6.0, 1.0 / 6.0];
+const NYSTROM4_TABLEAU: RknTableau = RknTableau {
+    nodes: NYSTROM4_NODES,
+    position_coefficients: NYSTROM4_A,
+    velocity_coefficients: Some(NYSTROM4_ABAR),
+    position_weights: NYSTROM4_B,
+    velocity_weights: NYSTROM4_BP,
+};
+
+const RKN4_A: &[&[f64]] = &[EMPTY_ROW, NYSTROM4_A2, NYSTROM4_VI_A3];
+const RKN4_ABAR3: &[f64] = &[0.0, 1.0];
+const RKN4_ABAR: &[&[f64]] = &[EMPTY_ROW, NYSTROM4_ABAR2, RKN4_ABAR3];
+const RKN4_TABLEAU: RknTableau = RknTableau {
+    nodes: NYSTROM4_VI_NODES,
+    position_coefficients: RKN4_A,
+    velocity_coefficients: Some(RKN4_ABAR),
+    position_weights: NYSTROM4_VI_B,
+    velocity_weights: NYSTROM4_VI_BP,
+};
+
 #[derive(Clone, Copy)]
 enum Method {
     SymplecticEuler,
@@ -297,6 +679,83 @@ impl_algorithm!(SymplecticEuler, Method::SymplecticEuler);
 impl_algorithm!(VelocityVerlet, Method::VelocityVerlet);
 impl_algorithm!(VerletLeapfrog, Method::VerletLeapfrog);
 impl_algorithm!(LeapfrogDriftKickDrift, Method::LeapfrogDriftKickDrift);
+
+macro_rules! impl_rkn_algorithm {
+    ($algorithm:ty, $tableau:expr) => {
+        impl SecondOrderOdeAlgorithm for $algorithm {
+            fn solve<F, P>(
+                &self,
+                problem: &SecondOrderOdeProblem<F, P>,
+                options: &SolveOptions,
+            ) -> Result<SecondOrderSolution, SecondOrderSolveError>
+            where
+                F: Fn(&mut [f64], &[f64], &[f64], &P, f64),
+            {
+                solve_rkn_fixed(problem, options, &$tableau)
+            }
+        }
+    };
+}
+
+impl_rkn_algorithm!(Nystrom4, NYSTROM4_TABLEAU);
+impl_rkn_algorithm!(Nystrom4VelocityIndependent, NYSTROM4_VI_TABLEAU);
+impl_rkn_algorithm!(Nystrom5VelocityIndependent, NYSTROM5_VI_TABLEAU);
+impl_rkn_algorithm!(Rkn4, RKN4_TABLEAU);
+
+macro_rules! impl_adaptive_rkn_algorithm {
+    ($algorithm:ty, $tableau:ident) => {
+        impl SecondOrderOdeAlgorithm for $algorithm {
+            fn solve<F, P>(
+                &self,
+                problem: &SecondOrderOdeProblem<F, P>,
+                options: &SolveOptions,
+            ) -> Result<SecondOrderSolution, SecondOrderSolveError>
+            where
+                F: Fn(&mut [f64], &[f64], &[f64], &P, f64),
+            {
+                solve_rkn_adaptive(problem, options, &$tableau)
+            }
+        }
+    };
+}
+
+impl_adaptive_rkn_algorithm!(Dprkn4, DPRKN4_ADAPTIVE_TABLEAU);
+impl_adaptive_rkn_algorithm!(Dprkn5, DPRKN5_ADAPTIVE_TABLEAU);
+impl_adaptive_rkn_algorithm!(Dprkn6, DPRKN6_ADAPTIVE_TABLEAU);
+impl_adaptive_rkn_algorithm!(Dprkn6Fm, DPRKN6FM_ADAPTIVE_TABLEAU);
+impl_adaptive_rkn_algorithm!(Dprkn8, DPRKN8_ADAPTIVE_TABLEAU);
+impl_adaptive_rkn_algorithm!(Dprkn12, DPRKN12_ADAPTIVE_TABLEAU);
+impl_adaptive_rkn_algorithm!(Erkn4, ERKN4_ADAPTIVE_TABLEAU);
+impl_adaptive_rkn_algorithm!(Erkn5, ERKN5_ADAPTIVE_TABLEAU);
+impl_adaptive_rkn_algorithm!(Erkn7, ERKN7_ADAPTIVE_TABLEAU);
+impl_adaptive_rkn_algorithm!(FineRkn4, FINERKN4_ADAPTIVE_TABLEAU);
+impl_adaptive_rkn_algorithm!(FineRkn5, FINERKN5_ADAPTIVE_TABLEAU);
+
+impl SecondOrderOdeAlgorithm for Irkn3 {
+    fn solve<F, P>(
+        &self,
+        problem: &SecondOrderOdeProblem<F, P>,
+        options: &SolveOptions,
+    ) -> Result<SecondOrderSolution, SecondOrderSolveError>
+    where
+        F: Fn(&mut [f64], &[f64], &[f64], &P, f64),
+    {
+        solve_irkn(problem, options, IrknMethod::ThirdOrder)
+    }
+}
+
+impl SecondOrderOdeAlgorithm for Irkn4 {
+    fn solve<F, P>(
+        &self,
+        problem: &SecondOrderOdeProblem<F, P>,
+        options: &SolveOptions,
+    ) -> Result<SecondOrderSolution, SecondOrderSolveError>
+    where
+        F: Fn(&mut [f64], &[f64], &[f64], &P, f64),
+    {
+        solve_irkn(problem, options, IrknMethod::FourthOrder)
+    }
+}
 
 fn validate<F, P>(
     problem: &SecondOrderOdeProblem<F, P>,
@@ -387,6 +846,977 @@ impl Workspace {
     }
 }
 
+struct RknWorkspace {
+    candidate_velocity: Vec<f64>,
+    candidate_position: Vec<f64>,
+    stage_velocity: Vec<f64>,
+    stage_position: Vec<f64>,
+    stage_accelerations: Vec<f64>,
+    previous_effect_velocity: Vec<f64>,
+    previous_effect_position: Vec<f64>,
+}
+
+impl RknWorkspace {
+    fn new(dimension: usize, stages: usize, callbacks: bool) -> Self {
+        Self {
+            candidate_velocity: vec![0.0; dimension],
+            candidate_position: vec![0.0; dimension],
+            stage_velocity: vec![0.0; dimension],
+            stage_position: vec![0.0; dimension],
+            stage_accelerations: vec![0.0; dimension * stages],
+            previous_effect_velocity: if callbacks {
+                vec![0.0; dimension]
+            } else {
+                Vec::new()
+            },
+            previous_effect_position: if callbacks {
+                vec![0.0; dimension]
+            } else {
+                Vec::new()
+            },
+        }
+    }
+}
+
+fn solve_rkn_fixed<F, P>(
+    problem: &SecondOrderOdeProblem<F, P>,
+    options: &SolveOptions,
+    tableau: &RknTableau,
+) -> Result<SecondOrderSolution, SecondOrderSolveError>
+where
+    F: Fn(&mut [f64], &[f64], &[f64], &P, f64),
+{
+    if options.adaptive {
+        return Err(SolveError::AdaptiveStepUnsupported.into());
+    }
+    let fixed_step = options
+        .initial_step
+        .ok_or(SolveError::InitialStepRequired)?;
+    let maximum_step = fixed_step.min(options.max_step);
+    let dimension = problem.initial_position.len();
+    let stages = tableau.nodes.len();
+    debug_assert_eq!(tableau.position_coefficients.len(), stages);
+    debug_assert_eq!(tableau.position_weights.len(), stages);
+    debug_assert_eq!(tableau.velocity_weights.len(), stages);
+    debug_assert!(
+        tableau
+            .velocity_coefficients
+            .is_none_or(|rows| rows.len() == stages)
+    );
+
+    let (start, end) = problem.time_span;
+    let direction = (end - start).signum();
+    let mut velocity = problem.initial_velocity.clone();
+    let mut position = problem.initial_position.clone();
+    let mut workspace = RknWorkspace::new(dimension, stages, !problem.callbacks.is_empty());
+    let mut stats = SolverStats::default();
+
+    let initial = apply_initial_callbacks(problem, &mut velocity, &mut position, start)?;
+    stats.callback_invocations += initial.invocations;
+    let mut recorder = PartitionedRecorder::new(&velocity, &position, start, options);
+    if initial.terminate {
+        recorder.force_state(start, &velocity, &position);
+        return Ok(recorder.finish(stats));
+    }
+
+    let mut time = start;
+    let mut steps = 0;
+    while direction * (end - time) > 0.0 {
+        if steps == options.max_steps {
+            return Err(SolveError::MaxStepsExceeded.into());
+        }
+        steps += 1;
+        let step = direction * maximum_step.min((end - time).abs());
+        if time + step == time {
+            return Err(SolveError::StepSizeUnderflow.into());
+        }
+
+        for stage in 0..stages {
+            let node = tableau.nodes[stage];
+            workspace.stage_position.copy_from_slice(&position);
+            workspace.stage_velocity.copy_from_slice(&velocity);
+            for (stage_position, velocity) in workspace.stage_position.iter_mut().zip(&velocity) {
+                *stage_position += step * node * velocity;
+            }
+            for previous_stage in 0..stage {
+                let acceleration = workspace.stage_accelerations
+                    [previous_stage * dimension..(previous_stage + 1) * dimension]
+                    .iter();
+                let position_coefficient = tableau.position_coefficients[stage][previous_stage];
+                for (value, acceleration) in workspace.stage_position.iter_mut().zip(acceleration) {
+                    *value += step * step * position_coefficient * acceleration;
+                }
+                if let Some(velocity_coefficients) = tableau.velocity_coefficients {
+                    let acceleration = &workspace.stage_accelerations
+                        [previous_stage * dimension..(previous_stage + 1) * dimension];
+                    let coefficient = velocity_coefficients[stage][previous_stage];
+                    for (value, acceleration) in
+                        workspace.stage_velocity.iter_mut().zip(acceleration)
+                    {
+                        *value += step * coefficient * acceleration;
+                    }
+                }
+            }
+            let stage_velocity = if tableau.velocity_coefficients.is_some() {
+                &workspace.stage_velocity
+            } else {
+                &velocity
+            };
+            let acceleration =
+                &mut workspace.stage_accelerations[stage * dimension..(stage + 1) * dimension];
+            evaluate_acceleration(
+                problem,
+                acceleration,
+                stage_velocity,
+                &workspace.stage_position,
+                time + node * step,
+                &mut stats,
+            )?;
+        }
+
+        workspace.candidate_position.copy_from_slice(&position);
+        workspace.candidate_velocity.copy_from_slice(&velocity);
+        for (candidate_position, velocity) in workspace.candidate_position.iter_mut().zip(&velocity)
+        {
+            *candidate_position += step * velocity;
+        }
+        for stage in 0..stages {
+            let acceleration =
+                &workspace.stage_accelerations[stage * dimension..(stage + 1) * dimension];
+            for ((candidate_position, candidate_velocity), acceleration) in workspace
+                .candidate_position
+                .iter_mut()
+                .zip(&mut workspace.candidate_velocity)
+                .zip(acceleration)
+            {
+                *candidate_position += step * step * tableau.position_weights[stage] * acceleration;
+                *candidate_velocity += step * tableau.velocity_weights[stage] * acceleration;
+            }
+        }
+        ensure_finite_state(&workspace.candidate_velocity, &workspace.candidate_position)?;
+
+        let previous_time = time;
+        let mut next_time = time + step;
+        if direction * (end - next_time) <= 0.0 {
+            next_time = end;
+        }
+        let callback = apply_step_callbacks(
+            problem,
+            &velocity,
+            &position,
+            previous_time,
+            &mut workspace.candidate_velocity,
+            &mut workspace.candidate_position,
+            &mut next_time,
+            &mut workspace.previous_effect_velocity,
+            &mut workspace.previous_effect_position,
+            options.event_tolerance,
+            None,
+        )?;
+        stats.callback_invocations += callback.invocations;
+        time = next_time;
+        std::mem::swap(&mut velocity, &mut workspace.candidate_velocity);
+        std::mem::swap(&mut position, &mut workspace.candidate_position);
+        stats.accepted_steps += 1;
+
+        recorder.record_step(
+            &workspace.candidate_velocity,
+            &workspace.candidate_position,
+            previous_time,
+            if callback.invocations == 0 {
+                &velocity
+            } else {
+                &workspace.previous_effect_velocity
+            },
+            if callback.invocations == 0 {
+                &position
+            } else {
+                &workspace.previous_effect_position
+            },
+            time,
+            time == end,
+            None,
+        );
+        if callback.invocations > 0 {
+            recorder.force_state(time, &velocity, &position);
+        }
+        if callback.terminate {
+            return Ok(recorder.finish(stats));
+        }
+    }
+    Ok(recorder.finish(stats))
+}
+
+fn solve_rkn_adaptive<F, P>(
+    problem: &SecondOrderOdeProblem<F, P>,
+    options: &SolveOptions,
+    tableau: &AdaptiveRknTableau,
+) -> Result<SecondOrderSolution, SecondOrderSolveError>
+where
+    F: Fn(&mut [f64], &[f64], &[f64], &P, f64),
+{
+    if !options.adaptive && options.initial_step.is_none() {
+        return Err(SolveError::InitialStepRequired.into());
+    }
+    let dimension = problem.initial_position.len();
+    let stages = tableau.nodes.len();
+    debug_assert_eq!(tableau.position_coefficients.len(), stages * stages);
+    debug_assert!(
+        tableau
+            .velocity_coefficients
+            .is_none_or(|coefficients| coefficients.len() == stages * stages)
+    );
+    debug_assert_eq!(tableau.position_weights.len(), stages);
+    debug_assert_eq!(tableau.velocity_weights.len(), stages);
+    debug_assert_eq!(tableau.position_error_weights.len(), stages);
+    debug_assert!(tableau.position_only_error || tableau.velocity_error_weights.len() == stages);
+
+    let (start, end) = problem.time_span;
+    let direction = (end - start).signum();
+    let span = (end - start).abs();
+    let maximum_step = options.max_step.min(span);
+    let mut step_magnitude = options
+        .initial_step
+        .unwrap_or(span / 100.0)
+        .min(maximum_step);
+    if !step_magnitude.is_finite() || step_magnitude <= 0.0 {
+        return Err(SolveError::StepSizeUnderflow.into());
+    }
+
+    let mut velocity = problem.initial_velocity.clone();
+    let mut position = problem.initial_position.clone();
+    let mut workspace = RknWorkspace::new(dimension, stages, !problem.callbacks.is_empty());
+    let mut stats = SolverStats::default();
+    let controller = ControllerConfig::proportional(tableau.order, 0.9, 0.2, 10.0, 0.2);
+    let mut controller_state = ControllerState::default();
+    let mut previous_attempt_rejected = false;
+
+    let initial = apply_initial_callbacks(problem, &mut velocity, &mut position, start)?;
+    stats.callback_invocations += initial.invocations;
+    let mut recorder = PartitionedRecorder::new(&velocity, &position, start, options);
+    if initial.terminate {
+        recorder.force_state(start, &velocity, &position);
+        return Ok(recorder.finish(stats));
+    }
+
+    let mut time = start;
+    let mut attempts = 0;
+    while direction * (end - time) > 0.0 {
+        if attempts == options.max_steps {
+            return Err(SolveError::MaxStepsExceeded.into());
+        }
+        attempts += 1;
+        let step = direction * step_magnitude.min((end - time).abs());
+        if time + step == time {
+            return Err(SolveError::StepSizeUnderflow.into());
+        }
+
+        for stage in 0..stages {
+            workspace.stage_position.copy_from_slice(&position);
+            workspace.stage_velocity.copy_from_slice(&velocity);
+            for (stage_position, velocity) in workspace.stage_position.iter_mut().zip(&velocity) {
+                *stage_position += step * tableau.nodes[stage] * velocity;
+            }
+            for previous_stage in 0..stage {
+                let coefficient = tableau.position_coefficients[stage * stages + previous_stage];
+                let acceleration = &workspace.stage_accelerations
+                    [previous_stage * dimension..(previous_stage + 1) * dimension];
+                for (stage_position, acceleration) in
+                    workspace.stage_position.iter_mut().zip(acceleration)
+                {
+                    *stage_position += step * step * coefficient * acceleration;
+                }
+                if let Some(velocity_coefficients) = tableau.velocity_coefficients {
+                    let coefficient = velocity_coefficients[stage * stages + previous_stage];
+                    for (stage_velocity, acceleration) in
+                        workspace.stage_velocity.iter_mut().zip(acceleration)
+                    {
+                        *stage_velocity += step * coefficient * acceleration;
+                    }
+                }
+            }
+            let acceleration =
+                &mut workspace.stage_accelerations[stage * dimension..(stage + 1) * dimension];
+            evaluate_acceleration(
+                problem,
+                acceleration,
+                if tableau.velocity_coefficients.is_some() {
+                    &workspace.stage_velocity
+                } else {
+                    &velocity
+                },
+                &workspace.stage_position,
+                time + tableau.nodes[stage] * step,
+                &mut stats,
+            )?;
+        }
+
+        workspace.candidate_position.copy_from_slice(&position);
+        workspace.candidate_velocity.copy_from_slice(&velocity);
+        for (candidate_position, velocity) in workspace.candidate_position.iter_mut().zip(&velocity)
+        {
+            *candidate_position += step * velocity;
+        }
+        for stage in 0..stages {
+            let acceleration =
+                &workspace.stage_accelerations[stage * dimension..(stage + 1) * dimension];
+            for ((candidate_position, candidate_velocity), acceleration) in workspace
+                .candidate_position
+                .iter_mut()
+                .zip(&mut workspace.candidate_velocity)
+                .zip(acceleration)
+            {
+                *candidate_position += step * step * tableau.position_weights[stage] * acceleration;
+                *candidate_velocity += step * tableau.velocity_weights[stage] * acceleration;
+            }
+        }
+        ensure_finite_state(&workspace.candidate_velocity, &workspace.candidate_position)?;
+
+        let error = if options.adaptive {
+            rkn_error_norm(
+                &velocity,
+                &position,
+                &workspace.candidate_velocity,
+                &workspace.candidate_position,
+                &workspace.stage_accelerations,
+                step,
+                tableau,
+                options,
+            )
+        } else {
+            0.0
+        };
+
+        if error <= 1.0 {
+            let previous_time = time;
+            let attempted_time = time + step;
+            let mut next_time = if direction * (end - attempted_time) <= 0.0 {
+                end
+            } else {
+                attempted_time
+            };
+            let callback = if tableau.dense_position_coefficients.is_some() {
+                let stage_accelerations = &workspace.stage_accelerations;
+                let mut interpolate =
+                    |fraction: f64, output_velocity: &mut [f64], output_position: &mut [f64]| {
+                        interpolate_dprkn6(
+                            tableau,
+                            &velocity,
+                            &position,
+                            stage_accelerations,
+                            step,
+                            fraction,
+                            output_velocity,
+                            output_position,
+                        )
+                    };
+                apply_step_callbacks(
+                    problem,
+                    &velocity,
+                    &position,
+                    previous_time,
+                    &mut workspace.candidate_velocity,
+                    &mut workspace.candidate_position,
+                    &mut next_time,
+                    &mut workspace.previous_effect_velocity,
+                    &mut workspace.previous_effect_position,
+                    options.event_tolerance,
+                    Some(&mut interpolate),
+                )?
+            } else {
+                apply_step_callbacks(
+                    problem,
+                    &velocity,
+                    &position,
+                    previous_time,
+                    &mut workspace.candidate_velocity,
+                    &mut workspace.candidate_position,
+                    &mut next_time,
+                    &mut workspace.previous_effect_velocity,
+                    &mut workspace.previous_effect_position,
+                    options.event_tolerance,
+                    None,
+                )?
+            };
+            stats.callback_invocations += callback.invocations;
+            time = next_time;
+            std::mem::swap(&mut velocity, &mut workspace.candidate_velocity);
+            std::mem::swap(&mut position, &mut workspace.candidate_position);
+            stats.accepted_steps += 1;
+
+            let recorded_velocity = if callback.invocations == 0 {
+                &velocity
+            } else {
+                &workspace.previous_effect_velocity
+            };
+            let recorded_position = if callback.invocations == 0 {
+                &position
+            } else {
+                &workspace.previous_effect_position
+            };
+            if tableau.dense_position_coefficients.is_some() {
+                let previous_velocity = &workspace.candidate_velocity;
+                let previous_position = &workspace.candidate_position;
+                let stage_accelerations = &workspace.stage_accelerations;
+                let mut interpolate =
+                    |target: f64, output_velocity: &mut [f64], output_position: &mut [f64]| {
+                        let fraction = (target - previous_time) / step;
+                        interpolate_dprkn6(
+                            tableau,
+                            previous_velocity,
+                            previous_position,
+                            stage_accelerations,
+                            step,
+                            fraction,
+                            output_velocity,
+                            output_position,
+                        )
+                    };
+                recorder.record_step(
+                    previous_velocity,
+                    previous_position,
+                    previous_time,
+                    recorded_velocity,
+                    recorded_position,
+                    time,
+                    time == end,
+                    Some(&mut interpolate),
+                );
+            } else {
+                recorder.record_step(
+                    &workspace.candidate_velocity,
+                    &workspace.candidate_position,
+                    previous_time,
+                    recorded_velocity,
+                    recorded_position,
+                    time,
+                    time == end,
+                    None,
+                );
+            }
+            if callback.invocations > 0 {
+                recorder.force_state(time, &velocity, &position);
+                controller_state.reset();
+            }
+            if callback.terminate {
+                return Ok(recorder.finish(stats));
+            }
+
+            if options.adaptive {
+                let factor = controller_state.factor(error, controller);
+                controller_state.accepted(error);
+                let factor = if previous_attempt_rejected {
+                    factor.min(1.0)
+                } else {
+                    factor
+                };
+                step_magnitude = (step_magnitude * factor).min(maximum_step);
+                previous_attempt_rejected = false;
+            }
+        } else {
+            stats.rejected_steps += 1;
+            controller_state.rejected(error);
+            let factor = controller_state.factor(error, controller).min(1.0);
+            step_magnitude = (step_magnitude * factor).min(maximum_step);
+            previous_attempt_rejected = true;
+            if time + direction * step_magnitude == time {
+                return Err(SolveError::StepSizeUnderflow.into());
+            }
+        }
+    }
+    Ok(recorder.finish(stats))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn rkn_error_norm(
+    velocity: &[f64],
+    position: &[f64],
+    candidate_velocity: &[f64],
+    candidate_position: &[f64],
+    stage_accelerations: &[f64],
+    step: f64,
+    tableau: &AdaptiveRknTableau,
+    options: &SolveOptions,
+) -> f64 {
+    let dimension = position.len();
+    let stages = tableau.nodes.len();
+    let mut sum = 0.0;
+    for component in 0..dimension {
+        let mut position_error = 0.0;
+        let mut velocity_error = 0.0;
+        for stage in 0..stages {
+            let acceleration = stage_accelerations[stage * dimension + component];
+            position_error += tableau.position_error_weights[stage] * acceleration;
+            if !tableau.position_only_error {
+                velocity_error += tableau.velocity_error_weights[stage] * acceleration;
+            }
+        }
+        position_error *= step * step;
+        let position_scale = options.absolute_tolerance
+            + options.relative_tolerance
+                * position[component]
+                    .abs()
+                    .max(candidate_position[component].abs());
+        sum += (position_error / position_scale).powi(2);
+        if !tableau.position_only_error {
+            velocity_error *= step;
+            let velocity_scale = options.absolute_tolerance
+                + options.relative_tolerance
+                    * velocity[component]
+                        .abs()
+                        .max(candidate_velocity[component].abs());
+            sum += (velocity_error / velocity_scale).powi(2);
+        }
+    }
+    let components = if tableau.position_only_error {
+        dimension
+    } else {
+        2 * dimension
+    };
+    (sum / components as f64).sqrt()
+}
+
+#[allow(clippy::too_many_arguments)]
+fn interpolate_dprkn6(
+    tableau: &AdaptiveRknTableau,
+    previous_velocity: &[f64],
+    previous_position: &[f64],
+    stage_accelerations: &[f64],
+    step: f64,
+    fraction: f64,
+    output_velocity: &mut [f64],
+    output_position: &mut [f64],
+) -> Result<(), SolveError> {
+    let position_coefficients = tableau
+        .dense_position_coefficients
+        .expect("DPRKN6 dense position coefficients");
+    let velocity_coefficients = tableau
+        .dense_velocity_coefficients
+        .expect("DPRKN6 dense velocity coefficients");
+    let dimension = previous_position.len();
+    let stages = tableau.nodes.len();
+    debug_assert_eq!(position_coefficients.len(), stages * 5);
+    debug_assert_eq!(velocity_coefficients.len(), stages * 5);
+    for component in 0..dimension {
+        let mut position_sum = 0.0;
+        let mut velocity_sum = 0.0;
+        for stage in 0..stages {
+            let position_row = &position_coefficients[stage * 5..stage * 5 + 5];
+            let velocity_row = &velocity_coefficients[stage * 5..stage * 5 + 5];
+            let position_weight = position_row
+                .iter()
+                .rev()
+                .fold(0.0, |value, coefficient| value * fraction + coefficient);
+            let velocity_weight = velocity_row
+                .iter()
+                .rev()
+                .fold(0.0, |value, coefficient| value * fraction + coefficient);
+            let acceleration = stage_accelerations[stage * dimension + component];
+            position_sum += position_weight * acceleration;
+            velocity_sum += velocity_weight * acceleration;
+        }
+        output_velocity[component] = previous_velocity[component] + step * fraction * velocity_sum;
+        output_position[component] = previous_position[component]
+            + step * fraction * (previous_velocity[component] + step * fraction * position_sum);
+    }
+    ensure_finite_state(output_velocity, output_position)
+}
+
+#[derive(Clone, Copy)]
+enum IrknMethod {
+    ThirdOrder,
+    FourthOrder,
+}
+
+struct IrknWorkspace {
+    candidate_velocity: Vec<f64>,
+    candidate_position: Vec<f64>,
+    k2: Vec<f64>,
+    k3: Vec<f64>,
+    next_acceleration: Vec<f64>,
+    old_acceleration: Vec<f64>,
+    old_internal_first: Vec<f64>,
+    old_internal_second: Vec<f64>,
+    internal_first: Vec<f64>,
+    internal_second: Vec<f64>,
+    previous_velocity: Vec<f64>,
+    previous_effect_velocity: Vec<f64>,
+    previous_effect_position: Vec<f64>,
+}
+
+impl IrknWorkspace {
+    fn new(dimension: usize, callbacks: bool) -> Self {
+        Self {
+            candidate_velocity: vec![0.0; dimension],
+            candidate_position: vec![0.0; dimension],
+            k2: vec![0.0; dimension],
+            k3: vec![0.0; dimension],
+            next_acceleration: vec![0.0; dimension],
+            old_acceleration: vec![0.0; dimension],
+            old_internal_first: vec![0.0; dimension],
+            old_internal_second: vec![0.0; dimension],
+            internal_first: vec![0.0; dimension],
+            internal_second: vec![0.0; dimension],
+            previous_velocity: vec![0.0; dimension],
+            previous_effect_velocity: if callbacks {
+                vec![0.0; dimension]
+            } else {
+                Vec::new()
+            },
+            previous_effect_position: if callbacks {
+                vec![0.0; dimension]
+            } else {
+                Vec::new()
+            },
+        }
+    }
+}
+
+fn solve_irkn<F, P>(
+    problem: &SecondOrderOdeProblem<F, P>,
+    options: &SolveOptions,
+    method: IrknMethod,
+) -> Result<SecondOrderSolution, SecondOrderSolveError>
+where
+    F: Fn(&mut [f64], &[f64], &[f64], &P, f64),
+{
+    match method {
+        IrknMethod::ThirdOrder => {
+            debug_assert_eq!(IRKN3_ORDER, 3);
+            debug_assert_eq!(IRKN3_BOOTSTRAP_ORDER, 4);
+            debug_assert_eq!(IRKN3_INTERNAL_STAGES, 1);
+            debug_assert_eq!(IRKN3_RETAINED_ENDPOINT_ACCELERATIONS, 2);
+            debug_assert_eq!(IRKN3_RETAINED_INTERNAL_STAGES, 1);
+        }
+        IrknMethod::FourthOrder => {
+            debug_assert_eq!(IRKN4_ORDER, 4);
+            debug_assert_eq!(IRKN4_BOOTSTRAP_ORDER, 4);
+            debug_assert_eq!(IRKN4_INTERNAL_STAGES, 2);
+            debug_assert_eq!(IRKN4_RETAINED_ENDPOINT_ACCELERATIONS, 2);
+            debug_assert_eq!(IRKN4_RETAINED_INTERNAL_STAGES, 2);
+        }
+    }
+    if options.adaptive {
+        return Err(SolveError::AdaptiveStepUnsupported.into());
+    }
+    let fixed_step = options
+        .initial_step
+        .ok_or(SolveError::InitialStepRequired)?;
+    let maximum_step = fixed_step.min(options.max_step);
+    let dimension = problem.initial_position.len();
+    let (start, end) = problem.time_span;
+    let direction = (end - start).signum();
+    let mut velocity = problem.initial_velocity.clone();
+    let mut position = problem.initial_position.clone();
+    let mut acceleration = vec![0.0; dimension];
+    let mut workspace = IrknWorkspace::new(dimension, !problem.callbacks.is_empty());
+    let mut stats = SolverStats::default();
+
+    let initial = apply_initial_callbacks(problem, &mut velocity, &mut position, start)?;
+    stats.callback_invocations += initial.invocations;
+    let mut recorder = PartitionedRecorder::new(&velocity, &position, start, options);
+    if initial.terminate {
+        recorder.force_state(start, &velocity, &position);
+        return Ok(recorder.finish(stats));
+    }
+    evaluate_acceleration(
+        problem,
+        &mut acceleration,
+        &velocity,
+        &position,
+        start,
+        &mut stats,
+    )?;
+
+    let mut time = start;
+    let mut attempts = 0;
+    let mut history_valid = false;
+    while direction * (end - time) > 0.0 {
+        if attempts == options.max_steps {
+            return Err(SolveError::MaxStepsExceeded.into());
+        }
+        attempts += 1;
+        let step = direction * maximum_step.min((end - time).abs());
+        if time + step == time {
+            return Err(SolveError::StepSizeUnderflow.into());
+        }
+        let constant_step = step.abs() == maximum_step;
+        let bootstrap = !history_valid || !constant_step;
+
+        if bootstrap {
+            // Exact pinned Nyström4VelocityIndependent startup.
+            for component in 0..dimension {
+                workspace.candidate_position[component] = position[component]
+                    + 0.5 * step * velocity[component]
+                    + step * step * acceleration[component] / 8.0;
+            }
+            evaluate_acceleration(
+                problem,
+                &mut workspace.k2,
+                &velocity,
+                &workspace.candidate_position,
+                time + 0.5 * step,
+                &mut stats,
+            )?;
+            for component in 0..dimension {
+                workspace.candidate_position[component] = position[component]
+                    + step * velocity[component]
+                    + 0.5 * step * step * workspace.k2[component];
+            }
+            evaluate_acceleration(
+                problem,
+                &mut workspace.k3,
+                &velocity,
+                &workspace.candidate_position,
+                time + step,
+                &mut stats,
+            )?;
+            for component in 0..dimension {
+                workspace.candidate_position[component] = position[component]
+                    + step * velocity[component]
+                    + step * step * (acceleration[component] + 2.0 * workspace.k2[component]) / 6.0;
+                workspace.candidate_velocity[component] = velocity[component]
+                    + step
+                        * (acceleration[component]
+                            + 4.0 * workspace.k2[component]
+                            + workspace.k3[component])
+                        / 6.0;
+            }
+            evaluate_acceleration(
+                problem,
+                &mut workspace.next_acceleration,
+                &workspace.candidate_velocity,
+                &workspace.candidate_position,
+                time + step,
+                &mut stats,
+            )?;
+
+            let (c1, a21) = match method {
+                IrknMethod::ThirdOrder => (IRKN3_C[0], IRKN3_A[0]),
+                IrknMethod::FourthOrder => (IRKN4_C[0], IRKN4_A[0]),
+            };
+            // Preserve the pinned in-place cache seeds, including their time arguments.
+            evaluate_acceleration(
+                problem,
+                &mut workspace.old_acceleration,
+                &velocity,
+                &position,
+                time + c1 * step,
+                &mut stats,
+            )?;
+            for component in 0..dimension {
+                let seed_acceleration = match method {
+                    // The pinned in-place IRKN3 cache seeds G0 from H0, while
+                    // IRKN4 seeds G0 from the newly bootstrapped endpoint A1.
+                    IrknMethod::ThirdOrder => workspace.old_acceleration[component],
+                    IrknMethod::FourthOrder => workspace.next_acceleration[component],
+                };
+                workspace.k2[component] = position[component]
+                    + step * (c1 * velocity[component] + step * a21 * seed_acceleration);
+            }
+            evaluate_acceleration(
+                problem,
+                &mut workspace.old_internal_first,
+                &velocity,
+                &workspace.k2,
+                time + c1 * step,
+                &mut stats,
+            )?;
+            if matches!(method, IrknMethod::FourthOrder) {
+                for component in 0..dimension {
+                    workspace.k2[component] = position[component]
+                        + step
+                            * (IRKN4_C[1] * velocity[component]
+                                + step * IRKN4_A[1] * workspace.old_acceleration[component]);
+                }
+                evaluate_acceleration(
+                    problem,
+                    &mut workspace.old_internal_second,
+                    &velocity,
+                    &workspace.k2,
+                    time + IRKN4_C[0] * step,
+                    &mut stats,
+                )?;
+            }
+        } else {
+            match method {
+                IrknMethod::ThirdOrder => {
+                    for component in 0..dimension {
+                        workspace.k2[component] = position[component]
+                            + step
+                                * (IRKN3_C[0] * velocity[component]
+                                    + step * IRKN3_A[0] * workspace.old_acceleration[component]);
+                    }
+                    evaluate_acceleration(
+                        problem,
+                        &mut workspace.internal_first,
+                        &velocity,
+                        &workspace.k2,
+                        time + IRKN3_C[0] * step,
+                        &mut stats,
+                    )?;
+                    for component in 0..dimension {
+                        let difference = workspace.internal_first[component]
+                            - workspace.old_internal_first[component];
+                        workspace.candidate_velocity[component] = velocity[component]
+                            + step
+                                * (IRKN3_VELOCITY_WEIGHTS[0] * acceleration[component]
+                                    + IRKN3_HISTORY_WEIGHTS[0]
+                                        * workspace.old_acceleration[component]
+                                    + IRKN3_VELOCITY_WEIGHTS[1] * difference);
+                        workspace.candidate_position[component] = position[component]
+                            + step
+                                * (IRKN3_VELOCITY_HISTORY[0] * velocity[component]
+                                    + IRKN3_VELOCITY_HISTORY[1]
+                                        * workspace.previous_velocity[component])
+                            + step * step * IRKN3_HISTORY_WEIGHTS[1] * difference;
+                    }
+                }
+                IrknMethod::FourthOrder => {
+                    for component in 0..dimension {
+                        workspace.k2[component] = position[component]
+                            + step
+                                * (IRKN4_C[0] * velocity[component]
+                                    + step * IRKN4_A[0] * acceleration[component]);
+                    }
+                    evaluate_acceleration(
+                        problem,
+                        &mut workspace.internal_first,
+                        &velocity,
+                        &workspace.k2,
+                        time + IRKN4_C[0] * step,
+                        &mut stats,
+                    )?;
+                    for component in 0..dimension {
+                        workspace.k2[component] = position[component]
+                            + step
+                                * (IRKN4_C[1] * velocity[component]
+                                    + step * IRKN4_A[1] * workspace.internal_first[component]);
+                    }
+                    evaluate_acceleration(
+                        problem,
+                        &mut workspace.internal_second,
+                        &velocity,
+                        &workspace.k2,
+                        time + IRKN4_C[1] * step,
+                        &mut stats,
+                    )?;
+                    for component in 0..dimension {
+                        let first_difference = workspace.internal_first[component]
+                            - workspace.old_internal_first[component];
+                        let second_difference = workspace.internal_second[component]
+                            - workspace.old_internal_second[component];
+                        workspace.candidate_velocity[component] = velocity[component]
+                            + step
+                                * (IRKN4_VELOCITY_WEIGHTS[0] * acceleration[component]
+                                    + IRKN4_HISTORY_WEIGHTS[0]
+                                        * workspace.old_acceleration[component]
+                                    + IRKN4_VELOCITY_WEIGHTS[1] * first_difference
+                                    + IRKN4_VELOCITY_WEIGHTS[2] * second_difference);
+                        workspace.candidate_position[component] = position[component]
+                            + step
+                                * (IRKN4_VELOCITY_HISTORY[0] * velocity[component]
+                                    + IRKN4_VELOCITY_HISTORY[1]
+                                        * workspace.previous_velocity[component])
+                            + step
+                                * step
+                                * (IRKN4_HISTORY_WEIGHTS[1] * first_difference
+                                    + IRKN4_HISTORY_WEIGHTS[2] * second_difference);
+                    }
+                }
+            }
+            evaluate_acceleration(
+                problem,
+                &mut workspace.next_acceleration,
+                &workspace.candidate_velocity,
+                &workspace.candidate_position,
+                time + step,
+                &mut stats,
+            )?;
+        }
+        ensure_finite_state(&workspace.candidate_velocity, &workspace.candidate_position)?;
+
+        let previous_time = time;
+        let mut next_time = if direction * (end - (time + step)) <= 0.0 {
+            end
+        } else {
+            time + step
+        };
+        let callback = apply_step_callbacks(
+            problem,
+            &velocity,
+            &position,
+            previous_time,
+            &mut workspace.candidate_velocity,
+            &mut workspace.candidate_position,
+            &mut next_time,
+            &mut workspace.previous_effect_velocity,
+            &mut workspace.previous_effect_position,
+            options.event_tolerance,
+            None,
+        )?;
+        stats.callback_invocations += callback.invocations;
+        time = next_time;
+        std::mem::swap(&mut velocity, &mut workspace.candidate_velocity);
+        std::mem::swap(&mut position, &mut workspace.candidate_position);
+        stats.accepted_steps += 1;
+        recorder.record_step(
+            &workspace.candidate_velocity,
+            &workspace.candidate_position,
+            previous_time,
+            if callback.invocations == 0 {
+                &velocity
+            } else {
+                &workspace.previous_effect_velocity
+            },
+            if callback.invocations == 0 {
+                &position
+            } else {
+                &workspace.previous_effect_position
+            },
+            time,
+            time == end,
+            None,
+        );
+        if callback.invocations > 0 {
+            recorder.force_state(time, &velocity, &position);
+        }
+        if callback.terminate {
+            return Ok(recorder.finish(stats));
+        }
+
+        if callback.invocations > 0 {
+            evaluate_acceleration(
+                problem,
+                &mut acceleration,
+                &velocity,
+                &position,
+                time,
+                &mut stats,
+            )?;
+            history_valid = false;
+        } else {
+            workspace
+                .previous_velocity
+                .copy_from_slice(&workspace.candidate_velocity);
+            if !bootstrap {
+                workspace.old_acceleration.copy_from_slice(&acceleration);
+                workspace
+                    .old_internal_first
+                    .copy_from_slice(&workspace.internal_first);
+                if matches!(method, IrknMethod::FourthOrder) {
+                    workspace
+                        .old_internal_second
+                        .copy_from_slice(&workspace.internal_second);
+                }
+            }
+            acceleration.copy_from_slice(&workspace.next_acceleration);
+            history_valid = constant_step;
+        }
+    }
+    Ok(recorder.finish(stats))
+}
+
 fn solve_fixed<F, P>(
     problem: &SecondOrderOdeProblem<F, P>,
     options: &SolveOptions,
@@ -468,6 +1898,7 @@ where
             &mut workspace.previous_effect_velocity,
             &mut workspace.previous_effect_position,
             options.event_tolerance,
+            None,
         )?;
         stats.callback_invocations += callback.invocations;
         time = next_time;
@@ -491,6 +1922,7 @@ where
             },
             time,
             time == end,
+            None,
         );
         if callback.invocations > 0 {
             recorder.force_state(time, &velocity, &position);
@@ -739,6 +2171,7 @@ fn apply_step_callbacks<F, P>(
     state_before_velocity: &mut [f64],
     state_before_position: &mut [f64],
     event_tolerance: f64,
+    mut interpolator: Option<&mut PartitionedInterpolator<'_>>,
 ) -> Result<CallbackOutcome, SolveError> {
     if problem.callbacks.is_empty() {
         return Ok(CallbackOutcome::default());
@@ -773,6 +2206,7 @@ fn apply_step_callbacks<F, P>(
                 state_before_position,
                 &problem.parameters,
                 event_tolerance,
+                interpolator.as_deref_mut(),
             )?;
             if root.is_none_or(|(_, earliest)| fraction < earliest) {
                 root = Some((index, fraction));
@@ -781,8 +2215,12 @@ fn apply_step_callbacks<F, P>(
     }
     if let Some((index, fraction)) = root {
         let end_time = *time;
-        interpolate(velocity, previous_velocity, fraction, state_before_velocity);
-        interpolate(position, previous_position, fraction, state_before_position);
+        if let Some(interpolator) = interpolator {
+            interpolator(fraction, state_before_velocity, state_before_position)?;
+        } else {
+            interpolate(velocity, previous_velocity, fraction, state_before_velocity);
+            interpolate(position, previous_position, fraction, state_before_position);
+        }
         velocity.copy_from_slice(state_before_velocity);
         position.copy_from_slice(state_before_position);
         *time = previous_time + fraction * (end_time - previous_time);
@@ -832,14 +2270,19 @@ fn locate_root<P>(
     interpolation_position: &mut [f64],
     parameters: &P,
     event_tolerance: f64,
+    mut interpolator: Option<&mut PartitionedInterpolator<'_>>,
 ) -> Result<f64, SolveError> {
     let mut left = 0.0;
     let mut right = 1.0;
     let mut left_value = before;
     for _ in 0..64 {
         let middle = 0.5 * (left + right);
-        interpolate(velocity, previous_velocity, middle, interpolation_velocity);
-        interpolate(position, previous_position, middle, interpolation_position);
+        if let Some(interpolator) = interpolator.as_deref_mut() {
+            interpolator(middle, interpolation_velocity, interpolation_position)?;
+        } else {
+            interpolate(velocity, previous_velocity, middle, interpolation_velocity);
+            interpolate(position, previous_position, middle, interpolation_position);
+        }
         let middle_time = previous_time + middle * (time - previous_time);
         let value = (callback.condition)(
             interpolation_velocity,
@@ -936,6 +2379,7 @@ impl<'a> PartitionedRecorder<'a> {
         position: &[f64],
         time: f64,
         final_time: bool,
+        mut interpolator: Option<&mut PartitionedInterpolator<'_>>,
     ) {
         if self.save_at.is_empty() {
             if self.save_mode == SaveMode::EveryStep || final_time {
@@ -952,19 +2396,28 @@ impl<'a> PartitionedRecorder<'a> {
             if direction * (time - target) < 0.0 {
                 break;
             }
-            let fraction = (target - previous_time) / (time - previous_time);
-            interpolate(
-                velocity,
-                previous_velocity,
-                fraction,
-                &mut self.interpolation_velocity,
-            );
-            interpolate(
-                position,
-                previous_position,
-                fraction,
-                &mut self.interpolation_position,
-            );
+            if let Some(interpolator) = interpolator.as_deref_mut() {
+                interpolator(
+                    target,
+                    &mut self.interpolation_velocity,
+                    &mut self.interpolation_position,
+                )
+                .expect("accepted finite DPRKN6 stage data must interpolate");
+            } else {
+                let fraction = (target - previous_time) / (time - previous_time);
+                interpolate(
+                    velocity,
+                    previous_velocity,
+                    fraction,
+                    &mut self.interpolation_velocity,
+                );
+                interpolate(
+                    position,
+                    previous_position,
+                    fraction,
+                    &mut self.interpolation_position,
+                );
+            }
             self.times.push(target);
             self.velocities
                 .extend_from_slice(&self.interpolation_velocity);

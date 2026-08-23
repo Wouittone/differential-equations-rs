@@ -1,6 +1,7 @@
 use differential_equations::{
     OdeAlgorithm, OdeProblem, SaveMode, SolveOptions, SspRk53, SspRk53H, SspRk53TwoN1,
-    SspRk53TwoN2, SspRk54, SspRk63, SspRk73, SspRk83, SspRk104, SspRk932, SspRkMsvs32, solve,
+    SspRk53TwoN2, SspRk54, SspRk63, SspRk73, SspRk83, SspRk104, SspRk932, SspRkMsvs32, SspRkMsvs43,
+    solve,
 };
 
 type TestRhs = fn(&mut [f64], &[f64], &(), f64);
@@ -34,4 +35,5 @@ fn main() {
     println!("ssprk104,{:.17e}", endpoint(SspRk104));
     println!("ssprk932,{:.17e}", endpoint(SspRk932));
     println!("ssprkmsvs32,{:.17e}", endpoint(SspRkMsvs32));
+    println!("ssprkmsvs43,{:.17e}", endpoint(SspRkMsvs43));
 }

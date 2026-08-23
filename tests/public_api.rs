@@ -26,6 +26,10 @@ fn family_namespaces_reexport_the_concrete_root_types() {
         differential_equations::VelocityVerlet,
         algorithms::second_order::VelocityVerlet,
     );
+    assert_same_type(
+        differential_equations::SspRkMsvs43,
+        algorithms::explicit::ssp::SspRkMsvs43,
+    );
 }
 
 #[test]
@@ -38,6 +42,10 @@ fn recovered_root_exports_are_real_ode_algorithms() {
     assert_algorithm::<differential_equations::Rodas3P>();
     assert_algorithm::<differential_equations::Ros4LStab>();
     assert_algorithm::<differential_equations::Tsit5DA>();
+    assert_algorithm::<differential_equations::SSPRKMSVS43>();
+    assert_algorithm::<differential_equations::QNDF>();
+    assert_algorithm::<differential_equations::QBDF>();
+    assert_algorithm::<differential_equations::FBDF>();
 }
 
 #[test]

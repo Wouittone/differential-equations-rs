@@ -1,4 +1,4 @@
-using OrdinaryDiffEqBDF: QNDF1
+using OrdinaryDiffEqBDF: QBDF1, QNDF1
 
 function rust_qndf1_results()
     manifest = joinpath(REPOSITORY_ROOT, "Cargo.toml")
@@ -30,4 +30,16 @@ end
     @test parse(Float64, rust["qndf1"][1]) ≈ only(adaptive.u[end]) rtol = 5.0e-4 atol = 5.0e-7
     @test parse(Float64, rust["qndf1"][1]) ≈ cos(1.0) rtol = 5.0e-4 atol = 5.0e-7
     @test parse(Int, rust["qndf1"][2]) > 0
+
+    qbdf_fixed = solve(problem, QBDF1(); adaptive = false, dt = 0.01, save_everystep = false)
+    @test parse(Float64, only(rust["qbdf1_fixed"])) ≈ only(qbdf_fixed.u[end]) rtol = 2.0e-4 atol = 2.0e-7
+    qbdf_adaptive = solve(
+        problem,
+        QBDF1();
+        abstol = 1.0e-8,
+        reltol = 1.0e-8,
+        save_everystep = false,
+    )
+    @test parse(Float64, rust["qbdf1"][1]) ≈ only(qbdf_adaptive.u[end]) rtol = 5.0e-4 atol = 5.0e-7
+    @test parse(Int, rust["qbdf1"][2]) > 0
 end

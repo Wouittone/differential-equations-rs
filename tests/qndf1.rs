@@ -1,5 +1,5 @@
 use differential_equations::{
-    CallbackAction, OdeProblem, Qndf1, SaveMode, SolveError, SolveOptions, solve,
+    CallbackAction, OdeProblem, Qbdf1, Qndf1, SaveMode, SolveError, SolveOptions, solve,
 };
 
 fn fixed(step: f64) -> SolveOptions {
@@ -88,4 +88,30 @@ fn reports_nonfinite_rhs_and_singular_systems() {
         solve(&singular, Qndf1, &fixed(1.0)),
         Err(SolveError::SingularLinearSystem)
     );
+}
+
+#[test]
+fn qbdf1_uses_zero_kappa_in_fixed_and_adaptive_modes() {
+    let problem = OdeProblem::new(
+        |du: &mut [f64], u: &[f64], _: &(), t: f64| {
+            du[0] = -15.0 * (u[0] - t.cos()) - t.sin();
+        },
+        vec![1.0],
+        (0.0, 1.0),
+        (),
+    );
+    let qbdf_fixed = solve(&problem, Qbdf1, &fixed(0.01)).unwrap();
+    let qndf_fixed = solve(&problem, Qndf1, &fixed(0.01)).unwrap();
+    assert!((qbdf_fixed.last_state()[0] - 0.540_103_568_471_148_3).abs() < 2.0e-12);
+    assert!((qbdf_fixed.last_state()[0] - qndf_fixed.last_state()[0]).abs() > 5.0e-5);
+
+    let adaptive = SolveOptions {
+        absolute_tolerance: 1.0e-8,
+        relative_tolerance: 1.0e-8,
+        save: SaveMode::Endpoints,
+        ..SolveOptions::default()
+    };
+    let qbdf_adaptive = solve(&problem, Qbdf1, &adaptive).unwrap();
+    assert!((qbdf_adaptive.last_state()[0] - 1.0f64.cos()).abs() < 5.0e-6);
+    assert!(qbdf_adaptive.stats().accepted_steps > 0);
 }

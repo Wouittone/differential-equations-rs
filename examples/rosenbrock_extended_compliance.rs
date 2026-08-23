@@ -1,8 +1,9 @@
 use differential_equations::{
-    Grk4a, Grk4t, OdeAlgorithm, OdeProblem, Rodas3, Rodas3d, Rodas4, Rodas4P, Rodas4P2, Rodas4PW,
-    Rodas5, Rodas5P, Rodas5Pe, Rodas5Pr, Rodas6P, Rodas23W, Rodas42, Rok4a, Ros2, Ros3, Ros3Pr,
-    Ros3Prl, Ros3Prl2, Ros3p, Ros34Prw, Ros34Pw1b, Ros34Pw2, Rosenbrock32, RosenbrockW6S4OS,
-    SaveMode, SolveOptions, solve,
+    Grk4a, Grk4t, HybridExplicitImplicitRK, OdeAlgorithm, OdeProblem, Rodas3, Rodas3P, Rodas3d,
+    Rodas4, Rodas4P, Rodas4P2, Rodas4PW, Rodas5, Rodas5P, Rodas5Pe, Rodas5Pr, Rodas6P, Rodas23W,
+    Rodas42, Rok4a, Ros2, Ros2Pr, Ros2S, Ros3, Ros3Pr, Ros3Prl, Ros3Prl2, Ros3p, Ros4LStab,
+    Ros34Prw, Ros34Pw1a, Ros34Pw1b, Ros34Pw2, RosShamp4, Rosenbrock32, RosenbrockW6S4OS, SaveMode,
+    Scholz4_7, SolveOptions, Tsit5DA, Veldd4, Velds4, solve,
 };
 
 type TestRhs = fn(&mut [f64], &[f64], &(), f64);
@@ -51,8 +52,11 @@ fn print_adaptive<A: OdeAlgorithm>(name: &str, algorithm: A) {
 
 fn main() {
     print_result("ros2", Ros2);
+    print_result("ros2pr", Ros2Pr);
+    print_result("ros2s", Ros2S);
     print_result("rodas23w", Rodas23W);
     print_result("rodas3", Rodas3);
+    print_result("rodas3p", Rodas3P);
     print_result("rodas3d", Rodas3d);
     print_adaptive("ros3", Ros3);
     print_result("ros3pr", Ros3Pr);
@@ -63,6 +67,7 @@ fn main() {
     print_result("rosenbrock32", Rosenbrock32);
     print_result("grk4t", Grk4t);
     print_result("ros34pw1b", Ros34Pw1b);
+    print_result("ros34pw1a", Ros34Pw1a);
     print_result("ros34pw2", Ros34Pw2);
     print_result("rodas4", Rodas4);
     print_result("rodas42", Rodas42);
@@ -76,6 +81,13 @@ fn main() {
     print_result("rodas5pe", Rodas5Pe);
     print_result("rodas5pr", Rodas5Pr);
     print_result("rodas6p", Rodas6P);
+    print_result("hybrid_explicit_implicit_rk", HybridExplicitImplicitRK);
+    print_result("ros4_l_stab", Ros4LStab);
+    print_result("ros_shamp4", RosShamp4);
+    print_result("scholz4_7", Scholz4_7);
+    print_result("tsit5da", Tsit5DA);
+    print_result("veldd4", Veldd4);
+    print_result("velds4", Velds4);
     println!(
         "rosenbrockw6s4os_fixed,{:.17e}",
         endpoint(RosenbrockW6S4OS, false)

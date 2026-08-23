@@ -1,9 +1,13 @@
 use differential_equations::{
+    CFRLDDRK64, CKLLSRK43_2, CKLLSRK54_3C, CKLLSRK54_3C_3R, CKLLSRK54_3M_3R, CKLLSRK54_3M_4R,
+    CKLLSRK54_3N_3R, CKLLSRK54_3N_4R, CKLLSRK65_4M_4R, CKLLSRK75_4M_5R, CKLLSRK85_4C_3R,
+    CKLLSRK85_4FM_4R, CKLLSRK85_4M_3R, CKLLSRK85_4P_3R, CKLLSRK95_4C, CKLLSRK95_4M, CKLLSRK95_4S,
     CarpenterKennedy2N54, Dglddrk73C, Dglddrk84C, Dglddrk84F, Ndblsrk124, Ndblsrk134, Ndblsrk144,
     OdeAlgorithm, OdeProblem, Ork256, ParsaniKetchesonDeconinck3S32, ParsaniKetchesonDeconinck3S53,
     ParsaniKetchesonDeconinck3S82, ParsaniKetchesonDeconinck3S94, ParsaniKetchesonDeconinck3S105,
     ParsaniKetchesonDeconinck3S173, ParsaniKetchesonDeconinck3S184, ParsaniKetchesonDeconinck3S205,
-    SaveMode, Shlddrk64, SolveOptions, solve,
+    RDPK3Sp35, RDPK3Sp49, RDPK3Sp510, RDPK3SpFSAL35, RDPK3SpFSAL49, RDPK3SpFSAL510, RK46NL,
+    SHLDDRK_2N, SHLDDRK52, SaveMode, Shlddrk64, SolveOptions, TSLDDRK74, solve,
 };
 
 type TestRhs = fn(&mut [f64], &[f64], &(), f64);
@@ -70,4 +74,31 @@ fn main() {
     println!("ndblsrk124,{:.17e}", endpoint(Ndblsrk124));
     println!("ndblsrk134,{:.17e}", endpoint(Ndblsrk134));
     println!("ndblsrk144,{:.17e}", endpoint(Ndblsrk144));
+    println!("cfrlddrk64,{:.17e}", endpoint(CFRLDDRK64));
+    println!("ckllsrk43_2,{:.17e}", endpoint(CKLLSRK43_2));
+    println!("ckllsrk54_3c,{:.17e}", endpoint(CKLLSRK54_3C));
+    println!("ckllsrk54_3c_3r,{:.17e}", endpoint(CKLLSRK54_3C_3R));
+    println!("ckllsrk54_3m_3r,{:.17e}", endpoint(CKLLSRK54_3M_3R));
+    println!("ckllsrk54_3m_4r,{:.17e}", endpoint(CKLLSRK54_3M_4R));
+    println!("ckllsrk54_3n_3r,{:.17e}", endpoint(CKLLSRK54_3N_3R));
+    println!("ckllsrk54_3n_4r,{:.17e}", endpoint(CKLLSRK54_3N_4R));
+    println!("ckllsrk65_4m_4r,{:.17e}", endpoint(CKLLSRK65_4M_4R));
+    println!("ckllsrk75_4m_5r,{:.17e}", endpoint(CKLLSRK75_4M_5R));
+    println!("ckllsrk85_4c_3r,{:.17e}", endpoint(CKLLSRK85_4C_3R));
+    println!("ckllsrk85_4fm_4r,{:.17e}", endpoint(CKLLSRK85_4FM_4R));
+    println!("ckllsrk85_4m_3r,{:.17e}", endpoint(CKLLSRK85_4M_3R));
+    println!("ckllsrk85_4p_3r,{:.17e}", endpoint(CKLLSRK85_4P_3R));
+    println!("ckllsrk95_4c,{:.17e}", endpoint(CKLLSRK95_4C));
+    println!("ckllsrk95_4m,{:.17e}", endpoint(CKLLSRK95_4M));
+    println!("ckllsrk95_4s,{:.17e}", endpoint(CKLLSRK95_4S));
+    println!("rdpk3sp35,{:.17e}", endpoint(RDPK3Sp35));
+    println!("rdpk3sp49,{:.17e}", endpoint(RDPK3Sp49));
+    println!("rdpk3sp510,{:.17e}", endpoint(RDPK3Sp510));
+    println!("rdpk3spfsal35,{:.17e}", endpoint(RDPK3SpFSAL35));
+    println!("rdpk3spfsal49,{:.17e}", endpoint(RDPK3SpFSAL49));
+    println!("rdpk3spfsal510,{:.17e}", endpoint(RDPK3SpFSAL510));
+    println!("rk46nl,{:.17e}", endpoint(RK46NL));
+    println!("shlddrk_2n,{:.17e}", endpoint(SHLDDRK_2N));
+    println!("shlddrk52,{:.17e}", endpoint(SHLDDRK52));
+    println!("tslddrk74,{:.17e}", endpoint(TSLDDRK74));
 }

@@ -32,8 +32,9 @@ pub mod algorithms {
         pub mod general {
             pub use crate::{
                 Alshina2, Alshina3, Alshina6, Bs3, Bs5, Dp5, Euler, ExplicitRK, ExplicitRungeKutta,
-                Heun, Midpoint, Msrk5, Msrk6, OwrenZen3, OwrenZen4, OwrenZen5, Psrk3p5q4,
-                Psrk3p6q5, Psrk4p7q6, Ralston, Ralston4, Rk4, Rkm, Rko65, Sir54, Stepanov5, Tsit5,
+                Heun, KuttaPRK2p5, Midpoint, Msrk5, Msrk6, OwrenZen3, OwrenZen4, OwrenZen5,
+                Psrk3p5q4, Psrk3p6q5, Psrk4p7q6, QPRK98, Ralston, Ralston4, Rk4, Rkm, Rko65, Sir54,
+                SplitEuler, Stepanov5, Tsit5,
             };
         }
 
@@ -66,9 +67,9 @@ pub mod algorithms {
         pub mod ssp {
             pub use crate::{
                 KYKSSPRK42, Kyk2014DgSsprk3S2, KykSsprk42, Prrk22, Prrk33, Prrk54, SSPRKMSVS32,
-                SspRk22, SspRk33, SspRk43, SspRk53, SspRk53H, SspRk53TwoN1, SspRk53TwoN2, SspRk54,
-                SspRk63, SspRk73, SspRk83, SspRk104, SspRk432, SspRk932, SspRkMsvs32, pRRK22,
-                pRRK33, pRRK54,
+                SSPRKMSVS43, SspRk22, SspRk33, SspRk43, SspRk53, SspRk53H, SspRk53TwoN1,
+                SspRk53TwoN2, SspRk54, SspRk63, SspRk73, SspRk83, SspRk104, SspRk432, SspRk932,
+                SspRkMsvs32, SspRkMsvs43, pRRK22, pRRK33, pRRK54,
             };
         }
 
@@ -103,8 +104,8 @@ pub mod algorithms {
     /// Linear multistep and multiderivative algorithms.
     pub mod multistep {
         pub use crate::{
-            Ab3, Ab4, Ab5, Abdf2, Abm32, Abm43, Abm54, Mebdf2, Qndf1, Qndf2, Trbdf2, Vcab3, Vcab4,
-            Vcab5, Vcabm3, Vcabm4, Vcabm5,
+            Ab3, Ab4, Ab5, Abdf2, Abm32, Abm43, Abm54, FBDF, Fbdf, Mebdf2, QBDF, QNDF, Qbdf, Qbdf1,
+            Qbdf2, Qndf, Qndf1, Qndf2, Trbdf2, Vcab3, Vcab4, Vcab5, Vcabm3, Vcabm4, Vcabm5,
         };
     }
 
@@ -121,11 +122,19 @@ pub mod algorithms {
 
     /// Explicit methods with extended real-axis stability intervals.
     pub mod stabilized {
-        pub use crate::{RKC, RKG1, RKG2, RKL1, RKL2, RKMC2};
+        pub use crate::{
+            ESERK4, ESERK5, RKC, RKG1, RKG2, RKL1, RKL2, RKMC2, ROCK2, ROCK4, SERK2, TSRKC2, TSRKC3,
+        };
     }
 
     /// Algorithms for partitioned second-order problems.
     pub mod second_order {
-        pub use crate::{LeapfrogDriftKickDrift, SymplecticEuler, VelocityVerlet, VerletLeapfrog};
+        pub use crate::{
+            DPRKN4, DPRKN5, DPRKN6, DPRKN6FM, DPRKN8, DPRKN12, Dprkn4, Dprkn5, Dprkn6, Dprkn6Fm,
+            Dprkn8, Dprkn12, ERKN4, ERKN5, ERKN7, Erkn4, Erkn5, Erkn7, FineRKN4, FineRKN5,
+            FineRkn4, FineRkn5, IRKN3, IRKN4, Irkn3, Irkn4, LeapfrogDriftKickDrift, Nystrom4,
+            Nystrom4VelocityIndependent, Nystrom5VelocityIndependent, Rkn4, SymplecticEuler,
+            VelocityVerlet, VerletLeapfrog,
+        };
     }
 }

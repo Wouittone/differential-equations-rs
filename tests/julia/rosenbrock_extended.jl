@@ -1,5 +1,5 @@
-using OrdinaryDiffEqRosenbrock: GRK4A, GRK4T, ROK4a, ROS2, ROS3, ROS3P, ROS3PR, ROS3PRL, ROS3PRL2, Rodas23W, Rodas3, Rodas3d, Rodas4, Rodas42, Rodas4P, Rodas4P2, Rodas4PW, Rodas5, Rodas5P, Rodas5Pe, Rodas5Pr, Rodas6P,
-    ROS34PRw, ROS34PW1b, ROS34PW2, Rosenbrock32, RosenbrockW6S4OS
+using OrdinaryDiffEqRosenbrock: GRK4A, GRK4T, HybridExplicitImplicitRK, ROK4a, ROS2, ROS2PR, ROS2S, ROS3, ROS3P, ROS3PR, ROS3PRL, ROS3PRL2, Rodas23W, Rodas3, Rodas3P, Rodas3d, Rodas4, Rodas42, Rodas4P, Rodas4P2, Rodas4PW, Rodas5, Rodas5P, Rodas5Pe, Rodas5Pr, Rodas6P,
+    Ros4LStab, ROS34PRw, ROS34PW1a, ROS34PW1b, ROS34PW2, RosShamp4, Rosenbrock32, RosenbrockW6S4OS, Scholz4_7, Tsit5DA, Veldd4, Velds4
 
 function rust_extended_rosenbrock_endpoints()
     manifest = joinpath(REPOSITORY_ROOT, "Cargo.toml")
@@ -45,7 +45,10 @@ end
     rust = rust_extended_rosenbrock_endpoints()
     algorithms = Dict(
         "ros2" => ROS2(),
+        "ros2pr" => ROS2PR(),
+        "ros2s" => ROS2S(),
         "rodas3" => Rodas3(),
+        "rodas3p" => Rodas3P(),
         "rodas3d" => Rodas3d(),
         "ros3pr" => ROS3PR(),
         "ros3prl" => ROS3PRL(),
@@ -66,10 +69,18 @@ end
         "rodas5pe" => Rodas5Pe(),
         "rodas5pr" => Rodas5Pr(),
         "ros34pw1b" => ROS34PW1b(),
+        "ros34pw1a" => ROS34PW1a(),
         "ros34pw2" => ROS34PW2(),
         "rodas5p" => Rodas5P(),
         "rodas6p" => Rodas6P(),
         "rosenbrockw6s4os" => RosenbrockW6S4OS(),
+        "hybrid_explicit_implicit_rk" => HybridExplicitImplicitRK(Tsit5DA().tab; order = 5),
+        "ros4_l_stab" => Ros4LStab(),
+        "ros_shamp4" => RosShamp4(),
+        "scholz4_7" => Scholz4_7(),
+        "tsit5da" => Tsit5DA(),
+        "veldd4" => Veldd4(),
+        "velds4" => Velds4(),
     )
     julia = Dict{String, Float64}()
     for (name, algorithm) in algorithms

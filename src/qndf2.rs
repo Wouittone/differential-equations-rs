@@ -10,7 +10,7 @@ use crate::integrator::{
 use crate::linear::{DenseLu, LinearError, StateLayout, factorize, solve_factorized};
 use crate::{OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions, SolverStats};
 
-const KAPPA: f64 = -1.0 / 9.0;
+const DEFAULT_KAPPA: f64 = -1.0 / 9.0;
 const MAX_NEWTON_ITERATIONS: usize = 12;
 const NEWTON_TOLERANCE: f64 = 1.0e-12;
 const CONTROLLER: ControllerConfig = ControllerConfig::proportional(3, 0.9, 0.2, 10.0, 0.2);
@@ -18,6 +18,10 @@ const CONTROLLER: ControllerConfig = ControllerConfig::proportional(3, 0.9, 0.2,
 /// Adaptive second-order quasi-constant-step NDF method for regular ODEs.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Qndf2;
+
+/// Second-order quasi-constant-step BDF method (`QNDF2(kappa = 0)`).
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct Qbdf2;
 
 impl OdeAlgorithm for Qndf2 {
     fn solve<F, P>(
@@ -31,7 +35,24 @@ impl OdeAlgorithm for Qndf2 {
         drive_integration(
             problem,
             options,
-            Qndf2Kernel::new(problem.initial_state().len()),
+            Qndf2Kernel::new(problem.initial_state().len(), DEFAULT_KAPPA),
+        )
+    }
+}
+
+impl OdeAlgorithm for Qbdf2 {
+    fn solve<F, P>(
+        &self,
+        problem: &OdeProblem<F, P>,
+        options: &SolveOptions,
+    ) -> Result<Solution, SolveError>
+    where
+        F: Fn(&mut [f64], &[f64], &P, f64),
+    {
+        drive_integration(
+            problem,
+            options,
+            Qndf2Kernel::new(problem.initial_state().len(), 0.0),
         )
     }
 }
@@ -97,12 +118,14 @@ impl Workspace {
 
 struct Qndf2Kernel {
     workspace: Workspace,
+    kappa: f64,
 }
 
 impl Qndf2Kernel {
-    fn new(dimension: usize) -> Self {
+    fn new(dimension: usize, kappa: f64) -> Self {
         Self {
             workspace: Workspace::new(dimension),
+            kappa,
         }
     }
 }
@@ -169,7 +192,7 @@ where
         let (beta_zero, gamma_two) = if startup {
             (1.0, 1.0)
         } else {
-            (1.0 / ((1.0 - KAPPA) * 1.5), 1.5)
+            (1.0 / ((1.0 - self.kappa) * 1.5), 1.5)
         };
         build_differences(&mut self.workspace, state, step);
         for (((out, &now), &d1), &d2) in self
@@ -216,7 +239,7 @@ where
                 .zip(candidate.iter().zip(state))
                 .zip(&self.workspace.difference_one)
             {
-                *out = (KAPPA * gamma_two + 1.0 / 3.0) * ((next - now) - d1);
+                *out = (self.kappa * gamma_two + 1.0 / 3.0) * ((next - now) - d1);
             }
             rms_scaled(
                 self.workspace.difference_three.iter().copied(),
