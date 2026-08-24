@@ -6,7 +6,9 @@
 //! provide no error estimator and require a fixed time step. This port
 //! therefore deliberately exposes fixed-step integration only.
 
+use crate::callback::CallbackOutcome;
 use crate::integrator::{KernelCapabilities, StepEstimate, StepKernel, integrate};
+use crate::solution::{BorrowedHermiteSegment, DenseSegment, HermiteSegment, TrajectoryRecorder};
 use crate::{OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions, SolverStats};
 
 /// The second-order, three-step strong-stability-preserving linear multistep
@@ -36,6 +38,8 @@ struct Msvs32Kernel {
     derivative: Vec<f64>,
     /// Derivative at the candidate endpoint, retained for the next step.
     next_derivative: Vec<f64>,
+    dense_endpoint_state: Vec<f64>,
+    dense_endpoint_prepared: bool,
     /// Temporary Euler state used by the two-stage startup procedure.
     euler_state: Vec<f64>,
     /// State two accepted steps before the current state (`u_2` upstream).
@@ -53,6 +57,8 @@ struct Msvs43Kernel {
     derivative: Vec<f64>,
     /// Derivative at the candidate endpoint, retained for the next step.
     next_derivative: Vec<f64>,
+    dense_endpoint_state: Vec<f64>,
+    dense_endpoint_prepared: bool,
     /// Temporary Euler state used by the two-stage startup procedure.
     euler_state: Vec<f64>,
     /// Accepted states one, two, and three steps behind the current state.
@@ -69,11 +75,137 @@ struct Msvs43Kernel {
     last_step: f64,
 }
 
+#[allow(clippy::too_many_arguments)]
+fn apply_msvs_callbacks<F, P>(
+    problem: &OdeProblem<F, P>,
+    previous_state: &[f64],
+    previous_time: f64,
+    state: &mut [f64],
+    time: &mut f64,
+    state_before_effect: &mut [f64],
+    event_tolerance: f64,
+    start_derivative: &[f64],
+    endpoint_derivative: &[f64],
+    endpoint_state: &mut [f64],
+    endpoint_prepared: &mut bool,
+) -> Result<CallbackOutcome, SolveError>
+where
+    F: Fn(&mut [f64], &[f64], &P, f64),
+{
+    if !problem.has_callbacks() {
+        *endpoint_prepared = false;
+        return problem.apply_step_callbacks(
+            previous_state,
+            previous_time,
+            state,
+            time,
+            state_before_effect,
+            event_tolerance,
+            None,
+        );
+    }
+    endpoint_state.copy_from_slice(state);
+    *endpoint_prepared = true;
+    if !problem.has_continuous_callbacks() {
+        return problem.apply_step_callbacks(
+            previous_state,
+            previous_time,
+            state,
+            time,
+            state_before_effect,
+            event_tolerance,
+            None,
+        );
+    }
+    let segment = BorrowedHermiteSegment::new(
+        previous_time,
+        *time,
+        previous_state,
+        endpoint_state,
+        start_derivative,
+        endpoint_derivative,
+    )
+    .map_err(|_| SolveError::NonFiniteDerivative)?;
+    let mut interpolate = |sample_time: f64, output: &mut [f64]| {
+        segment
+            .interpolate(sample_time, output)
+            .map_err(|_| SolveError::NonFiniteDerivative)
+    };
+    problem.apply_step_callbacks(
+        previous_state,
+        previous_time,
+        state,
+        time,
+        state_before_effect,
+        event_tolerance,
+        Some(&mut interpolate),
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn record_msvs_step(
+    previous_state: &[f64],
+    state: &[f64],
+    start_derivative: &[f64],
+    endpoint_derivative: &[f64],
+    endpoint_state: &mut [f64],
+    endpoint_prepared: &mut bool,
+    previous_time: f64,
+    attempted_time: f64,
+    time: f64,
+    final_time: bool,
+    recorder: &mut TrajectoryRecorder<'_>,
+) -> Result<bool, SolveError> {
+    if !recorder.needs_dense_sampling() && !recorder.retains_dense_output() {
+        *endpoint_prepared = false;
+        return Ok(false);
+    }
+    if !*endpoint_prepared {
+        endpoint_state.copy_from_slice(state);
+    }
+    let segment = BorrowedHermiteSegment::new(
+        previous_time,
+        attempted_time,
+        previous_state,
+        endpoint_state,
+        start_derivative,
+        endpoint_derivative,
+    )
+    .map_err(|_| SolveError::NonFiniteDerivative)?;
+    recorder
+        .record_step_dense(
+            previous_state,
+            previous_time,
+            state,
+            time,
+            final_time,
+            &segment,
+        )
+        .map_err(|_| SolveError::NonFiniteDerivative)?;
+    if recorder.retains_dense_output() {
+        let segment = HermiteSegment::new_bounded(
+            previous_time,
+            attempted_time,
+            time,
+            previous_state.to_vec(),
+            endpoint_state.to_vec(),
+            start_derivative.to_vec(),
+            endpoint_derivative.to_vec(),
+        )
+        .map_err(|_| SolveError::NonFiniteDerivative)?;
+        recorder.retain_hermite_segment(segment);
+    }
+    *endpoint_prepared = false;
+    Ok(true)
+}
+
 impl Msvs32Kernel {
     fn new(dimension: usize) -> Self {
         Self {
             derivative: vec![0.0; dimension],
             next_derivative: vec![0.0; dimension],
+            dense_endpoint_state: vec![0.0; dimension],
+            dense_endpoint_prepared: false,
             euler_state: vec![0.0; dimension],
             u_2: vec![0.0; dimension],
             u_1: vec![0.0; dimension],
@@ -109,6 +241,8 @@ impl Msvs43Kernel {
         Self {
             derivative: vec![0.0; dimension],
             next_derivative: vec![0.0; dimension],
+            dense_endpoint_state: vec![0.0; dimension],
+            dense_endpoint_prepared: false,
             euler_state: vec![0.0; dimension],
             u_1: vec![0.0; dimension],
             u_2: vec![0.0; dimension],
@@ -251,6 +385,59 @@ where
         );
         Self::ensure_finite(&self.next_derivative)?;
         Ok(StepEstimate::new(0.0))
+    }
+
+    fn apply_step_callbacks(
+        &mut self,
+        problem: &OdeProblem<F, P>,
+        previous_state: &[f64],
+        previous_time: f64,
+        state: &mut [f64],
+        time: &mut f64,
+        state_before_effect: &mut [f64],
+        event_tolerance: f64,
+        _: &mut SolverStats,
+    ) -> Result<CallbackOutcome, SolveError> {
+        apply_msvs_callbacks(
+            problem,
+            previous_state,
+            previous_time,
+            state,
+            time,
+            state_before_effect,
+            event_tolerance,
+            &self.derivative,
+            &self.next_derivative,
+            &mut self.dense_endpoint_state,
+            &mut self.dense_endpoint_prepared,
+        )
+    }
+
+    fn record_dense_step(
+        &mut self,
+        _: &OdeProblem<F, P>,
+        previous_state: &[f64],
+        state: &[f64],
+        previous_time: f64,
+        attempted_time: f64,
+        time: f64,
+        final_time: bool,
+        recorder: &mut TrajectoryRecorder<'_>,
+        _: &mut SolverStats,
+    ) -> Result<bool, SolveError> {
+        record_msvs_step(
+            previous_state,
+            state,
+            &self.derivative,
+            &self.next_derivative,
+            &mut self.dense_endpoint_state,
+            &mut self.dense_endpoint_prepared,
+            previous_time,
+            attempted_time,
+            time,
+            final_time,
+            recorder,
+        )
     }
 
     fn accept_step(
@@ -457,6 +644,59 @@ where
     }
 
     fn reject_step(&mut self) {}
+
+    fn apply_step_callbacks(
+        &mut self,
+        problem: &OdeProblem<F, P>,
+        previous_state: &[f64],
+        previous_time: f64,
+        state: &mut [f64],
+        time: &mut f64,
+        state_before_effect: &mut [f64],
+        event_tolerance: f64,
+        _: &mut SolverStats,
+    ) -> Result<CallbackOutcome, SolveError> {
+        apply_msvs_callbacks(
+            problem,
+            previous_state,
+            previous_time,
+            state,
+            time,
+            state_before_effect,
+            event_tolerance,
+            &self.derivative,
+            &self.next_derivative,
+            &mut self.dense_endpoint_state,
+            &mut self.dense_endpoint_prepared,
+        )
+    }
+
+    fn record_dense_step(
+        &mut self,
+        _: &OdeProblem<F, P>,
+        previous_state: &[f64],
+        state: &[f64],
+        previous_time: f64,
+        attempted_time: f64,
+        time: f64,
+        final_time: bool,
+        recorder: &mut TrajectoryRecorder<'_>,
+        _: &mut SolverStats,
+    ) -> Result<bool, SolveError> {
+        record_msvs_step(
+            previous_state,
+            state,
+            &self.derivative,
+            &self.next_derivative,
+            &mut self.dense_endpoint_state,
+            &mut self.dense_endpoint_prepared,
+            previous_time,
+            attempted_time,
+            time,
+            final_time,
+            recorder,
+        )
+    }
 }
 
 impl OdeAlgorithm for SspRkMsvs32 {

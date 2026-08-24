@@ -12,14 +12,154 @@
 #![allow(clippy::excessive_precision)]
 
 use crate::SolverStats;
+use crate::callback::CallbackOutcome;
 use crate::explicit_rk::{ButcherTableau, ExplicitRungeKutta};
 use crate::integrator::{
     KernelCapabilities, StepEstimate, StepKernel, integrate as drive_integration,
 };
-use crate::solution::TrajectoryRecorder;
+use crate::solution::{BorrowedHermiteSegment, DenseSegment, HermiteSegment, TrajectoryRecorder};
 use crate::{OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions};
 
 const EMPTY: &[f64] = &[];
+
+#[allow(clippy::too_many_arguments)]
+fn apply_hermite_callbacks<F, P>(
+    problem: &OdeProblem<F, P>,
+    previous_state: &[f64],
+    previous_time: f64,
+    state: &mut [f64],
+    time: &mut f64,
+    state_before_effect: &mut [f64],
+    event_tolerance: f64,
+    start_derivative: &[f64],
+    endpoint_state: &mut [f64],
+    endpoint_derivative: &mut [f64],
+    endpoint_prepared: &mut bool,
+    stats: &mut SolverStats,
+) -> Result<CallbackOutcome, SolveError>
+where
+    F: Fn(&mut [f64], &[f64], &P, f64),
+{
+    if !problem.has_continuous_callbacks() {
+        *endpoint_prepared = false;
+        return problem.apply_step_callbacks(
+            previous_state,
+            previous_time,
+            state,
+            time,
+            state_before_effect,
+            event_tolerance,
+            None,
+        );
+    }
+    endpoint_state.copy_from_slice(state);
+    (problem.rhs)(
+        endpoint_derivative,
+        endpoint_state,
+        problem.parameters(),
+        *time,
+    );
+    stats.rhs_evaluations += 1;
+    if !endpoint_derivative.iter().all(|value| value.is_finite()) {
+        return Err(SolveError::NonFiniteDerivative);
+    }
+    *endpoint_prepared = true;
+    let segment = BorrowedHermiteSegment::new(
+        previous_time,
+        *time,
+        previous_state,
+        endpoint_state,
+        start_derivative,
+        endpoint_derivative,
+    )
+    .map_err(|_| SolveError::NonFiniteDerivative)?;
+    let mut interpolate = |sample_time: f64, output: &mut [f64]| {
+        segment
+            .interpolate(sample_time, output)
+            .map_err(|_| SolveError::NonFiniteDerivative)
+    };
+    problem.apply_step_callbacks(
+        previous_state,
+        previous_time,
+        state,
+        time,
+        state_before_effect,
+        event_tolerance,
+        Some(&mut interpolate),
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn record_hermite_step<F, P>(
+    problem: &OdeProblem<F, P>,
+    previous_state: &[f64],
+    state: &[f64],
+    start_derivative: &[f64],
+    endpoint_state: &mut [f64],
+    endpoint_derivative: &mut [f64],
+    endpoint_prepared: &mut bool,
+    previous_time: f64,
+    attempted_time: f64,
+    time: f64,
+    final_time: bool,
+    recorder: &mut TrajectoryRecorder<'_>,
+    stats: &mut SolverStats,
+) -> Result<bool, SolveError>
+where
+    F: Fn(&mut [f64], &[f64], &P, f64),
+{
+    if !recorder.needs_dense_sampling() && !recorder.retains_dense_output() {
+        *endpoint_prepared = false;
+        return Ok(false);
+    }
+    if !*endpoint_prepared {
+        endpoint_state.copy_from_slice(state);
+        (problem.rhs)(
+            endpoint_derivative,
+            endpoint_state,
+            problem.parameters(),
+            attempted_time,
+        );
+        stats.rhs_evaluations += 1;
+        if !endpoint_derivative.iter().all(|value| value.is_finite()) {
+            return Err(SolveError::NonFiniteDerivative);
+        }
+    }
+    let segment = BorrowedHermiteSegment::new(
+        previous_time,
+        attempted_time,
+        previous_state,
+        endpoint_state,
+        start_derivative,
+        endpoint_derivative,
+    )
+    .map_err(|_| SolveError::NonFiniteDerivative)?;
+    recorder
+        .record_step_dense(
+            previous_state,
+            previous_time,
+            state,
+            time,
+            final_time,
+            &segment,
+        )
+        .map_err(|_| SolveError::NonFiniteDerivative)?;
+    if recorder.retains_dense_output() {
+        let segment = HermiteSegment::new_bounded(
+            previous_time,
+            attempted_time,
+            time,
+            previous_state.to_vec(),
+            endpoint_state.to_vec(),
+            start_derivative.to_vec(),
+            endpoint_derivative.to_vec(),
+        )
+        .map_err(|_| SolveError::NonFiniteDerivative)?;
+        recorder.retain_hermite_segment(segment);
+    }
+    *endpoint_prepared = false;
+    Ok(true)
+}
 
 macro_rules! fixed_ssprk {
     ($algorithm:ident, $tableau:ident, $order:expr, $nodes:ident, $rows:ident, $weights:ident) => {
@@ -61,6 +201,17 @@ pub struct SspRk432;
 
 struct SspRk432Tableau;
 
+const SSPRK432_DENSE_1: &[f64] = &[1.0, -5.0 / 6.0];
+const SSPRK432_DENSE_2: &[f64] = &[0.0, 1.0 / 6.0];
+const SSPRK432_DENSE_3: &[f64] = &[0.0, 1.0 / 6.0];
+const SSPRK432_DENSE_4: &[f64] = &[0.0, 0.5];
+const SSPRK432_DENSE: &[&[f64]] = &[
+    SSPRK432_DENSE_1,
+    SSPRK432_DENSE_2,
+    SSPRK432_DENSE_3,
+    SSPRK432_DENSE_4,
+];
+
 impl ButcherTableau for SspRk432Tableau {
     const NODES: &'static [f64] = &[0.0, 0.5, 1.0, 0.5];
     const COEFFICIENTS: &'static [&'static [f64]] = &[
@@ -74,6 +225,7 @@ impl ButcherTableau for SspRk432Tableau {
     // uprev + dt * (f₁ + f₂ + f₃) / 6 + dt * f₄ / 2.  The sign is immaterial
     // to the norm, but this is the conventional high-minus-low difference.
     const ERROR_WEIGHTS: Option<&'static [f64]> = Some(&[-1.0 / 6.0, -1.0 / 6.0, -1.0 / 6.0, 0.5]);
+    const DENSE_COEFFICIENTS: Option<&'static [&'static [f64]]> = Some(SSPRK432_DENSE);
     const ORDER: usize = 3;
     const FSAL: bool = false;
 }
@@ -340,6 +492,9 @@ struct Prrk22Kernel {
     first_derivative: Vec<f64>,
     second_derivative: Vec<f64>,
     stage_state: Vec<f64>,
+    dense_endpoint_state: Vec<f64>,
+    dense_endpoint_derivative: Vec<f64>,
+    dense_endpoint_prepared: bool,
 }
 
 impl Prrk22Kernel {
@@ -349,6 +504,9 @@ impl Prrk22Kernel {
             first_derivative: vec![0.0; dimension],
             second_derivative: vec![0.0; dimension],
             stage_state: vec![0.0; dimension],
+            dense_endpoint_state: vec![0.0; dimension],
+            dense_endpoint_derivative: vec![0.0; dimension],
+            dense_endpoint_prepared: false,
         }
     }
 
@@ -461,19 +619,60 @@ where
         Ok(StepEstimate::new(0.0))
     }
 
+    fn apply_step_callbacks(
+        &mut self,
+        problem: &OdeProblem<F, P>,
+        previous_state: &[f64],
+        previous_time: f64,
+        state: &mut [f64],
+        time: &mut f64,
+        state_before_effect: &mut [f64],
+        event_tolerance: f64,
+        stats: &mut SolverStats,
+    ) -> Result<CallbackOutcome, SolveError> {
+        apply_hermite_callbacks(
+            problem,
+            previous_state,
+            previous_time,
+            state,
+            time,
+            state_before_effect,
+            event_tolerance,
+            &self.first_derivative,
+            &mut self.dense_endpoint_state,
+            &mut self.dense_endpoint_derivative,
+            &mut self.dense_endpoint_prepared,
+            stats,
+        )
+    }
+
     fn record_dense_step(
         &mut self,
-        _: &OdeProblem<F, P>,
-        _: &[f64],
-        _: &[f64],
-        _: f64,
-        _: f64,
-        _: f64,
-        _: bool,
-        _: &mut TrajectoryRecorder<'_>,
-        _: &mut SolverStats,
+        problem: &OdeProblem<F, P>,
+        previous_state: &[f64],
+        state: &[f64],
+        previous_time: f64,
+        attempted_time: f64,
+        time: f64,
+        final_time: bool,
+        recorder: &mut TrajectoryRecorder<'_>,
+        stats: &mut SolverStats,
     ) -> Result<bool, SolveError> {
-        Ok(false)
+        record_hermite_step(
+            problem,
+            previous_state,
+            state,
+            &self.first_derivative,
+            &mut self.dense_endpoint_state,
+            &mut self.dense_endpoint_derivative,
+            &mut self.dense_endpoint_prepared,
+            previous_time,
+            attempted_time,
+            time,
+            final_time,
+            recorder,
+            stats,
+        )
     }
 
     fn accept_step(
@@ -516,6 +715,9 @@ struct Prrk33Kernel {
     third_derivative: Vec<f64>,
     stage_one: Vec<f64>,
     stage_two: Vec<f64>,
+    dense_endpoint_state: Vec<f64>,
+    dense_endpoint_derivative: Vec<f64>,
+    dense_endpoint_prepared: bool,
 }
 
 impl Prrk33Kernel {
@@ -527,6 +729,9 @@ impl Prrk33Kernel {
             third_derivative: vec![0.0; dimension],
             stage_one: vec![0.0; dimension],
             stage_two: vec![0.0; dimension],
+            dense_endpoint_state: vec![0.0; dimension],
+            dense_endpoint_derivative: vec![0.0; dimension],
+            dense_endpoint_prepared: false,
         }
     }
 
@@ -668,19 +873,60 @@ where
         Ok(StepEstimate::new(0.0))
     }
 
+    fn apply_step_callbacks(
+        &mut self,
+        problem: &OdeProblem<F, P>,
+        previous_state: &[f64],
+        previous_time: f64,
+        state: &mut [f64],
+        time: &mut f64,
+        state_before_effect: &mut [f64],
+        event_tolerance: f64,
+        stats: &mut SolverStats,
+    ) -> Result<CallbackOutcome, SolveError> {
+        apply_hermite_callbacks(
+            problem,
+            previous_state,
+            previous_time,
+            state,
+            time,
+            state_before_effect,
+            event_tolerance,
+            &self.first_derivative,
+            &mut self.dense_endpoint_state,
+            &mut self.dense_endpoint_derivative,
+            &mut self.dense_endpoint_prepared,
+            stats,
+        )
+    }
+
     fn record_dense_step(
         &mut self,
-        _: &OdeProblem<F, P>,
-        _: &[f64],
-        _: &[f64],
-        _: f64,
-        _: f64,
-        _: f64,
-        _: bool,
-        _: &mut TrajectoryRecorder<'_>,
-        _: &mut SolverStats,
+        problem: &OdeProblem<F, P>,
+        previous_state: &[f64],
+        state: &[f64],
+        previous_time: f64,
+        attempted_time: f64,
+        time: f64,
+        final_time: bool,
+        recorder: &mut TrajectoryRecorder<'_>,
+        stats: &mut SolverStats,
     ) -> Result<bool, SolveError> {
-        Ok(false)
+        record_hermite_step(
+            problem,
+            previous_state,
+            state,
+            &self.first_derivative,
+            &mut self.dense_endpoint_state,
+            &mut self.dense_endpoint_derivative,
+            &mut self.dense_endpoint_prepared,
+            previous_time,
+            attempted_time,
+            time,
+            final_time,
+            recorder,
+            stats,
+        )
     }
 
     fn accept_step(
@@ -743,6 +989,7 @@ pub type pRRK54 = Prrk54;
 
 struct Prrk54Kernel {
     kappa: f64,
+    start_derivative: Vec<f64>,
     first_derivative: Vec<f64>,
     second_derivative: Vec<f64>,
     third_derivative: Vec<f64>,
@@ -751,12 +998,16 @@ struct Prrk54Kernel {
     stage_two: Vec<f64>,
     stage_three: Vec<f64>,
     stage_four: Vec<f64>,
+    dense_endpoint_state: Vec<f64>,
+    dense_endpoint_derivative: Vec<f64>,
+    dense_endpoint_prepared: bool,
 }
 
 impl Prrk54Kernel {
     fn new(kappa: f64, dimension: usize) -> Self {
         Self {
             kappa,
+            start_derivative: vec![0.0; dimension],
             first_derivative: vec![0.0; dimension],
             second_derivative: vec![0.0; dimension],
             third_derivative: vec![0.0; dimension],
@@ -765,6 +1016,9 @@ impl Prrk54Kernel {
             stage_two: vec![0.0; dimension],
             stage_three: vec![0.0; dimension],
             stage_four: vec![0.0; dimension],
+            dense_endpoint_state: vec![0.0; dimension],
+            dense_endpoint_derivative: vec![0.0; dimension],
+            dense_endpoint_prepared: false,
         }
     }
 
@@ -805,8 +1059,8 @@ where
         time: f64,
         stats: &mut SolverStats,
     ) -> Result<(), SolveError> {
-        Self::evaluate(problem, &mut self.first_derivative, state, time, stats);
-        Self::ensure_finite(&self.first_derivative)
+        Self::evaluate(problem, &mut self.start_derivative, state, time, stats);
+        Self::ensure_finite(&self.start_derivative)
     }
 
     fn estimate_initial_step(
@@ -854,8 +1108,8 @@ where
         let alpha54 = 0.386_708_617_503_269;
         let beta54 = 0.226_007_483_236_906;
 
-        Self::evaluate(problem, &mut self.first_derivative, state, time, stats);
-        Self::ensure_finite(&self.first_derivative)?;
+        Self::evaluate(problem, &mut self.start_derivative, state, time, stats);
+        Self::ensure_finite(&self.start_derivative)?;
 
         let z = self.kappa * step;
         let psi1 = 1.0 + z * beta10;
@@ -896,7 +1150,7 @@ where
             .stage_one
             .iter_mut()
             .zip(state)
-            .zip(&self.first_derivative)
+            .zip(&self.start_derivative)
         {
             *output = alpha_hat10 * value + beta_hat10 * step_hat * derivative;
         }
@@ -987,19 +1241,60 @@ where
         Ok(StepEstimate::new(0.0))
     }
 
+    fn apply_step_callbacks(
+        &mut self,
+        problem: &OdeProblem<F, P>,
+        previous_state: &[f64],
+        previous_time: f64,
+        state: &mut [f64],
+        time: &mut f64,
+        state_before_effect: &mut [f64],
+        event_tolerance: f64,
+        stats: &mut SolverStats,
+    ) -> Result<CallbackOutcome, SolveError> {
+        apply_hermite_callbacks(
+            problem,
+            previous_state,
+            previous_time,
+            state,
+            time,
+            state_before_effect,
+            event_tolerance,
+            &self.start_derivative,
+            &mut self.dense_endpoint_state,
+            &mut self.dense_endpoint_derivative,
+            &mut self.dense_endpoint_prepared,
+            stats,
+        )
+    }
+
     fn record_dense_step(
         &mut self,
-        _: &OdeProblem<F, P>,
-        _: &[f64],
-        _: &[f64],
-        _: f64,
-        _: f64,
-        _: f64,
-        _: bool,
-        _: &mut TrajectoryRecorder<'_>,
-        _: &mut SolverStats,
+        problem: &OdeProblem<F, P>,
+        previous_state: &[f64],
+        state: &[f64],
+        previous_time: f64,
+        attempted_time: f64,
+        time: f64,
+        final_time: bool,
+        recorder: &mut TrajectoryRecorder<'_>,
+        stats: &mut SolverStats,
     ) -> Result<bool, SolveError> {
-        Ok(false)
+        record_hermite_step(
+            problem,
+            previous_state,
+            state,
+            &self.start_derivative,
+            &mut self.dense_endpoint_state,
+            &mut self.dense_endpoint_derivative,
+            &mut self.dense_endpoint_prepared,
+            previous_time,
+            attempted_time,
+            time,
+            final_time,
+            recorder,
+            stats,
+        )
     }
 
     fn accept_step(

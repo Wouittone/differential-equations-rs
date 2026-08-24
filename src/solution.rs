@@ -28,10 +28,11 @@ pub(crate) trait DenseSegment {
     fn interpolate(&self, time: f64, output: &mut [f64]) -> Result<(), &'static str>;
 }
 
-#[allow(dead_code)]
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) struct HermiteSegment {
     start_time: f64,
     end_time: f64,
+    bound_time: f64,
     start_state: Vec<f64>,
     end_state: Vec<f64>,
     start_derivative: Vec<f64>,
@@ -80,8 +81,14 @@ pub(crate) struct RungeKuttaSegment {
     coefficients: &'static [&'static [f64]],
 }
 
-#[allow(dead_code)]
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum OwnedDenseSegment {
+    Hermite(HermiteSegment),
+    RungeKutta(RungeKuttaSegment),
+}
+
 impl HermiteSegment {
+    #[allow(dead_code)]
     pub(crate) fn new(
         start_time: f64,
         end_time: f64,
@@ -90,8 +97,30 @@ impl HermiteSegment {
         start_derivative: Vec<f64>,
         end_derivative: Vec<f64>,
     ) -> Result<Self, &'static str> {
+        Self::new_bounded(
+            start_time,
+            end_time,
+            end_time,
+            start_state,
+            end_state,
+            start_derivative,
+            end_derivative,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new_bounded(
+        start_time: f64,
+        end_time: f64,
+        bound_time: f64,
+        start_state: Vec<f64>,
+        end_state: Vec<f64>,
+        start_derivative: Vec<f64>,
+        end_derivative: Vec<f64>,
+    ) -> Result<Self, &'static str> {
         if !start_time.is_finite()
             || !end_time.is_finite()
+            || !bound_time.is_finite()
             || end_time == start_time
             || start_state.is_empty()
             || start_state.len() != end_state.len()
@@ -104,9 +133,18 @@ impl HermiteSegment {
         {
             return Err("invalid dense segment dimensions or times");
         }
+        let within_step = if start_time < end_time {
+            (start_time..=end_time).contains(&bound_time)
+        } else {
+            (end_time..=start_time).contains(&bound_time)
+        };
+        if !within_step {
+            return Err("invalid dense segment bound");
+        }
         Ok(Self {
             start_time,
             end_time,
+            bound_time,
             start_state,
             end_state,
             start_derivative,
@@ -118,10 +156,10 @@ impl HermiteSegment {
         if !time.is_finite() {
             return false;
         }
-        if self.start_time < self.end_time {
-            (self.start_time..=self.end_time).contains(&time)
+        if self.start_time < self.bound_time {
+            (self.start_time..=self.bound_time).contains(&time)
         } else {
-            (self.end_time..=self.start_time).contains(&time)
+            (self.bound_time..=self.start_time).contains(&time)
         }
     }
 }
@@ -354,6 +392,24 @@ impl DenseSegment for RungeKuttaSegment {
     }
 }
 
+impl OwnedDenseSegment {
+    fn contains(&self, time: f64) -> bool {
+        match self {
+            Self::Hermite(segment) => segment.contains(time),
+            Self::RungeKutta(segment) => segment.contains(time),
+        }
+    }
+}
+
+impl DenseSegment for OwnedDenseSegment {
+    fn interpolate(&self, time: f64, output: &mut [f64]) -> Result<(), &'static str> {
+        match self {
+            Self::Hermite(segment) => segment.interpolate(time, output),
+            Self::RungeKutta(segment) => segment.interpolate(time, output),
+        }
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn interpolate_runge_kutta(
     start_time: f64,
@@ -441,7 +497,7 @@ pub(crate) struct TrajectoryRecorder<'a> {
     next_save: usize,
     save_mode: SaveMode,
     interpolation: Vec<f64>,
-    dense_segments: Vec<RungeKuttaSegment>,
+    dense_segments: Vec<OwnedDenseSegment>,
     retain_dense_output: bool,
 }
 
@@ -578,7 +634,14 @@ impl<'a> TrajectoryRecorder<'a> {
 
     pub(crate) fn retain_runge_kutta_segment(&mut self, segment: RungeKuttaSegment) {
         debug_assert!(self.retain_dense_output);
-        self.dense_segments.push(segment);
+        self.dense_segments
+            .push(OwnedDenseSegment::RungeKutta(segment));
+    }
+
+    pub(crate) fn retain_hermite_segment(&mut self, segment: HermiteSegment) {
+        debug_assert!(self.retain_dense_output);
+        self.dense_segments
+            .push(OwnedDenseSegment::Hermite(segment));
     }
 
     pub(crate) fn force_state(&mut self, time: f64, state: &[f64]) {
@@ -606,7 +669,7 @@ pub struct Solution {
     values: Vec<f64>,
     dimension: usize,
     stats: SolverStats,
-    dense_segments: Vec<RungeKuttaSegment>,
+    dense_segments: Vec<OwnedDenseSegment>,
 }
 
 impl Solution {
@@ -631,7 +694,7 @@ impl Solution {
         values: Vec<f64>,
         dimension: usize,
         stats: SolverStats,
-        dense_segments: Vec<RungeKuttaSegment>,
+        dense_segments: Vec<OwnedDenseSegment>,
     ) -> Self {
         debug_assert_eq!(values.len(), times.len() * dimension);
         Self {

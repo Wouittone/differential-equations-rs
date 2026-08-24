@@ -177,6 +177,7 @@ where
         time: &mut f64,
         state_before_effect: &mut [f64],
         event_tolerance: f64,
+        _: &mut SolverStats,
     ) -> Result<CallbackOutcome, SolveError> {
         problem.apply_step_callbacks(
             previous_state,
@@ -337,6 +338,7 @@ where
                 &mut next_time,
                 &mut state_before_effect,
                 options.event_tolerance,
+                &mut stats,
             )?;
             stats.callback_invocations += callbacks.invocations;
             stats.accepted_steps += 1;

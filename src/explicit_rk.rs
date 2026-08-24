@@ -11,8 +11,8 @@ use crate::integrator::{
     KernelCapabilities, StepEstimate, StepKernel, integrate as drive_integration,
 };
 use crate::solution::{
-    BorrowedHermiteSegment, BorrowedRungeKuttaSegment, RungeKuttaSegment, TrajectoryRecorder,
-    interpolate_runge_kutta,
+    BorrowedHermiteSegment, BorrowedRungeKuttaSegment, HermiteSegment, RungeKuttaSegment,
+    TrajectoryRecorder, interpolate_runge_kutta,
 };
 use crate::{OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions, SolverStats};
 use std::marker::PhantomData;
@@ -875,12 +875,19 @@ const BS5_C: &[f64] = &[
 const SSPRK22_A: &[&[f64]] = &[EMPTY, HEUN_A2];
 const SSPRK22_B: &[f64] = HEUN_B;
 const SSPRK22_C: &[f64] = HEUN_C;
+const SSPRK22_DENSE_1: &[f64] = &[1.0, -0.5];
+const SSPRK22_DENSE_2: &[f64] = &[0.0, 0.5];
+const SSPRK22_DENSE: &[&[f64]] = &[SSPRK22_DENSE_1, SSPRK22_DENSE_2];
 
 const SSPRK33_A2: &[f64] = &[1.0];
 const SSPRK33_A3: &[f64] = &[0.25, 0.25];
 const SSPRK33_A: &[&[f64]] = &[EMPTY, SSPRK33_A2, SSPRK33_A3];
 const SSPRK33_B: &[f64] = &[1.0 / 6.0, 1.0 / 6.0, 2.0 / 3.0];
 const SSPRK33_C: &[f64] = &[0.0, 1.0, 0.5];
+const SSPRK33_DENSE_1: &[f64] = &[1.0, -5.0 / 6.0];
+const SSPRK33_DENSE_2: &[f64] = &[0.0, 1.0 / 6.0];
+const SSPRK33_DENSE_3: &[f64] = &[0.0, 2.0 / 3.0];
+const SSPRK33_DENSE: &[&[f64]] = &[SSPRK33_DENSE_1, SSPRK33_DENSE_2, SSPRK33_DENSE_3];
 
 const SSPRK43_A2: &[f64] = &[0.5];
 const SSPRK43_A3: &[f64] = &[0.5, 0.5];
@@ -889,6 +896,16 @@ const SSPRK43_A: &[&[f64]] = &[EMPTY, SSPRK43_A2, SSPRK43_A3, SSPRK43_A4];
 const SSPRK43_B: &[f64] = &[1.0 / 6.0, 1.0 / 6.0, 1.0 / 6.0, 0.5];
 const SSPRK43_E: &[f64] = &[-1.0 / 12.0, -1.0 / 12.0, -1.0 / 12.0, 0.25];
 const SSPRK43_C: &[f64] = &[0.0, 0.5, 1.0, 0.5];
+const SSPRK43_DENSE_1: &[f64] = &[1.0, -5.0 / 6.0];
+const SSPRK43_DENSE_2: &[f64] = &[0.0, 1.0 / 6.0];
+const SSPRK43_DENSE_3: &[f64] = &[0.0, 1.0 / 6.0];
+const SSPRK43_DENSE_4: &[f64] = &[0.0, 0.5];
+const SSPRK43_DENSE: &[&[f64]] = &[
+    SSPRK43_DENSE_1,
+    SSPRK43_DENSE_2,
+    SSPRK43_DENSE_3,
+    SSPRK43_DENSE_4,
+];
 
 // Four-stage, third-order pseudo-symplectic Runge–Kutta method. These
 // coefficients are copied from OrdinaryDiffEqLowOrderRK's
@@ -1288,6 +1305,7 @@ algorithm!(
     coefficients = SSPRK22_A,
     weights = SSPRK22_B,
     error_weights = None,
+    dense_coefficients = SSPRK22_DENSE,
     order = 2,
     fsal = false
 );
@@ -1298,6 +1316,7 @@ algorithm!(
     coefficients = SSPRK33_A,
     weights = SSPRK33_B,
     error_weights = None,
+    dense_coefficients = SSPRK33_DENSE,
     order = 3,
     fsal = false
 );
@@ -1308,6 +1327,7 @@ algorithm!(
     coefficients = SSPRK43_A,
     weights = SSPRK43_B,
     error_weights = Some(SSPRK43_E),
+    dense_coefficients = SSPRK43_DENSE,
     order = 3,
     fsal = false
 );
@@ -1445,6 +1465,8 @@ where
 struct ExplicitKernel<T> {
     workspace: Workspace,
     stage_zero_is_current: bool,
+    dense_endpoint_state: Vec<f64>,
+    dense_endpoint_prepared: bool,
     marker: PhantomData<fn() -> T>,
 }
 
@@ -1456,6 +1478,8 @@ impl<T> ExplicitKernel<T> {
         Self {
             workspace: Workspace::new(T::WEIGHTS.len(), dimension),
             stage_zero_is_current: false,
+            dense_endpoint_state: vec![0.0; dimension],
+            dense_endpoint_prepared: false,
             marker: PhantomData,
         }
     }
@@ -1577,8 +1601,39 @@ where
         time: &mut f64,
         state_before_effect: &mut [f64],
         event_tolerance: f64,
+        stats: &mut SolverStats,
     ) -> Result<CallbackOutcome, SolveError> {
         let Some(coefficients) = T::DENSE_COEFFICIENTS else {
+            if !problem.has_continuous_callbacks() {
+                self.dense_endpoint_prepared = false;
+                return problem.apply_step_callbacks(
+                    previous_state,
+                    previous_time,
+                    state,
+                    time,
+                    state_before_effect,
+                    event_tolerance,
+                    None,
+                );
+            }
+            self.dense_endpoint_state.copy_from_slice(state);
+            evaluate(problem, &mut self.workspace.temporary, state, *time, stats);
+            ensure_finite(&self.workspace.temporary)?;
+            self.dense_endpoint_prepared = true;
+            let attempted_time = *time;
+            let segment = BorrowedHermiteSegment::new(
+                previous_time,
+                attempted_time,
+                previous_state,
+                &self.dense_endpoint_state,
+                self.workspace.stage(0),
+                &self.workspace.temporary,
+            )
+            .map_err(|_| SolveError::NonFiniteDerivative)?;
+            let mut interpolate = |sample_time: f64, output: &mut [f64]| {
+                crate::solution::DenseSegment::interpolate(&segment, sample_time, output)
+                    .map_err(|_| SolveError::NonFiniteDerivative)
+            };
             return problem.apply_step_callbacks(
                 previous_state,
                 previous_time,
@@ -1586,9 +1641,10 @@ where
                 time,
                 state_before_effect,
                 event_tolerance,
-                None,
+                Some(&mut interpolate),
             );
         };
+        self.dense_endpoint_prepared = false;
         let attempted_time = *time;
         let stages = &self.workspace.stages;
         let mut interpolate = |sample_time: f64, output: &mut [f64]| {
@@ -1660,19 +1716,26 @@ where
                 recorder.retain_runge_kutta_segment(segment);
             }
         } else {
-            if !recorder.needs_dense_sampling() {
+            if !recorder.needs_dense_sampling() && !recorder.retains_dense_output() {
+                self.dense_endpoint_prepared = false;
                 return Ok(false);
             }
-            // The initial stage is the derivative at the accepted step's left
-            // endpoint. Reuse the workspace error scratch for the right-endpoint
-            // derivative so dense save-at adds no per-step allocation.
-            evaluate(problem, &mut self.workspace.temporary, state, time, stats);
-            ensure_finite(&self.workspace.temporary)?;
+            if !self.dense_endpoint_prepared {
+                self.dense_endpoint_state.copy_from_slice(state);
+                evaluate(
+                    problem,
+                    &mut self.workspace.temporary,
+                    state,
+                    attempted_time,
+                    stats,
+                );
+                ensure_finite(&self.workspace.temporary)?;
+            }
             let segment = BorrowedHermiteSegment::new(
                 previous_time,
-                time,
+                attempted_time,
                 previous_state,
-                state,
+                &self.dense_endpoint_state,
                 self.workspace.stage(0),
                 &self.workspace.temporary,
             )
@@ -1687,6 +1750,20 @@ where
                     &segment,
                 )
                 .map_err(|_| SolveError::NonFiniteDerivative)?;
+            if recorder.retains_dense_output() {
+                let segment = HermiteSegment::new_bounded(
+                    previous_time,
+                    attempted_time,
+                    time,
+                    previous_state.to_vec(),
+                    self.dense_endpoint_state.clone(),
+                    self.workspace.stage(0).to_vec(),
+                    self.workspace.temporary.clone(),
+                )
+                .map_err(|_| SolveError::NonFiniteDerivative)?;
+                recorder.retain_hermite_segment(segment);
+            }
+            self.dense_endpoint_prepared = false;
         }
         Ok(true)
     }

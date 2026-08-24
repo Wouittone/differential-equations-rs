@@ -27,6 +27,9 @@ algorithms.
 - pinned method-specific continuous extensions for Tsit5, DP5, and
   Owren--Zennaro 3/4/5, shared consistently by `save_at`, scalar continuous
   event localization, and retained post-solve queries;
+- the pinned shared SSP quadratic extension for SSPRK22, SSPRK33, SSPRK43, and
+  SSPRK432; every other implemented SSP method follows the pinned generic
+  cubic-Hermite dispatch and retains those segments honestly;
 - the pinned DPRKN6 continuous extension for in-solve second-order sampling and
   scalar continuous event localization;
 - implicit identity-mass structural dynamics through adaptive/fixed
@@ -38,9 +41,8 @@ algorithms.
 
 - method-specific high-order dense interpolation for the remaining families.
   BS5 and Verner require their upstream lazy extra interpolation stages;
-  Rosenbrock/Rodas require retained stiff stage combinations; SSP methods need
-  their per-method polynomial dispatch; and multistep, SDIRK/TRBDF2,
-  stabilized, split, symplectic, and remaining second-order methods still need
+  Rosenbrock/Rodas require retained stiff stage combinations; and multistep,
+  SDIRK/TRBDF2, stabilized, split, symplectic, and remaining second-order methods still need
   family-specific accepted-segment hooks. Solvers without such a hook retain
   their existing endpoint fallback and must not be described as having a
   method-specific high-order extension;

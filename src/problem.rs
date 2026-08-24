@@ -295,6 +295,12 @@ impl<F, P> OdeProblem<F, P> {
         !self.callbacks.is_empty()
     }
 
+    pub(crate) fn has_continuous_callbacks(&self) -> bool {
+        self.callbacks
+            .iter()
+            .any(|callback| matches!(callback, Callback::Continuous(_)))
+    }
+
     /// Returns the problem parameters.
     pub fn parameters(&self) -> &P {
         &self.parameters

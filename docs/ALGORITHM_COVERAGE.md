@@ -27,9 +27,11 @@ This is algorithm-name coverage, not full feature parity. Basic discrete and
 scalar continuous callbacks plus `save_at` sampling are shared by implemented
 first-order methods. Tsit5, DP5, and Owren--Zennaro 3/4/5 provide retained
 method-specific dense segments and root localization, while DPRKN6 provides
-its pinned in-solve dense extension; other method families, arbitrary scalar
-types, limiters, and every upstream controller and callback option remain
-separate work. See
+its pinned in-solve dense extension. Implemented SSP methods now match their
+pinned dense dispatch: SSPRK22/33/43/432 use the special quadratic extension
+and the remainder use retained generic Hermite segments. Other method families,
+arbitrary scalar types, limiters, and every upstream controller and callback
+option remain separate work. See
 [`FEATURE_COVERAGE.md`](FEATURE_COVERAGE.md).
 
 ## Remaining ODE work
