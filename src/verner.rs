@@ -3,10 +3,14 @@
 //! The coefficients are the compiled-`Float64` default-step coefficients from
 //! `OrdinaryDiffEqVerner` at commit
 //! `211142263781255a9aa2f910f6760b9f18ec29c8`. OrdinaryDiffEq's additional
-//! stages for the method-specific dense interpolants are intentionally not part
-//! of these tableaus.
+//! stages for the method-specific dense interpolants are evaluated lazily only
+//! when continuous output is requested.
 
-use crate::explicit_rk::{ButcherTableau, ExplicitRungeKutta};
+use crate::dense_coefficients::{
+    VERN6_DENSE, VERN6_EXTRA_STAGES, VERN7_DENSE, VERN7_EXTRA_STAGES, VERN8_DENSE,
+    VERN8_EXTRA_STAGES, VERN9_DENSE, VERN9_EXTRA_STAGES,
+};
+use crate::explicit_rk::{ButcherTableau, ExplicitRungeKutta, LazyDenseStage};
 use crate::generated_coefficients::{
     VERN6_A_ROWS, VERN6_B as GENERATED_VERN6_B, VERN6_E as GENERATED_VERN6_E, VERN6_STAGE_TIMES,
     VERN7_A_ROWS, VERN7_B as GENERATED_VERN7_B, VERN7_E as GENERATED_VERN7_E, VERN7_STAGE_TIMES,
@@ -36,7 +40,7 @@ const VERN9_B: &[f64] = &GENERATED_VERN9_B;
 const VERN9_E: &[f64] = &GENERATED_VERN9_E;
 
 macro_rules! verner_algorithm {
-    ($name:ident, $documentation:literal, $order:literal, $nodes:ident, $coefficients:ident, $weights:ident, $error:ident, $fsal:literal) => {
+    ($name:ident, $documentation:literal, $order:literal, $nodes:ident, $coefficients:ident, $weights:ident, $error:ident, $dense:ident, $extra:ident, $fsal:literal) => {
         #[doc = $documentation]
         #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
         pub struct $name;
@@ -46,6 +50,8 @@ macro_rules! verner_algorithm {
             const COEFFICIENTS: &'static [&'static [f64]] = $coefficients;
             const WEIGHTS: &'static [f64] = $weights;
             const ERROR_WEIGHTS: Option<&'static [f64]> = Some($error);
+            const DENSE_COEFFICIENTS: Option<&'static [&'static [f64]]> = Some($dense);
+            const LAZY_DENSE_STAGES: &'static [LazyDenseStage] = $extra;
             const ORDER: usize = $order;
             const FSAL: bool = $fsal;
         }
@@ -73,6 +79,8 @@ verner_algorithm!(
     VERN6_A,
     VERN6_B,
     VERN6_E,
+    VERN6_DENSE,
+    VERN6_EXTRA_STAGES,
     true
 );
 verner_algorithm!(
@@ -83,6 +91,8 @@ verner_algorithm!(
     VERN7_A,
     VERN7_B,
     VERN7_E,
+    VERN7_DENSE,
+    VERN7_EXTRA_STAGES,
     false
 );
 verner_algorithm!(
@@ -93,6 +103,8 @@ verner_algorithm!(
     VERN8_A,
     VERN8_B,
     VERN8_E,
+    VERN8_DENSE,
+    VERN8_EXTRA_STAGES,
     false
 );
 verner_algorithm!(
@@ -103,6 +115,8 @@ verner_algorithm!(
     VERN9_A,
     VERN9_B,
     VERN9_E,
+    VERN9_DENSE,
+    VERN9_EXTRA_STAGES,
     false
 );
 

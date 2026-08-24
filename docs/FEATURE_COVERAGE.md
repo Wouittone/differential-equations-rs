@@ -24,9 +24,11 @@ algorithms.
 - opt-in retained dense segments and post-solve [`Solution::interpolate`]
   queries for shared explicit Runge--Kutta solvers; endpoint Hermite segments
   are used when no special extension is available;
-- pinned method-specific continuous extensions for Tsit5, DP5, and
-  Owren--Zennaro 3/4/5, shared consistently by `save_at`, scalar continuous
-  event localization, and retained post-solve queries;
+- pinned method-specific continuous extensions for Tsit5, DP5, BS5,
+  Owren--Zennaro 3/4/5, and Verner 6/7/8/9, shared consistently by `save_at`,
+  scalar continuous event localization, and retained post-solve queries; BS5
+  and Verner interpolation stages are evaluated lazily only when one of those
+  dense services requires them;
 - the pinned shared SSP quadratic extension for SSPRK22, SSPRK33, SSPRK43, and
   SSPRK432; every other implemented SSP method follows the pinned generic
   cubic-Hermite dispatch and retains those segments honestly;
@@ -40,7 +42,6 @@ algorithms.
 ## Remaining feature work
 
 - method-specific high-order dense interpolation for the remaining families.
-  BS5 and Verner require their upstream lazy extra interpolation stages;
   Rosenbrock/Rodas require retained stiff stage combinations; and multistep,
   SDIRK/TRBDF2, stabilized, split, symplectic, and remaining second-order methods still need
   family-specific accepted-segment hooks. Solvers without such a hook retain

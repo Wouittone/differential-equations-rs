@@ -15,6 +15,7 @@ mod callback;
 mod coefficients;
 mod compatibility;
 mod composites;
+mod dense_coefficients;
 mod ensemble;
 mod explicit_rk;
 mod exponential_rk;

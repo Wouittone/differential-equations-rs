@@ -1,4 +1,5 @@
 use crate::callback::CallbackOutcome;
+use crate::dense_coefficients::{BS5_DENSE, BS5_EXTRA_STAGES};
 use crate::generated_coefficients::{
     BS3_A_ROWS, BS3_B as GENERATED_BS3_B, BS3_E as GENERATED_BS3_E, BS3_STAGE_TIMES, DP5_A_ROWS,
     DP5_B as GENERATED_DP5_B, DP5_E as GENERATED_DP5_E, DP5_STAGE_TIMES, EULER_A_ROWS,
@@ -37,6 +38,28 @@ pub trait ButcherTableau {
     /// Each row corresponds to one RK stage and stores `r0, r1, ...` for the
     /// stage weight `theta * (r0 + r1*theta + ...)`.
     const DENSE_COEFFICIENTS: Option<&'static [&'static [f64]]> = None;
+    /// Optional stages evaluated lazily only when the continuous extension is
+    /// requested by saving, root localization, or retained dense output.
+    #[doc(hidden)]
+    const LAZY_DENSE_STAGES: &'static [LazyDenseStage] = &[];
+}
+
+/// One sparse explicit stage used only by a method-specific continuous
+/// extension.
+#[doc(hidden)]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct LazyDenseStage {
+    node: f64,
+    coefficients: &'static [(usize, f64)],
+}
+
+impl LazyDenseStage {
+    /// Creates a lazy dense stage at `node` from zero-based prior-stage
+    /// coefficient pairs.
+    #[doc(hidden)]
+    pub const fn new(node: f64, coefficients: &'static [(usize, f64)]) -> Self {
+        Self { node, coefficients }
+    }
 }
 
 /// The centralized explicit Runge–Kutta solver for a [`ButcherTableau`].
@@ -1282,6 +1305,8 @@ impl ButcherTableau for Bs5 {
     const WEIGHTS: &'static [f64] = BS5_B;
     const ERROR_WEIGHTS: Option<&'static [f64]> = Some(BS5_E1);
     const SECOND_ERROR_WEIGHTS: Option<&'static [f64]> = Some(BS5_E2);
+    const DENSE_COEFFICIENTS: Option<&'static [&'static [f64]]> = Some(BS5_DENSE);
+    const LAZY_DENSE_STAGES: &'static [LazyDenseStage] = BS5_EXTRA_STAGES;
     const ORDER: usize = 5;
     const FSAL: bool = true;
 }
@@ -1367,7 +1392,6 @@ struct Workspace {
     // The other work vectors remain separate arrays rather than per-component
     // structs, keeping the hot saxpy-style loops friendly to SIMD.
     stages: Vec<f64>,
-    stage_count: usize,
     dimension: usize,
     temporary: Vec<f64>,
 }
@@ -1376,7 +1400,6 @@ impl Workspace {
     fn new(stage_count: usize, dimension: usize) -> Self {
         Self {
             stages: vec![0.0; stage_count * dimension],
-            stage_count,
             dimension,
             temporary: vec![0.0; dimension],
         }
@@ -1398,6 +1421,7 @@ impl Workspace {
 
 fn validate_tableau<T: ButcherTableau>() -> Result<(), SolveError> {
     let stage_count = T::WEIGHTS.len();
+    let dense_stage_count = stage_count + T::LAZY_DENSE_STAGES.len();
     let structurally_valid = stage_count > 0
         && T::ORDER > 0
         && T::NODES.first() == Some(&0.0)
@@ -1410,6 +1434,18 @@ fn validate_tableau<T: ButcherTableau>() -> Result<(), SolveError> {
         && T::ERROR_WEIGHTS.is_none_or(|weights| weights.len() == stage_count);
     let error_estimators_valid = T::SECOND_ERROR_WEIGHTS
         .is_none_or(|weights| T::ERROR_WEIGHTS.is_some() && weights.len() == stage_count);
+    let lazy_dense_stages_valid = (T::LAZY_DENSE_STAGES.is_empty()
+        || T::DENSE_COEFFICIENTS.is_some())
+        && T::LAZY_DENSE_STAGES
+            .iter()
+            .enumerate()
+            .all(|(offset, stage)| {
+                stage.node.is_finite()
+                    && !stage.coefficients.is_empty()
+                    && stage.coefficients.iter().all(|&(index, coefficient)| {
+                        index < stage_count + offset && coefficient.is_finite()
+                    })
+            });
     let coefficients_finite = T::NODES.iter().all(|value| value.is_finite())
         && T::WEIGHTS.iter().all(|value| value.is_finite())
         && T::COEFFICIENTS
@@ -1420,12 +1456,15 @@ fn validate_tableau<T: ButcherTableau>() -> Result<(), SolveError> {
     let second_error_estimator_finite =
         T::SECOND_ERROR_WEIGHTS.is_none_or(|weights| weights.iter().all(|value| value.is_finite()));
     let dense_coefficients_valid = T::DENSE_COEFFICIENTS.is_none_or(|rows| {
-        rows.len() == stage_count
-            && rows.iter().zip(T::WEIGHTS).all(|(row, &endpoint_weight)| {
+        rows.len() == dense_stage_count
+            && rows.iter().enumerate().all(|(stage, row)| {
+                let endpoint_weight = T::WEIGHTS.get(stage).copied().unwrap_or(0.0);
+                let coefficient_scale = row.iter().map(|value| value.abs()).sum::<f64>();
                 !row.is_empty()
                     && row.iter().all(|coefficient| coefficient.is_finite())
                     && (row.iter().sum::<f64>() - endpoint_weight).abs()
                         <= 1.0e-12 * (1.0 + endpoint_weight.abs())
+                            + 64.0 * f64::EPSILON * coefficient_scale
             })
     });
     let fsal_valid = !T::FSAL
@@ -1438,6 +1477,7 @@ fn validate_tableau<T: ButcherTableau>() -> Result<(), SolveError> {
 
     (structurally_valid
         && error_estimators_valid
+        && lazy_dense_stages_valid
         && coefficients_finite
         && second_error_estimator_finite
         && dense_coefficients_valid
@@ -1467,6 +1507,7 @@ struct ExplicitKernel<T> {
     stage_zero_is_current: bool,
     dense_endpoint_state: Vec<f64>,
     dense_endpoint_prepared: bool,
+    dense_stages_prepared: bool,
     marker: PhantomData<fn() -> T>,
 }
 
@@ -1476,10 +1517,11 @@ impl<T> ExplicitKernel<T> {
         T: ButcherTableau,
     {
         Self {
-            workspace: Workspace::new(T::WEIGHTS.len(), dimension),
+            workspace: Workspace::new(T::WEIGHTS.len() + T::LAZY_DENSE_STAGES.len(), dimension),
             stage_zero_is_current: false,
             dense_endpoint_state: vec![0.0; dimension],
             dense_endpoint_prepared: false,
+            dense_stages_prepared: false,
             marker: PhantomData,
         }
     }
@@ -1564,6 +1606,7 @@ where
             &mut self.workspace,
             stats,
         );
+        self.dense_stages_prepared = false;
         ensure_finite(candidate)?;
         let error = if options.adaptive {
             let primary_error = error_norm(
@@ -1646,6 +1689,17 @@ where
         };
         self.dense_endpoint_prepared = false;
         let attempted_time = *time;
+        if !T::LAZY_DENSE_STAGES.is_empty() && problem.has_continuous_callbacks() {
+            perform_lazy_dense_stages::<F, P, T>(
+                problem,
+                previous_state,
+                previous_time,
+                attempted_time - previous_time,
+                &mut self.workspace,
+                stats,
+            )?;
+            self.dense_stages_prepared = true;
+        }
         let stages = &self.workspace.stages;
         let mut interpolate = |sample_time: f64, output: &mut [f64]| {
             interpolate_runge_kutta(
@@ -1683,6 +1737,16 @@ where
         stats: &mut SolverStats,
     ) -> Result<bool, SolveError> {
         if let Some(coefficients) = T::DENSE_COEFFICIENTS {
+            if !self.dense_stages_prepared && !T::LAZY_DENSE_STAGES.is_empty() {
+                perform_lazy_dense_stages::<F, P, T>(
+                    problem,
+                    previous_state,
+                    previous_time,
+                    attempted_time - previous_time,
+                    &mut self.workspace,
+                    stats,
+                )?;
+            }
             let segment = BorrowedRungeKuttaSegment::new(
                 previous_time,
                 attempted_time,
@@ -1715,6 +1779,7 @@ where
                 .map_err(|_| SolveError::NonFiniteDerivative)?;
                 recorder.retain_runge_kutta_segment(segment);
             }
+            self.dense_stages_prepared = false;
         } else {
             if !recorder.needs_dense_sampling() && !recorder.retains_dense_output() {
                 self.dense_endpoint_prepared = false;
@@ -1779,8 +1844,7 @@ where
         _: &mut SolverStats,
     ) -> Result<(), SolveError> {
         if T::FSAL && !callback_applied {
-            self.workspace
-                .swap_stages(0, self.workspace.stage_count - 1);
+            self.workspace.swap_stages(0, T::WEIGHTS.len() - 1);
             self.stage_zero_is_current = true;
         } else {
             self.stage_zero_is_current = false;
@@ -1790,6 +1854,7 @@ where
 
     fn reject_step(&mut self) {
         self.stage_zero_is_current = true;
+        self.dense_stages_prepared = false;
     }
 }
 
@@ -1893,7 +1958,8 @@ fn perform_step<F, P, T>(
     F: Fn(&mut [f64], &[f64], &P, f64),
     T: ButcherTableau,
 {
-    for stage_index in 1..workspace.stage_count {
+    let stage_count = T::WEIGHTS.len();
+    for stage_index in 1..stage_count {
         combine(
             &mut workspace.temporary,
             state,
@@ -1918,9 +1984,48 @@ fn perform_step<F, P, T>(
         step,
         &workspace.stages,
         workspace.dimension,
-        workspace.stage_count,
+        stage_count,
         T::WEIGHTS,
     );
+}
+
+fn perform_lazy_dense_stages<F, P, T>(
+    problem: &OdeProblem<F, P>,
+    state: &[f64],
+    time: f64,
+    step: f64,
+    workspace: &mut Workspace,
+    stats: &mut SolverStats,
+) -> Result<(), SolveError>
+where
+    F: Fn(&mut [f64], &[f64], &P, f64),
+    T: ButcherTableau,
+{
+    let base_stage_count = T::WEIGHTS.len();
+    for (offset, stage) in T::LAZY_DENSE_STAGES.iter().enumerate() {
+        workspace.temporary.copy_from_slice(state);
+        for &(source, coefficient) in stage.coefficients {
+            let source_start = source * workspace.dimension;
+            for (value, derivative) in workspace
+                .temporary
+                .iter_mut()
+                .zip(&workspace.stages[source_start..source_start + workspace.dimension])
+            {
+                *value += step * coefficient * derivative;
+            }
+        }
+        let target = base_stage_count + offset;
+        let target_start = target * workspace.dimension;
+        evaluate(
+            problem,
+            &mut workspace.stages[target_start..target_start + workspace.dimension],
+            &workspace.temporary,
+            time + stage.node * step,
+            stats,
+        );
+        ensure_finite(&workspace.stages[target_start..target_start + workspace.dimension])?;
+    }
+    Ok(())
 }
 
 fn combine(
