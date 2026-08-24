@@ -546,6 +546,48 @@ const DP5_A: &[&[f64]] = DP5_A_ROWS;
 const DP5_B: &[f64] = &GENERATED_DP5_B;
 const DP5_E: &[f64] = &GENERATED_DP5_E;
 const DP5_C: &[f64] = &DP5_STAGE_TIMES;
+// Dormand--Prince's fourth-order continuous extension, expanded from the
+// four dense combinations used by OrdinaryDiffEq's DP5 cache into weights
+// over the seven step stages already retained by the shared RK workspace.
+const DP5_D1: f64 = -12_715_105_075.0 / 11_282_082_432.0;
+const DP5_D3: f64 = 87_487_479_700.0 / 32_700_410_799.0;
+const DP5_D4: f64 = -10_690_763_975.0 / 1_880_347_072.0;
+const DP5_D5: f64 = 701_980_252_875.0 / 199_316_789_632.0;
+const DP5_D6: f64 = -1_453_857_185.0 / 822_651_844.0;
+const DP5_D7: f64 = 69_997_945.0 / 29_380_423.0;
+const DP5_R1: &[f64] = &[
+    1.0,
+    3.0 * (35.0 / 384.0) - 2.0 + DP5_D1,
+    -2.0 * (35.0 / 384.0) + 1.0 - 2.0 * DP5_D1,
+    DP5_D1,
+];
+const DP5_R2: &[f64] = &[0.0, 0.0, 0.0, 0.0];
+const DP5_R3: &[f64] = &[
+    0.0,
+    3.0 * (500.0 / 1_113.0) + DP5_D3,
+    -2.0 * (500.0 / 1_113.0) - 2.0 * DP5_D3,
+    DP5_D3,
+];
+const DP5_R4: &[f64] = &[
+    0.0,
+    3.0 * (125.0 / 192.0) + DP5_D4,
+    -2.0 * (125.0 / 192.0) - 2.0 * DP5_D4,
+    DP5_D4,
+];
+const DP5_R5: &[f64] = &[
+    0.0,
+    3.0 * (-2_187.0 / 6_784.0) + DP5_D5,
+    -2.0 * (-2_187.0 / 6_784.0) - 2.0 * DP5_D5,
+    DP5_D5,
+];
+const DP5_R6: &[f64] = &[
+    0.0,
+    3.0 * (11.0 / 84.0) + DP5_D6,
+    -2.0 * (11.0 / 84.0) - 2.0 * DP5_D6,
+    DP5_D6,
+];
+const DP5_R7: &[f64] = &[0.0, -1.0 + DP5_D7, 1.0 - 2.0 * DP5_D7, DP5_D7];
+const DP5_DENSE: &[&[f64]] = &[DP5_R1, DP5_R2, DP5_R3, DP5_R4, DP5_R5, DP5_R6, DP5_R7];
 
 // Owren-Zennaro 3/2 pair.
 const OWREN_ZEN3_A2: &[f64] = &[12.0 / 23.0];
@@ -555,6 +597,11 @@ const OWREN_ZEN3_A: &[&[f64]] = &[EMPTY, OWREN_ZEN3_A2, OWREN_ZEN3_A3, OWREN_ZEN
 const OWREN_ZEN3_B: &[f64] = &[31.0 / 144.0, 529.0 / 1_152.0, 125.0 / 384.0, 0.0];
 const OWREN_ZEN3_E: &[f64] = &[-25.0 / 144.0, 575.0 / 1_152.0, -125.0 / 384.0, 0.0];
 const OWREN_ZEN3_C: &[f64] = &[0.0, 12.0 / 23.0, 4.0 / 5.0, 1.0];
+const OWREN_ZEN3_R1: &[f64] = &[1.0, -65.0 / 48.0, 41.0 / 72.0];
+const OWREN_ZEN3_R2: &[f64] = &[0.0, 529.0 / 384.0, -529.0 / 576.0];
+const OWREN_ZEN3_R3: &[f64] = &[0.0, 125.0 / 128.0, -125.0 / 192.0];
+const OWREN_ZEN3_R4: &[f64] = &[0.0, -1.0, 1.0];
+const OWREN_ZEN3_DENSE: &[&[f64]] = &[OWREN_ZEN3_R1, OWREN_ZEN3_R2, OWREN_ZEN3_R3, OWREN_ZEN3_R4];
 
 // Owren-Zennaro 4/3 pair.
 const OWREN_ZEN4_A2: &[f64] = &[1.0 / 6.0];
@@ -598,6 +645,40 @@ const OWREN_ZEN4_E: &[f64] = &[
     0.0,
 ];
 const OWREN_ZEN4_C: &[f64] = &[0.0, 1.0 / 6.0, 11.0 / 37.0, 11.0 / 17.0, 13.0 / 15.0, 1.0];
+const OWREN_ZEN4_R1: &[f64] = &[
+    1.0,
+    -104_217.0 / 37_466.0,
+    1_806_901.0 / 618_189.0,
+    -866_577.0 / 824_252.0,
+];
+const OWREN_ZEN4_R2: &[f64] = &[0.0, 0.0, 0.0, 0.0];
+const OWREN_ZEN4_R3: &[f64] = &[
+    0.0,
+    861_101.0 / 230_560.0,
+    -2_178_079.0 / 380_424.0,
+    12_308_679.0 / 5_072_320.0,
+];
+const OWREN_ZEN4_R4: &[f64] = &[
+    0.0,
+    -63_869.0 / 293_440.0,
+    6_244_423.0 / 5_325_936.0,
+    -7_816_583.0 / 10_144_640.0,
+];
+const OWREN_ZEN4_R5: &[f64] = &[
+    0.0,
+    -1_522_125.0 / 762_944.0,
+    982_125.0 / 190_736.0,
+    -624_375.0 / 217_984.0,
+];
+const OWREN_ZEN4_R6: &[f64] = &[0.0, 165.0 / 131.0, -461.0 / 131.0, 296.0 / 131.0];
+const OWREN_ZEN4_DENSE: &[&[f64]] = &[
+    OWREN_ZEN4_R1,
+    OWREN_ZEN4_R2,
+    OWREN_ZEN4_R3,
+    OWREN_ZEN4_R4,
+    OWREN_ZEN4_R5,
+    OWREN_ZEN4_R6,
+];
 
 // Owren-Zennaro 5/4 pair.
 const OWREN_ZEN5_A2: &[f64] = &[1.0 / 6.0];
@@ -667,6 +748,54 @@ const OWREN_ZEN5_C: &[f64] = &[
     9.0 / 14.0,
     7.0 / 8.0,
     1.0,
+];
+const OWREN_ZEN5_R1: &[f64] = &[
+    1.0,
+    -3_292.0 / 819.0,
+    17_893.0 / 2_457.0,
+    -4_969.0 / 819.0,
+    596.0 / 315.0,
+];
+const OWREN_ZEN5_R2: &[f64] = &[0.0, 0.0, 0.0, 0.0, 0.0];
+const OWREN_ZEN5_R3: &[f64] = &[
+    0.0,
+    5_112.0 / 715.0,
+    -43_568.0 / 2_145.0,
+    1_344.0 / 65.0,
+    -1_984.0 / 275.0,
+];
+const OWREN_ZEN5_R4: &[f64] = &[
+    0.0,
+    -123.0 / 52.0,
+    3_161.0 / 234.0,
+    -1_465.0 / 78.0,
+    118.0 / 15.0,
+];
+const OWREN_ZEN5_R5: &[f64] = &[0.0, -63.0 / 52.0, 1_061.0 / 234.0, -413.0 / 78.0, 2.0];
+const OWREN_ZEN5_R6: &[f64] = &[
+    0.0,
+    -40_817.0 / 33_462.0,
+    60_025.0 / 50_193.0,
+    2_401.0 / 1_521.0,
+    -9_604.0 / 6_435.0,
+];
+const OWREN_ZEN5_R7: &[f64] = &[
+    0.0,
+    18_048.0 / 5_915.0,
+    -637_696.0 / 53_235.0,
+    96_256.0 / 5_915.0,
+    -48_128.0 / 6_825.0,
+];
+const OWREN_ZEN5_R8: &[f64] = &[0.0, -18.0 / 13.0, 75.0 / 13.0, -109.0 / 13.0, 4.0];
+const OWREN_ZEN5_DENSE: &[&[f64]] = &[
+    OWREN_ZEN5_R1,
+    OWREN_ZEN5_R2,
+    OWREN_ZEN5_R3,
+    OWREN_ZEN5_R4,
+    OWREN_ZEN5_R5,
+    OWREN_ZEN5_R6,
+    OWREN_ZEN5_R7,
+    OWREN_ZEN5_R8,
 ];
 
 // Bogacki-Shampine 5/4 pair. Its controller uses the maximum of two embedded
@@ -857,8 +986,36 @@ macro_rules! algorithm {
         coefficients = $coefficients:ident,
         weights = $weights:ident,
         error_weights = $error_weights:expr,
+        dense_coefficients = $dense_coefficients:ident,
         order = $order:literal,
         fsal = $fsal:literal
+    ) => {
+        algorithm!(@impl $name, $documentation, $nodes, $coefficients, $weights,
+            $error_weights, Some($dense_coefficients), $order, $fsal);
+    };
+    (
+        $name:ident,
+        $documentation:literal,
+        nodes = $nodes:ident,
+        coefficients = $coefficients:ident,
+        weights = $weights:ident,
+        error_weights = $error_weights:expr,
+        order = $order:literal,
+        fsal = $fsal:literal
+    ) => {
+        algorithm!(@impl $name, $documentation, $nodes, $coefficients, $weights,
+            $error_weights, None, $order, $fsal);
+    };
+    (@impl
+        $name:ident,
+        $documentation:literal,
+        $nodes:ident,
+        $coefficients:ident,
+        $weights:ident,
+        $error_weights:expr,
+        $dense_coefficients:expr,
+        $order:literal,
+        $fsal:literal
     ) => {
         #[doc = $documentation]
         #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -869,6 +1026,7 @@ macro_rules! algorithm {
             const COEFFICIENTS: &'static [&'static [f64]] = $coefficients;
             const WEIGHTS: &'static [f64] = $weights;
             const ERROR_WEIGHTS: Option<&'static [f64]> = $error_weights;
+            const DENSE_COEFFICIENTS: Option<&'static [&'static [f64]]> = $dense_coefficients;
             const ORDER: usize = $order;
             const FSAL: bool = $fsal;
         }
@@ -1055,6 +1213,7 @@ algorithm!(
     coefficients = DP5_A,
     weights = DP5_B,
     error_weights = Some(DP5_E),
+    dense_coefficients = DP5_DENSE,
     order = 5,
     fsal = true
 );
@@ -1065,6 +1224,7 @@ algorithm!(
     coefficients = OWREN_ZEN3_A,
     weights = OWREN_ZEN3_B,
     error_weights = Some(OWREN_ZEN3_E),
+    dense_coefficients = OWREN_ZEN3_DENSE,
     order = 3,
     fsal = true
 );
@@ -1075,6 +1235,7 @@ algorithm!(
     coefficients = OWREN_ZEN4_A,
     weights = OWREN_ZEN4_B,
     error_weights = Some(OWREN_ZEN4_E),
+    dense_coefficients = OWREN_ZEN4_DENSE,
     order = 4,
     fsal = true
 );
@@ -1085,6 +1246,7 @@ algorithm!(
     coefficients = OWREN_ZEN5_A,
     weights = OWREN_ZEN5_B,
     error_weights = Some(OWREN_ZEN5_E),
+    dense_coefficients = OWREN_ZEN5_DENSE,
     order = 5,
     fsal = true
 );
@@ -1239,9 +1401,12 @@ fn validate_tableau<T: ButcherTableau>() -> Result<(), SolveError> {
         T::SECOND_ERROR_WEIGHTS.is_none_or(|weights| weights.iter().all(|value| value.is_finite()));
     let dense_coefficients_valid = T::DENSE_COEFFICIENTS.is_none_or(|rows| {
         rows.len() == stage_count
-            && rows
-                .iter()
-                .all(|row| !row.is_empty() && row.iter().all(|coefficient| coefficient.is_finite()))
+            && rows.iter().zip(T::WEIGHTS).all(|(row, &endpoint_weight)| {
+                !row.is_empty()
+                    && row.iter().all(|coefficient| coefficient.is_finite())
+                    && (row.iter().sum::<f64>() - endpoint_weight).abs()
+                        <= 1.0e-12 * (1.0 + endpoint_weight.abs())
+            })
     });
     let fsal_valid = !T::FSAL
         || (stage_count > 0
