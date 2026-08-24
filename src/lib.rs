@@ -17,6 +17,7 @@ mod compatibility;
 mod composites;
 mod ensemble;
 mod explicit_rk;
+mod exponential_rk;
 mod frk65;
 mod generated_coefficients;
 mod high_order;
@@ -38,6 +39,7 @@ mod rosenbrock_extended;
 mod sdirk;
 mod sdirk_cash4;
 mod second_order;
+mod semilinear;
 mod solution;
 mod solver;
 mod split_euler;
@@ -56,11 +58,13 @@ mod verner;
 pub use callback::{CallbackAction, EventDirection};
 pub use compatibility::algorithms;
 pub use ensemble::{CaseOutcome, ExecutionPolicy, solve_batch, solve_ensemble};
+pub use exponential_rk::ExponentialAlgorithm;
 pub use problem::{MassMatrixOdeProblem, OdeProblem, SplitOdeProblem};
 pub use second_order::{
     SecondOrderOdeAlgorithm, SecondOrderOdeProblem, SecondOrderSolution, SecondOrderSolveError,
     solve_second_order,
 };
+pub use semilinear::{SemilinearOdeProblem, solve_exponential};
 pub use solution::{Solution, SolverStats};
 pub use solver::{OdeAlgorithm, SaveMode, SolveError, SolveOptions, solve};
 pub use split_euler::{SplitOdeAlgorithm, solve_split_euler};

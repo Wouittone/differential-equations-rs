@@ -112,6 +112,14 @@ pub mod algorithms {
         pub use crate::variable_adams::{Vcab3, Vcab4, Vcab5, Vcabm3, Vcabm4, Vcabm5};
     }
 
+    /// Exponential Runge--Kutta and exponential Rosenbrock algorithms.
+    pub mod exponential {
+        pub use crate::exponential_rk::{
+            EPIRK4s3A, EPIRK4s3B, EPIRK5P1, EPIRK5P2, EPIRK5s3, ETD1, ETD2, ETDRK2, ETDRK3, ETDRK4,
+            EXPRB53s3, Exp4, Exprb32, Exprb43, HochOst4, LawsonEuler, NorsettEuler,
+        };
+    }
+
     /// Rosenbrock and Rosenbrock--W algorithms.
     pub mod rosenbrock {
         pub use crate::rosenbrock::Rosenbrock23;
@@ -170,6 +178,7 @@ pub mod algorithms {
 
     pub use automatic::*;
     pub use explicit::{general::*, high_order::*, low_storage::*, ssp::*};
+    pub use exponential::*;
     pub use implicit::{diagonally_implicit::*, general::*};
     pub use multistep::*;
     pub use rosenbrock::*;
