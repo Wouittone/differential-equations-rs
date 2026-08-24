@@ -147,6 +147,13 @@ where
 {
     fn capabilities(&self) -> KernelCapabilities;
 
+    /// Adjusts a controller proposal before it becomes the next attempted
+    /// step. Most methods keep the proposal unchanged; interval-prediction
+    /// methods can snap it to a precomputed exponential grid.
+    fn modify_step(&mut self, proposed_step: f64) -> f64 {
+        proposed_step
+    }
+
     fn initialize(
         &mut self,
         problem: &OdeProblem<F, P>,
@@ -290,7 +297,7 @@ where
             &mut stats,
         )?,
     };
-    let mut step = direction * step_magnitude;
+    let mut step = kernel.modify_step(direction * step_magnitude);
     let mut time = start;
     let mut attempted_steps = 0;
     let mut previous_step_rejected = false;
@@ -326,7 +333,7 @@ where
                 stats.rejected_steps += 1;
                 kernel.reject_step();
                 controller_state.rejected(1.0);
-                step *= capabilities.controller.failed_attempt_factor;
+                step = kernel.modify_step(step * capabilities.controller.failed_attempt_factor);
                 previous_step_rejected = true;
                 continue;
             }
@@ -422,19 +429,20 @@ where
                 if previous_step_rejected {
                     factor = factor.min(capabilities.controller.rejected_acceptance_maximum);
                 }
-                step = direction * (step.abs() * factor).min(maximum_step);
+                step = kernel.modify_step(direction * (step.abs() * factor).min(maximum_step));
             }
             previous_step_rejected = false;
         } else {
             stats.rejected_steps += 1;
             kernel.reject_step();
             controller_state.rejected(estimate.error_norm);
-            step *= estimate
+            let factor = estimate
                 .proposed_factor
                 .unwrap_or_else(|| {
                     controller_state.factor(estimate.error_norm, capabilities.controller)
                 })
                 .min(capabilities.controller.rejection_maximum);
+            step = kernel.modify_step(step * factor);
             previous_step_rejected = true;
         }
     }

@@ -6,6 +6,11 @@
 
 /// Solver algorithms grouped by numerical family.
 pub mod algorithms {
+    /// Approximate-matrix-factorization Rosenbrock-W wrappers.
+    pub mod amf {
+        pub use crate::amf::AMF;
+    }
+
     /// Automatic and default algorithm selectors.
     pub mod automatic {
         pub use crate::autodp5::{AutoDP5, AutoDp5};
@@ -154,6 +159,11 @@ pub mod algorithms {
         };
     }
 
+    /// Runge--Kutta integration-picture algorithms.
+    pub mod interaction_picture {
+        pub use crate::rkip::RKIP;
+    }
+
     /// Exact linear, Magnus, and Lie-group integration algorithms.
     pub mod linear {
         pub use crate::linear_methods::{
@@ -181,6 +191,7 @@ pub mod algorithms {
 
     /// Explicit methods with extended real-axis stability intervals.
     pub mod stabilized {
+        pub use crate::irkc::IRKC;
         pub use crate::stabilized::{
             ESERK4, ESERK5, RKC, RKG1, RKG2, RKL1, RKL2, RKMC2, ROCK2, ROCK4, SERK2, TSRKC2, TSRKC3,
         };
@@ -219,11 +230,13 @@ pub mod algorithms {
         pub use symplectic::*;
     }
 
+    pub use amf::*;
     pub use automatic::*;
     pub use explicit::{general::*, high_order::*, low_storage::*, ssp::*};
     pub use exponential::*;
     pub use extrapolation::*;
     pub use implicit::{diagonally_implicit::*, fully_implicit::*, general::*};
+    pub use interaction_picture::*;
     pub use linear::*;
     pub use multirate::*;
     pub use multistep::*;

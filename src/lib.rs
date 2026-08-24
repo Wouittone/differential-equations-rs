@@ -8,6 +8,7 @@
 
 mod abdf2;
 mod adams;
+mod amf;
 mod anas5;
 mod autodp5;
 mod bdf;
@@ -27,6 +28,7 @@ mod high_order;
 mod imex_multistep;
 mod implicit;
 mod integrator;
+mod irkc;
 mod irkn_coefficients;
 mod linear;
 mod linear_methods;
@@ -41,6 +43,7 @@ mod problem;
 mod qndf1;
 mod qndf2;
 mod qprk;
+mod rkip;
 mod rkn_adaptive_coefficients;
 mod rosenbrock;
 mod rosenbrock_dense;
@@ -64,15 +67,20 @@ mod tsit5;
 mod variable_adams;
 mod verner;
 
+pub use amf::{
+    AMF, AMFOperator, AmfFunction, AmfOperator, AmfProblem, build_amf_function, solve_amf,
+};
 pub use callback::{CallbackAction, EventDirection};
 pub use compatibility::algorithms;
 pub use ensemble::{CaseOutcome, ExecutionPolicy, solve_batch, solve_ensemble};
 pub use exponential_rk::ExponentialAlgorithm;
+pub use irkc::{IRKC, solve_irkc};
 pub use linear_methods::{
     LieGroupAlgorithm, LinearOperatorAlgorithm, solve_lie_group, solve_linear_operator,
 };
 pub use operator_problem::{LieGroupProblem, LinearOperatorProblem};
 pub use problem::{MassMatrixOdeProblem, OdeProblem, SplitOdeProblem};
+pub use rkip::{RKIP, RkipCacheStats, solve_rkip};
 pub use second_order::{
     SecondOrderOdeAlgorithm, SecondOrderOdeProblem, SecondOrderSolution, SecondOrderSolveError,
     solve_second_order,
