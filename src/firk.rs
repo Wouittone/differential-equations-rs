@@ -13,7 +13,7 @@ use crate::integrator::{
     ControllerConfig, KernelCapabilities, StepEstimate, StepKernel, integrate as drive_integration,
 };
 use crate::linear::{factorize, solve_factorized};
-use crate::solution::{DenseSegment, TrajectoryRecorder};
+use crate::solution::{CollocationSegment, DenseSegment, TrajectoryRecorder};
 use crate::{OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions, SolverStats};
 
 const MAX_NEWTON_ITERATIONS: usize = 12;
@@ -630,6 +630,10 @@ impl<F, P> StepKernel<F, P> for FirkKernel
 where
     F: Fn(&mut [f64], &[f64], &P, f64),
 {
+    fn has_custom_dense_output(&self) -> bool {
+        true
+    }
+
     fn capabilities(&self) -> KernelCapabilities {
         KernelCapabilities::with_controller(
             true,
@@ -792,6 +796,25 @@ where
                 &segment,
             )
             .map_err(|_| SolveError::NonFiniteDerivative)?;
+        if recorder.retains_dense_output() {
+            recorder.retain_collocation_segment(
+                CollocationSegment::new(
+                    previous_time,
+                    attempted_time,
+                    time,
+                    previous_state,
+                    &self.midpoint_state,
+                    state,
+                    &self.stage_derivatives,
+                    &self.first_half_stages,
+                    &self.second_half_stages,
+                    &self.tableau.lagrange,
+                    self.tableau.stages,
+                    self.adaptive_attempt,
+                )
+                .map_err(|_| SolveError::NonFiniteDerivative)?,
+            );
+        }
         Ok(true)
     }
 

@@ -1,5 +1,5 @@
 use crate::callback::CallbackOutcome;
-use crate::solution::TrajectoryRecorder;
+use crate::solution::{BorrowedHermiteSegment, HermiteSegment, TrajectoryRecorder};
 use crate::{OdeProblem, Solution, SolveError, SolveOptions, SolverStats};
 
 const DEFAULT_SAFETY: f64 = 0.9;
@@ -154,6 +154,12 @@ where
         proposed_step
     }
 
+    /// Reports whether this kernel supplies a complete accepted-step dense
+    /// lifecycle. The shared driver otherwise provides cubic Hermite output.
+    fn has_custom_dense_output(&self) -> bool {
+        false
+    }
+
     fn initialize(
         &mut self,
         problem: &OdeProblem<F, P>,
@@ -245,6 +251,197 @@ where
     fn reject_step(&mut self);
 }
 
+struct DefaultDenseState {
+    start_derivative: Vec<f64>,
+    endpoint_state: Vec<f64>,
+    endpoint_derivative: Vec<f64>,
+    start_derivative_valid: bool,
+    prepared: bool,
+}
+
+impl DefaultDenseState {
+    fn new(dimension: usize, enabled: bool) -> Self {
+        let size = if enabled { dimension } else { 0 };
+        Self {
+            start_derivative: vec![0.0; size],
+            endpoint_state: vec![0.0; size],
+            endpoint_derivative: vec![0.0; size],
+            start_derivative_valid: false,
+            prepared: false,
+        }
+    }
+
+    fn evaluate<F, P>(
+        problem: &OdeProblem<F, P>,
+        output: &mut [f64],
+        state: &[f64],
+        time: f64,
+        stats: &mut SolverStats,
+    ) -> Result<(), SolveError>
+    where
+        F: Fn(&mut [f64], &[f64], &P, f64),
+    {
+        (problem.rhs)(output, state, problem.parameters(), time);
+        stats.rhs_evaluations += 1;
+        output
+            .iter()
+            .all(|value| value.is_finite())
+            .then_some(())
+            .ok_or(SolveError::NonFiniteDerivative)
+    }
+
+    fn prepare<F, P>(
+        &mut self,
+        problem: &OdeProblem<F, P>,
+        previous_state: &[f64],
+        previous_time: f64,
+        endpoint_state: &[f64],
+        endpoint_time: f64,
+        stats: &mut SolverStats,
+    ) -> Result<(), SolveError>
+    where
+        F: Fn(&mut [f64], &[f64], &P, f64),
+    {
+        self.endpoint_state.copy_from_slice(endpoint_state);
+        if !self.start_derivative_valid {
+            Self::evaluate(
+                problem,
+                &mut self.start_derivative,
+                previous_state,
+                previous_time,
+                stats,
+            )?;
+        }
+        Self::evaluate(
+            problem,
+            &mut self.endpoint_derivative,
+            &self.endpoint_state,
+            endpoint_time,
+            stats,
+        )?;
+        self.prepared = true;
+        Ok(())
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn apply_callbacks<F, P>(
+        &mut self,
+        problem: &OdeProblem<F, P>,
+        previous_state: &[f64],
+        previous_time: f64,
+        state: &mut [f64],
+        time: &mut f64,
+        state_before_effect: &mut [f64],
+        event_tolerance: f64,
+        enabled: bool,
+        stats: &mut SolverStats,
+    ) -> Result<CallbackOutcome, SolveError>
+    where
+        F: Fn(&mut [f64], &[f64], &P, f64),
+    {
+        if !enabled {
+            return problem.apply_step_callbacks(
+                previous_state,
+                previous_time,
+                state,
+                time,
+                state_before_effect,
+                event_tolerance,
+                None,
+            );
+        }
+        let endpoint_time = *time;
+        self.prepare(
+            problem,
+            previous_state,
+            previous_time,
+            state,
+            endpoint_time,
+            stats,
+        )?;
+        let segment = BorrowedHermiteSegment::new(
+            previous_time,
+            endpoint_time,
+            previous_state,
+            &self.endpoint_state,
+            &self.start_derivative,
+            &self.endpoint_derivative,
+        )
+        .map_err(|_| SolveError::NonFiniteDerivative)?;
+        let mut interpolate = |sample_time: f64, output: &mut [f64]| {
+            crate::solution::DenseSegment::interpolate(&segment, sample_time, output)
+                .map_err(|_| SolveError::NonFiniteDerivative)
+        };
+        problem.apply_step_callbacks(
+            previous_state,
+            previous_time,
+            state,
+            time,
+            state_before_effect,
+            event_tolerance,
+            Some(&mut interpolate),
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn record(
+        &self,
+        previous_state: &[f64],
+        previous_time: f64,
+        attempted_time: f64,
+        state: &[f64],
+        time: f64,
+        final_time: bool,
+        recorder: &mut TrajectoryRecorder<'_>,
+    ) -> Result<(), SolveError> {
+        debug_assert!(self.prepared);
+        let segment = BorrowedHermiteSegment::new(
+            previous_time,
+            attempted_time,
+            previous_state,
+            &self.endpoint_state,
+            &self.start_derivative,
+            &self.endpoint_derivative,
+        )
+        .map_err(|_| SolveError::NonFiniteDerivative)?;
+        recorder
+            .record_step_dense(
+                previous_state,
+                previous_time,
+                state,
+                time,
+                final_time,
+                &segment,
+            )
+            .map_err(|_| SolveError::NonFiniteDerivative)?;
+        if recorder.retains_dense_output() {
+            recorder.retain_hermite_segment(
+                HermiteSegment::new_bounded(
+                    previous_time,
+                    attempted_time,
+                    time,
+                    previous_state.to_vec(),
+                    self.endpoint_state.clone(),
+                    self.start_derivative.clone(),
+                    self.endpoint_derivative.clone(),
+                )
+                .map_err(|_| SolveError::NonFiniteDerivative)?,
+            );
+        }
+        Ok(())
+    }
+
+    fn accepted(&mut self, callback_applied: bool) {
+        if callback_applied || !self.prepared {
+            self.start_derivative_valid = false;
+        } else {
+            std::mem::swap(&mut self.start_derivative, &mut self.endpoint_derivative);
+            self.start_derivative_valid = true;
+        }
+        self.prepared = false;
+    }
+}
+
 pub(crate) fn integrate<F, P, K>(
     problem: &OdeProblem<F, P>,
     options: &SolveOptions,
@@ -274,6 +471,13 @@ where
         Vec::new()
     };
     let mut stats = SolverStats::default();
+    let custom_dense_output = kernel.has_custom_dense_output();
+    let default_dense_enabled = !custom_dense_output
+        && (problem.has_continuous_callbacks()
+            || !options.save_at.is_empty()
+            || options.retain_dense_output);
+    let default_callback_dense_enabled = !custom_dense_output && problem.has_continuous_callbacks();
+    let mut default_dense = DefaultDenseState::new(dimension, default_dense_enabled);
 
     let initial_callbacks = problem.apply_initial_callbacks(&mut state, start)?;
     stats.callback_invocations += initial_callbacks.invocations;
@@ -350,16 +554,30 @@ where
                 next_time = end;
             }
             let attempted_time = next_time;
-            let callbacks = kernel.apply_step_callbacks(
-                problem,
-                &state,
-                previous_time,
-                &mut candidate,
-                &mut next_time,
-                &mut state_before_effect,
-                options.event_tolerance,
-                &mut stats,
-            )?;
+            let callbacks = if custom_dense_output {
+                kernel.apply_step_callbacks(
+                    problem,
+                    &state,
+                    previous_time,
+                    &mut candidate,
+                    &mut next_time,
+                    &mut state_before_effect,
+                    options.event_tolerance,
+                    &mut stats,
+                )?
+            } else {
+                default_dense.apply_callbacks(
+                    problem,
+                    &state,
+                    previous_time,
+                    &mut candidate,
+                    &mut next_time,
+                    &mut state_before_effect,
+                    options.event_tolerance,
+                    default_callback_dense_enabled,
+                    &mut stats,
+                )?
+            };
             stats.callback_invocations += callbacks.invocations;
             stats.accepted_steps += 1;
 
@@ -369,17 +587,40 @@ where
                 } else {
                     &state_before_effect
                 };
-                kernel.record_dense_step(
-                    problem,
-                    &state,
-                    dense_state,
-                    previous_time,
-                    attempted_time,
-                    next_time,
-                    next_time == end,
-                    &mut recorder,
-                    &mut stats,
-                )?
+                if custom_dense_output {
+                    kernel.record_dense_step(
+                        problem,
+                        &state,
+                        dense_state,
+                        previous_time,
+                        attempted_time,
+                        next_time,
+                        next_time == end,
+                        &mut recorder,
+                        &mut stats,
+                    )?
+                } else {
+                    if !default_dense.prepared {
+                        default_dense.prepare(
+                            problem,
+                            &state,
+                            previous_time,
+                            dense_state,
+                            attempted_time,
+                            &mut stats,
+                        )?;
+                    }
+                    default_dense.record(
+                        &state,
+                        previous_time,
+                        attempted_time,
+                        dense_state,
+                        next_time,
+                        next_time == end,
+                        &mut recorder,
+                    )?;
+                    true
+                }
             } else {
                 false
             };
@@ -414,6 +655,9 @@ where
                 callbacks.invocations > 0,
                 &mut stats,
             )?;
+            if !custom_dense_output {
+                default_dense.accepted(callbacks.invocations > 0);
+            }
 
             if options.adaptive {
                 if callbacks.invocations > 0 {

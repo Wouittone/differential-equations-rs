@@ -12,7 +12,7 @@ use crate::integrator::{
     ControllerConfig, KernelCapabilities, StepEstimate, StepKernel, integrate as drive_integration,
 };
 use crate::linear::{factorize, solve_factorized};
-use crate::solution::{BorrowedHermiteSegment, DenseSegment, TrajectoryRecorder};
+use crate::solution::{BorrowedHermiteSegment, DenseSegment, HermiteSegment, TrajectoryRecorder};
 use crate::{OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions, SolverStats};
 
 /// Subdividing sequences supported by OrdinaryDiffEq's extrapolation methods.
@@ -224,6 +224,7 @@ struct ExtrapolationKernel {
     derivative: Vec<f64>,
     start_derivative: Vec<f64>,
     end_derivative: Vec<f64>,
+    dense_endpoint_state: Vec<f64>,
     temporary: Vec<f64>,
     previous: Vec<f64>,
     next: Vec<f64>,
@@ -262,6 +263,7 @@ impl ExtrapolationKernel {
             derivative: vec![0.0; dimension],
             start_derivative: vec![0.0; dimension],
             end_derivative: vec![0.0; dimension],
+            dense_endpoint_state: vec![0.0; dimension],
             temporary: vec![0.0; dimension],
             previous: vec![0.0; dimension],
             next: vec![0.0; dimension],
@@ -618,6 +620,10 @@ impl<F, P> StepKernel<F, P> for ExtrapolationKernel
 where
     F: Fn(&mut [f64], &[f64], &P, f64),
 {
+    fn has_custom_dense_output(&self) -> bool {
+        true
+    }
+
     fn capabilities(&self) -> KernelCapabilities {
         let controller_order = match self.base {
             BaseMethod::ExplicitEuler | BaseMethod::LinearlyImplicitEuler => self.current_order + 1,
@@ -738,11 +744,11 @@ where
         _: &mut SolverStats,
     ) -> Result<crate::callback::CallbackOutcome, SolveError> {
         let endpoint_time = *time;
-        let endpoint_state = state.to_vec();
+        self.dense_endpoint_state.copy_from_slice(state);
         let mut interpolator = |query: f64, output: &mut [f64]| {
             self.hermite_interpolate(
                 previous_state,
-                &endpoint_state,
+                &self.dense_endpoint_state,
                 previous_time,
                 endpoint_time,
                 query,
@@ -762,7 +768,7 @@ where
 
     fn record_dense_step(
         &mut self,
-        problem: &OdeProblem<F, P>,
+        _: &OdeProblem<F, P>,
         previous_state: &[f64],
         state: &[f64],
         previous_time: f64,
@@ -770,16 +776,13 @@ where
         time: f64,
         final_time: bool,
         recorder: &mut TrajectoryRecorder<'_>,
-        stats: &mut SolverStats,
+        _: &mut SolverStats,
     ) -> Result<bool, SolveError> {
-        if time != attempted_time {
-            Self::evaluate(problem, &mut self.end_derivative, state, time, stats)?;
-        }
         let segment = BorrowedHermiteSegment::new(
             previous_time,
-            time,
+            attempted_time,
             previous_state,
-            state,
+            &self.dense_endpoint_state,
             &self.start_derivative,
             &self.end_derivative,
         )
@@ -794,6 +797,20 @@ where
                 &segment,
             )
             .map_err(|_| SolveError::NonFiniteDerivative)?;
+        if recorder.retains_dense_output() {
+            recorder.retain_hermite_segment(
+                HermiteSegment::new_bounded(
+                    previous_time,
+                    attempted_time,
+                    time,
+                    previous_state.to_vec(),
+                    self.dense_endpoint_state.clone(),
+                    self.start_derivative.clone(),
+                    self.end_derivative.clone(),
+                )
+                .map_err(|_| SolveError::NonFiniteDerivative)?,
+            );
+        }
         Ok(true)
     }
 

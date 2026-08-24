@@ -1271,8 +1271,8 @@ mod tests {
         let solution = solve(&problem, Vcab3, &options).unwrap();
 
         assert_eq!(solution.stats().accepted_steps, 3);
-        assert_eq!(solution.stats().rhs_evaluations, 8);
-        assert_eq!(calls.get(), 8);
+        assert_eq!(solution.stats().rhs_evaluations, 12);
+        assert_eq!(calls.get(), 12);
         assert_eq!(calls_after_termination.get(), 0);
     }
 }

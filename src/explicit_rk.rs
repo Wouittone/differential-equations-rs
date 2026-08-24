@@ -1532,6 +1532,10 @@ where
     F: Fn(&mut [f64], &[f64], &P, f64),
     T: ButcherTableau,
 {
+    fn has_custom_dense_output(&self) -> bool {
+        true
+    }
+
     fn capabilities(&self) -> KernelCapabilities {
         KernelCapabilities::new(T::ERROR_WEIGHTS.is_some(), T::ORDER)
     }

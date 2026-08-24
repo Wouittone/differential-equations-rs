@@ -281,6 +281,10 @@ impl<F, P> StepKernel<F, P> for Msvs32Kernel
 where
     F: Fn(&mut [f64], &[f64], &P, f64),
 {
+    fn has_custom_dense_output(&self) -> bool {
+        true
+    }
+
     fn capabilities(&self) -> KernelCapabilities {
         // The pinned constructor has no error estimator and explicitly
         // requires fixed timestep operation.
@@ -485,6 +489,10 @@ impl<F, P> StepKernel<F, P> for Msvs43Kernel
 where
     F: Fn(&mut [f64], &[f64], &P, f64),
 {
+    fn has_custom_dense_output(&self) -> bool {
+        true
+    }
+
     fn capabilities(&self) -> KernelCapabilities {
         // The pinned constructor has no error estimator and explicitly
         // requires fixed timestep operation.

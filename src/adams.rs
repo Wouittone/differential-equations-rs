@@ -515,7 +515,10 @@ mod tests {
         let solution = solve(&problem, Ab3, &options).unwrap();
 
         assert_eq!(solution.stats().accepted_steps, 1);
-        assert_eq!(solution.stats().rhs_evaluations, 2);
-        assert_eq!(calls.get(), 2);
+        // The shared Hermite fallback evaluates both accepted-step endpoint
+        // derivatives before root localization, but still performs no work
+        // after the terminating effect.
+        assert_eq!(solution.stats().rhs_evaluations, 4);
+        assert_eq!(calls.get(), 4);
     }
 }

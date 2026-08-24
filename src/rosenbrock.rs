@@ -96,6 +96,10 @@ impl<F, P> StepKernel<F, P> for Rosenbrock23Kernel
 where
     F: Fn(&mut [f64], &[f64], &P, f64),
 {
+    fn has_custom_dense_output(&self) -> bool {
+        true
+    }
+
     fn capabilities(&self) -> KernelCapabilities {
         KernelCapabilities::with_controller(
             true,

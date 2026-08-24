@@ -536,6 +536,10 @@ impl<F, P> StepKernel<F, P> for Prrk22Kernel
 where
     F: Fn(&mut [f64], &[f64], &P, f64),
 {
+    fn has_custom_dense_output(&self) -> bool {
+        true
+    }
+
     fn capabilities(&self) -> KernelCapabilities {
         KernelCapabilities::new(false, 2)
     }
@@ -761,6 +765,10 @@ impl<F, P> StepKernel<F, P> for Prrk33Kernel
 where
     F: Fn(&mut [f64], &[f64], &P, f64),
 {
+    fn has_custom_dense_output(&self) -> bool {
+        true
+    }
+
     fn capabilities(&self) -> KernelCapabilities {
         KernelCapabilities::new(false, 3)
     }
@@ -1048,6 +1056,10 @@ impl<F, P> StepKernel<F, P> for Prrk54Kernel
 where
     F: Fn(&mut [f64], &[f64], &P, f64),
 {
+    fn has_custom_dense_output(&self) -> bool {
+        true
+    }
+
     fn capabilities(&self) -> KernelCapabilities {
         KernelCapabilities::new(false, 4)
     }
