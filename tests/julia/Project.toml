@@ -25,6 +25,7 @@ OrdinaryDiffEqSymplecticRK = "fa646aed-7ef9-47eb-84c4-9443fc8cbfa8"
 OrdinaryDiffEqTsit5 = "b1df2697-797e-41e3-8120-5422d3b24e4a"
 OrdinaryDiffEqVerner = "79d7bb75-1356-48c1-b8c0-6832512096c2"
 SciMLBase = "0bca4576-84f4-4d90-8ffe-ffa030f20462"
+SciMLOperators = "c0aeaf25-5076-4817-a8d5-81caf7dfa961"
 
 [compat]
 OrdinaryDiffEqAdamsBashforthMoulton = "2"
@@ -49,4 +50,5 @@ OrdinaryDiffEqSymplecticRK = "2.2"
 OrdinaryDiffEqTsit5 = "2"
 OrdinaryDiffEqVerner = "2"
 SciMLBase = "3"
+SciMLOperators = "1"
 julia = "1.10"

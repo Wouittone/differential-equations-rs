@@ -1,7 +1,8 @@
 using OrdinaryDiffEqExponentialRK: EPIRK4s3A, EPIRK4s3B, EPIRK5P1, EPIRK5P2,
     EPIRK5s3, ETD1, ETD2, ETDRK2, ETDRK3, ETDRK4, EXPRB53s3, Exp4, Exprb32,
     Exprb43, HochOst4, LawsonEuler, NorsettEuler
-using SciMLBase: ODEFunction, ScalarOperator, SplitFunction, SplitODEProblem
+using SciMLBase: ODEFunction, SplitFunction, SplitODEProblem
+using SciMLOperators: ScalarOperator
 
 function rust_exponential_rk_results()
     manifest = joinpath(REPOSITORY_ROOT, "Cargo.toml")
