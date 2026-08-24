@@ -1,5 +1,6 @@
 using OrdinaryDiffEqMultirate: MIS, MRAB, MREEF, MRIGARKERK22a, MRIGARKERK22b,
     MRIGARKERK33a, MRIGARKERK45a, MRIGARKESDIRK34a, MRIGARKIRK21a
+using SciMLBase: SplitODEProblem
 
 function rust_multirate_results()
     manifest = joinpath(REPOSITORY_ROOT, "Cargo.toml")
