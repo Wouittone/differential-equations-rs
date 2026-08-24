@@ -33,6 +33,7 @@ mod linear_methods;
 mod low_storage_rk;
 mod mebdf2;
 mod operator_problem;
+mod multirate;
 mod pdirk;
 mod prk;
 mod problem;

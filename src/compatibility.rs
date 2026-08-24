@@ -134,6 +134,15 @@ pub mod algorithms {
         };
     }
 
+    /// Multirate infinitesimal-step and MRI-GARK algorithms for split ODEs.
+    pub mod multirate {
+        pub use crate::multirate::{
+            MIS, MRAB, MREEF, MRIGARKERK22a, MRIGARKERK22b, MRIGARKERK33a, MRIGARKERK45a,
+            MRIGARKESDIRK34a, MRIGARKIRK21a, Mis, Mrab, Mreef, MriGarkErk22a, MriGarkErk22b,
+            MriGarkErk33a, MriGarkErk45a, MriGarkEsdirk34a, MriGarkIrk21a, MultirateSequence,
+        };
+    }
+
     /// Exponential Runge--Kutta and exponential Rosenbrock algorithms.
     pub mod exponential {
         pub use crate::exponential_rk::{
@@ -213,6 +222,7 @@ pub mod algorithms {
     pub use extrapolation::*;
     pub use implicit::{diagonally_implicit::*, fully_implicit::*, general::*};
     pub use linear::*;
+    pub use multirate::*;
     pub use multistep::*;
     pub use rosenbrock::*;
     pub use second_order::*;

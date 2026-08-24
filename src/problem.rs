@@ -33,6 +33,7 @@ pub struct SplitOdeProblem<FE, FI, P> {
     time_span: (f64, f64),
     parameters: P,
     implicit_jacobian: Option<Box<JacobianFunction<P>>>,
+    callbacks: Vec<Callback<P>>,
 }
 
 #[allow(dead_code)]
@@ -51,7 +52,50 @@ impl<FE, FI, P> SplitOdeProblem<FE, FI, P> {
             time_span,
             parameters,
             implicit_jacobian: None,
+            callbacks: Vec::new(),
         }
+    }
+
+    /// Adds a callback evaluated after every accepted step and at the initial state.
+    pub fn with_discrete_callback<C, A>(mut self, condition: C, affect: A) -> Self
+    where
+        C: Fn(&[f64], &P, f64) -> bool + 'static,
+        A: Fn(&mut [f64], &P, f64) -> CallbackAction + 'static,
+    {
+        self.callbacks.push(Callback::Discrete(DiscreteCallback {
+            condition: Box::new(condition),
+            affect: Box::new(affect),
+        }));
+        self
+    }
+
+    /// Adds a zero-crossing callback that triggers in either direction.
+    pub fn with_continuous_callback<C, A>(self, condition: C, affect: A) -> Self
+    where
+        C: Fn(&[f64], &P, f64) -> f64 + 'static,
+        A: Fn(&mut [f64], &P, f64) -> CallbackAction + 'static,
+    {
+        self.with_continuous_callback_direction(EventDirection::Any, condition, affect)
+    }
+
+    /// Adds a direction-filtered continuous callback.
+    pub fn with_continuous_callback_direction<C, A>(
+        mut self,
+        direction: EventDirection,
+        condition: C,
+        affect: A,
+    ) -> Self
+    where
+        C: Fn(&[f64], &P, f64) -> f64 + 'static,
+        A: Fn(&mut [f64], &P, f64) -> CallbackAction + 'static,
+    {
+        self.callbacks
+            .push(Callback::Continuous(ContinuousCallback {
+                condition: Box::new(condition),
+                affect: Box::new(affect),
+                direction,
+            }));
+        self
     }
 
     /// Supplies the analytic state Jacobian of the implicit component.
@@ -83,6 +127,11 @@ impl<FE, FI, P> SplitOdeProblem<FE, FI, P> {
         self.initial_state.len()
     }
 
+    /// Returns whether event callbacks were supplied.
+    pub fn has_callbacks(&self) -> bool {
+        !self.callbacks.is_empty()
+    }
+
     pub fn evaluate_explicit(&self, derivative: &mut [f64], state: &[f64], time: f64)
     where
         FE: Fn(&mut [f64], &[f64], &P, f64),
@@ -108,6 +157,114 @@ impl<FE, FI, P> SplitOdeProblem<FE, FI, P> {
         };
         function(jacobian, state, &self.parameters, time);
         true
+    }
+
+    pub(crate) fn apply_initial_callbacks(
+        &self,
+        state: &mut [f64],
+        time: f64,
+    ) -> Result<CallbackOutcome, SolveError> {
+        let mut outcome = CallbackOutcome::default();
+        for callback in &self.callbacks {
+            let Callback::Discrete(callback) = callback else {
+                continue;
+            };
+            if (callback.condition)(state, &self.parameters, time) {
+                outcome.invocations += 1;
+                outcome.terminate =
+                    (callback.affect)(state, &self.parameters, time) == CallbackAction::Terminate;
+                ensure_finite_callback_state(state)?;
+                if outcome.terminate {
+                    break;
+                }
+            }
+        }
+        Ok(outcome)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn apply_step_callbacks(
+        &self,
+        previous_state: &[f64],
+        previous_time: f64,
+        state: &mut [f64],
+        time: &mut f64,
+        state_before_effect: &mut [f64],
+        event_tolerance: f64,
+        mut interpolator: Option<&mut StepInterpolator<'_>>,
+    ) -> Result<CallbackOutcome, SolveError> {
+        if self.callbacks.is_empty() {
+            return Ok(CallbackOutcome::default());
+        }
+        let mut outcome = CallbackOutcome::default();
+        let mut root = None;
+        for (index, callback) in self.callbacks.iter().enumerate() {
+            let Callback::Continuous(callback) = callback else {
+                continue;
+            };
+            let before = (callback.condition)(previous_state, &self.parameters, previous_time);
+            let after = (callback.condition)(state, &self.parameters, *time);
+            if !before.is_finite() || !after.is_finite() {
+                return Err(SolveError::NonFiniteCallbackCondition);
+            }
+            if callback.direction.accepts(before, after) {
+                let fraction = locate_root(
+                    callback,
+                    RootSegment {
+                        previous_state,
+                        previous_time,
+                        state,
+                        time: *time,
+                    },
+                    before,
+                    state_before_effect,
+                    &self.parameters,
+                    event_tolerance,
+                    &mut interpolator,
+                )?;
+                if root.is_none_or(|(_, earliest)| fraction < earliest) {
+                    root = Some((index, fraction));
+                }
+            }
+        }
+        if let Some((index, fraction)) = root {
+            let end_time = *time;
+            let root_time = previous_time + fraction * (end_time - previous_time);
+            if let Some(interpolator) = interpolator.as_mut() {
+                interpolator(root_time, state_before_effect)?;
+            } else {
+                interpolate(state, previous_state, fraction, state_before_effect);
+            }
+            state.copy_from_slice(state_before_effect);
+            *time = root_time;
+            let Callback::Continuous(callback) = &self.callbacks[index] else {
+                unreachable!();
+            };
+            outcome.invocations += 1;
+            outcome.terminate =
+                (callback.affect)(state, &self.parameters, *time) == CallbackAction::Terminate;
+            ensure_finite_callback_state(state)?;
+        }
+        if !outcome.terminate {
+            for callback in &self.callbacks {
+                let Callback::Discrete(callback) = callback else {
+                    continue;
+                };
+                if (callback.condition)(state, &self.parameters, *time) {
+                    if outcome.invocations == 0 {
+                        state_before_effect.copy_from_slice(state);
+                    }
+                    outcome.invocations += 1;
+                    outcome.terminate = (callback.affect)(state, &self.parameters, *time)
+                        == CallbackAction::Terminate;
+                    ensure_finite_callback_state(state)?;
+                    if outcome.terminate {
+                        break;
+                    }
+                }
+            }
+        }
+        Ok(outcome)
     }
 }
 

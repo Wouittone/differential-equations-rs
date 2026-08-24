@@ -2,7 +2,7 @@
 
 julia_version = "1.12.6"
 manifest_format = "2.0"
-project_hash = "690374b0eb96edeb9477cdb976db17e0b7b9ff20"
+project_hash = "48cb332a74e7bb79b040ddb43fc6970c6bec124a"
 
 [[deps.ADTypes]]
 deps = ["PrecompileTools"]
@@ -1067,6 +1067,15 @@ repo-subdir = "lib/OrdinaryDiffEqLowStorageRK"
 repo-url = "https://github.com/SciML/OrdinaryDiffEq.jl.git"
 uuid = "b0944070-b475-4768-8dec-fb6eb410534d"
 version = "3.2.2"
+
+[[deps.OrdinaryDiffEqMultirate]]
+deps = ["ADTypes", "DiffEqBase", "FastBroadcast", "LinearAlgebra", "MuladdMacro", "OrdinaryDiffEqCore", "OrdinaryDiffEqDifferentiation", "OrdinaryDiffEqLowOrderRK", "OrdinaryDiffEqNonlinearSolve", "RecursiveArrayTools", "Reexport", "SciMLBase"]
+git-tree-sha1 = "dfb8b652323348a607a2ce21448a9379c7a67468"
+repo-rev = "211142263781255a9aa2f910f6760b9f18ec29c8"
+repo-subdir = "lib/OrdinaryDiffEqMultirate"
+repo-url = "https://github.com/SciML/OrdinaryDiffEq.jl.git"
+uuid = "d4b830b4-ac80-426b-8507-16693d424963"
+version = "2.6.0"
 
 [[deps.OrdinaryDiffEqNewmark]]
 deps = ["ADTypes", "ConcreteStructs", "DiffEqBase", "FastBroadcast", "LinearAlgebra", "MacroTools", "MuladdMacro", "NonlinearSolveFirstOrder", "OrdinaryDiffEqCore", "PreallocationTools", "RecursiveArrayTools", "Reexport", "SciMLBase", "TruncatedStacktraces"]
