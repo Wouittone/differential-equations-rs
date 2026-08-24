@@ -81,10 +81,37 @@ pub(crate) struct RungeKuttaSegment {
     coefficients: &'static [&'static [f64]],
 }
 
+/// Borrowed Rosenbrock/Rodas continuous extension for one accepted step.
+///
+/// `corrections` stores the already-combined rows `H * k`. Unlike explicit
+/// Runge--Kutta stages these values are state increments, so interpolation
+/// does not multiply them by the step size.
+pub(crate) struct BorrowedStiffSegment<'a> {
+    start_time: f64,
+    end_time: f64,
+    start_state: &'a [f64],
+    end_state: &'a [f64],
+    corrections: &'a [f64],
+    order: usize,
+}
+
+/// Owning Rosenbrock/Rodas continuous extension retained after a solve.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct StiffSegment {
+    start_time: f64,
+    end_time: f64,
+    bound_time: f64,
+    start_state: Vec<f64>,
+    end_state: Vec<f64>,
+    corrections: Vec<f64>,
+    order: usize,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum OwnedDenseSegment {
     Hermite(HermiteSegment),
     RungeKutta(RungeKuttaSegment),
+    Stiff(StiffSegment),
 }
 
 impl HermiteSegment {
@@ -304,6 +331,92 @@ impl RungeKuttaSegment {
     }
 }
 
+impl<'a> BorrowedStiffSegment<'a> {
+    pub(crate) fn new(
+        start_time: f64,
+        end_time: f64,
+        start_state: &'a [f64],
+        end_state: &'a [f64],
+        corrections: &'a [f64],
+        order: usize,
+    ) -> Result<Self, &'static str> {
+        let dimension = start_state.len();
+        if !start_time.is_finite()
+            || !end_time.is_finite()
+            || end_time == start_time
+            || dimension == 0
+            || end_state.len() != dimension
+            || !(2..=4).contains(&order)
+            || corrections.len() != order * dimension
+            || !start_state.iter().all(|value| value.is_finite())
+            || !end_state.iter().all(|value| value.is_finite())
+            || !corrections.iter().all(|value| value.is_finite())
+        {
+            return Err("invalid stiff dense segment data");
+        }
+        Ok(Self {
+            start_time,
+            end_time,
+            start_state,
+            end_state,
+            corrections,
+            order,
+        })
+    }
+
+    fn contains(&self, time: f64) -> bool {
+        time.is_finite()
+            && if self.start_time < self.end_time {
+                (self.start_time..=self.end_time).contains(&time)
+            } else {
+                (self.end_time..=self.start_time).contains(&time)
+            }
+    }
+}
+
+impl StiffSegment {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        start_time: f64,
+        end_time: f64,
+        bound_time: f64,
+        start_state: &[f64],
+        end_state: &[f64],
+        corrections: &[f64],
+        order: usize,
+    ) -> Result<Self, &'static str> {
+        let borrowed = BorrowedStiffSegment::new(
+            start_time,
+            end_time,
+            start_state,
+            end_state,
+            corrections,
+            order,
+        )?;
+        if !borrowed.contains(bound_time) {
+            return Err("invalid stiff dense segment bound");
+        }
+        Ok(Self {
+            start_time,
+            end_time,
+            bound_time,
+            start_state: start_state.to_vec(),
+            end_state: end_state.to_vec(),
+            corrections: corrections.to_vec(),
+            order,
+        })
+    }
+
+    fn contains(&self, time: f64) -> bool {
+        time.is_finite()
+            && if self.start_time < self.bound_time {
+                (self.start_time..=self.bound_time).contains(&time)
+            } else {
+                (self.bound_time..=self.start_time).contains(&time)
+            }
+    }
+}
+
 #[allow(dead_code)]
 impl DenseSegment for HermiteSegment {
     fn interpolate(&self, time: f64, output: &mut [f64]) -> Result<(), &'static str> {
@@ -392,11 +505,48 @@ impl DenseSegment for RungeKuttaSegment {
     }
 }
 
+impl DenseSegment for BorrowedStiffSegment<'_> {
+    fn interpolate(&self, time: f64, output: &mut [f64]) -> Result<(), &'static str> {
+        if !self.contains(time) {
+            return Err("dense output dimension or time mismatch");
+        }
+        interpolate_stiff(
+            self.start_time,
+            self.end_time,
+            self.start_state,
+            self.end_state,
+            self.corrections,
+            self.order,
+            time,
+            output,
+        )
+    }
+}
+
+impl DenseSegment for StiffSegment {
+    fn interpolate(&self, time: f64, output: &mut [f64]) -> Result<(), &'static str> {
+        if !self.contains(time) {
+            return Err("dense output dimension or time mismatch");
+        }
+        interpolate_stiff(
+            self.start_time,
+            self.end_time,
+            &self.start_state,
+            &self.end_state,
+            &self.corrections,
+            self.order,
+            time,
+            output,
+        )
+    }
+}
+
 impl OwnedDenseSegment {
     fn contains(&self, time: f64) -> bool {
         match self {
             Self::Hermite(segment) => segment.contains(time),
             Self::RungeKutta(segment) => segment.contains(time),
+            Self::Stiff(segment) => segment.contains(time),
         }
     }
 }
@@ -406,8 +556,45 @@ impl DenseSegment for OwnedDenseSegment {
         match self {
             Self::Hermite(segment) => segment.interpolate(time, output),
             Self::RungeKutta(segment) => segment.interpolate(time, output),
+            Self::Stiff(segment) => segment.interpolate(time, output),
         }
     }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn interpolate_stiff(
+    start_time: f64,
+    end_time: f64,
+    start_state: &[f64],
+    end_state: &[f64],
+    corrections: &[f64],
+    order: usize,
+    time: f64,
+    output: &mut [f64],
+) -> Result<(), &'static str> {
+    let dimension = start_state.len();
+    if output.len() != dimension || corrections.len() != order * dimension || !time.is_finite() {
+        return Err("dense output dimension or time mismatch");
+    }
+    if time == start_time {
+        output.copy_from_slice(start_state);
+        return Ok(());
+    }
+    if time == end_time {
+        output.copy_from_slice(end_state);
+        return Ok(());
+    }
+    let theta = (time - start_time) / (end_time - start_time);
+    let theta1 = 1.0 - theta;
+    for component in 0..dimension {
+        let mut polynomial = corrections[(order - 1) * dimension + component];
+        for row in (0..order - 1).rev() {
+            polynomial = corrections[row * dimension + component] + theta * polynomial;
+        }
+        output[component] =
+            theta1 * start_state[component] + theta * (end_state[component] + theta1 * polynomial);
+    }
+    Ok(())
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -642,6 +829,11 @@ impl<'a> TrajectoryRecorder<'a> {
         debug_assert!(self.retain_dense_output);
         self.dense_segments
             .push(OwnedDenseSegment::Hermite(segment));
+    }
+
+    pub(crate) fn retain_stiff_segment(&mut self, segment: StiffSegment) {
+        debug_assert!(self.retain_dense_output);
+        self.dense_segments.push(OwnedDenseSegment::Stiff(segment));
     }
 
     pub(crate) fn force_state(&mut self, time: f64, state: &[f64]) {

@@ -32,6 +32,10 @@ algorithms.
 - the pinned shared SSP quadratic extension for SSPRK22, SSPRK33, SSPRK43, and
   SSPRK432; every other implemented SSP method follows the pinned generic
   cubic-Hermite dispatch and retains those segments honestly;
+- pinned Rosenbrock23/32 quadratic extensions and Rodas `H`-matrix extensions
+  for Rodas4/42/4P/4P2/4PW, Rodas5/5P/5Pe/5Pr, Rodas6P, Rodas23W, Rodas3P,
+  and Tsit5DA; implemented Rosenbrock tableaus with an empty upstream `H`
+  matrix retain the pinned cubic-Hermite fallback instead;
 - the pinned DPRKN6 continuous extension for in-solve second-order sampling and
   scalar continuous event localization;
 - implicit identity-mass structural dynamics through adaptive/fixed
@@ -42,8 +46,7 @@ algorithms.
 ## Remaining feature work
 
 - method-specific high-order dense interpolation for the remaining families.
-  Rosenbrock/Rodas require retained stiff stage combinations; and multistep,
-  SDIRK/TRBDF2, stabilized, split, symplectic, and remaining second-order methods still need
+  Multistep, SDIRK/TRBDF2, stabilized, split, symplectic, and remaining second-order methods still need
   family-specific accepted-segment hooks. Solvers without such a hook retain
   their existing endpoint fallback and must not be described as having a
   method-specific high-order extension;

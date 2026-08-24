@@ -42,6 +42,7 @@ mod qndf2;
 mod qprk;
 mod rkn_adaptive_coefficients;
 mod rosenbrock;
+mod rosenbrock_dense;
 mod rosenbrock_extended;
 mod sdirk;
 mod sdirk_cash4;

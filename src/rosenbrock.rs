@@ -1,7 +1,10 @@
+use crate::callback::CallbackOutcome;
 use crate::integrator::{
     ControllerConfig, KernelCapabilities, StepEstimate, StepKernel, integrate as drive_integration,
 };
 use crate::linear::{factorize, solve_factorized};
+use crate::rosenbrock_dense::ROSENBROCK_SPECIAL;
+use crate::solution::{BorrowedRungeKuttaSegment, RungeKuttaSegment, TrajectoryRecorder};
 use crate::{OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions, SolverStats};
 
 const GAMMA: f64 = 1.0 / (2.0 + std::f64::consts::SQRT_2);
@@ -22,6 +25,8 @@ struct Workspace {
     midpoint_state: Vec<f64>,
     midpoint_derivative: Vec<f64>,
     candidate_derivative: Vec<f64>,
+    dense_endpoint_state: Vec<f64>,
+    dense_stages: Vec<f64>,
     k1: Vec<f64>,
     k2: Vec<f64>,
     k3: Vec<f64>,
@@ -42,6 +47,8 @@ impl Workspace {
             midpoint_state: vec![0.0; dimension],
             midpoint_derivative: vec![0.0; dimension],
             candidate_derivative: vec![0.0; dimension],
+            dense_endpoint_state: vec![0.0; dimension],
+            dense_stages: vec![0.0; 2 * dimension],
             k1: vec![0.0; dimension],
             k2: vec![0.0; dimension],
             k3: vec![0.0; dimension],
@@ -153,6 +160,94 @@ where
         )?;
         self.candidate_derivative_valid = options.adaptive;
         Ok(StepEstimate::new(error))
+    }
+
+    fn apply_step_callbacks(
+        &mut self,
+        problem: &OdeProblem<F, P>,
+        previous_state: &[f64],
+        previous_time: f64,
+        state: &mut [f64],
+        time: &mut f64,
+        state_before_effect: &mut [f64],
+        event_tolerance: f64,
+        _: &mut SolverStats,
+    ) -> Result<CallbackOutcome, SolveError> {
+        let attempted_time = *time;
+        self.workspace.dense_endpoint_state.copy_from_slice(state);
+        let dimension = previous_state.len();
+        self.workspace.dense_stages[..dimension].copy_from_slice(&self.workspace.k1);
+        self.workspace.dense_stages[dimension..].copy_from_slice(&self.workspace.k2);
+        let segment = BorrowedRungeKuttaSegment::new(
+            previous_time,
+            attempted_time,
+            previous_state,
+            &self.workspace.dense_endpoint_state,
+            &self.workspace.dense_stages,
+            ROSENBROCK_SPECIAL,
+        )
+        .map_err(|_| SolveError::NonFiniteDerivative)?;
+        let mut interpolate = |sample_time: f64, output: &mut [f64]| {
+            crate::solution::DenseSegment::interpolate(&segment, sample_time, output)
+                .map_err(|_| SolveError::NonFiniteDerivative)
+        };
+        problem.apply_step_callbacks(
+            previous_state,
+            previous_time,
+            state,
+            time,
+            state_before_effect,
+            event_tolerance,
+            Some(&mut interpolate),
+        )
+    }
+
+    fn record_dense_step(
+        &mut self,
+        _: &OdeProblem<F, P>,
+        previous_state: &[f64],
+        state: &[f64],
+        previous_time: f64,
+        attempted_time: f64,
+        time: f64,
+        final_time: bool,
+        recorder: &mut TrajectoryRecorder<'_>,
+        _: &mut SolverStats,
+    ) -> Result<bool, SolveError> {
+        let segment = BorrowedRungeKuttaSegment::new(
+            previous_time,
+            attempted_time,
+            previous_state,
+            &self.workspace.dense_endpoint_state,
+            &self.workspace.dense_stages,
+            ROSENBROCK_SPECIAL,
+        )
+        .map_err(|_| SolveError::NonFiniteDerivative)?;
+        recorder
+            .record_step_dense(
+                previous_state,
+                previous_time,
+                state,
+                time,
+                final_time,
+                &segment,
+            )
+            .map_err(|_| SolveError::NonFiniteDerivative)?;
+        if recorder.retains_dense_output() {
+            recorder.retain_runge_kutta_segment(
+                RungeKuttaSegment::new(
+                    previous_time,
+                    attempted_time,
+                    time,
+                    previous_state,
+                    &self.workspace.dense_endpoint_state,
+                    &self.workspace.dense_stages,
+                    ROSENBROCK_SPECIAL,
+                )
+                .map_err(|_| SolveError::NonFiniteDerivative)?,
+            );
+        }
+        Ok(true)
     }
 
     fn accept_step(

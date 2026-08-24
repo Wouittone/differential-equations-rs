@@ -2,16 +2,22 @@
 //!
 //! Coefficients and stage equations are ported from `OrdinaryDiffEqRosenbrock`
 //! and `OrdinaryDiffEqRosenbrockTableaus` at commit
-//! `211142263781255a9aa2f910f6760b9f18ec29c8`. The method-specific stiff dense
-//! interpolants are not included; trajectory sampling uses the crate's shared
-//! recorder.
+//! `211142263781255a9aa2f910f6760b9f18ec29c8`, including each tableau's exact
+//! dense-output dispatch. Empty upstream `H` matrices intentionally retain the
+//! generic cubic Hermite fallback.
 
 use std::marker::PhantomData;
 
+use crate::callback::CallbackOutcome;
 use crate::integrator::{
     ControllerConfig, KernelCapabilities, StepEstimate, StepKernel, integrate as drive_integration,
 };
 use crate::linear::{factorize, solve_factorized};
+use crate::rosenbrock_dense::*;
+use crate::solution::{
+    BorrowedHermiteSegment, BorrowedRungeKuttaSegment, BorrowedStiffSegment, HermiteSegment,
+    RungeKuttaSegment, StiffSegment, TrajectoryRecorder,
+};
 use crate::{OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions, SolverStats};
 
 const ROSENBROCK_GAMMA: f64 = 1.0 / (2.0 + std::f64::consts::SQRT_2);
@@ -2137,37 +2143,6 @@ const RODAS5PE_TABLEAU: RodasTableau = RodasTableau {
     weights: RODAS5P_B,
     error_weights: RODAS5PE_E,
 };
-// RODAS5PH from lib/OrdinaryDiffEqRosenbrock/src/rosenbrock_tableaus.jl at
-// 211142263781255a9aa2f910f6760b9f18ec29c8. Rodas5Pr uses this same H matrix
-// for its residual-control midpoint estimate (the regular ODE path does not
-// otherwise need stiff-aware dense interpolation).
-const RODAS5P_H: &[f64] = &[
-    25.948786856663858,
-    -2.5579724845846235,
-    10.433815404888879,
-    -2.3679251022685204,
-    0.524948541321073,
-    1.1241088310450404,
-    0.4272876194431874,
-    -0.17202221070155493,
-    -9.91568850695171,
-    -0.9689944594115154,
-    3.0438037242978453,
-    -24.495224566215796,
-    20.176138334709044,
-    15.98066361424651,
-    -6.789040303419874,
-    -6.710236069923372,
-    11.419903575922262,
-    2.8879645146136994,
-    72.92137995996029,
-    80.12511834622643,
-    -52.072871366152654,
-    -59.78993625266729,
-    -0.15582684282751913,
-    4.883087185713722,
-];
-
 // Rodas6PTableau(T, T2) from
 // lib/OrdinaryDiffEqRosenbrock/src/rosenbrock_tableaus.jl at
 // 211142263781255a9aa2f910f6760b9f18ec29c8.
@@ -3939,6 +3914,9 @@ const TSIT5DA_TABLEAU: RodasTableau = RodasTableau {
 trait ExtendedRosenbrockMethod {
     const ERROR_ORDER: usize;
     const ADAPTIVE: bool;
+    const DENSE_H: &'static [f64] = &[];
+    const DENSE_ORDER: usize = 0;
+    const SPECIAL_DENSE: bool = false;
 
     fn perform_step<F, P>(
         problem: &OdeProblem<F, P>,
@@ -4017,6 +3995,7 @@ algorithm!(Velds4);
 impl ExtendedRosenbrockMethod for Rosenbrock32 {
     const ERROR_ORDER: usize = 3;
     const ADAPTIVE: bool = true;
+    const SPECIAL_DENSE: bool = true;
 
     fn perform_step<F, P>(
         problem: &OdeProblem<F, P>,
@@ -4038,23 +4017,17 @@ impl ExtendedRosenbrockMethod for Rosenbrock32 {
 }
 
 macro_rules! rodas_method {
+    ($name:ident, $order:literal, $tableau:ident, dense = $dense:ident, $dense_order:literal) => {
+        rodas_method!(@impl $name, $order, $tableau, false, AdaptiveErrorEstimator::Embedded,
+            $dense, $dense_order);
+    };
     ($name:ident, $order:literal, $tableau:ident) => {
-        rodas_method!(
-            $name,
-            $order,
-            $tableau,
-            false,
-            AdaptiveErrorEstimator::Embedded
-        );
+        rodas_method!(@impl $name, $order, $tableau, false,
+            AdaptiveErrorEstimator::Embedded, &[], 0);
     };
     ($name:ident, $order:literal, $tableau:ident, $residual_control:expr) => {
-        rodas_method!(
-            $name,
-            $order,
-            $tableau,
-            $residual_control,
-            AdaptiveErrorEstimator::Embedded
-        );
+        rodas_method!(@impl $name, $order, $tableau, $residual_control,
+            AdaptiveErrorEstimator::Embedded, &[], 0);
     };
     (
         $name:ident,
@@ -4063,9 +4036,23 @@ macro_rules! rodas_method {
         $residual_control:expr,
         $adaptive_error_estimator:expr
     ) => {
+        rodas_method!(@impl $name, $order, $tableau, $residual_control,
+            $adaptive_error_estimator, &[], 0);
+    };
+    (@impl
+        $name:ident,
+        $order:literal,
+        $tableau:ident,
+        $residual_control:expr,
+        $adaptive_error_estimator:expr,
+        $dense:expr,
+        $dense_order:literal
+    ) => {
         impl ExtendedRosenbrockMethod for $name {
             const ERROR_ORDER: usize = $order;
             const ADAPTIVE: bool = true;
+            const DENSE_H: &'static [f64] = $dense;
+            const DENSE_ORDER: usize = $dense_order;
 
             fn perform_step<F, P>(
                 problem: &OdeProblem<F, P>,
@@ -4113,17 +4100,17 @@ rodas_method!(Grk4t, 4, GRK4T_TABLEAU);
 rodas_method!(Rok4a, 4, ROK4A_TABLEAU);
 rodas_method!(Ros34Pw1b, 3, ROS34PW1B_TABLEAU);
 rodas_method!(Ros34Pw2, 3, ROS34PW2_TABLEAU);
-rodas_method!(Rodas4, 4, RODAS4_TABLEAU);
-rodas_method!(Rodas42, 4, RODAS42_TABLEAU);
-rodas_method!(Rodas4P, 4, RODAS4P_TABLEAU);
-rodas_method!(Rodas4P2, 4, RODAS4P2_TABLEAU);
-rodas_method!(Rodas4PW, 4, RODAS4PW_TABLEAU);
-rodas_method!(Rodas5, 5, RODAS5_TABLEAU);
-rodas_method!(Rodas5P, 5, RODAS5P_TABLEAU);
-rodas_method!(Rodas5Pe, 5, RODAS5PE_TABLEAU);
-rodas_method!(Rodas6P, 6, RODAS6P_TABLEAU);
-rodas_method!(Rodas23W, 3, RODAS23W_TABLEAU);
-rodas_method!(Rodas3P, 3, RODAS3P_TABLEAU);
+rodas_method!(Rodas4, 4, RODAS4_TABLEAU, dense = RODAS4_H, 2);
+rodas_method!(Rodas42, 4, RODAS42_TABLEAU, dense = RODAS42_H, 2);
+rodas_method!(Rodas4P, 4, RODAS4P_TABLEAU, dense = RODAS4P_H, 2);
+rodas_method!(Rodas4P2, 4, RODAS4P2_TABLEAU, dense = RODAS4P2_H, 2);
+rodas_method!(Rodas4PW, 4, RODAS4PW_TABLEAU, dense = RODAS4PW_H, 2);
+rodas_method!(Rodas5, 5, RODAS5_TABLEAU, dense = RODAS5_H, 3);
+rodas_method!(Rodas5P, 5, RODAS5P_TABLEAU, dense = RODAS5P_H, 3);
+rodas_method!(Rodas5Pe, 5, RODAS5PE_TABLEAU, dense = RODAS5P_H, 3);
+rodas_method!(Rodas6P, 6, RODAS6P_TABLEAU, dense = RODAS6P_H, 4);
+rodas_method!(Rodas23W, 3, RODAS23W_TABLEAU, dense = RODAS23W_H, 3);
+rodas_method!(Rodas3P, 3, RODAS3P_TABLEAU, dense = RODAS3P_H, 3);
 rodas_method!(Ros2Pr, 2, ROS2PR_TABLEAU);
 rodas_method!(Ros2S, 2, ROS2S_TABLEAU);
 rodas_method!(
@@ -4142,6 +4129,8 @@ rodas_method!(Velds4, 4, VELDS4_TABLEAU);
 impl ExtendedRosenbrockMethod for HybridExplicitImplicitRK {
     const ERROR_ORDER: usize = 5;
     const ADAPTIVE: bool = true;
+    const DENSE_H: &'static [f64] = TSIT5DA_H;
+    const DENSE_ORDER: usize = 3;
 
     fn perform_step<F, P>(
         problem: &OdeProblem<F, P>,
@@ -4165,6 +4154,8 @@ impl ExtendedRosenbrockMethod for HybridExplicitImplicitRK {
 impl ExtendedRosenbrockMethod for Rodas5Pr {
     const ERROR_ORDER: usize = 5;
     const ADAPTIVE: bool = true;
+    const DENSE_H: &'static [f64] = RODAS5P_H;
+    const DENSE_ORDER: usize = 3;
 
     fn perform_step<F, P>(
         problem: &OdeProblem<F, P>,
@@ -4238,6 +4229,9 @@ struct Workspace {
     right_hand_side: Vec<f64>,
     error: Vec<f64>,
     stages: Vec<f64>,
+    dense_endpoint_state: Vec<f64>,
+    dense_endpoint_derivative: Vec<f64>,
+    dense_corrections: Vec<f64>,
     jacobian: Vec<f64>,
     factorization: Vec<f64>,
     pivots: Vec<usize>,
@@ -4256,6 +4250,9 @@ impl Workspace {
             right_hand_side: vec![0.0; dimension],
             error: vec![0.0; dimension],
             stages: vec![0.0; 19 * dimension],
+            dense_endpoint_state: vec![0.0; dimension],
+            dense_endpoint_derivative: vec![0.0; dimension],
+            dense_corrections: vec![0.0; 4 * dimension],
             jacobian: vec![0.0; dimension * dimension],
             factorization: vec![0.0; dimension * dimension],
             pivots: vec![0; dimension],
@@ -4266,6 +4263,7 @@ impl Workspace {
 
 struct ExtendedRosenbrockKernel<M> {
     workspace: Workspace,
+    dense_endpoint_prepared: bool,
     method: PhantomData<M>,
 }
 
@@ -4273,7 +4271,26 @@ impl<M> ExtendedRosenbrockKernel<M> {
     fn new(dimension: usize) -> Self {
         Self {
             workspace: Workspace::new(dimension),
+            dense_endpoint_prepared: false,
             method: PhantomData,
+        }
+    }
+
+    fn prepare_stiff_corrections(&mut self)
+    where
+        M: ExtendedRosenbrockMethod,
+    {
+        let dimension = self.workspace.current_derivative.len();
+        let stages = M::DENSE_H.len() / M::DENSE_ORDER;
+        for row in 0..M::DENSE_ORDER {
+            for component in 0..dimension {
+                let mut correction = 0.0;
+                for stage in 0..stages {
+                    correction += M::DENSE_H[row * stages + stage]
+                        * self.workspace.stages[stage * dimension + component];
+                }
+                self.workspace.dense_corrections[row * dimension + component] = correction;
+            }
         }
     }
 }
@@ -4341,6 +4358,7 @@ where
         options: &SolveOptions,
         stats: &mut SolverStats,
     ) -> Result<StepEstimate, SolveError> {
+        self.dense_endpoint_prepared = false;
         Ok(StepEstimate::new(M::perform_step(
             problem,
             state,
@@ -4353,6 +4371,246 @@ where
         )?))
     }
 
+    fn apply_step_callbacks(
+        &mut self,
+        problem: &OdeProblem<F, P>,
+        previous_state: &[f64],
+        previous_time: f64,
+        state: &mut [f64],
+        time: &mut f64,
+        state_before_effect: &mut [f64],
+        event_tolerance: f64,
+        stats: &mut SolverStats,
+    ) -> Result<CallbackOutcome, SolveError> {
+        let attempted_time = *time;
+        self.workspace.dense_endpoint_state.copy_from_slice(state);
+        if M::SPECIAL_DENSE {
+            let dimension = previous_state.len();
+            let segment = BorrowedRungeKuttaSegment::new(
+                previous_time,
+                attempted_time,
+                previous_state,
+                &self.workspace.dense_endpoint_state,
+                &self.workspace.stages[..2 * dimension],
+                ROSENBROCK_SPECIAL,
+            )
+            .map_err(|_| SolveError::NonFiniteDerivative)?;
+            let mut interpolate = |sample_time: f64, output: &mut [f64]| {
+                crate::solution::DenseSegment::interpolate(&segment, sample_time, output)
+                    .map_err(|_| SolveError::NonFiniteDerivative)
+            };
+            return problem.apply_step_callbacks(
+                previous_state,
+                previous_time,
+                state,
+                time,
+                state_before_effect,
+                event_tolerance,
+                Some(&mut interpolate),
+            );
+        }
+        if M::DENSE_ORDER > 0 {
+            self.prepare_stiff_corrections();
+            let dimension = previous_state.len();
+            let segment = BorrowedStiffSegment::new(
+                previous_time,
+                attempted_time,
+                previous_state,
+                &self.workspace.dense_endpoint_state,
+                &self.workspace.dense_corrections[..M::DENSE_ORDER * dimension],
+                M::DENSE_ORDER,
+            )
+            .map_err(|_| SolveError::NonFiniteDerivative)?;
+            let mut interpolate = |sample_time: f64, output: &mut [f64]| {
+                crate::solution::DenseSegment::interpolate(&segment, sample_time, output)
+                    .map_err(|_| SolveError::NonFiniteDerivative)
+            };
+            return problem.apply_step_callbacks(
+                previous_state,
+                previous_time,
+                state,
+                time,
+                state_before_effect,
+                event_tolerance,
+                Some(&mut interpolate),
+            );
+        }
+        if !problem.has_continuous_callbacks() {
+            return problem.apply_step_callbacks(
+                previous_state,
+                previous_time,
+                state,
+                time,
+                state_before_effect,
+                event_tolerance,
+                None,
+            );
+        }
+        evaluate(
+            problem,
+            &mut self.workspace.dense_endpoint_derivative,
+            &self.workspace.dense_endpoint_state,
+            attempted_time,
+            stats,
+        )?;
+        self.dense_endpoint_prepared = true;
+        let segment = BorrowedHermiteSegment::new(
+            previous_time,
+            attempted_time,
+            previous_state,
+            &self.workspace.dense_endpoint_state,
+            &self.workspace.current_derivative,
+            &self.workspace.dense_endpoint_derivative,
+        )
+        .map_err(|_| SolveError::NonFiniteDerivative)?;
+        let mut interpolate = |sample_time: f64, output: &mut [f64]| {
+            crate::solution::DenseSegment::interpolate(&segment, sample_time, output)
+                .map_err(|_| SolveError::NonFiniteDerivative)
+        };
+        problem.apply_step_callbacks(
+            previous_state,
+            previous_time,
+            state,
+            time,
+            state_before_effect,
+            event_tolerance,
+            Some(&mut interpolate),
+        )
+    }
+
+    fn record_dense_step(
+        &mut self,
+        problem: &OdeProblem<F, P>,
+        previous_state: &[f64],
+        state: &[f64],
+        previous_time: f64,
+        attempted_time: f64,
+        time: f64,
+        final_time: bool,
+        recorder: &mut TrajectoryRecorder<'_>,
+        stats: &mut SolverStats,
+    ) -> Result<bool, SolveError> {
+        let dimension = previous_state.len();
+        if M::SPECIAL_DENSE {
+            let segment = BorrowedRungeKuttaSegment::new(
+                previous_time,
+                attempted_time,
+                previous_state,
+                &self.workspace.dense_endpoint_state,
+                &self.workspace.stages[..2 * dimension],
+                ROSENBROCK_SPECIAL,
+            )
+            .map_err(|_| SolveError::NonFiniteDerivative)?;
+            recorder
+                .record_step_dense(
+                    previous_state,
+                    previous_time,
+                    state,
+                    time,
+                    final_time,
+                    &segment,
+                )
+                .map_err(|_| SolveError::NonFiniteDerivative)?;
+            if recorder.retains_dense_output() {
+                recorder.retain_runge_kutta_segment(
+                    RungeKuttaSegment::new(
+                        previous_time,
+                        attempted_time,
+                        time,
+                        previous_state,
+                        &self.workspace.dense_endpoint_state,
+                        &self.workspace.stages[..2 * dimension],
+                        ROSENBROCK_SPECIAL,
+                    )
+                    .map_err(|_| SolveError::NonFiniteDerivative)?,
+                );
+            }
+            return Ok(true);
+        }
+        if M::DENSE_ORDER > 0 {
+            self.prepare_stiff_corrections();
+            let corrections = &self.workspace.dense_corrections[..M::DENSE_ORDER * dimension];
+            let segment = BorrowedStiffSegment::new(
+                previous_time,
+                attempted_time,
+                previous_state,
+                &self.workspace.dense_endpoint_state,
+                corrections,
+                M::DENSE_ORDER,
+            )
+            .map_err(|_| SolveError::NonFiniteDerivative)?;
+            recorder
+                .record_step_dense(
+                    previous_state,
+                    previous_time,
+                    state,
+                    time,
+                    final_time,
+                    &segment,
+                )
+                .map_err(|_| SolveError::NonFiniteDerivative)?;
+            if recorder.retains_dense_output() {
+                recorder.retain_stiff_segment(
+                    StiffSegment::new(
+                        previous_time,
+                        attempted_time,
+                        time,
+                        previous_state,
+                        &self.workspace.dense_endpoint_state,
+                        corrections,
+                        M::DENSE_ORDER,
+                    )
+                    .map_err(|_| SolveError::NonFiniteDerivative)?,
+                );
+            }
+            return Ok(true);
+        }
+        if !self.dense_endpoint_prepared {
+            evaluate(
+                problem,
+                &mut self.workspace.dense_endpoint_derivative,
+                &self.workspace.dense_endpoint_state,
+                attempted_time,
+                stats,
+            )?;
+            self.dense_endpoint_prepared = true;
+        }
+        let segment = BorrowedHermiteSegment::new(
+            previous_time,
+            attempted_time,
+            previous_state,
+            &self.workspace.dense_endpoint_state,
+            &self.workspace.current_derivative,
+            &self.workspace.dense_endpoint_derivative,
+        )
+        .map_err(|_| SolveError::NonFiniteDerivative)?;
+        recorder
+            .record_step_dense(
+                previous_state,
+                previous_time,
+                state,
+                time,
+                final_time,
+                &segment,
+            )
+            .map_err(|_| SolveError::NonFiniteDerivative)?;
+        if recorder.retains_dense_output() {
+            recorder.retain_hermite_segment(
+                HermiteSegment::new_bounded(
+                    previous_time,
+                    attempted_time,
+                    time,
+                    previous_state.to_vec(),
+                    self.workspace.dense_endpoint_state.clone(),
+                    self.workspace.current_derivative.clone(),
+                    self.workspace.dense_endpoint_derivative.clone(),
+                )
+                .map_err(|_| SolveError::NonFiniteDerivative)?,
+            );
+        }
+        Ok(true)
+    }
+
     fn accept_step(
         &mut self,
         problem: &OdeProblem<F, P>,
@@ -4360,10 +4618,19 @@ where
         state: &[f64],
         time: f64,
         _: f64,
-        _: bool,
+        callback_applied: bool,
         stats: &mut SolverStats,
     ) -> Result<(), SolveError> {
         self.workspace.differentiation_valid = false;
+        if self.dense_endpoint_prepared && !callback_applied {
+            std::mem::swap(
+                &mut self.workspace.current_derivative,
+                &mut self.workspace.dense_endpoint_derivative,
+            );
+            self.dense_endpoint_prepared = false;
+            return Ok(());
+        }
+        self.dense_endpoint_prepared = false;
         evaluate(
             problem,
             &mut self.workspace.current_derivative,
