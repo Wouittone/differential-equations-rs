@@ -116,6 +116,9 @@ Run the matched 31-algorithm steady-state benchmark matrix with:
 ./benchmarks/run.ps1 -Repetitions 20
 ```
 
+If Julia is not on `PATH`, pass its executable explicitly with
+`-JuliaPath <path-to-julia>`.
+
 Raw Rust and Julia measurements plus a ratio table are written beneath
 `benchmarks/results/`. Allocation totals exclude compilation and warm-up.
 For the reproducible, VM-per-case speed/RSS/allocation harness, see

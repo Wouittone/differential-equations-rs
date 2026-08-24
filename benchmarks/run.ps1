@@ -1,6 +1,8 @@
 param(
     [ValidateRange(1, 10000)]
-    [int]$Repetitions = 20
+    [int]$Repetitions = 20,
+
+    [string]$JuliaPath = 'julia'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -39,11 +41,11 @@ $rust = foreach ($timingRow in $rustTiming) {
 $rust | Export-Csv -LiteralPath $rustPath -NoTypeInformation
 
 $juliaProject = Join-Path $repository 'tests/julia'
-$juliaTimingOutput = & julia --startup-file=no "--project=$juliaProject" (Join-Path $PSScriptRoot 'julia_matrix.jl') --repetitions $Repetitions --mode timing
+$juliaTimingOutput = & $JuliaPath --startup-file=no "--project=$juliaProject" (Join-Path $PSScriptRoot 'julia_matrix.jl') --repetitions $Repetitions --mode timing
 if ($LASTEXITCODE -ne 0) {
     throw 'Julia timing benchmark failed'
 }
-$juliaAllocationOutput = & julia --startup-file=no "--project=$juliaProject" (Join-Path $PSScriptRoot 'julia_matrix.jl') --repetitions $Repetitions --mode allocation
+$juliaAllocationOutput = & $JuliaPath --startup-file=no "--project=$juliaProject" (Join-Path $PSScriptRoot 'julia_matrix.jl') --repetitions $Repetitions --mode allocation
 if ($LASTEXITCODE -ne 0) {
     throw 'Julia allocation benchmark failed'
 }
