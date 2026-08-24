@@ -2,7 +2,7 @@
 
 julia_version = "1.12.6"
 manifest_format = "2.0"
-project_hash = "02ab2e5dd813a1dd805b01227c035b40f0753bcc"
+project_hash = "ae053f5642cfc7530b13032824e56d6cda540621"
 
 [[deps.ADTypes]]
 git-tree-sha1 = "0a81a018463de6c3f4f2c9360121c562e5add9e4"
@@ -955,6 +955,15 @@ repo-subdir = "lib/OrdinaryDiffEqLowStorageRK"
 repo-url = "https://github.com/SciML/OrdinaryDiffEq.jl.git"
 uuid = "b0944070-b475-4768-8dec-fb6eb410534d"
 version = "3.2.2"
+
+[[deps.OrdinaryDiffEqNewmark]]
+deps = ["ADTypes", "ConcreteStructs", "DiffEqBase", "FastBroadcast", "LinearAlgebra", "MacroTools", "MuladdMacro", "NonlinearSolveFirstOrder", "OrdinaryDiffEqCore", "PreallocationTools", "RecursiveArrayTools", "Reexport", "SciMLBase", "TruncatedStacktraces"]
+git-tree-sha1 = "6f8c9768259434e7279f5946ab2b92ec1d5afc63"
+repo-rev = "211142263781255a9aa2f910f6760b9f18ec29c8"
+repo-subdir = "lib/OrdinaryDiffEqNewmark"
+repo-url = "https://github.com/SciML/OrdinaryDiffEq.jl.git"
+uuid = "d204908a-63b9-11ef-18f5-cfec7123a93b"
+version = "2.2.1"
 
 [[deps.OrdinaryDiffEqNonlinearSolve]]
 deps = ["ADTypes", "ArrayInterface", "ConstructionBase", "DiffEqBase", "FastBroadcast", "FastClosures", "ForwardDiff", "LinearAlgebra", "LinearSolve", "MuladdMacro", "NonlinearSolve", "NonlinearSolveBase", "OrdinaryDiffEqCore", "OrdinaryDiffEqDifferentiation", "PreallocationTools", "RecursiveArrayTools", "SciMLBase", "SciMLOperators", "SimpleNonlinearSolve", "SparseArrays", "StaticArraysCore"]

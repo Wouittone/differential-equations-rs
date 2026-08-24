@@ -29,6 +29,8 @@ algorithms.
   event localization, and retained post-solve queries;
 - the pinned DPRKN6 continuous extension for in-solve second-order sampling and
   scalar continuous event localization;
+- implicit identity-mass structural dynamics through adaptive/fixed
+  Newmark--beta and generalized-alpha methods;
 - matched OrdinaryDiffEq.jl compliance cases for discrete state effects,
   continuous termination, and `saveat` behavior.
 
@@ -47,8 +49,8 @@ algorithms.
   callback sets, vector continuous callbacks, preset-time stops, and the
   prebuilt DiffEqCallbacks.jl library;
 - out-of-place functions, arbitrary scalar/state container types, mass
-  matrices, split problems, general partitioned/dynamical problems, implicit
-  second-order structural problems, and sensitivities.
+  matrices, general partitioned/dynamical position-rate functions, structural
+  problems with non-identity mass matrices, and sensitivities.
 
 Boundary-value conditions are not an initial-value ODE feature and remain
 excluded by [`UPSTREAM_SCOPE.md`](UPSTREAM_SCOPE.md). Adding them would require

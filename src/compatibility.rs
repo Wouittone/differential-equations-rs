@@ -158,7 +158,13 @@ pub mod algorithms {
             };
         }
 
+        /// Implicit structural-dynamics algorithms.
+        pub mod structural {
+            pub use crate::second_order::{GeneralizedAlpha, NewmarkBeta};
+        }
+
         pub use rkn::*;
+        pub use structural::*;
         pub use symplectic::*;
     }
 

@@ -1,5 +1,6 @@
 use crate::integrator::{ControllerConfig, ControllerState};
 use crate::irkn_coefficients::*;
+use crate::linear::{factorize, solve_factorized};
 use crate::rkn_adaptive_coefficients::*;
 use crate::{CallbackAction, EventDirection, SaveMode, SolveError, SolveOptions, SolverStats};
 use thiserror::Error;
@@ -229,7 +230,7 @@ pub enum SecondOrderSolveError {
     ),
 }
 
-/// A fixed-step algorithm for `q' = v` second-order ODE problems.
+/// An algorithm for `q' = v` second-order ODE problems.
 pub trait SecondOrderOdeAlgorithm {
     fn solve<F, P>(
         &self,
@@ -297,6 +298,115 @@ pub struct Nystrom5VelocityIndependent;
 /// second order outside it.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Rkn4;
+
+/// Classical Newmark--beta structural dynamics method.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct NewmarkBeta {
+    beta: f64,
+    gamma: f64,
+}
+
+impl NewmarkBeta {
+    /// Creates a Newmark method with parameters in the upstream admissible ranges.
+    pub fn new(beta: f64, gamma: f64) -> Result<Self, &'static str> {
+        if !beta.is_finite() || !(0.0..=0.5).contains(&beta) {
+            return Err("Newmark beta must be finite and in [0, 0.5]");
+        }
+        if !gamma.is_finite() || !(0.0..=1.0).contains(&gamma) {
+            return Err("Newmark gamma must be finite and in [0, 1]");
+        }
+        Ok(Self { beta, gamma })
+    }
+
+    /// Position update coefficient.
+    pub fn beta(self) -> f64 {
+        self.beta
+    }
+
+    /// Velocity update coefficient.
+    pub fn gamma(self) -> f64 {
+        self.gamma
+    }
+}
+
+impl Default for NewmarkBeta {
+    fn default() -> Self {
+        Self {
+            beta: 0.25,
+            gamma: 0.5,
+        }
+    }
+}
+
+/// Generalized-alpha structural dynamics method of Chung and Hulbert.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct GeneralizedAlpha {
+    alpha_m: f64,
+    alpha_f: f64,
+    beta: f64,
+    gamma: f64,
+}
+
+impl GeneralizedAlpha {
+    /// Creates a method from all four generalized-alpha parameters.
+    pub fn new(alpha_m: f64, alpha_f: f64, beta: f64, gamma: f64) -> Result<Self, &'static str> {
+        if ![alpha_m, alpha_f, beta, gamma]
+            .iter()
+            .all(|value| value.is_finite())
+        {
+            return Err("generalized-alpha parameters must be finite");
+        }
+        if alpha_m > alpha_f || alpha_f > 0.5 {
+            return Err("generalized-alpha parameters violate alpha_m <= alpha_f <= 0.5");
+        }
+        let minimum_beta = (0.5 + alpha_f - alpha_m).powi(2) / 4.0;
+        if beta < minimum_beta || !(0.0..=1.0).contains(&gamma) {
+            return Err("generalized-alpha beta or gamma violates unconditional stability");
+        }
+        Ok(Self {
+            alpha_m,
+            alpha_f,
+            beta,
+            gamma,
+        })
+    }
+
+    /// Uses the recommended spectral-radius-at-infinity parameterization.
+    pub fn from_spectral_radius(rho_infinity: f64) -> Result<Self, &'static str> {
+        if !rho_infinity.is_finite() || !(0.0..=1.0).contains(&rho_infinity) {
+            return Err("generalized-alpha spectral radius must be in [0, 1]");
+        }
+        let alpha_m = (2.0 * rho_infinity - 1.0) / (rho_infinity + 1.0);
+        let alpha_f = rho_infinity / (rho_infinity + 1.0);
+        let gamma = 0.5 - alpha_m + alpha_f;
+        let beta = (0.5 + alpha_f - alpha_m).powi(2) / 4.0;
+        Self::new(alpha_m, alpha_f, beta, gamma)
+    }
+
+    /// Uses the Hilber--Hughes--Taylor alpha parameterization.
+    pub fn from_hht_alpha(alpha: f64) -> Result<Self, &'static str> {
+        if !alpha.is_finite() || !(-1.0 / 3.0..=0.0).contains(&alpha) {
+            return Err("HHT alpha must be in [-1/3, 0]");
+        }
+        Self::new(
+            0.0,
+            -alpha,
+            (1.0 - alpha).powi(2) / 4.0,
+            (1.0 - 2.0 * alpha) / 2.0,
+        )
+    }
+
+    /// Returns `(alpha_m, alpha_f, beta, gamma)`.
+    pub fn parameters(self) -> (f64, f64, f64, f64) {
+        (self.alpha_m, self.alpha_f, self.beta, self.gamma)
+    }
+}
+
+impl Default for GeneralizedAlpha {
+    fn default() -> Self {
+        Self::from_spectral_radius(1.0).expect("rho infinity one is valid")
+    }
+}
 
 /// Dormand--Prince fourth-order adaptive Runge--Kutta--Nystrom method.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -731,6 +841,50 @@ impl_adaptive_rkn_algorithm!(Erkn7, ERKN7_ADAPTIVE_TABLEAU);
 impl_adaptive_rkn_algorithm!(FineRkn4, FINERKN4_ADAPTIVE_TABLEAU);
 impl_adaptive_rkn_algorithm!(FineRkn5, FINERKN5_ADAPTIVE_TABLEAU);
 
+impl SecondOrderOdeAlgorithm for NewmarkBeta {
+    fn solve<F, P>(
+        &self,
+        problem: &SecondOrderOdeProblem<F, P>,
+        options: &SolveOptions,
+    ) -> Result<SecondOrderSolution, SecondOrderSolveError>
+    where
+        F: Fn(&mut [f64], &[f64], &[f64], &P, f64),
+    {
+        solve_newmark(
+            problem,
+            options,
+            StructuralParameters {
+                alpha_m: 0.0,
+                alpha_f: 0.0,
+                beta: self.beta,
+                gamma: self.gamma,
+            },
+        )
+    }
+}
+
+impl SecondOrderOdeAlgorithm for GeneralizedAlpha {
+    fn solve<F, P>(
+        &self,
+        problem: &SecondOrderOdeProblem<F, P>,
+        options: &SolveOptions,
+    ) -> Result<SecondOrderSolution, SecondOrderSolveError>
+    where
+        F: Fn(&mut [f64], &[f64], &[f64], &P, f64),
+    {
+        solve_newmark(
+            problem,
+            options,
+            StructuralParameters {
+                alpha_m: self.alpha_m,
+                alpha_f: self.alpha_f,
+                beta: self.beta,
+                gamma: self.gamma,
+            },
+        )
+    }
+}
+
 impl SecondOrderOdeAlgorithm for Irkn3 {
     fn solve<F, P>(
         &self,
@@ -876,6 +1030,545 @@ impl RknWorkspace {
             },
         }
     }
+}
+
+#[derive(Clone, Copy)]
+struct StructuralParameters {
+    alpha_m: f64,
+    alpha_f: f64,
+    beta: f64,
+    gamma: f64,
+}
+
+struct StructuralWorkspace {
+    full_velocity: Vec<f64>,
+    full_position: Vec<f64>,
+    full_acceleration: Vec<f64>,
+    candidate_velocity: Vec<f64>,
+    candidate_position: Vec<f64>,
+    candidate_acceleration: Vec<f64>,
+    half_velocity: Vec<f64>,
+    half_position: Vec<f64>,
+    half_acceleration: Vec<f64>,
+    trial_acceleration: Vec<f64>,
+    trial_velocity: Vec<f64>,
+    trial_position: Vec<f64>,
+    evaluated_acceleration: Vec<f64>,
+    perturbed_acceleration: Vec<f64>,
+    residual: Vec<f64>,
+    perturbed_residual: Vec<f64>,
+    correction: Vec<f64>,
+    matrix: Vec<f64>,
+    pivots: Vec<usize>,
+    previous_effect_velocity: Vec<f64>,
+    previous_effect_position: Vec<f64>,
+}
+
+impl StructuralWorkspace {
+    fn new(dimension: usize, callbacks: bool) -> Self {
+        Self {
+            full_velocity: vec![0.0; dimension],
+            full_position: vec![0.0; dimension],
+            full_acceleration: vec![0.0; dimension],
+            candidate_velocity: vec![0.0; dimension],
+            candidate_position: vec![0.0; dimension],
+            candidate_acceleration: vec![0.0; dimension],
+            half_velocity: vec![0.0; dimension],
+            half_position: vec![0.0; dimension],
+            half_acceleration: vec![0.0; dimension],
+            trial_acceleration: vec![0.0; dimension],
+            trial_velocity: vec![0.0; dimension],
+            trial_position: vec![0.0; dimension],
+            evaluated_acceleration: vec![0.0; dimension],
+            perturbed_acceleration: vec![0.0; dimension],
+            residual: vec![0.0; dimension],
+            perturbed_residual: vec![0.0; dimension],
+            correction: vec![0.0; dimension],
+            matrix: vec![0.0; dimension * dimension],
+            pivots: vec![0; dimension],
+            previous_effect_velocity: if callbacks {
+                vec![0.0; dimension]
+            } else {
+                Vec::new()
+            },
+            previous_effect_position: if callbacks {
+                vec![0.0; dimension]
+            } else {
+                Vec::new()
+            },
+        }
+    }
+}
+
+fn solve_newmark<F, P>(
+    problem: &SecondOrderOdeProblem<F, P>,
+    options: &SolveOptions,
+    method: StructuralParameters,
+) -> Result<SecondOrderSolution, SecondOrderSolveError>
+where
+    F: Fn(&mut [f64], &[f64], &[f64], &P, f64),
+{
+    if !options.adaptive && options.initial_step.is_none() {
+        return Err(SolveError::InitialStepRequired.into());
+    }
+    let dimension = problem.initial_position.len();
+    let (start, end) = problem.time_span;
+    let direction = (end - start).signum();
+    let maximum_step = options.max_step.min((end - start).abs());
+    let mut step_magnitude = options
+        .initial_step
+        .unwrap_or_else(|| ((end - start).abs() / 100.0).min(maximum_step))
+        .min(maximum_step);
+    if !step_magnitude.is_finite() || step_magnitude <= 0.0 {
+        return Err(SolveError::StepSizeUnderflow.into());
+    }
+
+    let mut velocity = problem.initial_velocity.clone();
+    let mut position = problem.initial_position.clone();
+    let mut acceleration = vec![0.0; dimension];
+    let mut workspace = StructuralWorkspace::new(dimension, !problem.callbacks.is_empty());
+    let mut stats = SolverStats::default();
+
+    let initial = apply_initial_callbacks(problem, &mut velocity, &mut position, start)?;
+    stats.callback_invocations += initial.invocations;
+    let mut recorder = PartitionedRecorder::new(&velocity, &position, start, options);
+    if initial.terminate {
+        recorder.force_state(start, &velocity, &position);
+        return Ok(recorder.finish(stats));
+    }
+    evaluate_acceleration(
+        problem,
+        &mut acceleration,
+        &velocity,
+        &position,
+        start,
+        &mut stats,
+    )?;
+
+    let controller = ControllerConfig::proportional(2, 0.9, 0.2, 5.0, 0.2);
+    let mut controller_state = ControllerState::default();
+    let mut previous_attempt_rejected = false;
+    let mut time = start;
+    let mut attempts = 0;
+    while direction * (end - time) > 0.0 {
+        if attempts == options.max_steps {
+            return Err(SolveError::MaxStepsExceeded.into());
+        }
+        attempts += 1;
+        let step = direction * step_magnitude.min((end - time).abs());
+        if time + step == time {
+            return Err(SolveError::StepSizeUnderflow.into());
+        }
+
+        structural_substep(
+            problem,
+            method,
+            &velocity,
+            &position,
+            &acceleration,
+            time,
+            step,
+            &mut workspace.full_velocity,
+            &mut workspace.full_position,
+            &mut workspace.full_acceleration,
+            &mut workspace.trial_acceleration,
+            &mut workspace.trial_velocity,
+            &mut workspace.trial_position,
+            &mut workspace.evaluated_acceleration,
+            &mut workspace.perturbed_acceleration,
+            &mut workspace.residual,
+            &mut workspace.perturbed_residual,
+            &mut workspace.correction,
+            &mut workspace.matrix,
+            &mut workspace.pivots,
+            &mut stats,
+        )?;
+
+        let error = if options.adaptive {
+            structural_substep(
+                problem,
+                method,
+                &velocity,
+                &position,
+                &acceleration,
+                time,
+                0.5 * step,
+                &mut workspace.half_velocity,
+                &mut workspace.half_position,
+                &mut workspace.half_acceleration,
+                &mut workspace.trial_acceleration,
+                &mut workspace.trial_velocity,
+                &mut workspace.trial_position,
+                &mut workspace.evaluated_acceleration,
+                &mut workspace.perturbed_acceleration,
+                &mut workspace.residual,
+                &mut workspace.perturbed_residual,
+                &mut workspace.correction,
+                &mut workspace.matrix,
+                &mut workspace.pivots,
+                &mut stats,
+            )?;
+            structural_substep(
+                problem,
+                method,
+                &workspace.half_velocity,
+                &workspace.half_position,
+                &workspace.half_acceleration,
+                time + 0.5 * step,
+                0.5 * step,
+                &mut workspace.candidate_velocity,
+                &mut workspace.candidate_position,
+                &mut workspace.candidate_acceleration,
+                &mut workspace.trial_acceleration,
+                &mut workspace.trial_velocity,
+                &mut workspace.trial_position,
+                &mut workspace.evaluated_acceleration,
+                &mut workspace.perturbed_acceleration,
+                &mut workspace.residual,
+                &mut workspace.perturbed_residual,
+                &mut workspace.correction,
+                &mut workspace.matrix,
+                &mut workspace.pivots,
+                &mut stats,
+            )?;
+            structural_error_norm(
+                &workspace.candidate_velocity,
+                &workspace.candidate_position,
+                &workspace.full_velocity,
+                &workspace.full_position,
+                &velocity,
+                &position,
+                options,
+            )
+        } else {
+            workspace
+                .candidate_velocity
+                .copy_from_slice(&workspace.full_velocity);
+            workspace
+                .candidate_position
+                .copy_from_slice(&workspace.full_position);
+            workspace
+                .candidate_acceleration
+                .copy_from_slice(&workspace.full_acceleration);
+            0.0
+        };
+
+        if error > 1.0 {
+            stats.rejected_steps += 1;
+            controller_state.rejected(error);
+            step_magnitude *= controller_state.factor(error, controller).min(1.0);
+            previous_attempt_rejected = true;
+            continue;
+        }
+
+        let previous_time = time;
+        let attempted_time = time + step;
+        let mut next_time = if direction * (end - attempted_time) <= 0.0 {
+            end
+        } else {
+            attempted_time
+        };
+        let callback = apply_step_callbacks(
+            problem,
+            &velocity,
+            &position,
+            previous_time,
+            &mut workspace.candidate_velocity,
+            &mut workspace.candidate_position,
+            &mut next_time,
+            &mut workspace.previous_effect_velocity,
+            &mut workspace.previous_effect_position,
+            options.event_tolerance,
+            None,
+        )?;
+        stats.callback_invocations += callback.invocations;
+        stats.accepted_steps += 1;
+        recorder.record_step(
+            &velocity,
+            &position,
+            previous_time,
+            if callback.invocations == 0 {
+                &workspace.candidate_velocity
+            } else {
+                &workspace.previous_effect_velocity
+            },
+            if callback.invocations == 0 {
+                &workspace.candidate_position
+            } else {
+                &workspace.previous_effect_position
+            },
+            next_time,
+            next_time == end,
+            None,
+        );
+        if callback.invocations > 0 {
+            recorder.force_state(
+                next_time,
+                &workspace.candidate_velocity,
+                &workspace.candidate_position,
+            );
+        }
+        if callback.terminate {
+            return Ok(recorder.finish(stats));
+        }
+
+        time = next_time;
+        std::mem::swap(&mut velocity, &mut workspace.candidate_velocity);
+        std::mem::swap(&mut position, &mut workspace.candidate_position);
+        if callback.invocations > 0 || next_time != attempted_time {
+            evaluate_acceleration(
+                problem,
+                &mut acceleration,
+                &velocity,
+                &position,
+                time,
+                &mut stats,
+            )?;
+        } else {
+            std::mem::swap(&mut acceleration, &mut workspace.candidate_acceleration);
+        }
+
+        if options.adaptive {
+            if callback.invocations > 0 {
+                controller_state.reset();
+            }
+            controller_state.accepted(error);
+            let mut factor = controller_state.factor(error, controller);
+            if previous_attempt_rejected {
+                factor = factor.min(1.0);
+            }
+            step_magnitude = (step_magnitude * factor).min(maximum_step);
+        }
+        previous_attempt_rejected = false;
+    }
+    Ok(recorder.finish(stats))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn structural_substep<F, P>(
+    problem: &SecondOrderOdeProblem<F, P>,
+    method: StructuralParameters,
+    velocity: &[f64],
+    position: &[f64],
+    acceleration: &[f64],
+    time: f64,
+    step: f64,
+    output_velocity: &mut [f64],
+    output_position: &mut [f64],
+    output_acceleration: &mut [f64],
+    trial_acceleration: &mut [f64],
+    trial_velocity: &mut [f64],
+    trial_position: &mut [f64],
+    evaluated_acceleration: &mut [f64],
+    perturbed_acceleration: &mut [f64],
+    residual: &mut [f64],
+    perturbed_residual: &mut [f64],
+    correction: &mut [f64],
+    matrix: &mut [f64],
+    pivots: &mut [usize],
+    stats: &mut SolverStats,
+) -> Result<(), SecondOrderSolveError>
+where
+    F: Fn(&mut [f64], &[f64], &[f64], &P, f64),
+{
+    const MAX_ITERATIONS: usize = 12;
+    const TOLERANCE: f64 = 1.0e-12;
+    trial_acceleration.copy_from_slice(acceleration);
+    let dimension = acceleration.len();
+    for _ in 0..MAX_ITERATIONS {
+        structural_residual(
+            problem,
+            method,
+            velocity,
+            position,
+            acceleration,
+            time,
+            step,
+            trial_acceleration,
+            trial_velocity,
+            trial_position,
+            evaluated_acceleration,
+            residual,
+            stats,
+        )?;
+        stats.nonlinear_iterations += 1;
+        let residual_norm = residual
+            .iter()
+            .fold(0.0_f64, |maximum, value| maximum.max(value.abs()));
+        let scale = 1.0
+            + trial_acceleration
+                .iter()
+                .fold(0.0_f64, |maximum, value| maximum.max(value.abs()));
+        if residual_norm <= TOLERANCE * scale {
+            update_structural_state(
+                method,
+                velocity,
+                position,
+                acceleration,
+                trial_acceleration,
+                step,
+                output_velocity,
+                output_position,
+            );
+            evaluate_acceleration(
+                problem,
+                output_acceleration,
+                output_velocity,
+                output_position,
+                time + step,
+                stats,
+            )?;
+            return Ok(());
+        }
+
+        stats.jacobian_evaluations += 1;
+        for column in 0..dimension {
+            let original = trial_acceleration[column];
+            let delta = f64::EPSILON.sqrt() * original.abs().max(1.0);
+            trial_acceleration[column] = original + delta;
+            structural_residual(
+                problem,
+                method,
+                velocity,
+                position,
+                acceleration,
+                time,
+                step,
+                trial_acceleration,
+                trial_velocity,
+                trial_position,
+                perturbed_acceleration,
+                perturbed_residual,
+                stats,
+            )?;
+            for row in 0..dimension {
+                matrix[row * dimension + column] =
+                    (perturbed_residual[row] - residual[row]) / delta;
+            }
+            trial_acceleration[column] = original;
+        }
+        for (correction, residual) in correction.iter_mut().zip(residual.iter()) {
+            *correction = -*residual;
+        }
+        factorize(matrix, pivots, dimension)?;
+        stats.linear_factorizations += 1;
+        solve_factorized(matrix, pivots, correction, dimension);
+        stats.linear_solves += 1;
+        for (value, correction) in trial_acceleration.iter_mut().zip(correction.iter()) {
+            *value += correction;
+        }
+    }
+    Err(SolveError::NonlinearSolveFailed.into())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn structural_residual<F, P>(
+    problem: &SecondOrderOdeProblem<F, P>,
+    method: StructuralParameters,
+    velocity: &[f64],
+    position: &[f64],
+    acceleration: &[f64],
+    time: f64,
+    step: f64,
+    trial_acceleration: &[f64],
+    trial_velocity: &mut [f64],
+    trial_position: &mut [f64],
+    evaluated_acceleration: &mut [f64],
+    residual: &mut [f64],
+    stats: &mut SolverStats,
+) -> Result<(), SecondOrderSolveError>
+where
+    F: Fn(&mut [f64], &[f64], &[f64], &P, f64),
+{
+    update_structural_state(
+        method,
+        velocity,
+        position,
+        acceleration,
+        trial_acceleration,
+        step,
+        trial_velocity,
+        trial_position,
+    );
+    for index in 0..trial_acceleration.len() {
+        trial_velocity[index] =
+            (1.0 - method.alpha_f) * trial_velocity[index] + method.alpha_f * velocity[index];
+        trial_position[index] =
+            (1.0 - method.alpha_f) * trial_position[index] + method.alpha_f * position[index];
+    }
+    evaluate_acceleration(
+        problem,
+        evaluated_acceleration,
+        trial_velocity,
+        trial_position,
+        time + (1.0 - method.alpha_f) * step,
+        stats,
+    )?;
+    for index in 0..residual.len() {
+        residual[index] = (1.0 - method.alpha_m) * trial_acceleration[index]
+            + method.alpha_m * acceleration[index]
+            - evaluated_acceleration[index];
+    }
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn update_structural_state(
+    method: StructuralParameters,
+    velocity: &[f64],
+    position: &[f64],
+    acceleration: &[f64],
+    next_acceleration: &[f64],
+    step: f64,
+    output_velocity: &mut [f64],
+    output_position: &mut [f64],
+) {
+    for index in 0..velocity.len() {
+        output_velocity[index] = velocity[index]
+            + step
+                * ((1.0 - method.gamma) * acceleration[index]
+                    + method.gamma * next_acceleration[index]);
+        output_position[index] = position[index]
+            + step * velocity[index]
+            + 0.5
+                * step
+                * step
+                * ((1.0 - 2.0 * method.beta) * acceleration[index]
+                    + 2.0 * method.beta * next_acceleration[index]);
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn structural_error_norm(
+    velocity: &[f64],
+    position: &[f64],
+    coarse_velocity: &[f64],
+    coarse_position: &[f64],
+    previous_velocity: &[f64],
+    previous_position: &[f64],
+    options: &SolveOptions,
+) -> f64 {
+    velocity
+        .iter()
+        .zip(position)
+        .zip(coarse_velocity.iter().zip(coarse_position))
+        .zip(previous_velocity.iter().zip(previous_position))
+        .fold(
+            0.0_f64,
+            |maximum,
+             (
+                ((velocity, position), (coarse_velocity, coarse_position)),
+                (previous_velocity, previous_position),
+            )| {
+                let velocity_scale = options.absolute_tolerance
+                    + options.relative_tolerance * velocity.abs().max(previous_velocity.abs());
+                let position_scale = options.absolute_tolerance
+                    + options.relative_tolerance * position.abs().max(previous_position.abs());
+                maximum
+                    .max(((velocity - coarse_velocity) / (3.0 * velocity_scale)).abs())
+                    .max(((position - coarse_position) / (3.0 * position_scale)).abs())
+            },
+        )
 }
 
 fn solve_rkn_fixed<F, P>(
