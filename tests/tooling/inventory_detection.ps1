@@ -56,12 +56,19 @@ algorithm!(MacroMethod);
 pub struct CollidingMethod;
 impl OdeAlgorithm for CollidingMethod {}
 
+pub struct SimpleNestedMethod;
+impl OdeAlgorithm for SimpleNestedMethod {}
+
 pub type NativeAlias = NativeMethod;
 '@, $utf8NoBom)
 
     [System.IO.File]::WriteAllText((Join-Path $sourceRoot 'compatibility.rs'), @'
 pub mod algorithms {
     pub use crate::native::{MacroMethod, NativeAlias, NativeMethod};
+
+    pub mod nested {
+        pub use crate::native::SimpleNestedMethod;
+    }
 }
 
 pub type FacadeOnly = NativeMethod;
@@ -81,16 +88,19 @@ tested = NativeMethod()
     Assert-Contains $detected.rust_public_names 'FacadeOnly' 'A public facade export was not detected.'
     Assert-Contains $detected.rust_public_names 'CollidingMethod' 'The facade collision was not detected as public.'
     Assert-Contains $detected.rust_public_names 'NativeMethod' 'A namespaced algorithm export was not detected.'
+    Assert-Contains $detected.rust_public_names 'SimpleNestedMethod' 'A simple nested algorithm export was not detected.'
     Assert-NotContains $detected.rust_native_public_names 'FacadeOnly' 'A compatibility facade was treated as a native export.'
     Assert-NotContains $detected.rust_native_public_names 'CollidingMethod' 'A compatibility name collision was treated as a native export.'
     Assert-Contains $detected.rust_native_public_names 'NativeMethod' 'A namespaced algorithm export was treated as a facade.'
+    Assert-Contains $detected.rust_native_public_names 'SimpleNestedMethod' 'A simple nested algorithm export was treated as a facade.'
 
     Assert-Contains $detected.rust_algorithm_implementation_names 'NativeMethod' 'A direct trait implementation was not detected.'
     Assert-Contains $detected.rust_algorithm_implementation_names 'MacroMethod' 'A macro-generated trait implementation was not detected.'
     Assert-Contains $detected.rust_algorithm_implementation_names 'NativeAlias' 'A legitimate alias of an implementation was not detected.'
+    Assert-Contains $detected.rust_algorithm_implementation_names 'SimpleNestedMethod' 'A simple nested implementation was not detected.'
     Assert-NotContains $detected.rust_algorithm_implementation_names 'FacadeOnly' 'A compatibility alias was treated as an implementation.'
 
-    foreach ($name in @('NativeMethod', 'MacroMethod', 'NativeAlias')) {
+    foreach ($name in @('NativeMethod', 'MacroMethod', 'NativeAlias', 'SimpleNestedMethod')) {
         Assert-Contains $detected.rust_implemented_public_names $name "$name was not recognized as implemented and public."
     }
     Assert-NotContains $detected.rust_implemented_public_names 'CollidingMethod' 'A private implementation was matched to a facade with the same name.'

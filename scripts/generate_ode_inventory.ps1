@@ -61,15 +61,20 @@ function Get-RustPublicNames {
             }
             foreach ($export in [regex]::Matches($moduleText, '(?ms)^\s*pub use\s+(?<body>[^;]+);')) {
                 $exportBody = $export.Groups['body'].Value.Trim()
-                if ($exportBody -notmatch '(?s)\{(?<items>.*?)\}') { continue }
-                foreach ($item in $Matches['items'] -split ',') {
-                    $trimmed = $item.Trim()
-                    if ([string]::IsNullOrWhiteSpace($trimmed)) { continue }
-                    if ($trimmed -match '\bas\s+(?<alias>[A-Za-z_][A-Za-z0-9_]*)$') {
-                        [void] $names.Add($Matches['alias'])
-                    } elseif ($trimmed -match '(?<name>[A-Za-z_][A-Za-z0-9_]*)$') {
-                        [void] $names.Add($Matches['name'])
+                if ($exportBody -match '(?s)\{(?<items>.*?)\}') {
+                    foreach ($item in $Matches['items'] -split ',') {
+                        $trimmed = $item.Trim()
+                        if ([string]::IsNullOrWhiteSpace($trimmed)) { continue }
+                        if ($trimmed -match '\bas\s+(?<alias>[A-Za-z_][A-Za-z0-9_]*)$') {
+                            [void] $names.Add($Matches['alias'])
+                        } elseif ($trimmed -match '(?<name>[A-Za-z_][A-Za-z0-9_]*)$') {
+                            [void] $names.Add($Matches['name'])
+                        }
                     }
+                } elseif ($exportBody -match '\bas\s+(?<alias>[A-Za-z_][A-Za-z0-9_]*)$') {
+                    [void] $names.Add($Matches['alias'])
+                } elseif ($exportBody -match '::(?<name>[A-Za-z_][A-Za-z0-9_]*)$') {
+                    [void] $names.Add($Matches['name'])
                 }
             }
             continue
