@@ -18,6 +18,8 @@ mod composites;
 mod ensemble;
 mod explicit_rk;
 mod exponential_rk;
+mod extrapolation;
+mod firk;
 mod frk65;
 mod generated_coefficients;
 mod high_order;

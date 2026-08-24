@@ -96,8 +96,24 @@ pub mod algorithms {
             pub use crate::sdirk_cash4::Cash4;
         }
 
+        /// Fully implicit collocation Runge--Kutta algorithms.
+        pub mod fully_implicit {
+            pub use crate::firk::{AdaptiveRadau, GaussLegendre, RadauIIA3, RadauIIA5, RadauIIA9};
+        }
+
         pub use diagonally_implicit::*;
+        pub use fully_implicit::*;
         pub use general::*;
+    }
+
+    /// Explicit and linearly implicit extrapolation algorithms.
+    pub mod extrapolation {
+        pub use crate::extrapolation::{
+            AitkenNeville, ExtrapolationMidpointDeuflhard, ExtrapolationMidpointHairerWanner,
+            ExtrapolationSequence, ImplicitDeuflhardExtrapolation,
+            ImplicitEulerBarycentricExtrapolation, ImplicitEulerExtrapolation,
+            ImplicitHairerWannerExtrapolation,
+        };
     }
 
     /// Linear multistep and multiderivative algorithms.
@@ -185,7 +201,8 @@ pub mod algorithms {
     pub use automatic::*;
     pub use explicit::{general::*, high_order::*, low_storage::*, ssp::*};
     pub use exponential::*;
-    pub use implicit::{diagonally_implicit::*, general::*};
+    pub use extrapolation::*;
+    pub use implicit::{diagonally_implicit::*, fully_implicit::*, general::*};
     pub use multistep::*;
     pub use rosenbrock::*;
     pub use second_order::*;
