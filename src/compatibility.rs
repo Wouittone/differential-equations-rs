@@ -126,6 +126,9 @@ pub mod algorithms {
             SBDF2, SBDF3, SBDF4, Sbdf, Sbdf2, Sbdf3, Sbdf4,
         };
         pub use crate::mebdf2::Mebdf2;
+        pub use crate::nordsieck::{
+            AN5, JVODE, JVODE_Adams, JVODE_BDF, JvodeAdams, JvodeBdf, JvodeMethod,
+        };
         pub use crate::qndf1::{Qbdf1, Qndf1};
         pub use crate::qndf2::{Qbdf2, Qndf2};
         pub use crate::trbdf2::Trbdf2;

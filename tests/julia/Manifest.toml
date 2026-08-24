@@ -2,7 +2,7 @@
 
 julia_version = "1.12.6"
 manifest_format = "2.0"
-project_hash = "48cb332a74e7bb79b040ddb43fc6970c6bec124a"
+project_hash = "91607255fa743e6292161380c0fa4d9d58bfe222"
 
 [[deps.ADTypes]]
 deps = ["PrecompileTools"]
@@ -1094,6 +1094,15 @@ repo-subdir = "lib/OrdinaryDiffEqNonlinearSolve"
 repo-url = "https://github.com/SciML/OrdinaryDiffEq.jl.git"
 uuid = "127b3ac7-2247-4354-8eb6-78cf4e7c58e8"
 version = "2.6.0"
+
+[[deps.OrdinaryDiffEqNordsieck]]
+deps = ["DiffEqBase", "FastBroadcast", "LinearAlgebra", "MuladdMacro", "OrdinaryDiffEqCore", "OrdinaryDiffEqTsit5", "RecursiveArrayTools", "Reexport", "SciMLBase"]
+git-tree-sha1 = "f79732e44dda5f35f81f74cbc671b1146634bcda"
+repo-rev = "211142263781255a9aa2f910f6760b9f18ec29c8"
+repo-subdir = "lib/OrdinaryDiffEqNordsieck"
+repo-url = "https://github.com/SciML/OrdinaryDiffEq.jl.git"
+uuid = "c9986a66-5c92-4813-8696-a7ec84c806c8"
+version = "2.2.1"
 
 [[deps.OrdinaryDiffEqPDIRK]]
 deps = ["ADTypes", "DiffEqBase", "FastBroadcast", "MuladdMacro", "OrdinaryDiffEqCore", "OrdinaryDiffEqDifferentiation", "OrdinaryDiffEqNonlinearSolve", "Reexport", "SciMLBase"]

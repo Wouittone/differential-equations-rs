@@ -115,11 +115,24 @@ impl KernelCapabilities {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct StepEstimate {
     pub(crate) error_norm: f64,
+    proposed_factor: Option<f64>,
 }
 
 impl StepEstimate {
     pub(crate) const fn new(error_norm: f64) -> Self {
-        Self { error_norm }
+        Self {
+            error_norm,
+            proposed_factor: None,
+        }
+    }
+
+    /// Supplies an algorithm-owned next-step ratio while retaining the shared
+    /// driver's acceptance, rejection, and lifecycle machinery.
+    pub(crate) const fn with_factor(error_norm: f64, proposed_factor: f64) -> Self {
+        Self {
+            error_norm,
+            proposed_factor: Some(proposed_factor),
+        }
     }
 }
 
@@ -403,8 +416,9 @@ where
                     controller_state.reset();
                 }
                 controller_state.accepted(estimate.error_norm);
-                let mut factor =
-                    controller_state.factor(estimate.error_norm, capabilities.controller);
+                let mut factor = estimate.proposed_factor.unwrap_or_else(|| {
+                    controller_state.factor(estimate.error_norm, capabilities.controller)
+                });
                 if previous_step_rejected {
                     factor = factor.min(capabilities.controller.rejected_acceptance_maximum);
                 }
@@ -415,8 +429,11 @@ where
             stats.rejected_steps += 1;
             kernel.reject_step();
             controller_state.rejected(estimate.error_norm);
-            step *= controller_state
-                .factor(estimate.error_norm, capabilities.controller)
+            step *= estimate
+                .proposed_factor
+                .unwrap_or_else(|| {
+                    controller_state.factor(estimate.error_norm, capabilities.controller)
+                })
                 .min(capabilities.controller.rejection_maximum);
             previous_step_rejected = true;
         }
