@@ -29,8 +29,10 @@ mod implicit;
 mod integrator;
 mod irkn_coefficients;
 mod linear;
+mod linear_methods;
 mod low_storage_rk;
 mod mebdf2;
+mod operator_problem;
 mod pdirk;
 mod prk;
 mod problem;
@@ -63,6 +65,10 @@ pub use callback::{CallbackAction, EventDirection};
 pub use compatibility::algorithms;
 pub use ensemble::{CaseOutcome, ExecutionPolicy, solve_batch, solve_ensemble};
 pub use exponential_rk::ExponentialAlgorithm;
+pub use linear_methods::{
+    LieGroupAlgorithm, LinearOperatorAlgorithm, solve_lie_group, solve_linear_operator,
+};
+pub use operator_problem::{LieGroupProblem, LinearOperatorProblem};
 pub use problem::{MassMatrixOdeProblem, OdeProblem, SplitOdeProblem};
 pub use second_order::{
     SecondOrderOdeAlgorithm, SecondOrderOdeProblem, SecondOrderSolution, SecondOrderSolveError,

@@ -142,6 +142,15 @@ pub mod algorithms {
         };
     }
 
+    /// Exact linear, Magnus, and Lie-group integration algorithms.
+    pub mod linear {
+        pub use crate::linear_methods::{
+            CG2, CG3, CG4a, CayleyEuler, LieEuler, LieRK4, LinearExponential, MagnusAdapt4,
+            MagnusGL4, MagnusGL6, MagnusGL8, MagnusGauss4, MagnusLeapfrog, MagnusMidpoint,
+            MagnusNC6, MagnusNC8, RKMK2, RKMK4,
+        };
+    }
+
     /// Rosenbrock and Rosenbrock--W algorithms.
     pub mod rosenbrock {
         pub use crate::rosenbrock::Rosenbrock23;
@@ -203,6 +212,7 @@ pub mod algorithms {
     pub use exponential::*;
     pub use extrapolation::*;
     pub use implicit::{diagonally_implicit::*, fully_implicit::*, general::*};
+    pub use linear::*;
     pub use multistep::*;
     pub use rosenbrock::*;
     pub use second_order::*;

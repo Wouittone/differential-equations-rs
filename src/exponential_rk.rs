@@ -1068,7 +1068,7 @@ fn exp_action(a: &[f64], scale_a: f64, input: &[f64]) -> Vec<f64> {
     mat_vec(&matrix_exp(&scaled, n), input)
 }
 
-fn matrix_exp(matrix: &[f64], n: usize) -> Vec<f64> {
+pub(crate) fn matrix_exp(matrix: &[f64], n: usize) -> Vec<f64> {
     let norm = (0..n)
         .map(|row| {
             (0..n)
@@ -1111,14 +1111,14 @@ fn matrix_exp(matrix: &[f64], n: usize) -> Vec<f64> {
     result
 }
 
-fn identity(n: usize) -> Vec<f64> {
+pub(crate) fn identity(n: usize) -> Vec<f64> {
     let mut out = vec![0.0; n * n];
     for i in 0..n {
         out[i * n + i] = 1.0;
     }
     out
 }
-fn mat_mul(left: &[f64], right: &[f64], n: usize) -> Vec<f64> {
+pub(crate) fn mat_mul(left: &[f64], right: &[f64], n: usize) -> Vec<f64> {
     let mut out = vec![0.0; n * n];
     for i in 0..n {
         for k in 0..n {
@@ -1130,7 +1130,7 @@ fn mat_mul(left: &[f64], right: &[f64], n: usize) -> Vec<f64> {
     }
     out
 }
-fn mat_vec(matrix: &[f64], vector: &[f64]) -> Vec<f64> {
+pub(crate) fn mat_vec(matrix: &[f64], vector: &[f64]) -> Vec<f64> {
     let n = vector.len();
     (0..n)
         .map(|row| {
