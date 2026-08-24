@@ -735,6 +735,7 @@ where
         time: &mut f64,
         state_before_effect: &mut [f64],
         event_tolerance: f64,
+        _: &mut SolverStats,
     ) -> Result<crate::callback::CallbackOutcome, SolveError> {
         let endpoint_time = *time;
         let endpoint_state = state.to_vec();

@@ -737,6 +737,7 @@ where
         time: &mut f64,
         state_before_effect: &mut [f64],
         event_tolerance: f64,
+        _: &mut SolverStats,
     ) -> Result<crate::callback::CallbackOutcome, SolveError> {
         let mut scratch = vec![0.0; self.dimension];
         let mut interpolator = |query: f64, output: &mut [f64]| {
