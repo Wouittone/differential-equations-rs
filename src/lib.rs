@@ -21,6 +21,7 @@ mod exponential_rk;
 mod frk65;
 mod generated_coefficients;
 mod high_order;
+mod imex_multistep;
 mod implicit;
 mod integrator;
 mod irkn_coefficients;
@@ -67,7 +68,7 @@ pub use second_order::{
 pub use semilinear::{SemilinearOdeProblem, solve_exponential};
 pub use solution::{Solution, SolverStats};
 pub use solver::{OdeAlgorithm, SaveMode, SolveError, SolveOptions, solve};
-pub use split_euler::{SplitOdeAlgorithm, solve_split_euler};
+pub use split_euler::{SplitOdeAlgorithm, solve_split, solve_split_euler};
 pub use symplectic::{
     SymplecticAlgorithm, SymplecticSolution, SymplecticSolveError, SymplecticTableau,
     solve_symplectic,

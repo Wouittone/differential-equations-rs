@@ -21,6 +21,20 @@ pub trait SplitOdeAlgorithm {
         FI: Fn(&mut [f64], &[f64], &P, f64);
 }
 
+/// Solves a typed split problem with a selected split/IMEX algorithm.
+pub fn solve_split<FE, FI, P, A>(
+    problem: &SplitOdeProblem<FE, FI, P>,
+    algorithm: A,
+    options: &SolveOptions,
+) -> Result<Solution, SolveError>
+where
+    FE: Fn(&mut [f64], &[f64], &P, f64),
+    FI: Fn(&mut [f64], &[f64], &P, f64),
+    A: SplitOdeAlgorithm,
+{
+    algorithm.solve(problem, options)
+}
+
 impl SplitOdeAlgorithm for SplitEuler {
     fn solve<FE, FI, P>(
         &self,

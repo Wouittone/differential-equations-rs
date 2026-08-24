@@ -152,6 +152,8 @@ pub enum SolveError {
     InitialStepRequired,
     #[error("the selected algorithm does not support adaptive stepping")]
     AdaptiveStepUnsupported,
+    #[error("the configured multistep order is unsupported")]
+    InvalidMultistepOrder,
     #[error("the maximum step must be positive and not NaN")]
     InvalidMaxStep,
     #[error("the maximum step count must be positive")]

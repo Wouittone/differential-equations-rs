@@ -105,11 +105,17 @@ pub mod algorithms {
         pub use crate::abdf2::Abdf2;
         pub use crate::adams::{Ab3, Ab4, Ab5, Abm32, Abm43, Abm54};
         pub use crate::bdf::{FBDF, Fbdf, QBDF, QNDF, Qbdf, Qndf};
+        pub use crate::imex_multistep::{
+            CNAB2, CNLF2, Cnab2, Cnlf2, IMEXEuler, IMEXEulerARK, ImexEuler, ImexEulerArk, SBDF,
+            SBDF2, SBDF3, SBDF4, Sbdf, Sbdf2, Sbdf3, Sbdf4,
+        };
         pub use crate::mebdf2::Mebdf2;
         pub use crate::qndf1::{Qbdf1, Qndf1};
         pub use crate::qndf2::{Qbdf2, Qndf2};
         pub use crate::trbdf2::Trbdf2;
-        pub use crate::variable_adams::{Vcab3, Vcab4, Vcab5, Vcabm3, Vcabm4, Vcabm5};
+        pub use crate::variable_adams::{
+            VCABM, Vcab3, Vcab4, Vcab5, Vcabm, Vcabm3, Vcabm4, Vcabm5,
+        };
     }
 
     /// Exponential Runge--Kutta and exponential Rosenbrock algorithms.

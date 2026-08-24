@@ -32,6 +32,7 @@ pub struct SplitOdeProblem<FE, FI, P> {
     initial_state: Vec<f64>,
     time_span: (f64, f64),
     parameters: P,
+    implicit_jacobian: Option<Box<JacobianFunction<P>>>,
 }
 
 #[allow(dead_code)]
@@ -49,7 +50,21 @@ impl<FE, FI, P> SplitOdeProblem<FE, FI, P> {
             initial_state: initial_state.into(),
             time_span,
             parameters,
+            implicit_jacobian: None,
         }
+    }
+
+    /// Supplies the analytic state Jacobian of the implicit component.
+    ///
+    /// The callback receives a row-major `dimension x dimension` output matrix
+    /// and must overwrite every entry with the Jacobian of the implicit right-
+    /// hand side. IMEX methods use finite differences when this is absent.
+    pub fn with_implicit_jacobian<J>(mut self, jacobian: J) -> Self
+    where
+        J: Fn(&mut [f64], &[f64], &P, f64) + 'static,
+    {
+        self.implicit_jacobian = Some(Box::new(jacobian));
+        self
     }
 
     pub fn initial_state(&self) -> &[f64] {
@@ -80,6 +95,19 @@ impl<FE, FI, P> SplitOdeProblem<FE, FI, P> {
         FI: Fn(&mut [f64], &[f64], &P, f64),
     {
         (self.implicit)(derivative, state, &self.parameters, time);
+    }
+
+    pub(crate) fn evaluate_implicit_jacobian(
+        &self,
+        jacobian: &mut [f64],
+        state: &[f64],
+        time: f64,
+    ) -> bool {
+        let Some(function) = &self.implicit_jacobian else {
+            return false;
+        };
+        function(jacobian, state, &self.parameters, time);
+        true
     }
 }
 
