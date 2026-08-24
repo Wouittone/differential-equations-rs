@@ -25,6 +25,7 @@ mod irkn_coefficients;
 mod linear;
 mod low_storage_rk;
 mod mebdf2;
+mod pdirk;
 mod prk;
 mod problem;
 mod qndf1;

@@ -85,6 +85,7 @@ pub mod algorithms {
 
         /// Singly diagonally implicit and additive implicit algorithms.
         pub mod diagonally_implicit {
+            pub use crate::pdirk::{PDIRK44, Pdirk44};
             pub use crate::sdirk::{
                 Ars222, Ars232, Ars343, Ars443, Bhr553, Cfnlirk3, Esdirk54I8L2Sa, Esdirk325L2Sa,
                 Esdirk436L2Sa2, Esdirk437L2Sa, Esdirk547L2Sa2, Esdirk659L2Sa, Hairer4, Hairer42,
