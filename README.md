@@ -126,6 +126,31 @@ The exact generated implemented/remaining algorithm inventory is maintained in
 policy and interpretation are in
 [`docs/ALGORITHM_COVERAGE.md`](docs/ALGORITHM_COVERAGE.md).
 
+Independent parameter sweeps and ensembles can run sequentially or on Rayon's
+global thread pool. Results always remain in input order, and each case keeps
+its own success or failure:
+
+```rust
+use differential_equations::algorithms::explicit::Tsit5;
+use differential_equations::{
+    ExecutionPolicy, OdeProblem, SolveOptions, solve_ensemble,
+};
+
+let outcomes = solve_ensemble(
+    [0.5, 1.0, 2.0],
+    |initial| OdeProblem::new(
+        |du: &mut [f64], u: &[f64], _: &(), _: f64| du[0] = -u[0],
+        vec![initial],
+        (0.0, 1.0),
+        (),
+    ),
+    Tsit5,
+    &SolveOptions::default(),
+    ExecutionPolicy::Parallel,
+);
+assert!(outcomes.iter().all(|case| case.result.is_ok()));
+```
+
 ## Roadmap
 
 - [x] Define the ODE problem, solver options, solution, and statistics API.
@@ -146,7 +171,7 @@ policy and interpretation are in
 - [ ] Port all remaining native OrdinaryDiffEq.jl ODE algorithm families.
 - [x] Establish matched runtime/allocation benchmarks and a reproducible
       peak-RSS cloud harness.
-- [ ] Add Rayon-backed APIs for parallel independent solve and ensemble cases.
+- [x] Add Rayon-backed APIs for parallel independent solve and ensemble cases.
 - [x] Add basic discrete/continuous callbacks and save-at behavior.
 - [ ] Complete method-specific high-order dense output, continuous-root
       interpolation, and retained post-solve dense segments.

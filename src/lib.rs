@@ -15,6 +15,7 @@ mod callback;
 mod coefficients;
 mod compatibility;
 mod composites;
+mod ensemble;
 mod explicit_rk;
 mod frk65;
 mod generated_coefficients;
@@ -54,6 +55,7 @@ mod verner;
 
 pub use callback::{CallbackAction, EventDirection};
 pub use compatibility::algorithms;
+pub use ensemble::{CaseOutcome, ExecutionPolicy, solve_batch, solve_ensemble};
 pub use problem::{MassMatrixOdeProblem, OdeProblem, SplitOdeProblem};
 pub use second_order::{
     SecondOrderOdeAlgorithm, SecondOrderOdeProblem, SecondOrderSolution, SecondOrderSolveError,
