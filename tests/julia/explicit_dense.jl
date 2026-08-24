@@ -44,7 +44,12 @@ end
             dt = 1.0,
             saveat = [0.2, 0.55, 0.9],
         )
-        @test [state[1] for state in solution.u] â‰ˆ expected_samples rtol = 0.0 atol = 3.0e-14
+        @test isapprox(
+            [state[1] for state in solution.u],
+            expected_samples;
+            rtol = 0.0,
+            atol = 3.0e-14,
+        )
 
         condition(u, _, _) = u[1] - 1.8
         callback = ContinuousCallback(condition, terminate!)
@@ -57,8 +62,8 @@ end
             save_everystep = false,
             abstol = 1.0e-13,
         )
-        @test event_solution.t[end] â‰ˆ expected_root rtol = 0.0 atol = 5.0e-12
-        @test event_solution.u[end][1] â‰ˆ 1.8 rtol = 0.0 atol = 2.0e-12
+        @test isapprox(event_solution.t[end], expected_root; rtol = 0.0, atol = 5.0e-12)
+        @test isapprox(event_solution.u[end][1], 1.8; rtol = 0.0, atol = 2.0e-12)
     end
 end
 
