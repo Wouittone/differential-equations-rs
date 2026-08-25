@@ -47,19 +47,22 @@ fn variable_adams_allocations(maximum_step: f64) -> usize {
 
 #[test]
 fn adams_solve_allocations_are_invariant_with_step_count() {
-    let one_fixed_step = fixed_adams_allocations(1.0);
+    // Compare two runs that both advance past the multistep startup phase.
+    // A single-step solve legitimately skips the fixed-size history setup and
+    // therefore is not a valid baseline for per-step allocation growth.
+    let hundred_fixed_steps = fixed_adams_allocations(0.01);
     let thousand_fixed_steps = fixed_adams_allocations(0.001);
-    assert_eq!(thousand_fixed_steps, one_fixed_step);
+    assert_eq!(thousand_fixed_steps, hundred_fixed_steps);
     assert!(
-        one_fixed_step <= 25,
-        "unexpected fixed Adams allocation count: {one_fixed_step}"
+        hundred_fixed_steps <= 25,
+        "unexpected fixed Adams allocation count: {hundred_fixed_steps}"
     );
 
-    let few_variable_steps = variable_adams_allocations(1.0);
+    let hundred_variable_steps = variable_adams_allocations(0.01);
     let many_variable_steps = variable_adams_allocations(0.001);
-    assert_eq!(many_variable_steps, few_variable_steps);
+    assert_eq!(many_variable_steps, hundred_variable_steps);
     assert!(
-        few_variable_steps <= 50,
-        "unexpected variable Adams allocation count: {few_variable_steps}"
+        hundred_variable_steps <= 50,
+        "unexpected variable Adams allocation count: {hundred_variable_steps}"
     );
 }
