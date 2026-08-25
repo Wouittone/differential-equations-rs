@@ -75,6 +75,7 @@ pub use amf::{
 };
 pub use callback::{CallbackAction, EventDirection};
 pub use compatibility::algorithms;
+pub use differential_equations_tableau_macros::define_explicit_rk_from_file;
 pub use ensemble::{CaseOutcome, ExecutionPolicy, solve_batch, solve_ensemble};
 pub use exponential_rk::ExponentialAlgorithm;
 pub use irkc::{IRKC, solve_irkc};

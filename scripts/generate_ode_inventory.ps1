@@ -151,6 +151,17 @@ function Get-RustAlgorithmImplementationNames {
             }
         }
 
+        # The public file-backed tableau macro expands in a companion
+        # proc-macro crate, so its generated OdeAlgorithm impl is not visible
+        # as Rust source under src/. Treat each validated invocation as the
+        # concrete implementation it produces.
+        foreach ($invocation in [regex]::Matches(
+                $text,
+                '(?m)\bdefine_explicit_rk_from_file!\s*\(\s*(?:pub(?:\s*\([^)]*\))?\s+)?(?<name>[A-Za-z_][A-Za-z0-9_]*)\s*,'
+            )) {
+            [void] $names.Add($invocation.Groups['name'].Value)
+        }
+
         # Compatibility aliases intentionally expose substitute algorithms and
         # are public API names, not method implementations. Legitimate spelling
         # aliases in method modules inherit the implementation of their target.

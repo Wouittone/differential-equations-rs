@@ -6,10 +6,15 @@ rust-version = "1.85"
 description = "Beta Rust implementations of Julia SciML ODE solvers"
 publish = false
 
+[workspace]
+members = ["tableau-macros"]
+resolver = "2"
+
 [features]
 allocation-metrics = []
 
 [dependencies]
+differential-equations-tableau-macros = { version = "=0.1.0-beta.1", path = "tableau-macros" }
 rayon = "1.11.0"
 thiserror = "2.0.20"
 

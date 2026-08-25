@@ -5,6 +5,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $canonicalSource = Join-Path $root 'src/generated_coefficients.rs'
+$resourceRoot = Join-Path $root 'tableaux'
 $output = Join-Path $root 'docs/coefficients_manifest.txt'
 $sourceRevision = '211142263781255a9aa2f910f6760b9f18ec29c8'
 $utf8NoBom = [Text.UTF8Encoding]::new($false)
@@ -37,6 +38,29 @@ $methods = @(
         Sort-Object
 )
 
+$resourceRecords = @()
+if (Test-Path -LiteralPath $resourceRoot -PathType Container) {
+    foreach ($resource in @(Get-ChildItem -LiteralPath $resourceRoot -Filter '*.toml' -File -Recurse | Sort-Object FullName)) {
+        $resourceSource = Normalize-Newlines ([IO.File]::ReadAllText($resource.FullName))
+        $nameMatch = [regex]::Match($resourceSource, '(?m)^\s*name\s*=\s*"(?<value>[A-Za-z][A-Za-z0-9_]*)"\s*$')
+        $orderMatch = [regex]::Match($resourceSource, '(?m)^\s*order\s*=\s*(?<value>[1-9][0-9]*)\s*$')
+        $embeddedMatch = [regex]::Match($resourceSource, '(?m)^\s*embedded_order\s*=\s*(?<value>[1-9][0-9]*)\s*$')
+        if (-not $nameMatch.Success -or -not $orderMatch.Success) {
+            throw "Resource is missing a valid name or order: $($resource.FullName)"
+        }
+        $embedded = if ($embeddedMatch.Success) { $embeddedMatch.Groups['value'].Value } else { 'none' }
+        $method = "method=$($nameMatch.Groups['value'].Value)|family=explicit|order=$($orderMatch.Groups['value'].Value)|embedded-order=$embedded"
+        $relativePath = $resource.FullName.Substring($root.Length + 1).Replace('\', '/')
+        $hash = Get-NormalizedSha256 $resourceSource
+        $resourceRecords += [pscustomobject]@{
+            Method = $method
+            Manifest = "resource=$relativePath|sha256=$hash"
+        }
+    }
+}
+
+$methods = @($methods + $resourceRecords.Method | Sort-Object)
+
 if ($methods.Count -eq 0) {
     throw "No coefficient method records found in $canonicalSource"
 }
@@ -54,11 +78,11 @@ if ($duplicates.Count -ne 0) {
 
 $sourceHash = Get-NormalizedSha256 $source
 $contentLines = @(
-    'schema-version=2'
+    'schema-version=3'
     "source-revision=$sourceRevision"
     'canonical-source=src/generated_coefficients.rs'
     "canonical-source-sha256=$sourceHash"
-) + $methods
+) + @($resourceRecords.Manifest | Sort-Object) + $methods
 $content = ($contentLines -join "`n") + "`n"
 
 if ($Check) {

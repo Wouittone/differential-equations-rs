@@ -98,6 +98,12 @@ and invalid FSAL layouts are rejected before integration. Solver workspaces use
 flat stage-major storage with separate candidate, error, and temporary arrays
 so component loops remain contiguous and SIMD-friendly.
 
+For file-based extension, `define_explicit_rk_from_file!` turns a TOML tableau
+resource into a validated zero-sized algorithm at compile time. There is no
+runtime parser or dynamic dispatch. See
+[`docs/TABLEAU_RESOURCES.md`](docs/TABLEAU_RESOURCES.md) for the schema and a
+complete downstream example.
+
 Run both test layers with:
 
 ```console
@@ -176,6 +182,8 @@ assert!(outcomes.iter().all(|case| case.result.is_ok()));
 - [x] Establish matched runtime/allocation benchmarks and a reproducible
       peak-RSS cloud harness.
 - [x] Add Rayon-backed APIs for parallel independent solve and ensemble cases.
+- [x] Add compile-time TOML tableau resources for zero-overhead downstream
+      explicit Runge--Kutta method definitions.
 - [x] Add basic discrete/continuous callbacks and save-at behavior.
 - [x] Complete the dense-output lifecycle: pinned method-specific extensions
       where upstream provides them, honest Hermite/partitioned fallbacks

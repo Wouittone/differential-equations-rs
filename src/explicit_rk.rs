@@ -5,8 +5,7 @@ use crate::generated_coefficients::{
     DP5_B as GENERATED_DP5_B, DP5_E as GENERATED_DP5_E, DP5_STAGE_TIMES, EULER_A_ROWS,
     EULER_B as GENERATED_EULER_B, EULER_STAGE_TIMES, HEUN_A_ROWS, HEUN_A2,
     HEUN_B as GENERATED_HEUN_B, HEUN_ERROR, HEUN_STAGE_TIMES, MIDPOINT_A_ROWS, MIDPOINT_A2,
-    MIDPOINT_B as GENERATED_MIDPOINT_B, MIDPOINT_ERROR, MIDPOINT_STAGE_TIMES, RK4_A_ROWS,
-    RK4_B as GENERATED_RK4_B, RK4_STAGE_TIMES,
+    MIDPOINT_B as GENERATED_MIDPOINT_B, MIDPOINT_ERROR, MIDPOINT_STAGE_TIMES,
 };
 use crate::integrator::{
     KernelCapabilities, StepEstimate, StepKernel, integrate as drive_integration,
@@ -125,10 +124,6 @@ const RALSTON_A: &[&[f64]] = &[EMPTY, RALSTON_A2];
 const RALSTON_B: &[f64] = &[0.25, 0.75];
 const RALSTON_E: &[f64] = &[-0.75, 0.75];
 const RALSTON_C: &[f64] = &[0.0, 2.0 / 3.0];
-
-const RK4_A: &[&[f64]] = RK4_A_ROWS;
-const RK4_B: &[f64] = &GENERATED_RK4_B;
-const RK4_C: &[f64] = &RK4_STAGE_TIMES;
 
 const RKM_A2: &[f64] = &[0.167_266_187_050_662];
 const RKM_A3: &[f64] = &[0.0, 0.484_574_582_244_783];
@@ -1126,16 +1121,7 @@ algorithm!(
     order = 2,
     fsal = false
 );
-algorithm!(
-    Rk4,
-    "The fixed-step classical fourth-order Runge–Kutta method.",
-    nodes = RK4_C,
-    coefficients = RK4_A,
-    weights = RK4_B,
-    error_weights = None,
-    order = 4,
-    fsal = false
-);
+crate::define_explicit_rk_from_file!(pub Rk4, "tableaux/explicit/rk4.toml", crate = crate);
 algorithm!(
     Rkm,
     "The fixed-step six-stage, fourth-order Mead–Renaut Runge–Kutta method.",

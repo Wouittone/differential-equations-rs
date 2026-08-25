@@ -10,6 +10,9 @@ algorithms.
 - in-place first-order ODE right-hand sides with vector `f64` state;
 - arbitrary vector initial conditions, parameters, forward or backward time
   spans, and optional dense analytic state Jacobians;
+- downstream explicit Runge--Kutta methods defined from validated TOML
+  resources at compile time, producing the same static `ButcherTableau` kernel
+  and zero-sized algorithm representation as built-in methods;
 - a separate in-place `SecondOrderOdeProblem` API for the `q' = v`,
   `v' = f(v, q, p, t)` specialization, with separate position and velocity
   storage; this is not yet a general `DynamicalODEProblem` with an independent

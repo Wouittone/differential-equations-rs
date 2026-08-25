@@ -1,0 +1,16 @@
+[package]
+name = "differential-equations-tableau-macros"
+version = "0.1.0-beta.1"
+edition = "2024"
+rust-version = "1.85"
+description = "Compile-time tableau resources for differential-equations"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+proc-macro2 = "1.0"
+quote = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+syn = "3.0"
+toml = "0.8"

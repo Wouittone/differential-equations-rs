@@ -1,7 +1,8 @@
-schema-version=2
+schema-version=3
 source-revision=211142263781255a9aa2f910f6760b9f18ec29c8
 canonical-source=src/generated_coefficients.rs
-canonical-source-sha256=b5e87eaf8be2b2290c59475bdfa5ad37542fe6a9208304283ab555603252e831
+canonical-source-sha256=bd3403487209ecb650f484fa8d552b0ea6af5d2f18804b9eeed37e324695951c
+resource=tableaux/explicit/rk4.toml|sha256=be700b97473c04c21f2d9aeb6c76fb4b73f553fbe51133b87a42f88a6da6d7f2
 method=AB3|family=multistep|order=3|variable-step=false
 method=ABDF2|family=multistep|order=2|variable-step=true
 method=BS3|family=explicit|order=3|embedded-order=2|fsal=true
@@ -9,7 +10,7 @@ method=DP5|family=explicit|order=5|embedded-order=4|fsal=true
 method=Euler|family=explicit|order=1|embedded-order=none
 method=Heun|family=explicit|order=2|embedded-order=1
 method=Midpoint|family=explicit|order=2|embedded-order=1
-method=RK4|family=explicit|order=4|embedded-order=none
+method=Rk4|family=explicit|order=4|embedded-order=none
 method=SDIRK2|family=sdirk|order=2|embedded-order=1
 method=VelocityVerlet|family=symplectic|order=2|embedded-order=none
 method=Vern6|family=explicit|order=6|embedded-order=5|fsal=true

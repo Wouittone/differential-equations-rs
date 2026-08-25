@@ -1,0 +1,11 @@
+schema_version = 1
+name = "FileHeun"
+description = "An adaptive Heun method defined by a downstream TOML resource."
+order = 2
+embedded_order = 1
+fsal = false
+
+nodes = ["0", "1"]
+coefficients = [[], ["1"]]
+weights = ["1/2", "1/2"]
+error_weights = ["-1/2", "1/2"]

@@ -24,6 +24,7 @@ pub mod algorithms {
     pub mod explicit {
         /// General-purpose explicit Runge--Kutta algorithms and tableau API.
         pub mod general {
+            pub use crate::define_explicit_rk_from_file;
             pub use crate::explicit_rk::{
                 Alshina2, Alshina3, Alshina6, Bs3, Bs5, ButcherTableau, Dp5, Euler, ExplicitRK,
                 ExplicitRungeKutta, Heun, Midpoint, Msrk5, Msrk6, OwrenZen3, OwrenZen4, OwrenZen5,

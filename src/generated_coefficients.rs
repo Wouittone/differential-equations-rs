@@ -20,7 +20,6 @@
 // coefficient-method: method=Euler|family=explicit|order=1|embedded-order=none
 // coefficient-method: method=Heun|family=explicit|order=2|embedded-order=1
 // coefficient-method: method=Midpoint|family=explicit|order=2|embedded-order=1
-// coefficient-method: method=RK4|family=explicit|order=4|embedded-order=none
 // coefficient-method: method=SDIRK2|family=sdirk|order=2|embedded-order=1
 // coefficient-method: method=VelocityVerlet|family=symplectic|order=2|embedded-order=none
 // coefficient-method: method=Vern6|family=explicit|order=6|embedded-order=5|fsal=true
@@ -49,20 +48,6 @@ pub(crate) const MIDPOINT_A2: &[f64] = &[0.5];
 pub(crate) const MIDPOINT_A_ROWS: &[&[f64]] = &[MIDPOINT_EMPTY, MIDPOINT_A2];
 pub(crate) const MIDPOINT_B: [f64; 2] = [0.0, 1.0];
 pub(crate) const MIDPOINT_ERROR: [f64; 2] = [-1.0, 1.0];
-
-pub(crate) const RK4_STAGE_TIMES: [f64; 4] = [0.0, 0.5, 0.5, 1.0];
-pub(crate) const RK4_A: [[f64; 4]; 4] = [
-    [0.0, 0.0, 0.0, 0.0],
-    [0.5, 0.0, 0.0, 0.0],
-    [0.0, 0.5, 0.0, 0.0],
-    [0.0, 0.0, 1.0, 0.0],
-];
-pub(crate) const RK4_EMPTY: &[f64] = &[];
-pub(crate) const RK4_A2: &[f64] = &[0.5];
-pub(crate) const RK4_A3: &[f64] = &[0.0, 0.5];
-pub(crate) const RK4_A4: &[f64] = &[0.0, 0.0, 1.0];
-pub(crate) const RK4_A_ROWS: &[&[f64]] = &[RK4_EMPTY, RK4_A2, RK4_A3, RK4_A4];
-pub(crate) const RK4_B: [f64; 4] = [1.0 / 6.0, 1.0 / 3.0, 1.0 / 3.0, 1.0 / 6.0];
 
 /// Bogacki-Shampine 3(2) explicit tableau from OrdinaryDiffEqLowOrderRK.
 /// The fourth stage is FSAL and is retained in the generated rows so the
@@ -721,17 +706,14 @@ mod tests {
         AB3_HISTORY, BS3_A_ROWS, BS3_B, BS3_E, BS3_STAGE_TIMES, DP5_A_ROWS, DP5_B, DP5_E,
         DP5_STAGE_TIMES, EULER_A, EULER_A_ROWS, EULER_B, EULER_STAGE_TIMES, HEUN_A, HEUN_A_ROWS,
         HEUN_B, HEUN_ERROR, HEUN_STAGE_TIMES, MIDPOINT_A, MIDPOINT_A_ROWS, MIDPOINT_B,
-        MIDPOINT_ERROR, MIDPOINT_STAGE_TIMES, RK4_A, RK4_B, RK4_STAGE_TIMES, SDIRK2_A, SDIRK2_B,
-        SDIRK2_B_EMBEDDED, SDIRK2_STAGE_TIMES, VELOCITY_VERLET_COMPOSITION, VERN6_A_ROWS, VERN6_B,
-        VERN6_E, VERN6_STAGE_TIMES, VERN7_A_ROWS, VERN7_B, VERN7_E, VERN7_STAGE_TIMES,
-        VERN8_A_ROWS, VERN8_B, VERN8_E, VERN8_STAGE_TIMES, VERN9_A_ROWS, VERN9_B, VERN9_E,
-        VERN9_STAGE_TIMES,
+        MIDPOINT_ERROR, MIDPOINT_STAGE_TIMES, SDIRK2_A, SDIRK2_B, SDIRK2_B_EMBEDDED,
+        SDIRK2_STAGE_TIMES, VELOCITY_VERLET_COMPOSITION, VERN6_A_ROWS, VERN6_B, VERN6_E,
+        VERN6_STAGE_TIMES, VERN7_A_ROWS, VERN7_B, VERN7_E, VERN7_STAGE_TIMES, VERN8_A_ROWS,
+        VERN8_B, VERN8_E, VERN8_STAGE_TIMES, VERN9_A_ROWS, VERN9_B, VERN9_E, VERN9_STAGE_TIMES,
     };
 
     #[test]
     fn generated_fixtures_have_expected_shapes() {
-        assert_eq!(RK4_A.len(), RK4_STAGE_TIMES.len());
-        assert_eq!(RK4_B.len(), RK4_STAGE_TIMES.len());
         assert_eq!(AB3_HISTORY.len(), 3);
         assert_eq!(BS3_A_ROWS.len(), BS3_STAGE_TIMES.len());
         assert_eq!(BS3_B.len(), BS3_STAGE_TIMES.len());
@@ -758,7 +740,6 @@ mod tests {
         assert_eq!(VERN9_E.len(), VERN9_STAGE_TIMES.len());
         assert!((VERN9_B.iter().sum::<f64>() - 1.0).abs() < 1.0e-13);
         assert_eq!(VELOCITY_VERLET_COMPOSITION, [0.5, 0.5]);
-        assert!((RK4_B.iter().sum::<f64>() - 1.0).abs() < 1.0e-15);
         assert_eq!(SDIRK2_A.len(), SDIRK2_STAGE_TIMES.len());
         assert_eq!(SDIRK2_B.len(), SDIRK2_STAGE_TIMES.len());
         assert_eq!(SDIRK2_B_EMBEDDED.len(), SDIRK2_STAGE_TIMES.len());

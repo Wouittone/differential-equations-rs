@@ -52,6 +52,7 @@ macro_rules! algorithm {
 }
 
 algorithm!(MacroMethod);
+define_explicit_rk_from_file!(pub FileMethod, "tableaux/file_method.toml");
 
 pub struct CollidingMethod;
 impl OdeAlgorithm for CollidingMethod {}
@@ -64,7 +65,7 @@ pub type NativeAlias = NativeMethod;
 
     [System.IO.File]::WriteAllText((Join-Path $sourceRoot 'compatibility.rs'), @'
 pub mod algorithms {
-    pub use crate::native::{MacroMethod, NativeAlias, NativeMethod};
+    pub use crate::native::{FileMethod, MacroMethod, NativeAlias, NativeMethod};
 
     pub mod nested {
         pub use crate::native::SimpleNestedMethod;
@@ -96,11 +97,12 @@ tested = NativeMethod()
 
     Assert-Contains $detected.rust_algorithm_implementation_names 'NativeMethod' 'A direct trait implementation was not detected.'
     Assert-Contains $detected.rust_algorithm_implementation_names 'MacroMethod' 'A macro-generated trait implementation was not detected.'
+    Assert-Contains $detected.rust_algorithm_implementation_names 'FileMethod' 'A file-backed proc-macro implementation was not detected.'
     Assert-Contains $detected.rust_algorithm_implementation_names 'NativeAlias' 'A legitimate alias of an implementation was not detected.'
     Assert-Contains $detected.rust_algorithm_implementation_names 'SimpleNestedMethod' 'A simple nested implementation was not detected.'
     Assert-NotContains $detected.rust_algorithm_implementation_names 'FacadeOnly' 'A compatibility alias was treated as an implementation.'
 
-    foreach ($name in @('NativeMethod', 'MacroMethod', 'NativeAlias', 'SimpleNestedMethod')) {
+    foreach ($name in @('NativeMethod', 'MacroMethod', 'FileMethod', 'NativeAlias', 'SimpleNestedMethod')) {
         Assert-Contains $detected.rust_implemented_public_names $name "$name was not recognized as implemented and public."
     }
     Assert-NotContains $detected.rust_implemented_public_names 'CollidingMethod' 'A private implementation was matched to a facade with the same name.'
