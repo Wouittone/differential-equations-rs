@@ -1,3 +1,5 @@
+import SciMLBase
+
 using OrdinaryDiffEqMultirate: MIS, MRAB, MREEF, MRIGARKERK22a, MRIGARKERK22b,
     MRIGARKERK33a, MRIGARKERK45a, MRIGARKESDIRK34a, MRIGARKIRK21a
 using SciMLBase: SplitODEProblem
@@ -10,7 +12,7 @@ function rust_multirate_results()
 end
 
 function multirate_problem()
-    SplitODEProblem(
+    SciMLBase.SplitODEProblem(
         (u, _, _) -> -0.9 * u,
         (u, _, _) -> -0.1 * u,
         1.0,

@@ -125,12 +125,37 @@ pub(crate) struct CollocationSegment {
     adaptive: bool,
 }
 
+/// Borrowed Taylor polynomial with normalized full-step coefficients.
+pub(crate) struct BorrowedTaylorSegment<'a> {
+    start_time: f64,
+    end_time: f64,
+    start_state: &'a [f64],
+    end_state: &'a [f64],
+    coefficients: &'a [f64],
+    dimension: usize,
+    order: usize,
+}
+
+/// Owning Taylor polynomial retained after a solve.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct TaylorSegment {
+    start_time: f64,
+    end_time: f64,
+    bound_time: f64,
+    start_state: Vec<f64>,
+    end_state: Vec<f64>,
+    coefficients: Vec<f64>,
+    dimension: usize,
+    order: usize,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum OwnedDenseSegment {
     Hermite(HermiteSegment),
     RungeKutta(RungeKuttaSegment),
     Stiff(StiffSegment),
     Collocation(CollocationSegment),
+    Taylor(TaylorSegment),
 }
 
 impl HermiteSegment {
@@ -526,6 +551,91 @@ impl CollocationSegment {
     }
 }
 
+impl<'a> BorrowedTaylorSegment<'a> {
+    pub(crate) fn new(
+        start_time: f64,
+        end_time: f64,
+        start_state: &'a [f64],
+        end_state: &'a [f64],
+        coefficients: &'a [f64],
+        order: usize,
+    ) -> Result<Self, &'static str> {
+        let dimension = start_state.len();
+        if !start_time.is_finite()
+            || !end_time.is_finite()
+            || start_time == end_time
+            || dimension == 0
+            || end_state.len() != dimension
+            || order == 0
+            || coefficients.len() < (order + 1) * dimension
+        {
+            return Err("invalid Taylor dense segment data");
+        }
+        Ok(Self {
+            start_time,
+            end_time,
+            start_state,
+            end_state,
+            coefficients,
+            dimension,
+            order,
+        })
+    }
+
+    fn contains(&self, time: f64) -> bool {
+        time.is_finite()
+            && if self.start_time < self.end_time {
+                (self.start_time..=self.end_time).contains(&time)
+            } else {
+                (self.end_time..=self.start_time).contains(&time)
+            }
+    }
+}
+
+impl TaylorSegment {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new_bounded(
+        start_time: f64,
+        end_time: f64,
+        bound_time: f64,
+        start_state: &[f64],
+        end_state: &[f64],
+        coefficients: &[f64],
+        order: usize,
+    ) -> Result<Self, &'static str> {
+        let borrowed = BorrowedTaylorSegment::new(
+            start_time,
+            end_time,
+            start_state,
+            end_state,
+            coefficients,
+            order,
+        )?;
+        if !borrowed.contains(bound_time) {
+            return Err("invalid Taylor dense segment bound");
+        }
+        Ok(Self {
+            start_time,
+            end_time,
+            bound_time,
+            start_state: start_state.to_vec(),
+            end_state: end_state.to_vec(),
+            coefficients: coefficients[..(order + 1) * borrowed.dimension].to_vec(),
+            dimension: borrowed.dimension,
+            order,
+        })
+    }
+
+    fn contains(&self, time: f64) -> bool {
+        time.is_finite()
+            && if self.start_time < self.bound_time {
+                (self.start_time..=self.bound_time).contains(&time)
+            } else {
+                (self.bound_time..=self.start_time).contains(&time)
+            }
+    }
+}
+
 #[allow(dead_code)]
 impl DenseSegment for HermiteSegment {
     fn interpolate(&self, time: f64, output: &mut [f64]) -> Result<(), &'static str> {
@@ -699,6 +809,58 @@ impl DenseSegment for CollocationSegment {
     }
 }
 
+impl DenseSegment for BorrowedTaylorSegment<'_> {
+    fn interpolate(&self, time: f64, output: &mut [f64]) -> Result<(), &'static str> {
+        if !self.contains(time) || output.len() != self.dimension {
+            return Err("dense output dimension or time mismatch");
+        }
+        if time == self.start_time {
+            output.copy_from_slice(self.start_state);
+            return Ok(());
+        }
+        if time == self.end_time {
+            output.copy_from_slice(self.end_state);
+            return Ok(());
+        }
+        interpolate_taylor(
+            self.start_time,
+            self.end_time,
+            self.start_state,
+            self.coefficients,
+            self.dimension,
+            self.order,
+            time,
+            output,
+        )
+    }
+}
+
+impl DenseSegment for TaylorSegment {
+    fn interpolate(&self, time: f64, output: &mut [f64]) -> Result<(), &'static str> {
+        if !self.contains(time) || output.len() != self.dimension {
+            return Err("dense output dimension or time mismatch");
+        }
+        if time == self.start_time {
+            output.copy_from_slice(&self.start_state);
+            return Ok(());
+        }
+        if time == self.bound_time {
+            output.copy_from_slice(&self.end_state);
+            return Ok(());
+        }
+        interpolate_taylor(
+            self.start_time,
+            self.end_time,
+            &self.start_state,
+            &self.coefficients,
+            self.dimension,
+            self.order,
+            time,
+            output,
+        )
+    }
+}
+
 impl OwnedDenseSegment {
     fn contains(&self, time: f64) -> bool {
         match self {
@@ -706,6 +868,7 @@ impl OwnedDenseSegment {
             Self::RungeKutta(segment) => segment.contains(time),
             Self::Stiff(segment) => segment.contains(time),
             Self::Collocation(segment) => segment.contains(time),
+            Self::Taylor(segment) => segment.contains(time),
         }
     }
 }
@@ -717,8 +880,36 @@ impl DenseSegment for OwnedDenseSegment {
             Self::RungeKutta(segment) => segment.interpolate(time, output),
             Self::Stiff(segment) => segment.interpolate(time, output),
             Self::Collocation(segment) => segment.interpolate(time, output),
+            Self::Taylor(segment) => segment.interpolate(time, output),
         }
     }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn interpolate_taylor(
+    start_time: f64,
+    end_time: f64,
+    start_state: &[f64],
+    coefficients: &[f64],
+    dimension: usize,
+    order: usize,
+    time: f64,
+    output: &mut [f64],
+) -> Result<(), &'static str> {
+    let theta = (time - start_time) / (end_time - start_time);
+    output.copy_from_slice(start_state);
+    for component in 0..dimension {
+        let mut value = coefficients[order * dimension + component];
+        for power in (1..order).rev() {
+            value = coefficients[power * dimension + component] + theta * value;
+        }
+        output[component] += theta * value;
+    }
+    output
+        .iter()
+        .all(|value| value.is_finite())
+        .then_some(())
+        .ok_or("non-finite Taylor interpolation")
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -997,6 +1188,11 @@ impl<'a> TrajectoryRecorder<'a> {
         debug_assert!(self.retain_dense_output);
         self.dense_segments
             .push(OwnedDenseSegment::Collocation(segment));
+    }
+
+    pub(crate) fn retain_taylor_segment(&mut self, segment: TaylorSegment) {
+        debug_assert!(self.retain_dense_output);
+        self.dense_segments.push(OwnedDenseSegment::Taylor(segment));
     }
 
     pub(crate) fn force_state(&mut self, time: f64, state: &[f64]) {

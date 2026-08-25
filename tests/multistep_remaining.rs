@@ -246,6 +246,22 @@ fn split_failures_and_analytic_jacobian_stats_are_reported() {
 }
 
 #[test]
+fn imex_multistep_dense_output_uses_total_split_derivatives() {
+    let problem = autonomous_split((0.0, 1.0));
+    let dense = solve_split(&problem, SBDF2, &fixed(0.02).with_dense_output(true)).unwrap();
+    let expected = (-1.5_f64 * 0.375).exp();
+    let dense_sample = dense.interpolate(0.375).unwrap()[0];
+    assert!(
+        (dense_sample - expected).abs() < 1.0e-3,
+        "dense={dense_sample} expected={expected}"
+    );
+
+    let saved = solve_split(&problem, SBDF2, &fixed(0.02).with_save_at([0.375, 1.0])).unwrap();
+    assert_eq!(saved.times(), &[0.375, 1.0]);
+    assert!((saved.state(0).unwrap()[0] - expected).abs() < 1.0e-3);
+}
+
+#[test]
 fn vcabm_handles_scalar_vector_nonautonomous_and_reverse_solves() {
     let scalar = OdeProblem::new(
         |du: &mut [f64], u: &[f64], _: &(), time: f64| du[0] = u[0] + time,

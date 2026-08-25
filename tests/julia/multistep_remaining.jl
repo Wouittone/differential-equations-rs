@@ -1,3 +1,5 @@
+import SciMLBase
+
 using OrdinaryDiffEqAdamsBashforthMoulton: VCABM
 using OrdinaryDiffEqBDF: IMEXEuler, IMEXEulerARK, SBDF, SBDF2, SBDF3, SBDF4
 using OrdinaryDiffEqIMEXMultistep: CNAB2, CNLF2
@@ -23,7 +25,7 @@ function remaining_split_problem()
     function explicit!(du, u, _, time)
         du[1] = 0.5 * u[1] + sin(time)
     end
-    SplitODEProblem(implicit!, explicit!, [1.0], (0.0, 1.0))
+    SciMLBase.SplitODEProblem(implicit!, explicit!, [1.0], (0.0, 1.0))
 end
 
 @testset "Remaining Adams/BDF/IMEX multistep compliance" begin

@@ -141,6 +141,24 @@ pub struct RKIP {
     cache: RefCell<ExponentialCache>,
 }
 
+/// Algorithms specialized for semilinear interaction-picture problems.
+pub trait InteractionPictureAlgorithm {
+    /// Classical solution order.
+    fn order(&self) -> usize;
+
+    /// Embedded estimator order used by adaptive control.
+    fn adaptive_order(&self) -> usize;
+
+    #[doc(hidden)]
+    fn solve_interaction_picture<G, P>(
+        &self,
+        problem: &SemilinearOdeProblem<G, P>,
+        options: &SolveOptions,
+    ) -> Result<Solution, SolveError>
+    where
+        G: Fn(&mut [f64], &[f64], &P, f64);
+}
+
 impl Default for RKIP {
     fn default() -> Self {
         Self::new(1.0e-3, 1.0, 100).expect("valid defaults")
@@ -209,8 +227,41 @@ impl RKIP {
     }
 }
 
+impl InteractionPictureAlgorithm for RKIP {
+    fn order(&self) -> usize {
+        self.order()
+    }
+
+    fn adaptive_order(&self) -> usize {
+        self.adaptive_order()
+    }
+
+    fn solve_interaction_picture<G, P>(
+        &self,
+        problem: &SemilinearOdeProblem<G, P>,
+        options: &SolveOptions,
+    ) -> Result<Solution, SolveError>
+    where
+        G: Fn(&mut [f64], &[f64], &P, f64),
+    {
+        solve_rkip_kernel(problem, self, options)
+    }
+}
+
 /// Solves a typed semilinear split with the pinned RKIP Verner 6(5) tableau.
-pub fn solve_rkip<G, P>(
+pub fn solve_rkip<G, P, A>(
+    problem: &SemilinearOdeProblem<G, P>,
+    algorithm: &A,
+    options: &SolveOptions,
+) -> Result<Solution, SolveError>
+where
+    G: Fn(&mut [f64], &[f64], &P, f64),
+    A: InteractionPictureAlgorithm,
+{
+    algorithm.solve_interaction_picture(problem, options)
+}
+
+fn solve_rkip_kernel<G, P>(
     problem: &SemilinearOdeProblem<G, P>,
     algorithm: &RKIP,
     options: &SolveOptions,
@@ -308,6 +359,18 @@ where
     }
     fn modify_step(&mut self, proposed_step: f64) -> f64 {
         self.algorithm.snap(proposed_step)
+    }
+    fn evaluate_dense_derivative(
+        &mut self,
+        _: &OdeProblem<fn(&mut [f64], &[f64], &(), f64), ()>,
+        output: &mut [f64],
+        state: &[f64],
+        time: f64,
+        stats: &mut SolverStats,
+    ) -> Result<(), SolveError> {
+        self.problem.evaluate(output, state, time);
+        stats.rhs_evaluations += 1;
+        checked(output)
     }
     fn initialize(
         &mut self,

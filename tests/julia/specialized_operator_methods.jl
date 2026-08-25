@@ -1,3 +1,5 @@
+import SciMLBase
+
 using OrdinaryDiffEqAMF: AMF, build_amf_function
 using OrdinaryDiffEqRKIP: RKIP
 using OrdinaryDiffEqStabilizedIRK: IRKC
@@ -31,14 +33,14 @@ end
 function rkip_endpoint()
     linear = MatrixOperator(reshape([-2.0], 1, 1))
     nonlinear! = (du, _, _, _) -> (du[1] = 1.0)
-    problem = SplitODEProblem(SplitFunction(linear, nonlinear!), [1.0], (0.0, 1.0))
+    problem = SciMLBase.SplitODEProblem(SplitFunction(linear, nonlinear!), [1.0], (0.0, 1.0))
     only(solve(problem, RKIP(0.1, 0.2; nb_of_cache_step = 2); adaptive = false, dt = 0.1, save_everystep = false).u[end])
 end
 
 function irkc_endpoint()
     implicit! = (du, u, _, _) -> (du[1] = -u[1])
     explicit! = (du, u, _, _) -> (du[1] = -100.0u[1])
-    problem = SplitODEProblem(SplitFunction(implicit!, explicit!), [1.0], (0.0, 0.1))
+    problem = SciMLBase.SplitODEProblem(SplitFunction(implicit!, explicit!), [1.0], (0.0, 0.1))
     estimate! = integrator -> (integrator.eigen_est = 100.0)
     only(solve(problem, IRKC(eigen_est = estimate!); adaptive = false, dt = 0.001, save_everystep = false).u[end])
 end

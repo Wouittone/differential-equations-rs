@@ -364,6 +364,7 @@ pub struct SymplecticSolution {
     velocities: Vec<f64>,
     dimension: usize,
     rhs_evaluations: usize,
+    dense_segments: Vec<SymplecticDenseSegment>,
 }
 
 impl SymplecticSolution {
@@ -412,6 +413,130 @@ impl SymplecticSolution {
     /// Number of acceleration evaluations.
     pub fn rhs_evaluations(&self) -> usize {
         self.rhs_evaluations
+    }
+
+    /// Interpolates `(position, velocity)` at a covered time.
+    ///
+    /// Retained segments use cubic-Hermite position interpolation consistent
+    /// with `q' = v` and linear velocity interpolation. Saved-only solutions
+    /// retain the stable linear compatibility fallback.
+    pub fn interpolate(&self, time: f64) -> Option<(Vec<f64>, Vec<f64>)> {
+        if !time.is_finite() || self.times.is_empty() {
+            return None;
+        }
+        for (index, &saved_time) in self.times.iter().enumerate() {
+            if time == saved_time {
+                return Some((
+                    self.position(index)?.to_vec(),
+                    self.velocity(index)?.to_vec(),
+                ));
+            }
+        }
+        for segment in &self.dense_segments {
+            if segment.contains(time) {
+                let mut position = vec![0.0; self.dimension];
+                let mut velocity = vec![0.0; self.dimension];
+                segment.interpolate(time, &mut position, &mut velocity)?;
+                return Some((position, velocity));
+            }
+        }
+        for index in 1..self.times.len() {
+            let left = self.times[index - 1];
+            let right = self.times[index];
+            if between(time, left, right) && left != right {
+                let fraction = (time - left) / (right - left);
+                let mut position = vec![0.0; self.dimension];
+                let mut velocity = vec![0.0; self.dimension];
+                interpolate(
+                    self.position(index)?,
+                    self.position(index - 1)?,
+                    fraction,
+                    &mut position,
+                );
+                interpolate(
+                    self.velocity(index)?,
+                    self.velocity(index - 1)?,
+                    fraction,
+                    &mut velocity,
+                );
+                return Some((position, velocity));
+            }
+        }
+        None
+    }
+}
+
+fn between(time: f64, left: f64, right: f64) -> bool {
+    (left <= time && time <= right) || (right <= time && time <= left)
+}
+
+#[derive(Clone, Debug, PartialEq)]
+struct SymplecticDenseSegment {
+    start_time: f64,
+    end_time: f64,
+    start_position: Vec<f64>,
+    end_position: Vec<f64>,
+    start_velocity: Vec<f64>,
+    end_velocity: Vec<f64>,
+}
+
+impl SymplecticDenseSegment {
+    fn new(
+        start_time: f64,
+        end_time: f64,
+        start_position: &[f64],
+        end_position: &[f64],
+        start_velocity: &[f64],
+        end_velocity: &[f64],
+    ) -> Self {
+        Self {
+            start_time,
+            end_time,
+            start_position: start_position.to_vec(),
+            end_position: end_position.to_vec(),
+            start_velocity: start_velocity.to_vec(),
+            end_velocity: end_velocity.to_vec(),
+        }
+    }
+
+    fn contains(&self, time: f64) -> bool {
+        between(time, self.start_time, self.end_time)
+    }
+
+    fn interpolate(&self, time: f64, position: &mut [f64], velocity: &mut [f64]) -> Option<()> {
+        if !self.contains(time)
+            || position.len() != self.start_position.len()
+            || velocity.len() != self.start_velocity.len()
+        {
+            return None;
+        }
+        if time == self.start_time {
+            position.copy_from_slice(&self.start_position);
+            velocity.copy_from_slice(&self.start_velocity);
+            return Some(());
+        }
+        if time == self.end_time {
+            position.copy_from_slice(&self.end_position);
+            velocity.copy_from_slice(&self.end_velocity);
+            return Some(());
+        }
+        let step = self.end_time - self.start_time;
+        let theta = (time - self.start_time) / step;
+        let theta2 = theta * theta;
+        let theta3 = theta2 * theta;
+        let h00 = 2.0 * theta3 - 3.0 * theta2 + 1.0;
+        let h10 = theta3 - 2.0 * theta2 + theta;
+        let h01 = -2.0 * theta3 + 3.0 * theta2;
+        let h11 = theta3 - theta2;
+        for index in 0..position.len() {
+            position[index] = h00 * self.start_position[index]
+                + h10 * step * self.start_velocity[index]
+                + h01 * self.end_position[index]
+                + h11 * step * self.end_velocity[index];
+            velocity[index] = self.start_velocity[index]
+                + theta * (self.end_velocity[index] - self.start_velocity[index]);
+        }
+        Some(())
     }
 }
 
@@ -621,6 +746,8 @@ struct SymplecticRecorder<'a> {
     save_mode: SaveMode,
     interpolation_position: Vec<f64>,
     interpolation_velocity: Vec<f64>,
+    dense_segments: Vec<SymplecticDenseSegment>,
+    retain_dense_output: bool,
 }
 
 impl<'a> SymplecticRecorder<'a> {
@@ -645,6 +772,8 @@ impl<'a> SymplecticRecorder<'a> {
             } else {
                 vec![0.0; velocity.len()]
             },
+            dense_segments: Vec::new(),
+            retain_dense_output: options.retain_dense_output,
         };
         if save_initial {
             recorder.push_unique(time, position, velocity);
@@ -663,6 +792,17 @@ impl<'a> SymplecticRecorder<'a> {
         time: f64,
         final_time: bool,
     ) {
+        let segment = SymplecticDenseSegment::new(
+            previous_time,
+            time,
+            previous_position,
+            position,
+            previous_velocity,
+            velocity,
+        );
+        if self.retain_dense_output {
+            self.dense_segments.push(segment.clone());
+        }
         if self.save_at.is_empty() {
             if self.save_mode == SaveMode::EveryStep || final_time {
                 self.push_unique(time, position, velocity);
@@ -679,19 +819,13 @@ impl<'a> SymplecticRecorder<'a> {
             if direction * (time - target) < 0.0 {
                 break;
             }
-            let fraction = (target - previous_time) / (time - previous_time);
-            interpolate(
-                position,
-                previous_position,
-                fraction,
-                &mut self.interpolation_position,
-            );
-            interpolate(
-                velocity,
-                previous_velocity,
-                fraction,
-                &mut self.interpolation_velocity,
-            );
+            segment
+                .interpolate(
+                    target,
+                    &mut self.interpolation_position,
+                    &mut self.interpolation_velocity,
+                )
+                .expect("accepted finite symplectic states must interpolate");
             self.times.push(target);
             self.positions
                 .extend_from_slice(&self.interpolation_position);
@@ -720,6 +854,7 @@ impl<'a> SymplecticRecorder<'a> {
             velocities: self.velocities,
             dimension: self.dimension,
             rhs_evaluations,
+            dense_segments: self.dense_segments,
         }
     }
 }

@@ -8,7 +8,7 @@
 //! custom nonlinear solvers, and custom linear solvers are not represented.
 
 use crate::linear::{factorize, solve_factorized};
-use crate::solution::TrajectoryRecorder;
+use crate::solution::{BorrowedHermiteSegment, HermiteSegment, TrajectoryRecorder};
 use crate::{Solution, SolveError, SolveOptions, SolverStats, SplitOdeAlgorithm, SplitOdeProblem};
 
 const MAX_NEWTON_ITERATIONS: usize = 12;
@@ -241,6 +241,8 @@ where
     evaluate_explicit(problem, &mut workspace.explicit, &state, start, &mut stats)?;
     evaluate_implicit(problem, &mut workspace.implicit, &state, start, &mut stats)?;
     let mut recorder = TrajectoryRecorder::new(&state, start, options);
+    let mut start_derivative = vec![0.0; dimension];
+    let mut end_derivative = vec![0.0; dimension];
     let mut time = start;
     let mut attempted_steps = 0;
 
@@ -291,14 +293,43 @@ where
             next_time,
             &mut stats,
         )?;
-        stats.accepted_steps += 1;
-        recorder.record_step(
-            &previous_state,
+        for index in 0..dimension {
+            start_derivative[index] = workspace.explicit[index] + workspace.implicit[index];
+            end_derivative[index] = workspace.next_explicit[index] + workspace.next_implicit[index];
+        }
+        let segment = BorrowedHermiteSegment::new(
             time,
-            &next_state,
             next_time,
-            next_time == end,
-        );
+            &previous_state,
+            &next_state,
+            &start_derivative,
+            &end_derivative,
+        )
+        .map_err(|_| SolveError::NonFiniteDerivative)?;
+        stats.accepted_steps += 1;
+        recorder
+            .record_step_dense(
+                &previous_state,
+                time,
+                &next_state,
+                next_time,
+                next_time == end,
+                &segment,
+            )
+            .map_err(|_| SolveError::NonFiniteDerivative)?;
+        if recorder.retains_dense_output() {
+            recorder.retain_hermite_segment(
+                HermiteSegment::new(
+                    time,
+                    next_time,
+                    previous_state.clone(),
+                    next_state.clone(),
+                    start_derivative.clone(),
+                    end_derivative.clone(),
+                )
+                .map_err(|_| SolveError::NonFiniteDerivative)?,
+            );
+        }
         workspace.accept(&previous_state);
         workspace.candidate = previous_state;
         state = next_state;

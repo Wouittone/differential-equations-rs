@@ -1,3 +1,5 @@
+import SciMLBase
+
 using OrdinaryDiffEqExponentialRK: EPIRK4s3A, EPIRK4s3B, EPIRK5P1, EPIRK5P2,
     EPIRK5s3, ETD1, ETD2, ETDRK2, ETDRK3, ETDRK4, EXPRB53s3, Exp4, Exprb32,
     Exprb43, HochOst4, LawsonEuler, NorsettEuler
@@ -37,7 +39,7 @@ function etd2_endpoint()
         fill!(du, 0.0)
     end
     split = SplitFunction(ScalarOperator(-2.0), nonlinear!)
-    problem = SplitODEProblem(split, [1.0], (0.0, 1.0))
+    problem = SciMLBase.SplitODEProblem(split, [1.0], (0.0, 1.0))
     solution = solve(
         problem,
         ETD2();

@@ -197,6 +197,16 @@ pub mod algorithms {
         };
     }
 
+    /// Explicit Runge--Kutta methods with SIMD-grouped stage tableaus.
+    pub mod simd {
+        pub use crate::simd_rk::{MER5v2, MER6v2, RK6v4};
+    }
+
+    /// Explicit Taylor-series algorithms.
+    pub mod taylor {
+        pub use crate::taylor::{ExplicitTaylor, ExplicitTaylor2, ExplicitTaylorAdaptiveOrder};
+    }
+
     /// Algorithms for partitioned second-order problems.
     pub mod second_order {
         /// Runge--Kutta--Nyström algorithms.
@@ -242,5 +252,7 @@ pub mod algorithms {
     pub use multistep::*;
     pub use rosenbrock::*;
     pub use second_order::*;
+    pub use simd::*;
     pub use stabilized::*;
+    pub use taylor::*;
 }

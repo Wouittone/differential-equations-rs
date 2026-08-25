@@ -92,9 +92,9 @@ impl<F, P> SecondOrderOdeProblem<F, P> {
 
     /// Adds a direction-filtered zero-crossing callback.
     ///
-    /// Roots are localized on the line segment between accepted partitioned
-    /// states. This is the interpolation used by OrdinaryDiffEq's leapfrog
-    /// variants; higher-order second-order interpolants are not implied.
+    /// Roots use the method's native extension when available; otherwise they
+    /// use a partition-aware segment with cubic-Hermite position and linear
+    /// velocity interpolation.
     pub fn with_continuous_callback_direction<C, A>(
         mut self,
         direction: EventDirection,
@@ -157,6 +157,7 @@ pub struct SecondOrderSolution {
     positions: Vec<f64>,
     dimension: usize,
     stats: SolverStats,
+    dense_segments: Vec<PartitionedDenseSegment>,
 }
 
 impl SecondOrderSolution {
@@ -207,6 +208,130 @@ impl SecondOrderSolution {
     /// as a user function.
     pub fn stats(&self) -> SolverStats {
         self.stats
+    }
+
+    /// Interpolates `(velocity, position)` at a time covered by the solution.
+    ///
+    /// When dense output was retained, positions use a cubic Hermite segment
+    /// consistent with `q' = v` and velocities use a stable linear segment.
+    /// Without retained segments, saved states are linearly interpolated.
+    pub fn interpolate(&self, time: f64) -> Option<(Vec<f64>, Vec<f64>)> {
+        if !time.is_finite() || self.times.is_empty() {
+            return None;
+        }
+        for (index, &saved_time) in self.times.iter().enumerate() {
+            if time == saved_time {
+                return Some((
+                    self.velocity(index)?.to_vec(),
+                    self.position(index)?.to_vec(),
+                ));
+            }
+        }
+        for segment in &self.dense_segments {
+            if segment.contains(time) {
+                let mut velocity = vec![0.0; self.dimension];
+                let mut position = vec![0.0; self.dimension];
+                segment.interpolate(time, &mut velocity, &mut position)?;
+                return Some((velocity, position));
+            }
+        }
+        for index in 1..self.times.len() {
+            let left = self.times[index - 1];
+            let right = self.times[index];
+            if between(time, left, right) && left != right {
+                let fraction = (time - left) / (right - left);
+                let mut velocity = vec![0.0; self.dimension];
+                let mut position = vec![0.0; self.dimension];
+                interpolate(
+                    self.velocity(index)?,
+                    self.velocity(index - 1)?,
+                    fraction,
+                    &mut velocity,
+                );
+                interpolate(
+                    self.position(index)?,
+                    self.position(index - 1)?,
+                    fraction,
+                    &mut position,
+                );
+                return Some((velocity, position));
+            }
+        }
+        None
+    }
+}
+
+fn between(time: f64, left: f64, right: f64) -> bool {
+    (left <= time && time <= right) || (right <= time && time <= left)
+}
+
+#[derive(Clone, Debug, PartialEq)]
+struct PartitionedDenseSegment {
+    start_time: f64,
+    end_time: f64,
+    start_velocity: Vec<f64>,
+    end_velocity: Vec<f64>,
+    start_position: Vec<f64>,
+    end_position: Vec<f64>,
+}
+
+impl PartitionedDenseSegment {
+    fn new(
+        start_time: f64,
+        end_time: f64,
+        start_velocity: &[f64],
+        end_velocity: &[f64],
+        start_position: &[f64],
+        end_position: &[f64],
+    ) -> Self {
+        Self {
+            start_time,
+            end_time,
+            start_velocity: start_velocity.to_vec(),
+            end_velocity: end_velocity.to_vec(),
+            start_position: start_position.to_vec(),
+            end_position: end_position.to_vec(),
+        }
+    }
+
+    fn contains(&self, time: f64) -> bool {
+        between(time, self.start_time, self.end_time)
+    }
+
+    fn interpolate(&self, time: f64, velocity: &mut [f64], position: &mut [f64]) -> Option<()> {
+        if !self.contains(time)
+            || velocity.len() != self.start_velocity.len()
+            || position.len() != self.start_position.len()
+        {
+            return None;
+        }
+        if time == self.start_time {
+            velocity.copy_from_slice(&self.start_velocity);
+            position.copy_from_slice(&self.start_position);
+            return Some(());
+        }
+        if time == self.end_time {
+            velocity.copy_from_slice(&self.end_velocity);
+            position.copy_from_slice(&self.end_position);
+            return Some(());
+        }
+        let step = self.end_time - self.start_time;
+        let theta = (time - self.start_time) / step;
+        let theta2 = theta * theta;
+        let theta3 = theta2 * theta;
+        let h00 = 2.0 * theta3 - 3.0 * theta2 + 1.0;
+        let h10 = theta3 - 2.0 * theta2 + theta;
+        let h01 = -2.0 * theta3 + 3.0 * theta2;
+        let h11 = theta3 - theta2;
+        for index in 0..velocity.len() {
+            velocity[index] = self.start_velocity[index]
+                + theta * (self.end_velocity[index] - self.start_velocity[index]);
+            position[index] = h00 * self.start_position[index]
+                + h10 * step * self.start_velocity[index]
+                + h01 * self.end_position[index]
+                + h11 * step * self.end_velocity[index];
+        }
+        Some(())
     }
 }
 
@@ -2911,8 +3036,16 @@ fn apply_step_callbacks<F, P>(
         if let Some(interpolator) = interpolator {
             interpolator(fraction, state_before_velocity, state_before_position)?;
         } else {
-            interpolate(velocity, previous_velocity, fraction, state_before_velocity);
-            interpolate(position, previous_position, fraction, state_before_position);
+            interpolate_partitioned(
+                previous_velocity,
+                previous_position,
+                velocity,
+                position,
+                end_time - previous_time,
+                fraction,
+                state_before_velocity,
+                state_before_position,
+            );
         }
         velocity.copy_from_slice(state_before_velocity);
         position.copy_from_slice(state_before_position);
@@ -2973,8 +3106,16 @@ fn locate_root<P>(
         if let Some(interpolator) = interpolator.as_deref_mut() {
             interpolator(middle, interpolation_velocity, interpolation_position)?;
         } else {
-            interpolate(velocity, previous_velocity, middle, interpolation_velocity);
-            interpolate(position, previous_position, middle, interpolation_position);
+            interpolate_partitioned(
+                previous_velocity,
+                previous_position,
+                velocity,
+                position,
+                time - previous_time,
+                middle,
+                interpolation_velocity,
+                interpolation_position,
+            );
         }
         let middle_time = previous_time + middle * (time - previous_time);
         let value = (callback.condition)(
@@ -3008,6 +3149,33 @@ fn interpolate(current: &[f64], previous: &[f64], fraction: f64, output: &mut [f
     }
 }
 
+#[allow(clippy::too_many_arguments)]
+fn interpolate_partitioned(
+    start_velocity: &[f64],
+    start_position: &[f64],
+    end_velocity: &[f64],
+    end_position: &[f64],
+    step: f64,
+    theta: f64,
+    velocity: &mut [f64],
+    position: &mut [f64],
+) {
+    let theta2 = theta * theta;
+    let theta3 = theta2 * theta;
+    let h00 = 2.0 * theta3 - 3.0 * theta2 + 1.0;
+    let h10 = theta3 - 2.0 * theta2 + theta;
+    let h01 = -2.0 * theta3 + 3.0 * theta2;
+    let h11 = theta3 - theta2;
+    for index in 0..velocity.len() {
+        velocity[index] =
+            start_velocity[index] + theta * (end_velocity[index] - start_velocity[index]);
+        position[index] = h00 * start_position[index]
+            + h10 * step * start_velocity[index]
+            + h01 * end_position[index]
+            + h11 * step * end_velocity[index];
+    }
+}
+
 fn ensure_finite_state(velocity: &[f64], position: &[f64]) -> Result<(), SolveError> {
     velocity
         .iter()
@@ -3027,6 +3195,8 @@ struct PartitionedRecorder<'a> {
     save_mode: SaveMode,
     interpolation_velocity: Vec<f64>,
     interpolation_position: Vec<f64>,
+    dense_segments: Vec<PartitionedDenseSegment>,
+    retain_dense_output: bool,
 }
 
 impl<'a> PartitionedRecorder<'a> {
@@ -3055,6 +3225,8 @@ impl<'a> PartitionedRecorder<'a> {
             } else {
                 vec![0.0; position.len()]
             },
+            dense_segments: Vec::new(),
+            retain_dense_output: options.retain_dense_output,
         };
         if save_initial {
             recorder.push_unique(time, velocity, position);
@@ -3074,6 +3246,17 @@ impl<'a> PartitionedRecorder<'a> {
         final_time: bool,
         mut interpolator: Option<&mut PartitionedInterpolator<'_>>,
     ) {
+        let generic_segment = PartitionedDenseSegment::new(
+            previous_time,
+            time,
+            previous_velocity,
+            velocity,
+            previous_position,
+            position,
+        );
+        if self.retain_dense_output {
+            self.dense_segments.push(generic_segment.clone());
+        }
         if self.save_at.is_empty() {
             if self.save_mode == SaveMode::EveryStep || final_time {
                 self.push_unique(time, velocity, position);
@@ -3097,19 +3280,13 @@ impl<'a> PartitionedRecorder<'a> {
                 )
                 .expect("accepted finite DPRKN6 stage data must interpolate");
             } else {
-                let fraction = (target - previous_time) / (time - previous_time);
-                interpolate(
-                    velocity,
-                    previous_velocity,
-                    fraction,
-                    &mut self.interpolation_velocity,
-                );
-                interpolate(
-                    position,
-                    previous_position,
-                    fraction,
-                    &mut self.interpolation_position,
-                );
+                generic_segment
+                    .interpolate(
+                        target,
+                        &mut self.interpolation_velocity,
+                        &mut self.interpolation_position,
+                    )
+                    .expect("accepted finite partitioned states must interpolate");
             }
             self.times.push(target);
             self.velocities
@@ -3143,6 +3320,7 @@ impl<'a> PartitionedRecorder<'a> {
             positions: self.positions,
             dimension: self.dimension,
             stats,
+            dense_segments: self.dense_segments,
         }
     }
 }

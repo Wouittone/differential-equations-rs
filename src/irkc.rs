@@ -110,6 +110,29 @@ where
         )
         .recover_nonlinear_and_singular_failures()
     }
+    fn evaluate_dense_derivative(
+        &mut self,
+        _: &OdeProblem<fn(&mut [f64], &[f64], &(), f64), ()>,
+        output: &mut [f64],
+        state: &[f64],
+        time: f64,
+        stats: &mut SolverStats,
+    ) -> Result<(), SolveError> {
+        let mut implicit = vec![0.0; state.len()];
+        let mut explicit = vec![0.0; state.len()];
+        evaluate_parts(
+            self.problem,
+            state,
+            time,
+            &mut implicit,
+            &mut explicit,
+            stats,
+        )?;
+        for ((output, implicit), explicit) in output.iter_mut().zip(implicit).zip(explicit) {
+            *output = implicit + explicit;
+        }
+        Ok(())
+    }
     fn initialize(
         &mut self,
         _: &OdeProblem<fn(&mut [f64], &[f64], &(), f64), ()>,

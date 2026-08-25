@@ -17,3 +17,10 @@ The regression suite covers representative implicit, multistep, stabilized,
 and low-storage kernels through the shared fallback, native FIRK and
 extrapolation retention, forward queries, exact endpoints, and callback
 discontinuity ownership.
+
+The completion audit extended the same contract to typed adapters and the
+standalone partitioned drivers. AMF, RKIP, IRKC, linear-operator, and Lie-group
+kernels override the dense-derivative hook so placeholder driver problems
+cannot produce zero slopes. IMEX multistep uses the total explicit-plus-
+implicit derivative. `SecondOrderSolution` and `SymplecticSolution` retain
+partition-aware segments and expose post-solve interpolation queries.

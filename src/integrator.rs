@@ -160,6 +160,26 @@ where
         false
     }
 
+    /// Evaluates the derivative used by the shared Hermite dense lifecycle.
+    /// Typed problem adapters that drive through a placeholder `OdeProblem`
+    /// override this hook with their real derivative representation.
+    fn evaluate_dense_derivative(
+        &mut self,
+        problem: &OdeProblem<F, P>,
+        output: &mut [f64],
+        state: &[f64],
+        time: f64,
+        stats: &mut SolverStats,
+    ) -> Result<(), SolveError> {
+        (problem.rhs)(output, state, problem.parameters(), time);
+        stats.rhs_evaluations += 1;
+        output
+            .iter()
+            .all(|value| value.is_finite())
+            .then_some(())
+            .ok_or(SolveError::NonFiniteDerivative)
+    }
+
     fn initialize(
         &mut self,
         problem: &OdeProblem<F, P>,
@@ -271,27 +291,10 @@ impl DefaultDenseState {
         }
     }
 
-    fn evaluate<F, P>(
-        problem: &OdeProblem<F, P>,
-        output: &mut [f64],
-        state: &[f64],
-        time: f64,
-        stats: &mut SolverStats,
-    ) -> Result<(), SolveError>
-    where
-        F: Fn(&mut [f64], &[f64], &P, f64),
-    {
-        (problem.rhs)(output, state, problem.parameters(), time);
-        stats.rhs_evaluations += 1;
-        output
-            .iter()
-            .all(|value| value.is_finite())
-            .then_some(())
-            .ok_or(SolveError::NonFiniteDerivative)
-    }
-
-    fn prepare<F, P>(
+    #[allow(clippy::too_many_arguments)]
+    fn prepare<F, P, K>(
         &mut self,
+        kernel: &mut K,
         problem: &OdeProblem<F, P>,
         previous_state: &[f64],
         previous_time: f64,
@@ -301,10 +304,11 @@ impl DefaultDenseState {
     ) -> Result<(), SolveError>
     where
         F: Fn(&mut [f64], &[f64], &P, f64),
+        K: StepKernel<F, P>,
     {
         self.endpoint_state.copy_from_slice(endpoint_state);
         if !self.start_derivative_valid {
-            Self::evaluate(
+            kernel.evaluate_dense_derivative(
                 problem,
                 &mut self.start_derivative,
                 previous_state,
@@ -312,7 +316,7 @@ impl DefaultDenseState {
                 stats,
             )?;
         }
-        Self::evaluate(
+        kernel.evaluate_dense_derivative(
             problem,
             &mut self.endpoint_derivative,
             &self.endpoint_state,
@@ -324,8 +328,9 @@ impl DefaultDenseState {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn apply_callbacks<F, P>(
+    fn apply_callbacks<F, P, K>(
         &mut self,
+        kernel: &mut K,
         problem: &OdeProblem<F, P>,
         previous_state: &[f64],
         previous_time: f64,
@@ -338,6 +343,7 @@ impl DefaultDenseState {
     ) -> Result<CallbackOutcome, SolveError>
     where
         F: Fn(&mut [f64], &[f64], &P, f64),
+        K: StepKernel<F, P>,
     {
         if !enabled {
             return problem.apply_step_callbacks(
@@ -352,6 +358,7 @@ impl DefaultDenseState {
         }
         let endpoint_time = *time;
         self.prepare(
+            kernel,
             problem,
             previous_state,
             previous_time,
@@ -567,6 +574,7 @@ where
                 )?
             } else {
                 default_dense.apply_callbacks(
+                    &mut kernel,
                     problem,
                     &state,
                     previous_time,
@@ -602,6 +610,7 @@ where
                 } else {
                     if !default_dense.prepared {
                         default_dense.prepare(
+                            &mut kernel,
                             problem,
                             &state,
                             previous_time,

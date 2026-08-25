@@ -162,3 +162,39 @@ fn irkc_estimates_eigenvalue_and_reports_configuration_failures() {
         SolveError::InvalidTolerance
     );
 }
+
+#[test]
+fn typed_problem_dense_segments_use_real_derivatives() {
+    fn rhs(output: &mut [f64], state: &[f64], _: &(), _: f64) {
+        output[0] = -state[0];
+    }
+    fn jacobian(output: &mut [f64], _: &[f64], _: &(), _: f64) {
+        output[0] = -1.0;
+    }
+    fn factors(factors: &mut [Vec<f64>], _: &[f64], _: &(), _: f64) {
+        factors[0][0] = -1.0;
+    }
+    let function = build_amf_function(1, rhs, jacobian, vec![vec![0.0]], factors).unwrap();
+    let amf_problem = AmfProblem::new(function, vec![1.0], (0.0, 1.0), ()).unwrap();
+    let dense = fixed(0.05).with_dense_output(true);
+    let amf = solve_amf(&amf_problem, AMF::new(Rosenbrock23), &dense).unwrap();
+    assert!((amf.interpolate(0.375).unwrap()[0] - (-0.375_f64).exp()).abs() < 5.0e-4);
+
+    fn zero(output: &mut [f64], _: &[f64], _: &(), _: f64) {
+        output.fill(0.0);
+    }
+    let rkip_problem =
+        SemilinearOdeProblem::new(vec![-1.0], zero, vec![1.0], (0.0, 1.0), ()).unwrap();
+    let rkip_algorithm = RKIP::new(0.05, 0.1, 2).unwrap();
+    let rkip = solve_rkip(&rkip_problem, &rkip_algorithm, &dense).unwrap();
+    assert!((rkip.interpolate(0.375).unwrap()[0] - (-0.375_f64).exp()).abs() < 2.0e-6);
+
+    let irkc_problem = SplitOdeProblem::new(rhs, zero, vec![1.0], (0.0, 0.1), ());
+    let irkc = solve_irkc(
+        &irkc_problem,
+        IRKC::new().with_eigenvalue_estimate(1.0),
+        &fixed(0.001).with_dense_output(true),
+    )
+    .unwrap();
+    assert!((irkc.interpolate(0.0555).unwrap()[0] - (-0.0555_f64).exp()).abs() < 2.0e-4);
+}

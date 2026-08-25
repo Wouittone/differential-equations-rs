@@ -8,9 +8,12 @@ one consistent interpolation service for `save_at`, scalar continuous-root
 localization, and opt-in retained post-solve queries. No linear or cubic
 Hermite fallback is relabeled as a method-specific high-order interpolant.
 
-The roadmap item is not complete across all implemented solver families. The
-exact residual data and architecture gaps are listed below rather than hiding
-them behind the completed explicit-method slice.
+This document records the state of the initial explicit-method wave. Its
+then-remaining gaps were subsequently closed by the shared dense lifecycle,
+native FIRK/extrapolation/Taylor retention, typed derivative hooks, and
+partition-aware second-order recorders. See
+[`shared_dense_lifecycle.md`](shared_dense_lifecycle.md) and
+[`roadmap_completion.md`](roadmap_completion.md) for the completed state.
 
 ## Files changed
 
@@ -86,7 +89,7 @@ no stage vectors. Dense samples and roots add zero RHS evaluations. Opt-in
 post-solve retention continues to clone one segment's state/stage storage per
 accepted step, as designed; the default non-retained solve path is unchanged.
 
-## Exact residual coverage gaps
+## Historical residual coverage gaps
 
 1. `Bs5` needs upstream stages 9--11 and its RKSuite polynomial rows. Those
    stages are lazy and are not represented by the current shared tableau-only

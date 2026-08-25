@@ -1,3 +1,5 @@
+import SciMLBase
+
 using OrdinaryDiffEqLowOrderRK: SplitEuler
 using SciMLBase: SplitODEProblem
 
@@ -15,7 +17,7 @@ end
     function implicit!(du, _, _, time)
         du[1] = time
     end
-    problem = SplitODEProblem(explicit!, implicit!, [1.0], (0.0, 1.0))
+    problem = SciMLBase.SplitODEProblem(explicit!, implicit!, [1.0], (0.0, 1.0))
     solution = solve(
         problem,
         SplitEuler();

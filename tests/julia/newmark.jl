@@ -1,4 +1,26 @@
 using OrdinaryDiffEqNewmark: GeneralizedAlpha, NewmarkBeta
+import SciMLBase
+
+# The pinned generic algorithm remaker reconstructs structs through keyword
+# fields. GeneralizedAlpha's public constructor names those coefficients as
+# positional arguments, so the generic path fails once differentiation loads.
+function SciMLBase.remake(
+        algorithm::GeneralizedAlpha;
+        autodiff = algorithm.autodiff,
+        kwargs...,
+    )
+    @assert isempty(kwargs)
+    GeneralizedAlpha(
+        algorithm.αm,
+        algorithm.αf,
+        algorithm.β,
+        algorithm.γ,
+        algorithm.nlsolve,
+        autodiff,
+        algorithm.thread,
+        algorithm.concrete_jac,
+    )
+end
 
 function rust_newmark_results()
     manifest = joinpath(REPOSITORY_ROOT, "Cargo.toml")
@@ -16,7 +38,7 @@ function newmark_harmonic_problem()
     function position_rate!(output, velocity, _, _, _)
         output[1] = velocity[1]
     end
-    DynamicalODEProblem(acceleration!, position_rate!, [1.0], [0.0], (0.0, 1.0))
+    SciMLBase.DynamicalODEProblem(acceleration!, position_rate!, [1.0], [0.0], (0.0, 1.0))
 end
 
 function newmark_endpoint(algorithm)

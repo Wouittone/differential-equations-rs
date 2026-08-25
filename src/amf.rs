@@ -308,6 +308,18 @@ where
             ControllerConfig::proportional(3, 0.9, 0.2, 6.0, 0.2),
         )
     }
+    fn evaluate_dense_derivative(
+        &mut self,
+        _: &OdeProblem<F, P>,
+        output: &mut [f64],
+        state: &[f64],
+        time: f64,
+        stats: &mut SolverStats,
+    ) -> Result<(), SolveError> {
+        let mut jacobian = vec![0.0; self.n * self.n];
+        let mut factors = vec![vec![0.0; self.n * self.n]; self.operator.factor_count()];
+        (self.evaluate)(output, &mut jacobian, &mut factors, state, time, stats)
+    }
     fn initialize(
         &mut self,
         _: &OdeProblem<F, P>,

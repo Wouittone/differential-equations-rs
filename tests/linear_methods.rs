@@ -204,9 +204,7 @@ fn ordinary_path_honors_save_at_and_continuous_callback_lifecycle() {
     )
     .unwrap();
     assert_eq!(saved.times(), &[0.1, 0.4, 0.9]);
-    // Linear methods currently use the driver's endpoint-linear save-at and
-    // post-solve interpolation fallback; no method-specific segment is claimed.
-    assert!(saved.interpolate(0.4).is_some());
+    assert!((saved.interpolate(0.35).unwrap()[0] - (-0.35_f64).exp()).abs() < 2.0e-5);
 
     let event_problem = OdeProblem::new(rhs, vec![1.0], (0.0, 1.0), ())
         .with_jacobian(|jacobian, _, _, _| jacobian[0] = -1.0)
@@ -229,6 +227,38 @@ fn lie_vector_representation_and_matrix_representation_are_checked() {
         solve_lie_group(&vector, CayleyEuler, &fixed(0.1)).unwrap_err(),
         SolveError::InvalidTableau
     );
+}
+
+#[test]
+fn typed_linear_and_matrix_group_paths_retain_real_dense_slopes() {
+    let vector =
+        LinearOperatorProblem::new(rotation_operator, vec![1.0, 0.0], (0.0, 1.0), ()).unwrap();
+    let vector = solve_linear_operator(
+        &vector,
+        MagnusMidpoint,
+        &fixed(0.05).with_dense_output(true),
+    )
+    .unwrap();
+    let sample = vector.interpolate(0.375).unwrap();
+    assert!((sample[0] - 0.375_f64.cos()).abs() < 2.0e-6);
+    assert!((sample[1] - 0.375_f64.sin()).abs() < 2.0e-6);
+
+    let matrix = LieGroupProblem::matrix(
+        rotation_operator,
+        vec![1.0, 0.0, 0.0, 0.0],
+        2,
+        (0.0, 1.0),
+        (),
+    )
+    .unwrap();
+    let matrix =
+        solve_lie_group(&matrix, CayleyEuler, &fixed(0.05).with_dense_output(true)).unwrap();
+    let sample = matrix.interpolate(0.375).unwrap();
+    let cosine = 0.375_f64.cos();
+    let sine = 0.375_f64.sin();
+    assert!((sample[0] - cosine * cosine).abs() < 3.0e-4);
+    assert!((sample[1] - cosine * sine).abs() < 3.0e-4);
+    assert!((sample[3] - sine * sine).abs() < 3.0e-4);
 }
 
 fn autonomous_group_error<A: differential_equations::LinearOperatorAlgorithm>(

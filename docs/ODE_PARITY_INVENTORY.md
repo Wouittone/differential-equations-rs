@@ -20,9 +20,9 @@ and [ode_algorithm_inventory.csv](ode_algorithm_inventory.csv).
 - In-scope regular ODE names: **345**
   (333 canonical/composite constructors and
   12 public aliases).
-- Implemented and detected in matched Julia tests: **264**.
+- Implemented and detected in matched Julia tests: **345**.
 - Implemented without a detected matched Julia test: **0**.
-- Missing in-scope public names: **81**.
+- Missing in-scope public names: **0**.
 - Explicitly excluded public names: **4**.
 
 Aliases are public parity obligations but do not require a second numerical kernel.
@@ -31,35 +31,35 @@ Aliases are public parity obligations but do not require a second numerical kern
 
 | Family | In scope | Implemented + Julia-tested | Implemented, Julia test not detected | Missing Rust implementation |
 | --- | ---: | ---: | ---: | ---: |
-| Adams multistep | 13 | 12 | 0 | 1 |
-| approximate-matrix-factorization wrapper | 1 | 0 | 0 | 1 |
+| Adams multistep | 13 | 13 | 0 | 0 |
+| approximate-matrix-factorization wrapper | 1 | 1 | 0 | 0 |
 | automatic/default composite | 2 | 2 | 0 | 0 |
-| BDF and IMEX multistep | 15 | 9 | 0 | 6 |
+| BDF and IMEX multistep | 15 | 15 | 0 | 0 |
 | explicit Runge-Kutta | 2 | 2 | 0 | 0 |
-| exponential Runge-Kutta | 17 | 0 | 0 | 17 |
-| extrapolation | 7 | 0 | 0 | 7 |
-| fully implicit Runge-Kutta | 5 | 0 | 0 | 5 |
+| exponential Runge-Kutta | 17 | 17 | 0 | 0 |
+| extrapolation | 7 | 7 | 0 | 0 |
+| fully implicit Runge-Kutta | 5 | 5 | 0 | 0 |
 | high-order explicit Runge-Kutta | 16 | 16 | 0 | 0 |
-| IMEX multistep | 2 | 0 | 0 | 2 |
-| linear and Lie-group methods | 18 | 0 | 0 | 18 |
+| IMEX multistep | 2 | 2 | 0 | 0 |
+| linear and Lie-group methods | 18 | 18 | 0 | 0 |
 | low-order explicit Runge-Kutta | 28 | 28 | 0 | 0 |
 | low-storage explicit Runge-Kutta | 44 | 44 | 0 | 0 |
-| multirate and MRI-GARK | 9 | 0 | 0 | 9 |
-| Nordsieck variable-order multistep | 4 | 0 | 0 | 4 |
-| parallel diagonally implicit Runge-Kutta | 1 | 0 | 0 | 1 |
+| multirate and MRI-GARK | 9 | 9 | 0 | 0 |
+| Nordsieck variable-order multistep | 4 | 4 | 0 | 0 |
+| parallel diagonally implicit Runge-Kutta | 1 | 1 | 0 | 0 |
 | parallel explicit Runge-Kutta | 1 | 1 | 0 | 0 |
 | QPRK explicit Runge-Kutta | 1 | 1 | 0 | 0 |
 | Rosenbrock and Rosenbrock-W | 40 | 40 | 0 | 0 |
-| Runge-Kutta interval prediction | 1 | 0 | 0 | 1 |
+| Runge-Kutta interval prediction | 1 | 1 | 0 | 0 |
 | Runge-Kutta-Nystrom | 17 | 17 | 0 | 0 |
 | SDIRK, ESDIRK, and additive IMEX RK | 39 | 39 | 0 | 0 |
-| second-order structural dynamics | 2 | 0 | 0 | 2 |
-| SIMD explicit Runge-Kutta | 3 | 0 | 0 | 3 |
+| second-order structural dynamics | 2 | 2 | 0 | 0 |
+| SIMD explicit Runge-Kutta | 3 | 3 | 0 | 0 |
 | stabilized explicit Runge-Kutta | 13 | 13 | 0 | 0 |
-| stabilized implicit Runge-Kutta | 1 | 0 | 0 | 1 |
+| stabilized implicit Runge-Kutta | 1 | 1 | 0 | 0 |
 | strong-stability-preserving Runge-Kutta | 21 | 21 | 0 | 0 |
 | symplectic and partitioned Runge-Kutta | 18 | 18 | 0 | 0 |
-| Taylor series | 3 | 0 | 0 | 3 |
+| Taylor series | 3 | 3 | 0 | 0 |
 | user-tableau explicit Runge-Kutta | 1 | 1 | 0 | 0 |
 
 ## Missing Rust solver names by family
@@ -68,134 +68,7 @@ This is the implementation handoff list. Each entry remains in scope and lacks
 a detected public Rust algorithm implementation. Required features and exact
 upstream source locations are available in the JSON/CSV records.
 
-### Adams multistep (1)
 
-- `VCABM` — OrdinaryDiffEqAdamsBashforthMoulton; ODEProblem
-
-### approximate-matrix-factorization wrapper (1)
-
-- `AMF` — OrdinaryDiffEqAMF; ODEProblem with structured ODEFunction
-
-### BDF and IMEX multistep (6)
-
-- `IMEXEuler` — OrdinaryDiffEqBDF; ODEProblem or SplitODEProblem
-- `IMEXEulerARK` — OrdinaryDiffEqBDF; ODEProblem or SplitODEProblem
-- `SBDF` — OrdinaryDiffEqBDF; ODEProblem or SplitODEProblem
-- `SBDF2` — OrdinaryDiffEqBDF; ODEProblem or SplitODEProblem
-- `SBDF3` — OrdinaryDiffEqBDF; ODEProblem or SplitODEProblem
-- `SBDF4` — OrdinaryDiffEqBDF; ODEProblem or SplitODEProblem
-
-### exponential Runge-Kutta (17)
-
-- `EPIRK4s3A` — OrdinaryDiffEqExponentialRK; ODEProblem or SplitODEProblem
-- `EPIRK4s3B` — OrdinaryDiffEqExponentialRK; ODEProblem or SplitODEProblem
-- `EPIRK5P1` — OrdinaryDiffEqExponentialRK; ODEProblem or SplitODEProblem
-- `EPIRK5P2` — OrdinaryDiffEqExponentialRK; ODEProblem or SplitODEProblem
-- `EPIRK5s3` — OrdinaryDiffEqExponentialRK; ODEProblem or SplitODEProblem
-- `ETD1` — OrdinaryDiffEqExponentialRK; ODEProblem or SplitODEProblem
-- `ETD2` — OrdinaryDiffEqExponentialRK; ODEProblem or SplitODEProblem
-- `ETDRK2` — OrdinaryDiffEqExponentialRK; ODEProblem or SplitODEProblem
-- `ETDRK3` — OrdinaryDiffEqExponentialRK; ODEProblem or SplitODEProblem
-- `ETDRK4` — OrdinaryDiffEqExponentialRK; ODEProblem or SplitODEProblem
-- `Exp4` — OrdinaryDiffEqExponentialRK; ODEProblem or SplitODEProblem
-- `Exprb32` — OrdinaryDiffEqExponentialRK; ODEProblem or SplitODEProblem
-- `Exprb43` — OrdinaryDiffEqExponentialRK; ODEProblem or SplitODEProblem
-- `EXPRB53s3` — OrdinaryDiffEqExponentialRK; ODEProblem or SplitODEProblem
-- `HochOst4` — OrdinaryDiffEqExponentialRK; ODEProblem or SplitODEProblem
-- `LawsonEuler` — OrdinaryDiffEqExponentialRK; ODEProblem or SplitODEProblem
-- `NorsettEuler` — OrdinaryDiffEqExponentialRK; ODEProblem or SplitODEProblem
-
-### extrapolation (7)
-
-- `AitkenNeville` — OrdinaryDiffEqExtrapolation; ODEProblem
-- `ExtrapolationMidpointDeuflhard` — OrdinaryDiffEqExtrapolation; ODEProblem
-- `ExtrapolationMidpointHairerWanner` — OrdinaryDiffEqExtrapolation; ODEProblem
-- `ImplicitDeuflhardExtrapolation` — OrdinaryDiffEqExtrapolation; ODEProblem
-- `ImplicitEulerBarycentricExtrapolation` — OrdinaryDiffEqExtrapolation; ODEProblem
-- `ImplicitEulerExtrapolation` — OrdinaryDiffEqExtrapolation; ODEProblem
-- `ImplicitHairerWannerExtrapolation` — OrdinaryDiffEqExtrapolation; ODEProblem
-
-### fully implicit Runge-Kutta (5)
-
-- `AdaptiveRadau` — OrdinaryDiffEqFIRK; ODEProblem
-- `GaussLegendre` — OrdinaryDiffEqFIRK; ODEProblem
-- `RadauIIA3` — OrdinaryDiffEqFIRK; ODEProblem
-- `RadauIIA5` — OrdinaryDiffEqFIRK; ODEProblem
-- `RadauIIA9` — OrdinaryDiffEqFIRK; ODEProblem
-
-### IMEX multistep (2)
-
-- `CNAB2` — OrdinaryDiffEqIMEXMultistep; ODEProblem or SplitODEProblem
-- `CNLF2` — OrdinaryDiffEqIMEXMultistep; ODEProblem or SplitODEProblem
-
-### linear and Lie-group methods (18)
-
-- `CayleyEuler` — OrdinaryDiffEqLinear; ODEProblem with linear/operator ODEFunction
-- `CG2` — OrdinaryDiffEqLinear; ODEProblem with linear/operator ODEFunction
-- `CG3` — OrdinaryDiffEqLinear; ODEProblem with linear/operator ODEFunction
-- `CG4a` — OrdinaryDiffEqLinear; ODEProblem with linear/operator ODEFunction
-- `LieEuler` — OrdinaryDiffEqLinear; ODEProblem with linear/operator ODEFunction
-- `LieRK4` — OrdinaryDiffEqLinear; ODEProblem with linear/operator ODEFunction
-- `LinearExponential` — OrdinaryDiffEqLinear; ODEProblem with linear/operator ODEFunction
-- `MagnusAdapt4` — OrdinaryDiffEqLinear; ODEProblem with linear/operator ODEFunction
-- `MagnusGauss4` — OrdinaryDiffEqLinear; ODEProblem with linear/operator ODEFunction
-- `MagnusGL4` — OrdinaryDiffEqLinear; ODEProblem with linear/operator ODEFunction
-- `MagnusGL6` — OrdinaryDiffEqLinear; ODEProblem with linear/operator ODEFunction
-- `MagnusGL8` — OrdinaryDiffEqLinear; ODEProblem with linear/operator ODEFunction
-- `MagnusLeapfrog` — OrdinaryDiffEqLinear; ODEProblem with linear/operator ODEFunction
-- `MagnusMidpoint` — OrdinaryDiffEqLinear; ODEProblem with linear/operator ODEFunction
-- `MagnusNC6` — OrdinaryDiffEqLinear; ODEProblem with linear/operator ODEFunction
-- `MagnusNC8` — OrdinaryDiffEqLinear; ODEProblem with linear/operator ODEFunction
-- `RKMK2` — OrdinaryDiffEqLinear; ODEProblem with linear/operator ODEFunction
-- `RKMK4` — OrdinaryDiffEqLinear; ODEProblem with linear/operator ODEFunction
-
-### multirate and MRI-GARK (9)
-
-- `MIS` — OrdinaryDiffEqMultirate; SplitODEProblem
-- `MRAB` — OrdinaryDiffEqMultirate; SplitODEProblem
-- `MREEF` — OrdinaryDiffEqMultirate; SplitODEProblem
-- `MRIGARKERK22a` — OrdinaryDiffEqMultirate; SplitODEProblem
-- `MRIGARKERK22b` — OrdinaryDiffEqMultirate; SplitODEProblem
-- `MRIGARKERK33a` — OrdinaryDiffEqMultirate; SplitODEProblem
-- `MRIGARKERK45a` — OrdinaryDiffEqMultirate; SplitODEProblem
-- `MRIGARKESDIRK34a` — OrdinaryDiffEqMultirate; SplitODEProblem
-- `MRIGARKIRK21a` — OrdinaryDiffEqMultirate; SplitODEProblem
-
-### Nordsieck variable-order multistep (4)
-
-- `AN5` — OrdinaryDiffEqNordsieck; ODEProblem
-- `JVODE` — OrdinaryDiffEqNordsieck; ODEProblem
-- `JVODE_Adams` — OrdinaryDiffEqNordsieck; ODEProblem
-- `JVODE_BDF` — OrdinaryDiffEqNordsieck; ODEProblem
-
-### parallel diagonally implicit Runge-Kutta (1)
-
-- `PDIRK44` — OrdinaryDiffEqPDIRK; ODEProblem
-
-### Runge-Kutta interval prediction (1)
-
-- `RKIP` — OrdinaryDiffEqRKIP; ODEProblem
-
-### second-order structural dynamics (2)
-
-- `GeneralizedAlpha` — OrdinaryDiffEqNewmark; SecondOrderODEProblem
-- `NewmarkBeta` — OrdinaryDiffEqNewmark; SecondOrderODEProblem
-
-### SIMD explicit Runge-Kutta (3)
-
-- `MER5v2` — OrdinaryDiffEqSIMDRK; ODEProblem
-- `MER6v2` — OrdinaryDiffEqSIMDRK; ODEProblem
-- `RK6v4` — OrdinaryDiffEqSIMDRK; ODEProblem
-
-### stabilized implicit Runge-Kutta (1)
-
-- `IRKC` — OrdinaryDiffEqStabilizedIRK; ODEProblem
-
-### Taylor series (3)
-
-- `ExplicitTaylor` — OrdinaryDiffEqTaylorSeries; ODEProblem
-- `ExplicitTaylor2` — OrdinaryDiffEqTaylorSeries; ODEProblem
-- `ExplicitTaylorAdaptiveOrder` — OrdinaryDiffEqTaylorSeries; ODEProblem
 
 ## Rust implementations without detected Julia compliance
 

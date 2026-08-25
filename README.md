@@ -171,13 +171,16 @@ assert!(outcomes.iter().all(|case| case.result.is_ok()));
       compliance environment.
 - [x] Expand to variable Adams, Verner, low-storage/SSP RK, TRBDF2,
       Rosenbrock/Rodas, and initial second-order symplectic families.
-- [ ] Port all remaining native OrdinaryDiffEq.jl ODE algorithm families.
+- [x] Port every in-scope native OrdinaryDiffEq.jl ODE algorithm family and
+      verify all 345 included public names against the pinned Julia revision.
 - [x] Establish matched runtime/allocation benchmarks and a reproducible
       peak-RSS cloud harness.
 - [x] Add Rayon-backed APIs for parallel independent solve and ensemble cases.
 - [x] Add basic discrete/continuous callbacks and save-at behavior.
-- [ ] Complete method-specific high-order dense output, continuous-root
-      interpolation, and retained post-solve dense segments.
+- [x] Complete the dense-output lifecycle: pinned method-specific extensions
+      where upstream provides them, honest Hermite/partitioned fallbacks
+      elsewhere, continuous-root interpolation, and retained post-solve
+      segments.
 - [x] Select `Rodas5P` as the default stiff solver for the current regular-ODE
       scope from the matched stiff-candidate benchmark slice.
 

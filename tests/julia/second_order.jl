@@ -1,3 +1,5 @@
+import SciMLBase
+
 using OrdinaryDiffEqSymplecticRK:
     CalvoSanz4,
     CandyRoz4,
@@ -33,7 +35,7 @@ function oscillator_endpoint(algorithm)
     function acceleration!(dv, _, q, _, _)
         dv[1] = -q[1]
     end
-    problem = SecondOrderODEProblem(acceleration!, [0.0], [1.0], (0.0, 1.0))
+    problem = SciMLBase.SecondOrderODEProblem(acceleration!, [0.0], [1.0], (0.0, 1.0))
     solution = solve(
         problem,
         algorithm;
@@ -49,7 +51,7 @@ function velocity_dependent_endpoint()
     function acceleration!(dv, v, q, _, time)
         dv[1] = -q[1] - 0.2 * v[1] + 0.1 * time
     end
-    problem = SecondOrderODEProblem(acceleration!, [0.25], [1.0], (0.0, 1.0))
+    problem = SciMLBase.SecondOrderODEProblem(acceleration!, [0.25], [1.0], (0.0, 1.0))
     solution = solve(
         problem,
         LeapfrogDriftKickDrift();

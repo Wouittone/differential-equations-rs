@@ -22,8 +22,9 @@ algorithms.
   factorizations, and Rosenbrock differentiation data after callback effects;
 - ordered `save_at` sampling in either integration direction;
 - opt-in retained dense segments and post-solve [`Solution::interpolate`]
-  queries for shared explicit Runge--Kutta solvers; endpoint Hermite segments
-  are used when no special extension is available;
+  queries across every first-order driver; endpoint Hermite segments use the
+  real problem derivative when no special upstream extension is available,
+  including typed AMF, semilinear RKIP, split IRKC, and linear/Lie adapters;
 - pinned method-specific continuous extensions for Tsit5, DP5, BS5,
   Owren--Zennaro 3/4/5, and Verner 6/7/8/9, shared consistently by `save_at`,
   scalar continuous event localization, and retained post-solve queries; BS5
@@ -36,8 +37,14 @@ algorithms.
   for Rodas4/42/4P/4P2/4PW, Rodas5/5P/5Pe/5Pr, Rodas6P, Rodas23W, Rodas3P,
   and Tsit5DA; implemented Rosenbrock tableaus with an empty upstream `H`
   matrix retain the pinned cubic-Hermite fallback instead;
-- the pinned DPRKN6 continuous extension for in-solve second-order sampling and
-  scalar continuous event localization;
+- the pinned DPRKN6 continuous extension for second-order sampling and scalar
+  continuous event localization, plus retained partition-aware segments for
+  the general RKN, structural, and symplectic solution APIs; positions use
+  cubic Hermite data consistent with `q' = v`, and velocities use the honest
+  endpoint-linear fallback where no acceleration extension exists;
+- native retained Taylor polynomials, FIRK collocation polynomials,
+  extrapolation segments, and total-derivative Hermite output for split IMEX
+  multistep and multirate solvers;
 - implicit identity-mass structural dynamics through adaptive/fixed
   Newmark--beta and generalized-alpha methods;
 - matched OrdinaryDiffEq.jl compliance cases for discrete state effects,
@@ -45,11 +52,6 @@ algorithms.
 
 ## Remaining feature work
 
-- method-specific high-order dense interpolation for the remaining families.
-  Multistep, SDIRK/TRBDF2, stabilized, split, symplectic, and remaining second-order methods still need
-  family-specific accepted-segment hooks. Solvers without such a hook retain
-  their existing endpoint fallback and must not be described as having a
-  method-specific high-order extension;
 - Julia's full integrator callback interface, including parameter and step-size
   mutation, `save_positions`, callback initialization/finalization hooks,
   callback sets, vector continuous callbacks, preset-time stops, and the

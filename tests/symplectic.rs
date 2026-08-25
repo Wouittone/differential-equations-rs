@@ -154,6 +154,70 @@ fn work_count_is_one_acceleration_evaluation_per_stage() {
 }
 
 #[test]
+fn retained_partitioned_segments_cover_forward_and_backward_queries() {
+    let forward = solve_symplectic(
+        &oscillator(),
+        Yoshida6,
+        &SolveOptions {
+            retain_dense_output: true,
+            ..options(0.05)
+        },
+    )
+    .unwrap();
+    let (position, velocity) = forward.interpolate(0.375).unwrap();
+    assert!((position[0] - 0.375_f64.cos()).abs() < 2.0e-6);
+    assert!((velocity[0] + 0.375_f64.sin()).abs() < 2.0e-4);
+
+    let backward_problem = SecondOrderOdeProblem::new(
+        |output: &mut [f64], _: &[f64], position: &[f64], _: &(), _: f64| {
+            output[0] = -position[0];
+        },
+        vec![-1.0_f64.sin()],
+        vec![1.0_f64.cos()],
+        (1.0, 0.0),
+        (),
+    );
+    let backward = solve_symplectic(
+        &backward_problem,
+        Yoshida6,
+        &SolveOptions {
+            retain_dense_output: true,
+            ..options(0.05)
+        },
+    )
+    .unwrap();
+    let (position, velocity) = backward.interpolate(0.375).unwrap();
+    assert!((position[0] - 0.375_f64.cos()).abs() < 2.0e-6);
+    assert!((velocity[0] + 0.375_f64.sin()).abs() < 2.0e-4);
+    assert!(backward.interpolate(-0.1).is_none());
+}
+
+#[test]
+fn save_at_uses_position_velocity_consistent_interpolation() {
+    let problem = SecondOrderOdeProblem::new(
+        |output: &mut [f64], _: &[f64], _: &[f64], _: &(), _: f64| output[0] = 1.0,
+        vec![0.0],
+        vec![0.0],
+        (0.0, 1.0),
+        (),
+    );
+    let solution = solve_symplectic(
+        &problem,
+        PseudoVerletLeapfrog,
+        &SolveOptions {
+            adaptive: false,
+            initial_step: Some(1.0),
+            max_step: 1.0,
+            save_at: vec![0.5, 1.0],
+            ..SolveOptions::default()
+        },
+    )
+    .unwrap();
+    assert!((solution.position(0).unwrap()[0] - 0.125).abs() < 1.0e-14);
+    assert!((solution.velocity(0).unwrap()[0] - 0.5).abs() < 1.0e-14);
+}
+
+#[test]
 fn wrapped_errors_preserve_their_source() {
     let error = SymplecticSolveError::from(SolveError::InvalidInitialStep);
 

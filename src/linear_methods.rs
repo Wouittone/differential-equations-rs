@@ -405,6 +405,19 @@ where
         )
     }
 
+    fn evaluate_dense_derivative(
+        &mut self,
+        _: &OdeProblem<F, P>,
+        output: &mut [f64],
+        state: &[f64],
+        time: f64,
+        stats: &mut SolverStats,
+    ) -> OperatorResult {
+        (self.evaluate)(&mut self.operator, state, time, stats)?;
+        output.copy_from_slice(&mat_vec(&self.operator, state));
+        finite_operator(output)
+    }
+
     fn initialize(
         &mut self,
         _: &OdeProblem<F, P>,
@@ -965,6 +978,22 @@ where
 {
     fn capabilities(&self) -> KernelCapabilities {
         KernelCapabilities::new(false, 2)
+    }
+    fn evaluate_dense_derivative(
+        &mut self,
+        _: &OdeProblem<F, P>,
+        output: &mut [f64],
+        state: &[f64],
+        time: f64,
+        stats: &mut SolverStats,
+    ) -> OperatorResult {
+        (self.evaluate)(&mut self.generator, state, time, stats)?;
+        let left = mat_mul(&self.generator, state, self.dimension);
+        let right = mat_mul(state, &self.generator, self.dimension);
+        for ((output, left), right) in output.iter_mut().zip(left).zip(right) {
+            *output = left - right;
+        }
+        finite_operator(output)
     }
     fn initialize(
         &mut self,

@@ -1,3 +1,5 @@
+import SciMLBase
+
 using OrdinaryDiffEqRKN:
     DPRKN4,
     DPRKN5,
@@ -30,7 +32,7 @@ function rkn_oscillator_endpoint(algorithm)
     function acceleration!(dv, _, q, _, _)
         dv[1] = -q[1]
     end
-    problem = SecondOrderODEProblem(acceleration!, [0.0], [1.0], (0.0, 1.0))
+    problem = SciMLBase.SecondOrderODEProblem(acceleration!, [0.0], [1.0], (0.0, 1.0))
     solution = solve(problem, algorithm; adaptive = false, dt = 0.01, save_everystep = false)
     [only(solution.u[end].x[1]), only(solution.u[end].x[2])]
 end
@@ -39,7 +41,7 @@ function irkn_oscillator_endpoint(algorithm)
     function acceleration!(dv, _, q, _, _)
         dv[1] = -q[1]
     end
-    problem = SecondOrderODEProblem(acceleration!, [0.0], [1.0], (0.0, 1.0))
+    problem = SciMLBase.SecondOrderODEProblem(acceleration!, [0.0], [1.0], (0.0, 1.0))
     solution = solve(problem, algorithm; adaptive = false, dt = 0.125, save_everystep = false)
     [only(solution.u[end].x[1]), only(solution.u[end].x[2])]
 end
@@ -48,7 +50,7 @@ function rkn_adaptive_oscillator_endpoint(algorithm)
     function acceleration!(dv, _, q, _, _)
         dv[1] = -q[1]
     end
-    problem = SecondOrderODEProblem(acceleration!, [0.0], [1.0], (0.0, 1.0))
+    problem = SciMLBase.SecondOrderODEProblem(acceleration!, [0.0], [1.0], (0.0, 1.0))
     solution = solve(
         problem, algorithm; adaptive = true, dt = 0.5, dtmax = 0.5,
         abstol = 1.0e-10, reltol = 1.0e-10, save_everystep = false,
@@ -60,7 +62,7 @@ function rkn_velocity_dependent_endpoint(algorithm = Nystrom4(); adaptive = fals
     function acceleration!(dv, v, q, _, time)
         dv[1] = -q[1] - 0.2 * v[1] + 0.1 * time
     end
-    problem = SecondOrderODEProblem(acceleration!, [0.25], [1.0], (0.0, 1.0))
+    problem = SciMLBase.SecondOrderODEProblem(acceleration!, [0.25], [1.0], (0.0, 1.0))
     solution = solve(
         problem, algorithm; adaptive, dt = adaptive ? 0.5 : 0.01, dtmax = 0.5,
         abstol = 1.0e-10, reltol = 1.0e-10, save_everystep = false,
@@ -72,7 +74,7 @@ function dprkn6_dense_midpoint()
     function acceleration!(dv, _, q, _, _)
         dv[1] = -q[1]
     end
-    problem = SecondOrderODEProblem(acceleration!, [0.0], [1.0], (0.0, 1.0))
+    problem = SciMLBase.SecondOrderODEProblem(acceleration!, [0.0], [1.0], (0.0, 1.0))
     solution = solve(
         problem, DPRKN6(); adaptive = false, dt = 1.0,
         saveat = [0.0, 0.5, 1.0], save_everystep = false,

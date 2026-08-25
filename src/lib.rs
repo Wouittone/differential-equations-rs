@@ -52,6 +52,8 @@ mod sdirk;
 mod sdirk_cash4;
 mod second_order;
 mod semilinear;
+mod simd_rk;
+mod simd_rk_coefficients;
 mod solution;
 mod solver;
 mod split_euler;
@@ -62,6 +64,7 @@ mod ssprk_msvs;
 mod stabilized;
 mod stabilized_coefficients;
 mod symplectic;
+mod taylor;
 mod trbdf2;
 mod tsit5;
 mod variable_adams;
@@ -80,7 +83,7 @@ pub use linear_methods::{
 };
 pub use operator_problem::{LieGroupProblem, LinearOperatorProblem};
 pub use problem::{MassMatrixOdeProblem, OdeProblem, SplitOdeProblem};
-pub use rkip::{RKIP, RkipCacheStats, solve_rkip};
+pub use rkip::{InteractionPictureAlgorithm, RKIP, RkipCacheStats, solve_rkip};
 pub use second_order::{
     SecondOrderOdeAlgorithm, SecondOrderOdeProblem, SecondOrderSolution, SecondOrderSolveError,
     solve_second_order,
