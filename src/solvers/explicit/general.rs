@@ -1,7 +1,7 @@
-use super::dense_coefficients::{BS5_DENSE, BS5_EXTRA_STAGES};
-use super::generated_coefficients::{
-    BS3_A_ROWS, BS3_B as GENERATED_BS3_B, BS3_E as GENERATED_BS3_E, BS3_STAGE_TIMES, DP5_A_ROWS,
-    DP5_B as GENERATED_DP5_B, DP5_E as GENERATED_DP5_E, DP5_STAGE_TIMES,
+use super::coefficient_data::{
+    BS3_A_ROWS, BS3_B as GENERATED_BS3_B, BS3_E as GENERATED_BS3_E, BS3_STAGE_TIMES, BS5_DENSE,
+    BS5_EXTRA_STAGES, DP5_A_ROWS, DP5_B as GENERATED_DP5_B, DP5_E as GENERATED_DP5_E,
+    DP5_STAGE_TIMES,
 };
 use crate::callback::CallbackOutcome;
 use crate::integrator::{
@@ -66,7 +66,7 @@ impl LazyDenseStage {
 
 /// The centralized explicit Runge–Kutta solver for a [`ButcherTableau`].
 ///
-/// Named algorithms such as [`Rk4`](crate::algorithms::explicit::Rk4) are lightweight facades over
+/// Named algorithms such as [`Rk4`] are lightweight facades over
 /// this type. It can also be instantiated with a user-defined tableau marker.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ExplicitRungeKutta<T> {

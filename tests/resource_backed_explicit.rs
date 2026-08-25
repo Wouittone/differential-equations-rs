@@ -12,7 +12,7 @@ fn exponential() -> OdeProblem<TestRhs, ()> {
 }
 
 #[test]
-fn generated_bs3_tableau_preserves_adaptive_accuracy_and_fsal_work() {
+fn resource_backed_bs3_preserves_adaptive_accuracy_and_fsal_work() {
     let options = SolveOptions {
         absolute_tolerance: 1.0e-9,
         relative_tolerance: 1.0e-9,
@@ -27,4 +27,19 @@ fn generated_bs3_tableau_preserves_adaptive_accuracy_and_fsal_work() {
     // strictly below a fresh four-stage evaluation for every accepted step.
     assert!(solution.stats().rhs_evaluations > solution.stats().accepted_steps);
     assert!(solution.stats().rhs_evaluations < 4 * (solution.stats().accepted_steps + 1));
+}
+
+#[test]
+fn resource_backed_dp5_preserves_tight_endpoint_accuracy() {
+    let options = SolveOptions {
+        absolute_tolerance: 1.0e-11,
+        relative_tolerance: 1.0e-11,
+        save: SaveMode::Endpoints,
+        ..SolveOptions::default()
+    };
+    let solution = solve(&exponential(), Dp5, &options).unwrap();
+
+    assert!((solution.last_state()[0] - (-1.0_f64).exp()).abs() < 2.0e-10);
+    assert!(solution.stats().rhs_evaluations > solution.stats().accepted_steps);
+    assert!(solution.stats().rhs_evaluations < 7 * (solution.stats().accepted_steps + 1));
 }

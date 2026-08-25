@@ -1,5 +1,4 @@
-use super::irkn_coefficients::*;
-use super::rkn_adaptive_coefficients::*;
+use super::coefficient_data::*;
 use crate::event::{
     MAX_EVENT_ROOT_ITERATIONS, event_interval_converged, times_are_numerically_equal,
 };

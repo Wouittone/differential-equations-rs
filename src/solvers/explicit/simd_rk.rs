@@ -5,11 +5,55 @@
 //! lanes over ordinary contiguous `f64` state slices. This preserves the
 //! numerical methods without imposing a packed-vector state type on users.
 
-use super::simd_rk_coefficients::{MER5V2, MER6V2, RK6V4, SimdTableau};
 use crate::integrator::{
     ControllerConfig, KernelCapabilities, StepEstimate, StepKernel, integrate as drive_integration,
 };
 use crate::{OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions, SolverStats};
+
+struct SimdTableau {
+    stages: usize,
+    order: usize,
+    c: &'static [f64],
+    a: &'static [f64],
+    b: &'static [f64],
+    error: &'static [f64],
+}
+
+mod coefficient_data {
+    use super::SimdTableau;
+    use differential_equations_tableau_macros::define_coefficients_from_file;
+
+    define_coefficients_from_file!(pub(super), "coefficients/explicit/simd.toml", crate = crate);
+
+    pub(super) const MER5V2: SimdTableau = SimdTableau {
+        stages: 14,
+        order: 5,
+        c: MER5V2_C,
+        a: MER5V2_A,
+        b: MER5V2_B,
+        error: MER5V2_ERROR,
+    };
+
+    pub(super) const MER6V2: SimdTableau = SimdTableau {
+        stages: 15,
+        order: 6,
+        c: MER6V2_C,
+        a: MER6V2_A,
+        b: MER6V2_B,
+        error: MER6V2_ERROR,
+    };
+
+    pub(super) const RK6V4: SimdTableau = SimdTableau {
+        stages: 22,
+        order: 6,
+        c: RK6V4_C,
+        a: RK6V4_A,
+        b: RK6V4_B,
+        error: RK6V4_ERROR,
+    };
+}
+
+use coefficient_data::{MER5V2, MER6V2, RK6V4};
 
 macro_rules! simd_algorithm {
     ($name:ident, $tableau:ident) => {

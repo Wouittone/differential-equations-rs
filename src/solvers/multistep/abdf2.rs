@@ -10,7 +10,7 @@ use crate::integrator::{
     ControllerConfig, KernelCapabilities, StepEstimate, StepKernel, integrate as drive_integration,
 };
 use crate::linear::{DenseLu, LinearError, StateLayout, factorize, solve_factorized};
-use crate::solvers::explicit::generated_coefficients::{
+use crate::solvers::explicit::coefficient_data::{
     ABDF2_ALPHA_HISTORY_SCALE, ABDF2_ALPHA_ONE_BASE, ABDF2_BETA_ONE_SCALE, ABDF2_BETA_ZERO,
 };
 use crate::{OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions, SolverStats};

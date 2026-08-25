@@ -9,13 +9,11 @@
 //!
 //! The two-step TSRKC recurrences keep their accepted-step history inside the
 //! kernel. ROCK2, ROCK4, SERK2, ESERK4, and ESERK5 select their full
-//! degree-indexed coefficient banks from [`super::stabilized_coefficients`].
-//! Those banks are generated from the five pinned upstream
-//! `rkc_tableaus_{rock2,rock4,serk2,eserk4,eserk5}.jl` sources by
-//! `scripts/generate_stabilized_coefficients.jl`; no degree subset or
-//! substitute recurrence is used.
+//! degree-indexed coefficient banks from the compile-time resources in
+//! `coefficients/stabilized`. No degree subset or substitute recurrence is
+//! used.
 
-use super::stabilized_coefficients::{
+use super::coefficient_data::{
     ESERK4_DEGREES, ESERK4_ERROR_COMBINATION, ESERK4_SOLUTION_COMBINATION, ESERK4_WEIGHTS,
     ESERK5_DEGREES, ESERK5_ERROR_COMBINATION, ESERK5_SOLUTION_COMBINATION, ESERK5_WEIGHTS,
     ROCK2_DEGREES, ROCK2_FINISH_FIRST, ROCK2_FINISH_SECOND, ROCK2_RECURRENCE, ROCK4_DEGREES,

@@ -26,9 +26,6 @@ jobs:
         run: cargo test --all-targets --all-features
       - name: Build documentation
         run: cargo doc --no-deps --all-features
-      - name: Check generated coefficients
-        shell: pwsh
-        run: ./scripts/generate_coefficients.ps1 -Check
 
   msrv:
     name: Minimum supported Rust
