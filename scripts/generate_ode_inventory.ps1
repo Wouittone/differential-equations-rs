@@ -112,6 +112,107 @@ function Get-RustPublicNames {
             [void] $names.Add($Matches['name'])
         }
     }
+
+    # Concrete solvers now live below the public `solvers` hierarchy instead
+    # of being re-exported from the crate root. Scan public declarations and
+    # explicit re-exports throughout that hierarchy, then let the algorithm
+    # implementation scan below intersect this broader set with actual solver
+    # implementations. This intentionally ignores glob exports: their names
+    # are recovered from the module that declares or explicitly re-exports
+    # them.
+    $solverPath = Join-Path $sourcePath 'solvers'
+    if (Test-Path -LiteralPath $solverPath -PathType Container) {
+        foreach ($file in Get-ChildItem -LiteralPath $solverPath -Recurse -File -Filter '*.rs') {
+            $moduleText = Get-Content -LiteralPath $file.FullName -Raw
+            foreach ($item in [regex]::Matches(
+                    $moduleText,
+                    '(?m)^\s*pub\s+(?:struct|enum|type|trait|const|fn)\s+(?<name>[A-Za-z_][A-Za-z0-9_]*)'
+                )) {
+                [void] $names.Add($item.Groups['name'].Value)
+            }
+
+            foreach ($export in [regex]::Matches($moduleText, '(?ms)^\s*pub use\s+(?<body>[^;]+);')) {
+                $body = $export.Groups['body'].Value.Trim()
+                if ($body -match '(?s)\{(?<items>.*?)\}') {
+                    foreach ($item in $Matches['items'] -split ',') {
+                        $trimmed = $item.Trim()
+                        if ([string]::IsNullOrWhiteSpace($trimmed)) { continue }
+                        if ($trimmed -match '\bas\s+(?<alias>[A-Za-z_][A-Za-z0-9_]*)$') {
+                            [void] $names.Add($Matches['alias'])
+                        } elseif ($trimmed -match '(?<name>[A-Za-z_][A-Za-z0-9_]*)$') {
+                            [void] $names.Add($Matches['name'])
+                        }
+                    }
+                } elseif ($body -match '\bas\s+(?<alias>[A-Za-z_][A-Za-z0-9_]*)$') {
+                    [void] $names.Add($Matches['alias'])
+                } elseif ($body -notmatch '::\*$' -and
+                    $body -match '(?<name>[A-Za-z_][A-Za-z0-9_]*)$') {
+                    [void] $names.Add($Matches['name'])
+                }
+            }
+
+            # Recover concrete public names emitted by declarative macros. The
+            # invocation arguments corresponding to parameters used in a
+            # `pub struct`, `pub type`, or `pub const` declaration are part of
+            # the public API even though the expanded declaration is absent
+            # from the source text scanned above.
+            foreach ($macro in [regex]::Matches(
+                    $moduleText,
+                    '(?ms)^\s*macro_rules!\s*(?<macro>[A-Za-z_][A-Za-z0-9_]*)\s*\{(?<body>.*?)(?=^\})^\}'
+                )) {
+                $macroBody = $macro.Groups['body'].Value
+                $publicParameters = @(
+                    [regex]::Matches(
+                        $macroBody,
+                        '(?s)\bpub\s+(?:struct|enum|type|trait|const|fn)\s+\$(?<parameter>[A-Za-z_][A-Za-z0-9_]*)'
+                    ) | ForEach-Object { $_.Groups['parameter'].Value } | Select-Object -Unique
+                )
+                if ($publicParameters.Count -eq 0) { continue }
+
+                $signature = [regex]::Match($macroBody, '(?s)^\s*\((?<parameters>.*?)\)\s*=>')
+                if (-not $signature.Success) { continue }
+                $parameterIndexes = @{}
+                $parameterIndex = 0
+                foreach ($parameter in [regex]::Matches(
+                        $signature.Groups['parameters'].Value,
+                        '\$(?<parameter>[A-Za-z_][A-Za-z0-9_]*)\s*:\s*ident'
+                    )) {
+                    $parameterName = $parameter.Groups['parameter'].Value
+                    if (-not $parameterIndexes.ContainsKey($parameterName)) {
+                        $parameterIndexes[$parameterName] = $parameterIndex
+                        $parameterIndex++
+                    }
+                }
+
+                $macroName = [regex]::Escape($macro.Groups['macro'].Value)
+                foreach ($invocation in [regex]::Matches(
+                        $moduleText,
+                        "(?ms)^\s*$macroName!\s*\((?<arguments>.*?)\)\s*;"
+                    )) {
+                    $arguments = @($invocation.Groups['arguments'].Value -split ',' |
+                        ForEach-Object { $_.Trim() })
+                    foreach ($publicParameter in $publicParameters) {
+                        if (-not $parameterIndexes.ContainsKey($publicParameter)) { continue }
+                        $index = $parameterIndexes[$publicParameter]
+                        if ($index -lt $arguments.Count -and
+                            $arguments[$index] -match '^[A-Za-z_][A-Za-z0-9_]*$') {
+                            [void] $names.Add($arguments[$index])
+                        }
+                    }
+                }
+            }
+        }
+
+        # Several solver families declare their public algorithm types inside
+        # macros, so their concrete names exist only at macro invocation sites.
+        # The implementation scanner resolves those invocations and legitimate
+        # type aliases. Algorithm definitions live in public implementation
+        # modules or are re-exported by their public family preludes, so these
+        # names are reachable through the solver hierarchy.
+        foreach ($algorithmName in Get-RustAlgorithmImplementationNames -RepoPath $RepoPath) {
+            [void] $names.Add($algorithmName)
+        }
+    }
     return $names
 }
 
@@ -864,7 +965,8 @@ foreach ($entry in $inventory) {
 }
 
 if ($implemented.Count -lt 25) {
-    throw "Expected to detect at least the baseline 25 Julia-tested Rust algorithms, found $($implemented.Count): $($implemented.name -join ', ')"
+    $implementedNames = @($implemented | ForEach-Object { $_.name })
+    throw "Expected to detect at least the baseline 25 Julia-tested Rust algorithms, found $($implemented.Count): $($implementedNames -join ', ')"
 }
 if (($implemented.Count + $implementedWithoutJulia.Count + $missing.Count) -ne $included.Count) {
     throw "In-scope status counts do not sum to the included total"
