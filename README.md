@@ -3,6 +3,8 @@
 A beta Rust port of the ODE solvers in Julia's
 [DifferentialEquations.jl ecosystem](https://docs.sciml.ai/DiffEqDocs/stable/solvers/ode_solve/).
 
+The minimum supported Rust version (MSRV) is 1.85.
+
 ## Goals
 
 This project exists first and foremost as a proof of concept to answer a
@@ -192,13 +194,6 @@ assert!(outcomes.iter().all(|case| case.result.is_ok()));
       segments.
 - [x] Select `Rodas5P` as the default stiff solver for the current regular-ODE
       scope from the matched stiff-candidate benchmark slice.
-
-The unattended implementation runbook is in
-[`docs/OVERNIGHT_EXECUTION_PLAN.md`](docs/OVERNIGHT_EXECUTION_PLAN.md). Agent
-delegation rules are in
-[`docs/AGENT_OPERATING_RULES.md`](docs/AGENT_OPERATING_RULES.md), and the
-copy/paste runner prompt is in
-[`docs/OVERNIGHT_RUN_PROMPT.md`](docs/OVERNIGHT_RUN_PROMPT.md).
 
 ## Status
 

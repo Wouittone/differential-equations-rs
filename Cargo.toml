@@ -4,6 +4,15 @@ version = "0.1.0-beta.1"
 edition = "2024"
 rust-version = "1.85"
 description = "Beta Rust implementations of Julia SciML ODE solvers"
+repository = "https://github.com/Wouittone/differential-equations-rs"
+homepage = "https://github.com/Wouittone/differential-equations-rs"
+documentation = "https://docs.rs/differential-equations"
+include = [
+    "/src/**/*.rs",
+    "/coefficients/**/*.toml",
+    "/tableaux/**/*.toml",
+    "/README.md",
+]
 publish = false
 
 [workspace]

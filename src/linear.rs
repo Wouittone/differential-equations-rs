@@ -46,7 +46,7 @@ impl StateLayout {
             })
     }
 
-    pub(crate) fn state<'a>(self, data: &'a [f64]) -> Result<StateRef<'a>, LinearError> {
+    pub(crate) fn state(self, data: &[f64]) -> Result<StateRef<'_>, LinearError> {
         if data.len() != self.dimension {
             return Err(LinearError::LengthMismatch {
                 expected: self.dimension,
@@ -56,7 +56,7 @@ impl StateLayout {
         Ok(StateRef { layout: self, data })
     }
 
-    pub(crate) fn state_mut<'a>(self, data: &'a mut [f64]) -> Result<StateMut<'a>, LinearError> {
+    pub(crate) fn state_mut(self, data: &mut [f64]) -> Result<StateMut<'_>, LinearError> {
         if data.len() != self.dimension {
             return Err(LinearError::LengthMismatch {
                 expected: self.dimension,
@@ -66,7 +66,7 @@ impl StateLayout {
         Ok(StateMut { layout: self, data })
     }
 
-    pub(crate) fn matrix<'a>(self, data: &'a [f64]) -> Result<DenseMatrixRef<'a>, LinearError> {
+    pub(crate) fn matrix(self, data: &[f64]) -> Result<DenseMatrixRef<'_>, LinearError> {
         let expected = self.matrix_len()?;
         if data.len() != expected {
             return Err(LinearError::LengthMismatch {
@@ -81,10 +81,7 @@ impl StateLayout {
         })
     }
 
-    pub(crate) fn matrix_mut<'a>(
-        self,
-        data: &'a mut [f64],
-    ) -> Result<DenseMatrixMut<'a>, LinearError> {
+    pub(crate) fn matrix_mut(self, data: &mut [f64]) -> Result<DenseMatrixMut<'_>, LinearError> {
         let expected = self.matrix_len()?;
         if data.len() != expected {
             return Err(LinearError::LengthMismatch {
@@ -125,7 +122,7 @@ pub(crate) struct StateMut<'a> {
 }
 
 #[allow(dead_code)]
-impl<'a> StateMut<'a> {
+impl StateMut<'_> {
     pub(crate) fn as_mut_slice(&mut self) -> &mut [f64] {
         self.data
     }
@@ -166,7 +163,7 @@ pub(crate) struct DenseMatrixMut<'a> {
 }
 
 #[allow(dead_code)]
-impl<'a> DenseMatrixMut<'a> {
+impl DenseMatrixMut<'_> {
     pub(crate) fn rows(&self) -> usize {
         self.rows
     }

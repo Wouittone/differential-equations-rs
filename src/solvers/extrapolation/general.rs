@@ -580,10 +580,12 @@ impl ExtrapolationKernel {
             for column in 1..=level {
                 let ratio = self.node(level - column) / self.node(level) - 1.0;
                 let mut value = vec![0.0; self.dimension];
-                for component in 0..self.dimension {
-                    value[component] = row[column - 1][component]
-                        + (row[column - 1][component] - tableau[level - 1][column - 1][component])
-                            / ratio;
+                for ((value, current), previous) in value
+                    .iter_mut()
+                    .zip(&row[column - 1])
+                    .zip(&tableau[level - 1][column - 1])
+                {
+                    *value = current + (current - previous) / ratio;
                 }
                 row.push(value);
             }

@@ -274,7 +274,7 @@ pub struct Velds4;
 
 /// The generic hybrid explicit/linear-implicit Rosenbrock method.
 ///
-/// The native regular-ODE instantiation is [`Tsit5DA`].
+/// The native regular-ODE instantiation is [`type@Tsit5DA`].
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct HybridExplicitImplicitRK;
 

@@ -847,17 +847,18 @@ where
     let mut midpoint = vec![0.0; dimension];
     for stage in 1..4 {
         let mut value = state.to_vec();
-        for j in 0..stage {
+        for (j, previous_stage) in stages.iter().take(stage).enumerate() {
             for index in 0..dimension {
-                value[index] += ALPHA[stage][j] * (stages[j][index] - state[index]);
+                value[index] += ALPHA[stage][j] * (previous_stage[index] - state[index]);
             }
         }
         let mut offset = vec![0.0; dimension];
-        for j in 0..stage {
+        for (j, (previous_stage, previous_slow)) in stages.iter().zip(&slow).take(stage).enumerate()
+        {
             for index in 0..dimension {
                 offset[index] += GAMMA[stage][j] / (D[stage] * step)
-                    * (stages[j][index] - state[index])
-                    + BETA[stage][j] / D[stage] * slow[j][index];
+                    * (previous_stage[index] - state[index])
+                    + BETA[stage][j] / D[stage] * previous_slow[index];
             }
         }
         let micro_count = ((m as f64 * D[stage]).ceil() as usize).max(1);

@@ -4,7 +4,7 @@
 //! OrdinaryDiffEqIMEXMultistep at SciML/OrdinaryDiffEq.jl revision
 //! `211142263781255a9aa2f910f6760b9f18ec29c8`. The first split component in
 //! this crate is explicit and the second is implicit, matching
-//! [`SplitOdeProblem`](crate::SplitOdeProblem). Residual DAEs, mass matrices,
+//! [`SplitOdeProblem`]. Residual DAEs, mass matrices,
 //! custom nonlinear solvers, and custom linear solvers are not represented.
 
 use crate::linear::{factorize, solve_factorized};
