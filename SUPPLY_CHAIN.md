@@ -40,8 +40,13 @@ Install the cargo-deny release used by CI and run:
 
 ```console
 cargo deny check
+cargo check --locked --all-targets --no-default-features
 cargo test --locked --all-targets --all-features
+pwsh ./scripts/check_package_policy.ps1
 ```
 
-This policy complements code review and testing; it does not make dependency
-or licensing decisions automatic.
+The package-policy script verifies the workspace SPDX expressions, the copied
+proc-macro license texts, the license and notice files shipped in each crate,
+and the exclusion of development-only trees from the main package. This policy
+complements code review and testing; it does not make dependency or licensing
+decisions automatic.
