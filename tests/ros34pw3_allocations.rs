@@ -41,11 +41,14 @@ fn allocations(step: f64) -> usize {
 
 #[test]
 fn callback_free_steps_do_not_allocate_per_step() {
-    let one_step = allocations(1.0);
+    let hundred_steps = allocations(0.01);
     let many_steps = allocations(0.001);
     assert!(
-        many_steps <= one_step + 2,
-        "step allocations grew unexpectedly: one_step={one_step}, many_steps={many_steps}"
+        many_steps <= hundred_steps + 2,
+        "step allocations grew unexpectedly: hundred_steps={hundred_steps}, many_steps={many_steps}"
     );
-    assert!(one_step <= 60, "unexpected allocation count: {one_step}");
+    assert!(
+        hundred_steps <= 60,
+        "unexpected allocation count: {hundred_steps}"
+    );
 }

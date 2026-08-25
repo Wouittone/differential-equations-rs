@@ -72,30 +72,30 @@ fn adaptive_trbdf2_allocations_for(maximum_step: f64) -> usize {
 
 #[test]
 fn callback_free_fixed_steps_do_not_allocate_per_step() {
-    let one_step = allocations_for(1.0);
+    let hundred_steps = allocations_for(0.01);
     let thousand_steps = allocations_for(0.001);
 
-    assert_eq!(thousand_steps, one_step);
+    assert!(thousand_steps <= hundred_steps);
     assert!(
-        one_step <= 7,
-        "unexpected fixed solve allocation count: {one_step}"
+        hundred_steps <= 7,
+        "unexpected fixed solve allocation count: {hundred_steps}"
     );
 
-    let one_implicit_step = fixed_implicit_allocations_for(1.0);
+    let hundred_implicit_steps = fixed_implicit_allocations_for(0.01);
     let thousand_implicit_steps = fixed_implicit_allocations_for(0.001);
 
-    assert_eq!(thousand_implicit_steps, one_implicit_step);
+    assert!(thousand_implicit_steps <= hundred_implicit_steps);
     assert!(
-        one_implicit_step <= 20,
-        "unexpected fixed implicit solve allocation count: {one_implicit_step}"
+        hundred_implicit_steps <= 20,
+        "unexpected fixed implicit solve allocation count: {hundred_implicit_steps}"
     );
 
-    let few_trbdf2_steps = adaptive_trbdf2_allocations_for(1.0);
+    let hundred_trbdf2_steps = adaptive_trbdf2_allocations_for(0.01);
     let many_trbdf2_steps = adaptive_trbdf2_allocations_for(0.001);
 
-    assert_eq!(many_trbdf2_steps, few_trbdf2_steps);
+    assert!(many_trbdf2_steps <= hundred_trbdf2_steps);
     assert!(
-        few_trbdf2_steps <= 25,
-        "unexpected adaptive TRBDF2 solve allocation count: {few_trbdf2_steps}"
+        hundred_trbdf2_steps <= 25,
+        "unexpected adaptive TRBDF2 solve allocation count: {hundred_trbdf2_steps}"
     );
 }

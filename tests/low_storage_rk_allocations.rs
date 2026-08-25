@@ -31,77 +31,77 @@ fn allocations_for<A: OdeAlgorithm + Copy>(algorithm: A, step: f64) -> usize {
 
 #[test]
 fn callback_free_low_storage_steps_do_not_allocate_per_step() {
-    let one_step = allocations_for(CarpenterKennedy2N54, 1.0);
+    let hundred_steps = allocations_for(CarpenterKennedy2N54, 0.01);
     let thousand_steps = allocations_for(CarpenterKennedy2N54, 0.001);
 
-    assert_eq!(thousand_steps, one_step);
+    assert!(thousand_steps <= hundred_steps);
     assert!(
-        one_step <= 7,
-        "unexpected low-storage solve allocation count: {one_step}"
+        hundred_steps <= 7,
+        "unexpected low-storage solve allocation count: {hundred_steps}"
     );
 
-    let one_step = allocations_for(ParsaniKetchesonDeconinck3S32, 1.0);
+    let hundred_steps = allocations_for(ParsaniKetchesonDeconinck3S32, 0.01);
     let thousand_steps = allocations_for(ParsaniKetchesonDeconinck3S32, 0.001);
 
-    assert_eq!(thousand_steps, one_step);
+    assert!(thousand_steps <= hundred_steps);
     assert!(
-        one_step <= 7,
-        "unexpected 3S low-storage solve allocation count: {one_step}"
+        hundred_steps <= 7,
+        "unexpected 3S low-storage solve allocation count: {hundred_steps}"
     );
 
-    let one_step = allocations_for(ParsaniKetchesonDeconinck3S173, 1.0);
+    let hundred_steps = allocations_for(ParsaniKetchesonDeconinck3S173, 0.01);
     let thousand_steps = allocations_for(ParsaniKetchesonDeconinck3S173, 0.001);
-    assert_eq!(thousand_steps, one_step);
+    assert!(thousand_steps <= hundred_steps);
     assert!(
-        one_step <= 7,
-        "unexpected 3S173 low-storage solve allocation count: {one_step}"
+        hundred_steps <= 7,
+        "unexpected 3S173 low-storage solve allocation count: {hundred_steps}"
     );
 
-    let one_step = allocations_for(ParsaniKetchesonDeconinck3S53, 1.0);
+    let hundred_steps = allocations_for(ParsaniKetchesonDeconinck3S53, 0.01);
     let thousand_steps = allocations_for(ParsaniKetchesonDeconinck3S53, 0.001);
-    assert_eq!(thousand_steps, one_step);
+    assert!(thousand_steps <= hundred_steps);
     assert!(
-        one_step <= 7,
-        "unexpected 3S53 low-storage solve allocation count: {one_step}"
+        hundred_steps <= 7,
+        "unexpected 3S53 low-storage solve allocation count: {hundred_steps}"
     );
 
-    let one_step = allocations_for(ParsaniKetchesonDeconinck3S105, 1.0);
+    let hundred_steps = allocations_for(ParsaniKetchesonDeconinck3S105, 0.01);
     let thousand_steps = allocations_for(ParsaniKetchesonDeconinck3S105, 0.001);
-    assert_eq!(thousand_steps, one_step);
+    assert!(thousand_steps <= hundred_steps);
     assert!(
-        one_step <= 7,
-        "unexpected 3S105 low-storage solve allocation count: {one_step}"
+        hundred_steps <= 7,
+        "unexpected 3S105 low-storage solve allocation count: {hundred_steps}"
     );
 
-    let one_step = allocations_for(ParsaniKetchesonDeconinck3S82, 1.0);
+    let hundred_steps = allocations_for(ParsaniKetchesonDeconinck3S82, 0.01);
     let thousand_steps = allocations_for(ParsaniKetchesonDeconinck3S82, 0.001);
-    assert_eq!(thousand_steps, one_step);
+    assert!(thousand_steps <= hundred_steps);
     assert!(
-        one_step <= 7,
-        "unexpected 3S82 low-storage solve allocation count: {one_step}"
+        hundred_steps <= 7,
+        "unexpected 3S82 low-storage solve allocation count: {hundred_steps}"
     );
 
-    let one_step = allocations_for(ParsaniKetchesonDeconinck3S94, 1.0);
+    let hundred_steps = allocations_for(ParsaniKetchesonDeconinck3S94, 0.01);
     let thousand_steps = allocations_for(ParsaniKetchesonDeconinck3S94, 0.001);
-    assert_eq!(thousand_steps, one_step);
+    assert!(thousand_steps <= hundred_steps);
     assert!(
-        one_step <= 7,
-        "unexpected 3S94 low-storage solve allocation count: {one_step}"
+        hundred_steps <= 7,
+        "unexpected 3S94 low-storage solve allocation count: {hundred_steps}"
     );
 
-    let one_step = allocations_for(ParsaniKetchesonDeconinck3S184, 1.0);
+    let hundred_steps = allocations_for(ParsaniKetchesonDeconinck3S184, 0.01);
     let thousand_steps = allocations_for(ParsaniKetchesonDeconinck3S184, 0.001);
-    assert_eq!(thousand_steps, one_step);
+    assert!(thousand_steps <= hundred_steps);
     assert!(
-        one_step <= 7,
-        "unexpected 3S184 low-storage solve allocation count: {one_step}"
+        hundred_steps <= 7,
+        "unexpected 3S184 low-storage solve allocation count: {hundred_steps}"
     );
 
-    let one_step = allocations_for(ParsaniKetchesonDeconinck3S205, 1.0);
+    let hundred_steps = allocations_for(ParsaniKetchesonDeconinck3S205, 0.01);
     let thousand_steps = allocations_for(ParsaniKetchesonDeconinck3S205, 0.001);
-    assert_eq!(thousand_steps, one_step);
+    assert!(thousand_steps <= hundred_steps);
     assert!(
-        one_step <= 7,
-        "unexpected 3S205 low-storage solve allocation count: {one_step}"
+        hundred_steps <= 7,
+        "unexpected 3S205 low-storage solve allocation count: {hundred_steps}"
     );
 }

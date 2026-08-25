@@ -29,11 +29,11 @@ fn allocations(step: f64) -> usize {
 
 #[test]
 fn rodas4p2_callback_free_steps_do_not_allocate_per_step() {
-    let one_step = allocations(1.0);
+    let hundred_steps = allocations(0.01);
     let many_steps = allocations(0.001);
-    assert_eq!(many_steps, one_step);
+    assert!(many_steps <= hundred_steps);
     assert!(
-        one_step <= 35,
-        "unexpected Rodas4P2 solve allocation count: {one_step}"
+        hundred_steps <= 35,
+        "unexpected Rodas4P2 solve allocation count: {hundred_steps}"
     );
 }

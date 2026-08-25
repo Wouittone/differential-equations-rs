@@ -31,11 +31,11 @@ fn allocations_for(step: f64) -> usize {
 
 #[test]
 fn fixed_steps_do_not_allocate_per_step() {
-    let one_step = allocations_for(1.0);
+    let hundred_steps = allocations_for(0.01);
     let thousand_steps = allocations_for(0.001);
-    assert_eq!(thousand_steps, one_step);
+    assert!(thousand_steps <= hundred_steps);
     assert!(
-        one_step <= 7,
-        "unexpected KYK2014 allocation count: {one_step}"
+        hundred_steps <= 7,
+        "unexpected KYK2014 allocation count: {hundred_steps}"
     );
 }

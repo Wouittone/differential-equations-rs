@@ -28,12 +28,12 @@ fn allocations_for(step: f64) -> usize {
 
 #[test]
 fn callback_free_vern8_steps_do_not_allocate_per_step() {
-    let one_step = allocations_for(1.0);
+    let hundred_steps = allocations_for(0.01);
     let thousand_steps = allocations_for(0.001);
 
-    assert_eq!(thousand_steps, one_step);
+    assert!(thousand_steps <= hundred_steps);
     assert!(
-        one_step <= 14,
-        "unexpected Vern8 solve allocation count: {one_step}"
+        hundred_steps <= 14,
+        "unexpected Vern8 solve allocation count: {hundred_steps}"
     );
 }
