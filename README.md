@@ -202,3 +202,15 @@ Rust regression tests, with a growing set of comparisons against the pinned
 Julia SciML reference environment. The API may still change before 1.0, and
 users should validate solver choice and tolerances for scientific or production
 workloads.
+
+## License
+
+Licensed under either the [Apache License, Version 2.0](LICENSE-APACHE) or the
+[MIT License](LICENSE-MIT), at your option.
+
+Portions are derived from MIT-licensed SciML/OrdinaryDiffEq.jl. Its retained
+copyright and permission notice are in
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+Unless explicitly stated otherwise, contributions intentionally submitted for
+inclusion in this project are licensed under the same dual-license terms.

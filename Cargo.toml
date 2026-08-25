@@ -4,6 +4,7 @@ version = "0.1.0-beta.1"
 edition = "2024"
 rust-version = "1.85"
 description = "Beta Rust implementations of Julia SciML ODE solvers"
+license = "MIT OR Apache-2.0"
 repository = "https://github.com/Wouittone/differential-equations-rs"
 homepage = "https://github.com/Wouittone/differential-equations-rs"
 documentation = "https://docs.rs/differential-equations"
@@ -12,6 +13,9 @@ include = [
     "/coefficients/**/*.toml",
     "/tableaux/**/*.toml",
     "/README.md",
+    "/LICENSE-APACHE",
+    "/LICENSE-MIT",
+    "/THIRD_PARTY_NOTICES.md",
 ]
 publish = false
 
