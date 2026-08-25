@@ -1,9 +1,13 @@
 use differential_equations::algorithms::rosenbrock::Rosenbrock23;
 use differential_equations::algorithms::{amf::AMF, interaction_picture::RKIP, stabilized::IRKC};
+use differential_equations::solvers::exponential::rkip::solve_rkip;
+use differential_equations::solvers::rosenbrock::amf::{
+    AMFOperator, AmfProblem, build_amf_function, solve_amf,
+};
+use differential_equations::solvers::stabilized::irkc::solve_irkc;
 use differential_equations::{
-    AMFOperator, AmfProblem, CallbackAction, OdeProblem, SaveMode, SemilinearOdeProblem,
-    SolveError, SolveOptions, SplitOdeProblem, build_amf_function, solve, solve_amf, solve_irkc,
-    solve_rkip,
+    CallbackAction, OdeProblem, SaveMode, SemilinearOdeProblem, SolveError, SolveOptions,
+    SplitOdeProblem, solve,
 };
 
 fn fixed(step: f64) -> SolveOptions {

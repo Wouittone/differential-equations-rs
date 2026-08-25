@@ -4,7 +4,7 @@ param([switch]$Check)
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
-$canonicalSource = Join-Path $root 'src/generated_coefficients.rs'
+$canonicalSource = Join-Path $root 'src/solvers/explicit/generated_coefficients.rs'
 $resourceRoot = Join-Path $root 'tableaux'
 $output = Join-Path $root 'docs/coefficients_manifest.txt'
 $sourceRevision = '211142263781255a9aa2f910f6760b9f18ec29c8'
@@ -80,7 +80,7 @@ $sourceHash = Get-NormalizedSha256 $source
 $contentLines = @(
     'schema-version=3'
     "source-revision=$sourceRevision"
-    'canonical-source=src/generated_coefficients.rs'
+    'canonical-source=src/solvers/explicit/generated_coefficients.rs'
     "canonical-source-sha256=$sourceHash"
 ) + @($resourceRecords.Manifest | Sort-Object) + $methods
 $content = ($contentLines -join "`n") + "`n"

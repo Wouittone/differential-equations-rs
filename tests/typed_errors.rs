@@ -1,8 +1,10 @@
 use differential_equations::algorithms::explicit::Euler;
 use differential_equations::algorithms::second_order::NewmarkBeta;
+use differential_equations::solvers::exponential::rkip::RKIP;
+use differential_equations::solvers::rosenbrock::amf::AmfOperator;
 use differential_equations::{
-    AmfOperator, ConfigurationError, DEFAULT_EVENT_TOLERANCE, InterpolationError, LieGroupProblem,
-    MassMatrixOdeProblem, OdeProblem, RKIP, SemilinearOdeProblem, SolveOptions, solve,
+    ConfigurationError, DEFAULT_EVENT_TOLERANCE, InterpolationError, LieGroupProblem,
+    MassMatrixOdeProblem, OdeProblem, SemilinearOdeProblem, SolveOptions, solve,
 };
 
 #[test]

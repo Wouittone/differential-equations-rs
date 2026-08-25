@@ -1,6 +1,6 @@
 schema-version=3
 source-revision=211142263781255a9aa2f910f6760b9f18ec29c8
-canonical-source=src/generated_coefficients.rs
+canonical-source=src/solvers/explicit/generated_coefficients.rs
 canonical-source-sha256=218e16151e48de22d9f0544c5230ff8d3375132be3016ac91305d395e4905d4b
 resource=tableaux/explicit/alshina2.toml|sha256=12e444bd7da2b7f0d66ad78d51f245cc9829547011f654a32602bacd9d37b7f5
 resource=tableaux/explicit/euler.toml|sha256=308c3a3f8438e8dd1cfc58fe9cf41350c1073facb09f51bed667a2e567d209c3

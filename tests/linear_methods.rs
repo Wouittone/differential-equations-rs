@@ -1,7 +1,10 @@
 use differential_equations::algorithms::linear::*;
+use differential_equations::solvers::linear::general::{
+    LinearOperatorAlgorithm, solve_lie_group, solve_linear_operator,
+};
 use differential_equations::{
     CallbackAction, LieGroupProblem, LinearOperatorProblem, OdeProblem, SaveMode, SolveError,
-    SolveOptions, solve, solve_lie_group, solve_linear_operator,
+    SolveOptions, solve,
 };
 
 fn fixed(step: f64) -> SolveOptions {
@@ -15,7 +18,7 @@ fn rotation_operator(output: &mut [f64], _: &[f64], _: &(), _: f64) {
     output.copy_from_slice(&[0.0, -1.0, 1.0, 0.0]);
 }
 
-fn assert_rotation<A: differential_equations::LinearOperatorAlgorithm>(algorithm: A) {
+fn assert_rotation<A: LinearOperatorAlgorithm>(algorithm: A) {
     let problem =
         LinearOperatorProblem::new(rotation_operator, vec![1.0, 0.0], (0.0, 1.0), ()).unwrap();
     let solution = solve_linear_operator(&problem, algorithm, &fixed(0.125)).unwrap();
@@ -50,10 +53,7 @@ fn scalar_time_operator(output: &mut [f64], _: &[f64], _: &(), time: f64) {
     output[0] = -(1.0 + time);
 }
 
-fn scalar_error<A: differential_equations::LinearOperatorAlgorithm>(
-    algorithm: A,
-    step: f64,
-) -> f64 {
+fn scalar_error<A: LinearOperatorAlgorithm>(algorithm: A, step: f64) -> f64 {
     let problem =
         LinearOperatorProblem::new(scalar_time_operator, vec![1.0], (0.0, 1.0), ()).unwrap();
     let solution = solve_linear_operator(&problem, algorithm, &fixed(step)).unwrap();
@@ -261,10 +261,7 @@ fn typed_linear_and_matrix_group_paths_retain_real_dense_slopes() {
     assert!((sample[3] - sine * sine).abs() < 3.0e-4);
 }
 
-fn autonomous_group_error<A: differential_equations::LinearOperatorAlgorithm>(
-    algorithm: A,
-    step: f64,
-) -> f64 {
+fn autonomous_group_error<A: LinearOperatorAlgorithm>(algorithm: A, step: f64) -> f64 {
     fn operator(output: &mut [f64], state: &[f64], _: &(), _: f64) {
         output.copy_from_slice(&[0.0, -1.0, state[0].sin(), 0.0]);
     }
@@ -325,10 +322,7 @@ fn autonomous_lie_compositions_exhibit_expected_refinement() {
     assert_ratio!(CG4a, 6.5);
 }
 
-fn magnus_time_error<A: differential_equations::LinearOperatorAlgorithm>(
-    algorithm: A,
-    step: f64,
-) -> f64 {
+fn magnus_time_error<A: LinearOperatorAlgorithm>(algorithm: A, step: f64) -> f64 {
     fn operator(output: &mut [f64], _: &[f64], _: &(), time: f64) {
         let rate = time.sin();
         output.copy_from_slice(&[0.0, -rate, rate, 0.0]);

@@ -1,8 +1,10 @@
 use differential_equations::algorithms::rosenbrock::Rosenbrock23;
-use differential_equations::{
-    AMF, AmfProblem, IRKC, RKIP, SaveMode, SemilinearOdeProblem, SolveOptions, SplitOdeProblem,
-    build_amf_function, solve_amf, solve_irkc, solve_rkip,
+use differential_equations::solvers::exponential::rkip::{RKIP, solve_rkip};
+use differential_equations::solvers::rosenbrock::amf::{
+    AMF, AmfProblem, build_amf_function, solve_amf,
 };
+use differential_equations::solvers::stabilized::irkc::{IRKC, solve_irkc};
+use differential_equations::{SaveMode, SemilinearOdeProblem, SolveOptions, SplitOdeProblem};
 
 fn fixed(step: f64) -> SolveOptions {
     SolveOptions::new()

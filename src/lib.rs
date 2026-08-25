@@ -6,76 +6,20 @@
 
 #![forbid(unsafe_code)]
 
-mod abdf2;
-mod adams;
-mod amf;
-mod anas5;
-mod autodp5;
-mod bdf;
 mod callback;
-mod compatibility;
-mod composites;
-mod dense_coefficients;
 mod ensemble;
 mod error;
 mod event;
-mod explicit_rk;
-mod exponential_rk;
-mod extrapolation;
-mod firk;
-mod frk65;
-mod generated_coefficients;
-mod high_order;
-mod imex_multistep;
-mod implicit;
 mod integrator;
-mod irkc;
-mod irkn_coefficients;
 mod linear;
-mod linear_methods;
-mod low_storage_rk;
-mod mebdf2;
-mod multirate;
-mod nordsieck;
 mod operator_problem;
-mod pdirk;
-mod prk;
 mod problem;
-mod qndf1;
-mod qndf2;
-mod qprk;
-mod rkip;
-mod rkn_adaptive_coefficients;
-mod rosenbrock;
-mod rosenbrock_dense;
-mod rosenbrock_extended;
-mod sdirk;
-mod sdirk_cash4;
-mod second_order;
 mod semilinear;
-mod simd_rk;
-mod simd_rk_coefficients;
 mod solution;
 mod solver;
-mod split_euler;
-mod ssprk_extended;
-mod ssprk_kyk2014;
-mod ssprk_kyk42;
-mod ssprk_msvs;
-mod stabilized;
-mod stabilized_coefficients;
-mod symplectic;
-mod taylor;
-mod trbdf2;
-mod tsit5;
-mod variable_adams;
-mod verner;
+pub mod solvers;
 
-pub use amf::{
-    AMF, AMFOperator, AmfFunction, AmfOperator, AmfProblem, build_amf_function, solve_amf,
-};
 pub use callback::{CallbackAction, EventDirection};
-pub use compatibility::algorithms;
 pub use differential_equations_tableau_macros::define_explicit_rk_from_file;
 pub use ensemble::{
     CaseOutcome, ExecutionPolicy, solve_batch, solve_batch_sequential, solve_ensemble,
@@ -85,23 +29,18 @@ pub use ensemble::{
 pub use ensemble::{solve_batch_parallel, solve_ensemble_parallel};
 pub use error::ConfigurationError;
 pub use event::DEFAULT_EVENT_TOLERANCE;
-pub use exponential_rk::ExponentialAlgorithm;
-pub use irkc::{IRKC, solve_irkc};
-pub use linear_methods::{
-    LieGroupAlgorithm, LinearOperatorAlgorithm, solve_lie_group, solve_linear_operator,
-};
 pub use operator_problem::{LieGroupProblem, LinearOperatorProblem};
 pub use problem::{MassMatrixOdeProblem, OdeProblem, SplitOdeProblem};
-pub use rkip::{InteractionPictureAlgorithm, RKIP, RkipCacheStats, solve_rkip};
-pub use second_order::{
-    SecondOrderOdeAlgorithm, SecondOrderOdeProblem, SecondOrderSolution, SecondOrderSolveError,
-    solve_second_order,
-};
 pub use semilinear::{SemilinearOdeProblem, solve_exponential};
 pub use solution::{InterpolationError, Solution, SolverStats};
 pub use solver::{OdeAlgorithm, SaveMode, SolveError, SolveOptions, solve};
-pub use split_euler::{SplitOdeAlgorithm, solve_split, solve_split_euler};
-pub use symplectic::{
+pub use solvers as algorithms;
+pub use solvers::explicit::split_euler::{SplitOdeAlgorithm, solve_split, solve_split_euler};
+pub use solvers::second_order::general::{
+    SecondOrderOdeAlgorithm, SecondOrderOdeProblem, SecondOrderSolution, SecondOrderSolveError,
+    solve_second_order,
+};
+pub use solvers::second_order::symplectic::{
     SymplecticAlgorithm, SymplecticSolution, SymplecticSolveError, SymplecticTableau,
     solve_symplectic,
 };

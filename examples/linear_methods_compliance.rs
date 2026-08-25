@@ -1,8 +1,8 @@
 use differential_equations::algorithms::linear::*;
-use differential_equations::{
-    LieGroupProblem, LinearOperatorAlgorithm, LinearOperatorProblem, SaveMode, SolveOptions,
-    solve_lie_group, solve_linear_operator,
+use differential_equations::solvers::linear::general::{
+    LinearOperatorAlgorithm, solve_lie_group, solve_linear_operator,
 };
+use differential_equations::{LieGroupProblem, LinearOperatorProblem, SaveMode, SolveOptions};
 
 fn options() -> SolveOptions {
     SolveOptions::new()

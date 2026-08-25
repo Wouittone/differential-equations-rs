@@ -1,7 +1,5 @@
-use crate::{
-    ConfigurationError, ExponentialAlgorithm, OdeAlgorithm, OdeProblem, Solution, SolveError,
-    SolveOptions,
-};
+use crate::solvers::exponential::ExponentialAlgorithm;
+use crate::{ConfigurationError, OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions};
 
 /// A semilinear initial-value problem `u' = A u + g(u, p, t)`.
 ///

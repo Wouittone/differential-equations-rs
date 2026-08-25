@@ -46,15 +46,16 @@ usable without Julia; cross-language compliance tests are explicit so normal
 `cargo test` runs stay fast and deterministic.
 
 Core problem, solution, and driver types are exported at the crate root.
-Concrete solvers are organized under `differential_equations::algorithms`:
+Concrete solvers live under a family and implementation module:
 
 ```rust
-use differential_equations::algorithms::explicit::Tsit5;
+use differential_equations::solvers::explicit::tsit5::Tsit5;
 use differential_equations::{OdeProblem, SolveOptions, solve};
 ```
 
-Family-specific paths are preferred for focused applications, while
-`differential_equations::algorithms::*` imports every implemented method.
+Family façades such as `solvers::explicit::Tsit5` provide shorter focused
+imports. The historical `differential_equations::algorithms` namespace remains
+an alias for `solvers`, including its glob-import prelude.
 
 Stiff problems may optionally provide an analytic state Jacobian. Implicit and
 Rosenbrock methods use it directly; otherwise they fall back to finite
@@ -140,7 +141,7 @@ global thread pool. Results always remain in input order, and each case keeps
 its own success or failure:
 
 ```rust
-use differential_equations::algorithms::explicit::Tsit5;
+use differential_equations::solvers::explicit::tsit5::Tsit5;
 use differential_equations::{
     ExecutionPolicy, OdeProblem, SolveOptions, solve_ensemble,
 };

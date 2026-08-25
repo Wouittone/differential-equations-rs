@@ -1,7 +1,7 @@
 use differential_equations::algorithms::exponential::*;
+use differential_equations::solvers::exponential::general::ExponentialAlgorithm;
 use differential_equations::{
-    ExponentialAlgorithm, OdeProblem, SaveMode, SemilinearOdeProblem, SolveError, SolveOptions,
-    solve, solve_exponential,
+    OdeProblem, SaveMode, SemilinearOdeProblem, SolveError, SolveOptions, solve, solve_exponential,
 };
 
 fn fixed(step: f64) -> SolveOptions {

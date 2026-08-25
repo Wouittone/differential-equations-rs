@@ -1,4 +1,6 @@
-use differential_equations::{OdeAlgorithm, OdeProblem, SaveMode, SolveOptions, algorithms, solve};
+use differential_equations::{
+    OdeAlgorithm, OdeProblem, SaveMode, SolveOptions, algorithms, solve, solvers,
+};
 
 fn assert_algorithm<T: OdeAlgorithm>() {}
 
@@ -23,6 +25,17 @@ fn family_namespaces_reexport_the_flat_algorithm_types() {
     assert_same_type(
         algorithms::SspRkMsvs43,
         algorithms::explicit::ssp::SspRkMsvs43,
+    );
+}
+
+#[test]
+fn canonical_solver_paths_include_the_implementation_module() {
+    assert_same_type(solvers::explicit::Rk4, solvers::explicit::general::Rk4);
+    assert_same_type(solvers::implicit::Sdirk2, solvers::implicit::sdirk::Sdirk2);
+    assert_same_type(solvers::multistep::Qndf1, solvers::multistep::qndf1::Qndf1);
+    assert_same_type(
+        solvers::rosenbrock::Rosenbrock23,
+        solvers::rosenbrock::general::Rosenbrock23,
     );
 }
 
