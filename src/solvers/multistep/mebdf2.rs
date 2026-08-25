@@ -363,12 +363,7 @@ where
     stats.jacobian_evaluations += 1;
     if workspace.factorization.is_none() {
         workspace.factorization = Some(
-            DenseLu::factorize(
-                workspace.layout,
-                &workspace.matrix,
-                stats.jacobian_evaluations as u64,
-            )
-            .map_err(map_linear_error)?,
+            DenseLu::factorize(workspace.layout, &workspace.matrix).map_err(map_linear_error)?,
         );
         factorize(&mut workspace.matrix, &mut workspace.pivots, dimension)
             .map_err(|_| SolveError::SingularLinearSystem)?;

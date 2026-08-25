@@ -1,8 +1,8 @@
+use crate::SolveError;
 use crate::callback::{
     Callback, CallbackAction, CallbackOutcome, ContinuousCallback, DiscreteCallback, EventDirection,
 };
 use crate::event::{MAX_EVENT_ROOT_ITERATIONS, event_interval_converged};
-use crate::{ConfigurationError, SolveError};
 
 /// An initial-value ordinary differential equation problem.
 ///
@@ -266,81 +266,6 @@ impl<FE, FI, P> SplitOdeProblem<FE, FI, P> {
             }
         }
         Ok(outcome)
-    }
-}
-
-/// A regular ODE with a constant nonsingular dense mass matrix `M*u' = f(u,t)`.
-/// Singular/DAE residual initialization is intentionally not represented.
-#[allow(dead_code)]
-pub struct MassMatrixOdeProblem<F, P> {
-    rhs: F,
-    initial_state: Vec<f64>,
-    time_span: (f64, f64),
-    parameters: P,
-    mass_matrix: Vec<f64>,
-}
-
-#[allow(dead_code)]
-impl<F, P> MassMatrixOdeProblem<F, P> {
-    pub fn new(
-        rhs: F,
-        initial_state: impl Into<Vec<f64>>,
-        time_span: (f64, f64),
-        parameters: P,
-        mass_matrix: impl Into<Vec<f64>>,
-    ) -> Result<Self, ConfigurationError> {
-        let initial_state = initial_state.into();
-        if initial_state.is_empty() {
-            return Err(ConfigurationError::EmptyData {
-                context: "mass-matrix ODE state",
-            });
-        }
-        let mass_matrix = mass_matrix.into();
-        let expected = initial_state.len().checked_mul(initial_state.len()).ok_or(
-            ConfigurationError::DimensionOverflow {
-                context: "mass matrix",
-            },
-        )?;
-        if mass_matrix.len() != expected {
-            return Err(ConfigurationError::DimensionMismatch {
-                context: "mass matrix",
-            });
-        }
-        if mass_matrix.iter().any(|value| !value.is_finite()) {
-            return Err(ConfigurationError::NonFiniteData {
-                context: "mass matrix",
-            });
-        }
-        Ok(Self {
-            rhs,
-            initial_state,
-            time_span,
-            parameters,
-            mass_matrix,
-        })
-    }
-
-    pub fn initial_state(&self) -> &[f64] {
-        &self.initial_state
-    }
-
-    pub fn time_span(&self) -> (f64, f64) {
-        self.time_span
-    }
-
-    pub fn parameters(&self) -> &P {
-        &self.parameters
-    }
-
-    pub fn mass_matrix(&self) -> &[f64] {
-        &self.mass_matrix
-    }
-
-    pub fn evaluate_rhs(&self, derivative: &mut [f64], state: &[f64], time: f64)
-    where
-        F: Fn(&mut [f64], &[f64], &P, f64),
-    {
-        (self.rhs)(derivative, state, &self.parameters, time);
     }
 }
 
@@ -669,7 +594,7 @@ fn ensure_finite_callback_state(state: &[f64]) -> Result<(), SolveError> {
 
 #[cfg(test)]
 mod tests {
-    use super::{JacobianProvider, MassMatrixOdeProblem, OdeProblem, SplitOdeProblem};
+    use super::{JacobianProvider, OdeProblem, SplitOdeProblem};
 
     #[test]
     fn jacobian_provider_reports_analytic_callbacks() {
@@ -688,7 +613,7 @@ mod tests {
     }
 
     #[test]
-    fn split_and_mass_representations_validate_dimensions() {
+    fn split_representation_preserves_components() {
         let split = SplitOdeProblem::new(
             |du: &mut [f64], u: &[f64], _: &(), _: f64| du[0] = u[0],
             |du: &mut [f64], u: &[f64], _: &(), _: f64| du[0] = -u[0],
@@ -702,25 +627,5 @@ mod tests {
         split.evaluate_implicit(&mut implicit, &[2.0], 0.0);
         assert_eq!(explicit, [2.0]);
         assert_eq!(implicit, [-2.0]);
-
-        let mass = MassMatrixOdeProblem::new(
-            |du: &mut [f64], u: &[f64], _: &(), _: f64| du[0] = u[0],
-            vec![1.0],
-            (0.0, 1.0),
-            (),
-            vec![2.0],
-        )
-        .unwrap();
-        assert_eq!(mass.mass_matrix(), &[2.0]);
-        assert!(
-            MassMatrixOdeProblem::new(
-                |_: &mut [f64], _: &[f64], _: &(), _: f64| {},
-                vec![1.0, 2.0],
-                (0.0, 1.0),
-                (),
-                vec![1.0],
-            )
-            .is_err()
-        );
     }
 }

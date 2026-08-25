@@ -391,16 +391,8 @@ where
     stats.jacobian_evaluations += 1;
     stats.linear_factorizations += 1;
     let factorization = if workspace.factorization.is_none() {
-        let matrix = workspace
-            .layout
-            .matrix(&workspace.matrix)
-            .map_err(map_linear_error)?;
-        let dense = DenseLu::factorize(
-            workspace.layout,
-            matrix.as_slice(),
-            stats.jacobian_evaluations as u64,
-        )
-        .map_err(map_linear_error)?;
+        let dense =
+            DenseLu::factorize(workspace.layout, &workspace.matrix).map_err(map_linear_error)?;
         factorize(&mut workspace.matrix, &mut workspace.pivots, dimension)
             .map_err(|_| SolveError::SingularLinearSystem)?;
         workspace.dense_active = true;

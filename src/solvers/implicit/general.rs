@@ -255,15 +255,11 @@ where
             *correction = -*residual;
         }
         if workspace.dense_active {
-            let mut correction = workspace
-                .layout
-                .state_mut(&mut workspace.correction)
-                .map_err(map_linear_error)?;
             workspace
                 .factorization
                 .as_ref()
                 .ok_or(SolveError::SingularLinearSystem)?
-                .solve(correction.as_mut_slice())
+                .solve(&mut workspace.correction)
                 .map_err(map_linear_error)?;
             workspace.dense_active = false;
         } else {
@@ -388,17 +384,8 @@ where
     stats.jacobian_evaluations += 1;
     stats.linear_factorizations += 1;
     if workspace.factorization.is_none() {
-        let matrix = workspace
-            .layout
-            .matrix(&workspace.matrix)
-            .map_err(map_linear_error)?;
         workspace.factorization = Some(
-            DenseLu::factorize(
-                workspace.layout,
-                matrix.as_slice(),
-                stats.jacobian_evaluations as u64,
-            )
-            .map_err(map_linear_error)?,
+            DenseLu::factorize(workspace.layout, &workspace.matrix).map_err(map_linear_error)?,
         );
         // Keep the preallocated legacy factors for subsequent refreshes. The
         // checked DenseLu path is exercised for the first solve while refreshes
@@ -415,12 +402,10 @@ where
 
 fn map_linear_error(error: LinearError) -> SolveError {
     match error {
-        LinearError::EmptyDimension
-        | LinearError::DimensionOverflow { .. }
+        LinearError::DimensionOverflow { .. }
         | LinearError::LengthMismatch { .. }
         | LinearError::NonFiniteCoefficient
-        | LinearError::Singular
-        | LinearError::Unfactorized => SolveError::SingularLinearSystem,
+        | LinearError::Singular => SolveError::SingularLinearSystem,
     }
 }
 

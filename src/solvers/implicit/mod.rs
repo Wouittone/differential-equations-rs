@@ -6,6 +6,16 @@ pub mod pdirk;
 pub mod sdirk;
 pub mod sdirk_cash4;
 
+mod coefficient_data {
+    use differential_equations_tableau_macros::define_coefficients_from_file;
+
+    define_coefficients_from_file!(
+        pub(super),
+        "coefficients/implicit/sdirk.toml",
+        crate = crate
+    );
+}
+
 pub use firk::{AdaptiveRadau, GaussLegendre, RadauIIA3, RadauIIA5, RadauIIA9};
 pub use general::{ImplicitEuler, ImplicitMidpoint, Trapezoid};
 pub use pdirk::{PDIRK44, Pdirk44};

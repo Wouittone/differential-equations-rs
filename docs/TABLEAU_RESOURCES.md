@@ -110,6 +110,7 @@ define_explicit_rk_from_file!(
 
 The canonical low-order built-ins—Euler, midpoint, Heun, Ralston, Alshina2,
 and RK4—are resource-backed under `tableaux/explicit`. Family-specific banks
-for explicit, second-order, and stabilized methods live under `coefficients/`.
-Changing either kind of resource automatically invalidates Cargo's build
-because each macro expansion tracks its source with `include_str!`.
+for explicit Runge--Kutta, low-storage, SSPRK, SDIRK, Rosenbrock,
+second-order, and stabilized methods live under `coefficients/`. Changing
+either kind of resource automatically invalidates Cargo's build because each
+macro expansion tracks its source with `include_str!`.

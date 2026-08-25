@@ -893,13 +893,8 @@ adaptive_rkn_tableau!(
     ERKN7_POS_ONLY_ERROR
 );
 
-const EMPTY_ROW: &[f64] = &[];
-const NYSTROM4_VI_A2: &[f64] = &[1.0 / 8.0];
-const NYSTROM4_VI_A3: &[f64] = &[0.0, 1.0 / 2.0];
 const NYSTROM4_VI_A: &[&[f64]] = &[EMPTY_ROW, NYSTROM4_VI_A2, NYSTROM4_VI_A3];
-const NYSTROM4_VI_NODES: &[f64] = &[0.0, 1.0 / 2.0, 1.0];
-const NYSTROM4_VI_B: &[f64] = &[1.0 / 6.0, 2.0 / 6.0, 0.0];
-const NYSTROM4_VI_BP: &[f64] = &[1.0 / 6.0, 4.0 / 6.0, 1.0 / 6.0];
+
 const NYSTROM4_VI_TABLEAU: RknTableau = RknTableau {
     nodes: NYSTROM4_VI_NODES,
     position_coefficients: NYSTROM4_VI_A,
@@ -908,13 +903,8 @@ const NYSTROM4_VI_TABLEAU: RknTableau = RknTableau {
     velocity_weights: NYSTROM4_VI_BP,
 };
 
-const NYSTROM5_VI_A2: &[f64] = &[1.0 / 50.0];
-const NYSTROM5_VI_A3: &[f64] = &[-1.0 / 27.0, 7.0 / 27.0];
-const NYSTROM5_VI_A4: &[f64] = &[3.0 / 10.0, -2.0 / 35.0, 9.0 / 35.0];
 const NYSTROM5_VI_A: &[&[f64]] = &[EMPTY_ROW, NYSTROM5_VI_A2, NYSTROM5_VI_A3, NYSTROM5_VI_A4];
-const NYSTROM5_VI_NODES: &[f64] = &[0.0, 1.0 / 5.0, 2.0 / 3.0, 1.0];
-const NYSTROM5_VI_B: &[f64] = &[14.0 / 336.0, 100.0 / 336.0, 54.0 / 336.0, 0.0];
-const NYSTROM5_VI_BP: &[f64] = &[14.0 / 336.0, 125.0 / 336.0, 162.0 / 336.0, 35.0 / 336.0];
+
 const NYSTROM5_VI_TABLEAU: RknTableau = RknTableau {
     nodes: NYSTROM5_VI_NODES,
     position_coefficients: NYSTROM5_VI_A,
@@ -923,17 +913,10 @@ const NYSTROM5_VI_TABLEAU: RknTableau = RknTableau {
     velocity_weights: NYSTROM5_VI_BP,
 };
 
-const NYSTROM4_A2: &[f64] = &[1.0 / 8.0];
-const NYSTROM4_A3: &[f64] = &[1.0 / 8.0, 0.0];
-const NYSTROM4_A4: &[f64] = &[0.0, 0.0, 1.0 / 2.0];
 const NYSTROM4_A: &[&[f64]] = &[EMPTY_ROW, NYSTROM4_A2, NYSTROM4_A3, NYSTROM4_A4];
-const NYSTROM4_ABAR2: &[f64] = &[1.0 / 2.0];
-const NYSTROM4_ABAR3: &[f64] = &[0.0, 1.0 / 2.0];
-const NYSTROM4_ABAR4: &[f64] = &[0.0, 0.0, 1.0];
+
 const NYSTROM4_ABAR: &[&[f64]] = &[EMPTY_ROW, NYSTROM4_ABAR2, NYSTROM4_ABAR3, NYSTROM4_ABAR4];
-const NYSTROM4_NODES: &[f64] = &[0.0, 1.0 / 2.0, 1.0 / 2.0, 1.0];
-const NYSTROM4_B: &[f64] = &[1.0 / 6.0, 1.0 / 6.0, 1.0 / 6.0, 0.0];
-const NYSTROM4_BP: &[f64] = &[1.0 / 6.0, 2.0 / 6.0, 2.0 / 6.0, 1.0 / 6.0];
+
 const NYSTROM4_TABLEAU: RknTableau = RknTableau {
     nodes: NYSTROM4_NODES,
     position_coefficients: NYSTROM4_A,
@@ -943,7 +926,7 @@ const NYSTROM4_TABLEAU: RknTableau = RknTableau {
 };
 
 const RKN4_A: &[&[f64]] = &[EMPTY_ROW, NYSTROM4_A2, NYSTROM4_VI_A3];
-const RKN4_ABAR3: &[f64] = &[0.0, 1.0];
+
 const RKN4_ABAR: &[&[f64]] = &[EMPTY_ROW, NYSTROM4_ABAR2, RKN4_ABAR3];
 const RKN4_TABLEAU: RknTableau = RknTableau {
     nodes: NYSTROM4_VI_NODES,

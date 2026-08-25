@@ -14,6 +14,11 @@ mod coefficient_data {
         "coefficients/second_order/adaptive_rkn.toml",
         crate = crate
     );
+    define_coefficients_from_file!(
+        pub(super),
+        "coefficients/second_order/general.toml",
+        crate = crate
+    );
 }
 
 pub use general::*;

@@ -378,12 +378,10 @@ where
     }
     stats.jacobian_evaluations += 1;
     workspace.factorization = Some(
-        DenseLu::factorize(workspace.layout, &workspace.matrix, 0).map_err(
-            |error| match error {
-                crate::linear::LinearError::Singular => SolveError::SingularLinearSystem,
-                _ => SolveError::NonlinearSolveFailed,
-            },
-        )?,
+        DenseLu::factorize(workspace.layout, &workspace.matrix).map_err(|error| match error {
+            crate::linear::LinearError::Singular => SolveError::SingularLinearSystem,
+            _ => SolveError::NonlinearSolveFailed,
+        })?,
     );
     stats.linear_factorizations += 1;
     Ok(())

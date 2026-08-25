@@ -3,8 +3,8 @@ use differential_equations::algorithms::second_order::NewmarkBeta;
 use differential_equations::solvers::exponential::rkip::RKIP;
 use differential_equations::solvers::rosenbrock::amf::AmfOperator;
 use differential_equations::{
-    ConfigurationError, DEFAULT_EVENT_TOLERANCE, InterpolationError, LieGroupProblem,
-    MassMatrixOdeProblem, OdeProblem, SemilinearOdeProblem, SolveOptions, solve,
+    ConfigurationError, DEFAULT_EVENT_TOLERANCE, InterpolationError, LieGroupProblem, OdeProblem,
+    SemilinearOdeProblem, SolveOptions, solve,
 };
 
 #[test]
@@ -27,20 +27,6 @@ fn public_constructors_report_typed_configuration_errors() {
         overflow,
         Err(ConfigurationError::DimensionOverflow {
             context: "Lie-group matrix"
-        })
-    ));
-
-    let mass_matrix = MassMatrixOdeProblem::new(
-        |_: &mut [f64], _: &[f64], _: &(), _: f64| {},
-        vec![1.0, 2.0],
-        (0.0, 1.0),
-        (),
-        vec![1.0; 3],
-    );
-    assert!(matches!(
-        mass_matrix,
-        Err(ConfigurationError::DimensionMismatch {
-            context: "mass matrix"
         })
     ));
 

@@ -23,6 +23,7 @@ pub(crate) mod coefficient_data {
 
     define_coefficients_from_file!(pub(crate), "coefficients/explicit/core.toml", crate = crate);
     define_coefficients_from_file!(pub(crate), "coefficients/explicit/dense.toml", crate = crate);
+    define_coefficients_from_file!(pub(crate), "coefficients/explicit/general.toml", crate = crate);
 }
 
 #[cfg(test)]

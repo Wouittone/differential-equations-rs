@@ -1,3 +1,4 @@
+use super::coefficient_data::*;
 use super::coefficient_data::{
     BS3_A_ROWS, BS3_B as GENERATED_BS3_B, BS3_E as GENERATED_BS3_E, BS3_STAGE_TIMES, BS5_DENSE,
     BS5_EXTRA_STAGES, DP5_A_ROWS, DP5_B as GENERATED_DP5_B, DP5_E as GENERATED_DP5_E,
@@ -107,34 +108,7 @@ where
     }
 }
 
-const EMPTY: &[f64] = &[];
-const HALF_STAGE_ROW: &[f64] = &[0.5];
-const ENDPOINT_STAGE_ROW: &[f64] = &[1.0];
-const EXPLICIT_TRAPEZOID_WEIGHTS: &[f64] = &[0.5, 0.5];
-const EXPLICIT_ENDPOINT_NODES: &[f64] = &[0.0, 1.0];
-
-const RKM_A2: &[f64] = &[0.167_266_187_050_662];
-const RKM_A3: &[f64] = &[0.0, 0.484_574_582_244_783];
-const RKM_A4: &[f64] = &[0.0, 0.0, 0.536_909_403_373_491];
-const RKM_A5: &[f64] = &[0.0, 0.0, 0.0, 0.082_069_535_961_948];
-const RKM_A6: &[f64] = &[0.0, 0.0, 0.0, 0.0, 0.853_923_000_035_347];
 const RKM_A: &[&[f64]] = &[EMPTY, RKM_A2, RKM_A3, RKM_A4, RKM_A5, RKM_A6];
-const RKM_B: &[f64] = &[
-    -0.028_289_441_132_839,
-    0.463_968_918_564_71,
-    -0.434_414_348_751_899,
-    0.693_796_229_087_598,
-    0.0,
-    0.304_938_642_232_43,
-];
-const RKM_C: &[f64] = &[
-    0.0,
-    0.167_266_187_050_662,
-    0.484_574_582_244_783,
-    0.536_909_403_373_491,
-    0.082_069_535_961_948,
-    0.853_923_000_035_347,
-];
 
 // Tsitouras' Runge--Kutta--Oliver six-stage fifth-order method. The pinned
 // OrdinaryDiffEq implementation starts with a stage at c=2/3 (rather than
@@ -142,72 +116,15 @@ const RKM_C: &[f64] = &[
 // unweighted c=0 stage for dense-output Hermite segments, then stores the
 // upstream six stages at indices 1..=6. This preserves the published tableau
 // exactly while keeping the driver's endpoint and save-at semantics sound.
-const RKO65_A1: &[f64] = &[0.0];
-const RKO65_A2: &[f64] = &[0.0, 1.0 / 6.0];
-const RKO65_A3: &[f64] = &[0.0, -15.0 / 8.0, 21.0 / 8.0];
-const RKO65_A4: &[f64] = &[0.0, -9.0, 75.0 / 7.0, -5.0 / 7.0];
-const RKO65_A5: &[f64] = &[0.0, -3.0, 34257.0 / 8750.0, -114.0 / 875.0, 19.0 / 1250.0];
-const RKO65_A6: &[f64] = &[0.0, 0.0, 123.0 / 380.0, 5.0 / 2.0, 3.0 / 20.0, -75.0 / 38.0];
+
 const RKO65_A: &[&[f64]] = &[
     EMPTY, RKO65_A1, RKO65_A2, RKO65_A3, RKO65_A4, RKO65_A5, RKO65_A6,
 ];
-const RKO65_B: &[f64] = &[
-    0.0,
-    0.0,
-    54.0 / 133.0,
-    32.0 / 21.0,
-    1.0 / 18.0,
-    -125.0 / 114.0,
-    1.0 / 9.0,
-];
-const RKO65_C: &[f64] = &[0.0, 2.0 / 3.0, 1.0 / 6.0, 3.0 / 4.0, 1.0, 4.0 / 5.0, 1.0];
 
 // Misha Stepanov's eight-stage fifth-order method with a final FSAL stage.
 // Coefficients are copied from OrdinaryDiffEqLowOrderRK's
 // `MSRK5ConstantCache` at the pinned upstream revision.
-const MSRK5_A2: &[f64] = &[4.0 / 45.0];
-const MSRK5_A3: &[f64] = &[1.0 / 30.0, 1.0 / 10.0];
-const MSRK5_A4: &[f64] = &[1.0 / 20.0, 0.0, 3.0 / 20.0];
-const MSRK5_A5: &[f64] = &[1.0 / 2.0, 0.0, -15.0 / 8.0, 15.0 / 8.0];
-const MSRK5_A6: &[f64] = &[-11.0 / 135.0, 0.0, 23.0 / 45.0, -2.0 / 27.0, 8.0 / 45.0];
-const MSRK5_A7: &[f64] = &[
-    5.0 / 108.0,
-    0.0,
-    35.0 / 72.0,
-    -59.0 / 216.0,
-    -25.0 / 27.0,
-    3.0 / 2.0,
-];
-const MSRK5_A8: &[f64] = &[
-    31.0 / 128.0,
-    0.0,
-    -7563.0 / 4480.0,
-    233.0 / 112.0,
-    3461.0 / 2240.0,
-    -765.0 / 448.0,
-    153.0 / 320.0,
-];
-const MSRK5_B: &[f64] = &[
-    29.0 / 456.0,
-    0.0,
-    0.0,
-    11.0 / 38.0,
-    2.0 / 27.0,
-    11.0 / 40.0,
-    4.0 / 19.0,
-    224.0 / 2565.0,
-    0.0,
-];
-const MSRK5_FSAL_ROW: &[f64] = &[
-    29.0 / 456.0,
-    0.0,
-    0.0,
-    11.0 / 38.0,
-    2.0 / 27.0,
-    11.0 / 40.0,
-    4.0 / 19.0,
-    224.0 / 2565.0,
-];
+
 const MSRK5_A: &[&[f64]] = &[
     EMPTY,
     MSRK5_A2,
@@ -219,65 +136,13 @@ const MSRK5_A: &[&[f64]] = &[
     MSRK5_A8,
     MSRK5_FSAL_ROW,
 ];
-const MSRK5_C: &[f64] = &[
-    0.0,
-    4.0 / 45.0,
-    2.0 / 15.0,
-    1.0 / 5.0,
-    1.0 / 2.0,
-    8.0 / 15.0,
-    5.0 / 6.0,
-    19.0 / 20.0,
-    1.0,
-];
 
 // Misha Stepanov's embedded (4,5) seven-stage FSAL pair. The tableau and
 // embedded estimator are copied from OrdinaryDiffEqLowOrderRK's
 // `Stepanov5ConstantCache` at the pinned upstream revision. The final stage
 // evaluates the endpoint derivative and therefore repeats the primary update
 // weights, preserving the FSAL lifecycle used by the upstream implementation.
-const STEPANOV5_A2: &[f64] = &[1.0 / 5.0];
-const STEPANOV5_A3: &[f64] = &[21.0 / 338.0, 441.0 / 1690.0];
-const STEPANOV5_A4: &[f64] = &[639.0 / 392.0, -729.0 / 140.0, 1755.0 / 392.0];
-const STEPANOV5_A5: &[f64] = &[
-    4_878_991.0 / 1_693_440.0,
-    -16_601.0 / 1_792.0,
-    210_067.0 / 28_224.0,
-    -1_469.0 / 17_280.0,
-];
-const STEPANOV5_A6: &[f64] = &[
-    13_759_919.0 / 4_230_954.0,
-    -2_995.0 / 287.0,
-    507_312_091.0 / 61_294_590.0,
-    -22.0 / 405.0,
-    -7_040.0 / 180_687.0,
-];
-const STEPANOV5_B: &[f64] = &[
-    1_441.0 / 14_742.0,
-    0.0,
-    114_244.0 / 234_927.0,
-    118.0 / 81.0,
-    -12_800.0 / 4_407.0,
-    41.0 / 22.0,
-    0.0,
-];
-const STEPANOV5_B_TILDE: &[f64] = &[
-    -1.0 / 273.0,
-    0.0,
-    2_197.0 / 174_020.0,
-    -4.0 / 15.0,
-    1_280.0 / 1_469.0,
-    -33_743.0 / 52_712.0,
-    127.0 / 4_792.0,
-];
-const STEPANOV5_FSAL_ROW: &[f64] = &[
-    1_441.0 / 14_742.0,
-    0.0,
-    114_244.0 / 234_927.0,
-    118.0 / 81.0,
-    -12_800.0 / 4_407.0,
-    41.0 / 22.0,
-];
+
 const STEPANOV5_A: &[&[f64]] = &[
     EMPTY,
     STEPANOV5_A2,
@@ -287,86 +152,13 @@ const STEPANOV5_A: &[&[f64]] = &[
     STEPANOV5_A6,
     STEPANOV5_FSAL_ROW,
 ];
-const STEPANOV5_C: &[f64] = &[
-    0.0,
-    1.0 / 5.0,
-    21.0 / 65.0,
-    9.0 / 10.0,
-    39.0 / 40.0,
-    1.0,
-    1.0,
-];
 
 // Kovalnogov--Simos--Tsitouras' seven-stage embedded (4,5) pair designed for
 // SIR-type epidemic models. Coefficients are copied from
 // `SIR54ConstantCache` in OrdinaryDiffEqLowOrderRK at the pinned revision.
 // The eighth row evaluates the accepted endpoint derivative and repeats the
 // primary weights, enabling the shared driver's FSAL lifecycle.
-#[allow(clippy::excessive_precision)]
-const SIR54_A2: &[f64] = &[0.224_991_857_145_594_237];
-#[allow(clippy::excessive_precision)]
-const SIR54_A3: &[f64] = &[0.089_153_361_032_067_110_3, 0.238_960_211_116_888_553];
-#[allow(clippy::excessive_precision)]
-const SIR54_A4: &[f64] = &[
-    1.305_022_398_630_580_47,
-    -5.501_775_490_886_398_96,
-    5.141_131_395_293_160_96,
-];
-#[allow(clippy::excessive_precision)]
-const SIR54_A5: &[f64] = &[
-    1.762_340_129_275_443_37,
-    -7.448_004_284_702_026_72,
-    6.708_799_990_212_466_12,
-    -0.034_137_733_035_716_306_3,
-];
-#[allow(clippy::excessive_precision)]
-const SIR54_A6: &[f64] = &[
-    1.874_129_116_198_187_46,
-    -7.914_679_777_117_707_18,
-    7.079_854_670_922_640_69,
-    -0.024_494_533_823_827_536_7,
-    -0.014_809_476_179_293_43,
-];
-#[allow(clippy::excessive_precision)]
-const SIR54_A7: &[f64] = &[
-    0.098_697_149_855_166_425_6,
-    0.001_007_293_468_741_506_52,
-    0.495_118_366_873_759_549,
-    3.937_670_696_186_871_79,
-    -13.739_542_408_717_368_5,
-    10.207_048_902_332_829_2,
-];
-#[allow(clippy::excessive_precision)]
-const SIR54_B: &[f64] = &[
-    0.098_697_149_855_166_425_6,
-    0.001_007_293_468_741_506_52,
-    0.495_118_366_873_759_549,
-    3.937_670_696_186_871_79,
-    -13.739_542_408_717_368_5,
-    10.207_048_902_332_829_2,
-    0.0,
-    0.0,
-];
-const SIR54_ERROR: &[f64] = &[
-    0.008_811_109_678_338_494,
-    0.000_114_075_641_625_599_92,
-    -0.029_774_887_187_671_295,
-    9.643_100_938_483_734,
-    -8.034_112_166_420_506,
-    6.316_157_977_385_73,
-    -0.05,
-    0.0,
-];
-#[allow(clippy::excessive_precision)]
-const SIR54_FSAL_ROW: &[f64] = &[
-    0.098_697_149_855_166_425_6,
-    0.001_007_293_468_741_506_52,
-    0.495_118_366_873_759_549,
-    3.937_670_696_186_871_79,
-    -13.739_542_408_717_368_5,
-    10.207_048_902_332_829_2,
-    0.0,
-];
+
 const SIR54_A: &[&[f64]] = &[
     EMPTY,
     SIR54_A2,
@@ -377,55 +169,13 @@ const SIR54_A: &[&[f64]] = &[
     SIR54_A7,
     SIR54_FSAL_ROW,
 ];
-#[allow(clippy::excessive_precision)]
-const SIR54_C: &[f64] = &[
-    0.0,
-    0.224_991_857_145_594_237,
-    0.328_113_572_148_955_663,
-    0.944_378_303_037_342_471,
-    0.988_998_101_750_166_47,
-    1.0,
-    1.0,
-    1.0,
-];
 
 // Misha Stepanov's eight-stage sixth-order fixed-step method. The tableau is
 // copied from OrdinaryDiffEqLowOrderRK's `MSRK6ConstantCache` at the pinned
 // upstream revision. OrdinaryDiffEq evaluates one additional endpoint
 // derivative for its default FSAL lifecycle, represented here by the final
 // row equal to the update weights and a zero final weight.
-const MSRK6_A2: &[f64] = &[1.0 / 14.0];
-const MSRK6_A3: &[f64] = &[0.0, 1.0 / 7.0];
-const MSRK6_A4: &[f64] = &[3.0 / 56.0, 0.0, 9.0 / 56.0];
-const MSRK6_A5: &[f64] = &[29.0 / 72.0, 0.0, -35.0 / 24.0, 14.0 / 9.0];
-const MSRK6_A6: &[f64] = &[-17.0 / 56.0, 0.0, 93.0 / 56.0, -8.0 / 7.0, 3.0 / 7.0];
-const MSRK6_A7: &[f64] = &[
-    199.0 / 1372.0,
-    0.0,
-    -195.0 / 196.0,
-    1259.0 / 784.0,
-    -3855.0 / 5488.0,
-    45.0 / 56.0,
-];
-const MSRK6_A8: &[f64] = &[
-    4903.0 / 25596.0,
-    0.0,
-    4487.0 / 2844.0,
-    -255101.0 / 102384.0,
-    33847.0 / 11376.0,
-    -94325.0 / 51192.0,
-    3773.0 / 6399.0,
-];
-const MSRK6_FSAL_ROW: &[f64] = &[
-    16.0 / 243.0,
-    0.0,
-    0.0,
-    16807.0 / 53460.0,
-    53.0 / 300.0,
-    2401.0 / 12150.0,
-    2401.0 / 12150.0,
-    79.0 / 1650.0,
-];
+
 const MSRK6_A: &[&[f64]] = &[
     EMPTY,
     MSRK6_A2,
@@ -437,83 +187,16 @@ const MSRK6_A: &[&[f64]] = &[
     MSRK6_A8,
     MSRK6_FSAL_ROW,
 ];
-const MSRK6_B: &[f64] = &[
-    16.0 / 243.0,
-    0.0,
-    0.0,
-    16807.0 / 53460.0,
-    53.0 / 300.0,
-    2401.0 / 12150.0,
-    2401.0 / 12150.0,
-    79.0 / 1650.0,
-    0.0,
-];
-const MSRK6_C: &[f64] = &[
-    0.0,
-    1.0 / 14.0,
-    1.0 / 7.0,
-    3.0 / 14.0,
-    1.0 / 2.0,
-    9.0 / 14.0,
-    6.0 / 7.0,
-    1.0,
-    1.0,
-];
 
-const RALSTON4_A2: &[f64] = &[0.4];
-const RALSTON4_A3: &[f64] = &[0.296_977_609_247_753_57, 0.158_759_644_971_035_84];
-const RALSTON4_A4: &[f64] = &[
-    0.218_100_388_225_920_04,
-    -3.050_965_148_692_930_6,
-    3.832_864_760_467_010_5,
-];
 const RALSTON4_A: &[&[f64]] = &[EMPTY, RALSTON4_A2, RALSTON4_A3, RALSTON4_A4];
-const RALSTON4_B: &[f64] = &[
-    0.174_760_282_262_690_4,
-    -0.551_480_662_878_733,
-    1.205_535_599_396_523_5,
-    0.171_184_781_219_519_02,
-];
-const RALSTON4_C: &[f64] = &[0.0, 0.4, 0.455_737_254_218_789_4, 1.0];
 
-const ALSHINA3_A3: &[f64] = &[0.0, 0.75];
 const ALSHINA3_A: &[&[f64]] = &[EMPTY, HALF_STAGE_ROW, ALSHINA3_A3];
-const ALSHINA3_B: &[f64] = &[2.0 / 9.0, 1.0 / 3.0, 4.0 / 9.0];
-const ALSHINA3_E: &[f64] = &[0.0, 4.0 / 9.0, 0.0];
-const ALSHINA3_C: &[f64] = &[0.0, 0.5, 0.75];
 
 // Alshina's optimal sixth-order, seven-stage fixed-step scheme. The
 // coefficients are copied from OrdinaryDiffEqLowOrderRK's
 // `Alshina6ConstantCache` at the pinned upstream revision. The final update
 // uses only stages 1, 5, 6, and 7 (the omitted b2-b4 entries are zero).
-const ALSHINA6_A2: &[f64] = &[0.571_428_571_428_571_4];
-const ALSHINA6_A3: &[f64] = &[1.026_785_714_285_714_2, -0.312_5];
-const ALSHINA6_A4: &[f64] = &[
-    0.934_920_634_920_634_9,
-    0.277_777_777_777_777_8,
-    -0.355_555_555_555_555_57,
-];
-const ALSHINA6_A5: &[f64] = &[
-    0.180_025_671_442_084_34,
-    0.147_379_406_839_616_14,
-    0.016_070_163_293_314_288,
-    -0.067_082_039_324_993_7,
-];
-const ALSHINA6_A6: &[f64] = &[
-    -0.079_797_658_566_031_38,
-    0.025_290_591_998_992_584,
-    -0.351_632_620_226_681_3,
-    0.320_729_490_168_751_6,
-    0.809_016_994_374_947_5,
-];
-const ALSHINA6_A7: &[f64] = &[
-    0.498_859_935_619_735_2,
-    -0.863_349_994_193_042_9,
-    1.677_812_284_666_834_9,
-    -1.268_237_254_218_789_4,
-    -0.427_050_983_124_842_35,
-    1.381_966_011_250_105,
-];
+
 const ALSHINA6_A: &[&[f64]] = &[
     EMPTY,
     ALSHINA6_A2,
@@ -522,24 +205,6 @@ const ALSHINA6_A: &[&[f64]] = &[
     ALSHINA6_A5,
     ALSHINA6_A6,
     ALSHINA6_A7,
-];
-const ALSHINA6_B: &[f64] = &[
-    1.0 / 12.0,
-    0.0,
-    0.0,
-    0.0,
-    5.0 / 12.0,
-    5.0 / 12.0,
-    1.0 / 12.0,
-];
-const ALSHINA6_C: &[f64] = &[
-    0.0,
-    0.571_428_571_428_571_4,
-    0.714_285_714_285_714_3,
-    0.857_142_857_142_857_1,
-    0.276_393_202_250_021,
-    0.723_606_797_749_978_9,
-    1.0,
 ];
 
 const BS3_A: &[&[f64]] = BS3_A_ROWS;
@@ -566,7 +231,7 @@ const DP5_R1: &[f64] = &[
     -2.0 * (35.0 / 384.0) + 1.0 - 2.0 * DP5_D1,
     DP5_D1,
 ];
-const DP5_R2: &[f64] = &[0.0, 0.0, 0.0, 0.0];
+
 const DP5_R3: &[f64] = &[
     0.0,
     3.0 * (500.0 / 1_113.0) + DP5_D3,
@@ -595,36 +260,13 @@ const DP5_R7: &[f64] = &[0.0, -1.0 + DP5_D7, 1.0 - 2.0 * DP5_D7, DP5_D7];
 const DP5_DENSE: &[&[f64]] = &[DP5_R1, DP5_R2, DP5_R3, DP5_R4, DP5_R5, DP5_R6, DP5_R7];
 
 // Owren-Zennaro 3/2 pair.
-const OWREN_ZEN3_A2: &[f64] = &[12.0 / 23.0];
-const OWREN_ZEN3_A3: &[f64] = &[-68.0 / 375.0, 368.0 / 375.0];
-const OWREN_ZEN3_A4: &[f64] = &[31.0 / 144.0, 529.0 / 1_152.0, 125.0 / 384.0];
+
 const OWREN_ZEN3_A: &[&[f64]] = &[EMPTY, OWREN_ZEN3_A2, OWREN_ZEN3_A3, OWREN_ZEN3_A4];
-const OWREN_ZEN3_B: &[f64] = &[31.0 / 144.0, 529.0 / 1_152.0, 125.0 / 384.0, 0.0];
-const OWREN_ZEN3_E: &[f64] = &[-25.0 / 144.0, 575.0 / 1_152.0, -125.0 / 384.0, 0.0];
-const OWREN_ZEN3_C: &[f64] = &[0.0, 12.0 / 23.0, 4.0 / 5.0, 1.0];
-const OWREN_ZEN3_R1: &[f64] = &[1.0, -65.0 / 48.0, 41.0 / 72.0];
-const OWREN_ZEN3_R2: &[f64] = &[0.0, 529.0 / 384.0, -529.0 / 576.0];
-const OWREN_ZEN3_R3: &[f64] = &[0.0, 125.0 / 128.0, -125.0 / 192.0];
-const OWREN_ZEN3_R4: &[f64] = &[0.0, -1.0, 1.0];
+
 const OWREN_ZEN3_DENSE: &[&[f64]] = &[OWREN_ZEN3_R1, OWREN_ZEN3_R2, OWREN_ZEN3_R3, OWREN_ZEN3_R4];
 
 // Owren-Zennaro 4/3 pair.
-const OWREN_ZEN4_A2: &[f64] = &[1.0 / 6.0];
-const OWREN_ZEN4_A3: &[f64] = &[44.0 / 1_369.0, 363.0 / 1_369.0];
-const OWREN_ZEN4_A4: &[f64] = &[3_388.0 / 4_913.0, -8_349.0 / 4_913.0, 8_140.0 / 4_913.0];
-const OWREN_ZEN4_A5: &[f64] = &[
-    -36_764.0 / 408_375.0,
-    767.0 / 1_125.0,
-    -32_708.0 / 136_125.0,
-    210_392.0 / 408_375.0,
-];
-const OWREN_ZEN4_A6: &[f64] = &[
-    1_697.0 / 18_876.0,
-    0.0,
-    50_653.0 / 116_160.0,
-    299_693.0 / 1_626_240.0,
-    3_375.0 / 11_648.0,
-];
+
 const OWREN_ZEN4_A: &[&[f64]] = &[
     EMPTY,
     OWREN_ZEN4_A2,
@@ -633,49 +275,7 @@ const OWREN_ZEN4_A: &[&[f64]] = &[
     OWREN_ZEN4_A5,
     OWREN_ZEN4_A6,
 ];
-const OWREN_ZEN4_B: &[f64] = &[
-    1_697.0 / 18_876.0,
-    0.0,
-    50_653.0 / 116_160.0,
-    299_693.0 / 1_626_240.0,
-    3_375.0 / 11_648.0,
-    0.0,
-];
-const OWREN_ZEN4_E: &[f64] = &[
-    1_185.0 / 6_292.0,
-    0.0,
-    -4_107.0 / 7_744.0,
-    68_493.0 / 108_416.0,
-    -3_375.0 / 11_648.0,
-    0.0,
-];
-const OWREN_ZEN4_C: &[f64] = &[0.0, 1.0 / 6.0, 11.0 / 37.0, 11.0 / 17.0, 13.0 / 15.0, 1.0];
-const OWREN_ZEN4_R1: &[f64] = &[
-    1.0,
-    -104_217.0 / 37_466.0,
-    1_806_901.0 / 618_189.0,
-    -866_577.0 / 824_252.0,
-];
-const OWREN_ZEN4_R2: &[f64] = &[0.0, 0.0, 0.0, 0.0];
-const OWREN_ZEN4_R3: &[f64] = &[
-    0.0,
-    861_101.0 / 230_560.0,
-    -2_178_079.0 / 380_424.0,
-    12_308_679.0 / 5_072_320.0,
-];
-const OWREN_ZEN4_R4: &[f64] = &[
-    0.0,
-    -63_869.0 / 293_440.0,
-    6_244_423.0 / 5_325_936.0,
-    -7_816_583.0 / 10_144_640.0,
-];
-const OWREN_ZEN4_R5: &[f64] = &[
-    0.0,
-    -1_522_125.0 / 762_944.0,
-    982_125.0 / 190_736.0,
-    -624_375.0 / 217_984.0,
-];
-const OWREN_ZEN4_R6: &[f64] = &[0.0, 165.0 / 131.0, -461.0 / 131.0, 296.0 / 131.0];
+
 const OWREN_ZEN4_DENSE: &[&[f64]] = &[
     OWREN_ZEN4_R1,
     OWREN_ZEN4_R2,
@@ -686,34 +286,7 @@ const OWREN_ZEN4_DENSE: &[&[f64]] = &[
 ];
 
 // Owren-Zennaro 5/4 pair.
-const OWREN_ZEN5_A2: &[f64] = &[1.0 / 6.0];
-const OWREN_ZEN5_A3: &[f64] = &[1.0 / 16.0, 3.0 / 16.0];
-const OWREN_ZEN5_A4: &[f64] = &[1.0 / 4.0, -3.0 / 4.0, 1.0];
-const OWREN_ZEN5_A5: &[f64] = &[-3.0 / 4.0, 15.0 / 4.0, -3.0, 1.0 / 2.0];
-const OWREN_ZEN5_A6: &[f64] = &[
-    369.0 / 1_372.0,
-    -243.0 / 343.0,
-    297.0 / 343.0,
-    1_485.0 / 9_604.0,
-    297.0 / 4_802.0,
-];
-const OWREN_ZEN5_A7: &[f64] = &[
-    -133.0 / 4_512.0,
-    1_113.0 / 6_016.0,
-    7_945.0 / 16_544.0,
-    -12_845.0 / 24_064.0,
-    -315.0 / 24_064.0,
-    156_065.0 / 198_528.0,
-];
-const OWREN_ZEN5_A8: &[f64] = &[
-    83.0 / 945.0,
-    0.0,
-    248.0 / 825.0,
-    41.0 / 180.0,
-    1.0 / 36.0,
-    2_401.0 / 38_610.0,
-    6_016.0 / 20_475.0,
-];
+
 const OWREN_ZEN5_A: &[&[f64]] = &[
     EMPTY,
     OWREN_ZEN5_A2,
@@ -724,74 +297,7 @@ const OWREN_ZEN5_A: &[&[f64]] = &[
     OWREN_ZEN5_A7,
     OWREN_ZEN5_A8,
 ];
-const OWREN_ZEN5_B: &[f64] = &[
-    83.0 / 945.0,
-    0.0,
-    248.0 / 825.0,
-    41.0 / 180.0,
-    1.0 / 36.0,
-    2_401.0 / 38_610.0,
-    6_016.0 / 20_475.0,
-    0.0,
-];
-const OWREN_ZEN5_E: &[f64] = &[
-    -188.0 / 945.0,
-    0.0,
-    752.0 / 825.0,
-    -89.0 / 45.0,
-    -1.0 / 9.0,
-    32_242.0 / 19_305.0,
-    -6_016.0 / 20_475.0,
-    0.0,
-];
-const OWREN_ZEN5_C: &[f64] = &[
-    0.0,
-    1.0 / 6.0,
-    1.0 / 4.0,
-    1.0 / 2.0,
-    1.0 / 2.0,
-    9.0 / 14.0,
-    7.0 / 8.0,
-    1.0,
-];
-const OWREN_ZEN5_R1: &[f64] = &[
-    1.0,
-    -3_292.0 / 819.0,
-    17_893.0 / 2_457.0,
-    -4_969.0 / 819.0,
-    596.0 / 315.0,
-];
-const OWREN_ZEN5_R2: &[f64] = &[0.0, 0.0, 0.0, 0.0, 0.0];
-const OWREN_ZEN5_R3: &[f64] = &[
-    0.0,
-    5_112.0 / 715.0,
-    -43_568.0 / 2_145.0,
-    1_344.0 / 65.0,
-    -1_984.0 / 275.0,
-];
-const OWREN_ZEN5_R4: &[f64] = &[
-    0.0,
-    -123.0 / 52.0,
-    3_161.0 / 234.0,
-    -1_465.0 / 78.0,
-    118.0 / 15.0,
-];
-const OWREN_ZEN5_R5: &[f64] = &[0.0, -63.0 / 52.0, 1_061.0 / 234.0, -413.0 / 78.0, 2.0];
-const OWREN_ZEN5_R6: &[f64] = &[
-    0.0,
-    -40_817.0 / 33_462.0,
-    60_025.0 / 50_193.0,
-    2_401.0 / 1_521.0,
-    -9_604.0 / 6_435.0,
-];
-const OWREN_ZEN5_R7: &[f64] = &[
-    0.0,
-    18_048.0 / 5_915.0,
-    -637_696.0 / 53_235.0,
-    96_256.0 / 5_915.0,
-    -48_128.0 / 6_825.0,
-];
-const OWREN_ZEN5_R8: &[f64] = &[0.0, -18.0 / 13.0, 75.0 / 13.0, -109.0 / 13.0, 4.0];
+
 const OWREN_ZEN5_DENSE: &[&[f64]] = &[
     OWREN_ZEN5_R1,
     OWREN_ZEN5_R2,
@@ -805,106 +311,23 @@ const OWREN_ZEN5_DENSE: &[&[f64]] = &[
 
 // Bogacki-Shampine 5/4 pair. Its controller uses the maximum of two embedded
 // estimators, represented by ERROR_WEIGHTS and SECOND_ERROR_WEIGHTS.
-const BS5_A2: &[f64] = &[1.0 / 6.0];
-const BS5_A3: &[f64] = &[2.0 / 27.0, 4.0 / 27.0];
-const BS5_A4: &[f64] = &[183.0 / 1_372.0, -162.0 / 343.0, 1_053.0 / 1_372.0];
-const BS5_A5: &[f64] = &[68.0 / 297.0, -4.0 / 11.0, 42.0 / 143.0, 1_960.0 / 3_861.0];
-const BS5_A6: &[f64] = &[
-    597.0 / 22_528.0,
-    81.0 / 352.0,
-    63_099.0 / 585_728.0,
-    58_653.0 / 366_080.0,
-    4_617.0 / 20_480.0,
-];
-const BS5_A7: &[f64] = &[
-    174_197.0 / 959_244.0,
-    -30_942.0 / 79_937.0,
-    8_152_137.0 / 19_744_439.0,
-    666_106.0 / 1_039_181.0,
-    -29_421.0 / 29_068.0,
-    482_048.0 / 414_219.0,
-];
-const BS5_A8: &[f64] = &[
-    587.0 / 8_064.0,
-    0.0,
-    4_440_339.0 / 15_491_840.0,
-    24_353.0 / 124_800.0,
-    387.0 / 44_800.0,
-    2_152.0 / 5_985.0,
-    7_267.0 / 94_080.0,
-];
+
 const BS5_A: &[&[f64]] = &[
     EMPTY, BS5_A2, BS5_A3, BS5_A4, BS5_A5, BS5_A6, BS5_A7, BS5_A8,
-];
-const BS5_B: &[f64] = &[
-    587.0 / 8_064.0,
-    0.0,
-    4_440_339.0 / 15_491_840.0,
-    24_353.0 / 124_800.0,
-    387.0 / 44_800.0,
-    2_152.0 / 5_985.0,
-    7_267.0 / 94_080.0,
-    0.0,
-];
-const BS5_E1: &[f64] = &[
-    -3.0 / 1_280.0,
-    0.0,
-    6_561.0 / 632_320.0,
-    -343.0 / 20_800.0,
-    243.0 / 12_800.0,
-    -1.0 / 95.0,
-    0.0,
-    0.0,
-];
-const BS5_E2: &[f64] = &[
-    -3_817.0 / 1_959_552.0,
-    0.0,
-    140_181.0 / 15_491_840.0,
-    -4_224_731.0 / 272_937_600.0,
-    8_557.0 / 403_200.0,
-    -57_928.0 / 4_363_065.0,
-    -23_930_231.0 / 4_366_535_040.0,
-    3_293.0 / 556_956.0,
-];
-const BS5_C: &[f64] = &[
-    0.0,
-    1.0 / 6.0,
-    2.0 / 9.0,
-    3.0 / 7.0,
-    2.0 / 3.0,
-    3.0 / 4.0,
-    1.0,
-    1.0,
 ];
 
 const SSPRK22_A: &[&[f64]] = &[EMPTY, ENDPOINT_STAGE_ROW];
 const SSPRK22_B: &[f64] = EXPLICIT_TRAPEZOID_WEIGHTS;
 const SSPRK22_C: &[f64] = EXPLICIT_ENDPOINT_NODES;
-const SSPRK22_DENSE_1: &[f64] = &[1.0, -0.5];
-const SSPRK22_DENSE_2: &[f64] = &[0.0, 0.5];
+
 const SSPRK22_DENSE: &[&[f64]] = &[SSPRK22_DENSE_1, SSPRK22_DENSE_2];
 
-const SSPRK33_A2: &[f64] = &[1.0];
-const SSPRK33_A3: &[f64] = &[0.25, 0.25];
 const SSPRK33_A: &[&[f64]] = &[EMPTY, SSPRK33_A2, SSPRK33_A3];
-const SSPRK33_B: &[f64] = &[1.0 / 6.0, 1.0 / 6.0, 2.0 / 3.0];
-const SSPRK33_C: &[f64] = &[0.0, 1.0, 0.5];
-const SSPRK33_DENSE_1: &[f64] = &[1.0, -5.0 / 6.0];
-const SSPRK33_DENSE_2: &[f64] = &[0.0, 1.0 / 6.0];
-const SSPRK33_DENSE_3: &[f64] = &[0.0, 2.0 / 3.0];
+
 const SSPRK33_DENSE: &[&[f64]] = &[SSPRK33_DENSE_1, SSPRK33_DENSE_2, SSPRK33_DENSE_3];
 
-const SSPRK43_A2: &[f64] = &[0.5];
-const SSPRK43_A3: &[f64] = &[0.5, 0.5];
-const SSPRK43_A4: &[f64] = &[1.0 / 6.0, 1.0 / 6.0, 1.0 / 6.0];
 const SSPRK43_A: &[&[f64]] = &[EMPTY, SSPRK43_A2, SSPRK43_A3, SSPRK43_A4];
-const SSPRK43_B: &[f64] = &[1.0 / 6.0, 1.0 / 6.0, 1.0 / 6.0, 0.5];
-const SSPRK43_E: &[f64] = &[-1.0 / 12.0, -1.0 / 12.0, -1.0 / 12.0, 0.25];
-const SSPRK43_C: &[f64] = &[0.0, 0.5, 1.0, 0.5];
-const SSPRK43_DENSE_1: &[f64] = &[1.0, -5.0 / 6.0];
-const SSPRK43_DENSE_2: &[f64] = &[0.0, 1.0 / 6.0];
-const SSPRK43_DENSE_3: &[f64] = &[0.0, 1.0 / 6.0];
-const SSPRK43_DENSE_4: &[f64] = &[0.0, 0.5];
+
 const SSPRK43_DENSE: &[&[f64]] = &[
     SSPRK43_DENSE_1,
     SSPRK43_DENSE_2,
@@ -915,25 +338,13 @@ const SSPRK43_DENSE: &[&[f64]] = &[
 // Four-stage, third-order pseudo-symplectic Runge–Kutta method. These
 // coefficients are copied from OrdinaryDiffEqLowOrderRK's
 // `PSRK3p5q4ConstantCache` at the pinned upstream revision.
-const PSRK3P5Q4_A2: &[f64] = &[3.0 / 8.0];
-const PSRK3P5Q4_A3: &[f64] = &[11.0 / 12.0, -2.0 / 3.0];
-const PSRK3P5Q4_A4: &[f64] = &[-1.0 / 12.0, 11.0 / 6.0, -3.0 / 4.0];
+
 const PSRK3P5Q4_A: &[&[f64]] = &[EMPTY, PSRK3P5Q4_A2, PSRK3P5Q4_A3, PSRK3P5Q4_A4];
-const PSRK3P5Q4_B: &[f64] = &[1.0 / 9.0, 8.0 / 9.0, -2.0 / 9.0, 2.0 / 9.0];
-const PSRK3P5Q4_C: &[f64] = &[0.0, 3.0 / 8.0, 1.0 / 4.0, 1.0];
 
 // Five-stage, third-order pseudo-symplectic Runge--Kutta method. Coefficients
 // are copied from OrdinaryDiffEqLowOrderRK's `PSRK3p6q5ConstantCache` at the
 // pinned upstream revision.
-const PSRK3P6Q5_A2: &[f64] = &[0.13502027922909];
-const PSRK3P6Q5_A3: &[f64] = &[-0.47268213605237, 1.05980250415419];
-const PSRK3P6Q5_A4: &[f64] = &[-1.21650460595689, 2.16217630216753, -0.37234592426536];
-const PSRK3P6Q5_A5: &[f64] = &[
-    0.33274443036387,
-    -0.20882668296587,
-    1.87865617737921,
-    -1.00257392477721,
-];
+
 const PSRK3P6Q5_A: &[&[f64]] = &[
     EMPTY,
     PSRK3P6Q5_A2,
@@ -941,40 +352,11 @@ const PSRK3P6Q5_A: &[&[f64]] = &[
     PSRK3P6Q5_A4,
     PSRK3P6Q5_A5,
 ];
-const PSRK3P6Q5_B: &[f64] = &[
-    0.04113894457092,
-    0.26732123194414,
-    0.86700906289955,
-    -0.30547139552036,
-    0.13000215610576,
-];
-const PSRK3P6Q5_C: &[f64] = &[
-    0.0,
-    0.13502027922909,
-    0.58712036810182,
-    0.57332577194528,
-    1.0,
-];
 
 // Six-stage, fourth-order pseudo-symplectic Runge--Kutta method. Coefficients
 // are copied from OrdinaryDiffEqLowOrderRK's `PSRK4p7q6ConstantCache` at the
 // pinned upstream revision.
-const PSRK4P7Q6_A2: &[f64] = &[0.23593376536652];
-const PSRK4P7Q6_A3: &[f64] = &[0.34750735658424, -0.13561935398346];
-const PSRK4P7Q6_A4: &[f64] = &[-0.20592852403227, 1.89179076622108, -0.89775024478958];
-const PSRK4P7Q6_A5: &[f64] = &[
-    -0.09435493281455,
-    1.75617141223762,
-    -0.96707850476948,
-    0.06932825997989,
-];
-const PSRK4P7Q6_A6: &[f64] = &[
-    0.14157883255197,
-    -1.17039696277833,
-    1.30579112376331,
-    -2.20354136855289,
-    2.92656837501595,
-];
+
 const PSRK4P7Q6_A: &[&[f64]] = &[
     EMPTY,
     PSRK4P7Q6_A2,
@@ -982,22 +364,6 @@ const PSRK4P7Q6_A: &[&[f64]] = &[
     PSRK4P7Q6_A4,
     PSRK4P7Q6_A5,
     PSRK4P7Q6_A6,
-];
-const PSRK4P7Q6_B: &[f64] = &[
-    0.07078941627598,
-    0.87808570611881,
-    -0.44887512239479,
-    -0.44887512239479,
-    0.87808570611881,
-    0.07078941627598,
-];
-const PSRK4P7Q6_C: &[f64] = &[
-    0.0,
-    0.23593376536652,
-    0.21188800260078,
-    0.78811199739923,
-    0.76406623463348,
-    1.0,
 ];
 
 macro_rules! algorithm {

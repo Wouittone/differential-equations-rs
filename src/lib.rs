@@ -30,7 +30,7 @@ pub use ensemble::{solve_batch_parallel, solve_ensemble_parallel};
 pub use error::ConfigurationError;
 pub use event::DEFAULT_EVENT_TOLERANCE;
 pub use operator_problem::{LieGroupProblem, LinearOperatorProblem};
-pub use problem::{MassMatrixOdeProblem, OdeProblem, SplitOdeProblem};
+pub use problem::{OdeProblem, SplitOdeProblem};
 pub use semilinear::{SemilinearOdeProblem, solve_exponential};
 pub use solution::{InterpolationError, Solution, SolverStats};
 pub use solver::{OdeAlgorithm, SaveMode, SolveError, SolveOptions, solve};
