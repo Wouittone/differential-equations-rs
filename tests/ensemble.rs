@@ -1,16 +1,25 @@
+#[cfg(feature = "parallel")]
 use differential_equations::algorithms::explicit::{Euler, Tsit5};
+#[cfg(feature = "parallel")]
 use differential_equations::{
-    CaseOutcome, ExecutionPolicy, OdeProblem, SolveError, SolveOptions, solve_batch, solve_ensemble,
+    CaseOutcome, OdeProblem, SolveError, SolveOptions, solve_batch, solve_ensemble,
 };
+use differential_equations::{ExecutionPolicy, solve_batch_sequential};
+use std::rc::Rc;
+#[cfg(feature = "parallel")]
 use std::sync::Arc;
+#[cfg(feature = "parallel")]
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+#[cfg(feature = "parallel")]
 type ExponentialProblem = OdeProblem<fn(&mut [f64], &[f64], &f64, f64), f64>;
 
+#[cfg(feature = "parallel")]
 fn exponential_rhs(du: &mut [f64], u: &[f64], rate: &f64, _: f64) {
     du[0] = *rate * u[0];
 }
 
+#[cfg(feature = "parallel")]
 fn exponential_problem(initial: f64) -> ExponentialProblem {
     OdeProblem::new(
         exponential_rhs as fn(&mut [f64], &[f64], &f64, f64),
@@ -21,6 +30,7 @@ fn exponential_problem(initial: f64) -> ExponentialProblem {
 }
 
 #[test]
+#[cfg(feature = "parallel")]
 fn parallel_batch_preserves_input_order() {
     let outcomes = solve_batch(
         0..128,
@@ -39,6 +49,7 @@ fn parallel_batch_preserves_input_order() {
 }
 
 #[test]
+#[cfg(feature = "parallel")]
 fn successful_ensemble_solves_every_case() {
     let options = SolveOptions::default().with_tolerances(1.0e-10, 1.0e-10);
     let outcomes = solve_ensemble(
@@ -57,6 +68,7 @@ fn successful_ensemble_solves_every_case() {
 }
 
 #[test]
+#[cfg(feature = "parallel")]
 fn per_case_failures_are_preserved_and_indexed() {
     let executions = Arc::new(AtomicUsize::new(0));
     let observed = Arc::clone(&executions);
@@ -84,6 +96,7 @@ fn per_case_failures_are_preserved_and_indexed() {
 }
 
 #[test]
+#[cfg(feature = "parallel")]
 fn invalid_ode_case_does_not_abort_ensemble() {
     let outcomes = solve_ensemble(
         [1.0, f64::NAN, 2.0],
@@ -100,6 +113,7 @@ fn invalid_ode_case_does_not_abort_ensemble() {
 }
 
 #[test]
+#[cfg(feature = "parallel")]
 fn sequential_and_parallel_ensembles_are_equivalent() {
     let options = SolveOptions::new()
         .with_adaptive(false)
@@ -124,6 +138,7 @@ fn sequential_and_parallel_ensembles_are_equivalent() {
 }
 
 #[test]
+#[cfg(feature = "parallel")]
 fn empty_batches_return_no_outcomes() {
     let outcomes = solve_batch(
         std::iter::empty::<usize>(),
@@ -134,6 +149,26 @@ fn empty_batches_return_no_outcomes() {
 }
 
 #[test]
+fn sequential_batch_accepts_thread_local_values_and_runner_state() {
+    let total = Rc::new(std::cell::Cell::new(0));
+    let observed = Rc::clone(&total);
+    let values = [Rc::new(1), Rc::new(2), Rc::new(3)];
+    let outcomes = solve_batch_sequential(values, move |value| {
+        observed.set(observed.get() + *value);
+        Ok::<_, Rc<str>>(value)
+    });
+
+    assert_eq!(total.get(), 6);
+    assert_eq!(outcomes.len(), 3);
+}
+
+#[test]
+fn execution_policy_defaults_to_sequential() {
+    assert_eq!(ExecutionPolicy::default(), ExecutionPolicy::Sequential);
+}
+
+#[test]
+#[cfg(feature = "parallel")]
 fn public_batch_types_are_send_and_sync() {
     fn assert_send_sync<T: Send + Sync>() {}
 

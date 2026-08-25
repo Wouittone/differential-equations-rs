@@ -9,11 +9,11 @@
 //! ```
 //! use differential_equations::algorithms::explicit::Tsit5;
 //! use differential_equations::{
-//!     ExecutionPolicy, OdeProblem, SolveOptions, solve_ensemble,
+//!     OdeProblem, SolveOptions, solve_ensemble_sequential,
 //! };
 //!
 //! let initial_values = [1.0, 2.0, 3.0];
-//! let outcomes = solve_ensemble(
+//! let outcomes = solve_ensemble_sequential(
 //!     initial_values,
 //!     |initial| {
 //!         OdeProblem::new(
@@ -27,7 +27,6 @@
 //!     },
 //!     Tsit5,
 //!     &SolveOptions::default(),
-//!     ExecutionPolicy::Parallel,
 //! );
 //!
 //! assert_eq!(outcomes.len(), 3);
@@ -36,15 +35,18 @@
 //! ```
 
 use crate::{OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions, solve};
+#[cfg(feature = "parallel")]
 use rayon::prelude::*;
 
 /// Selects how independent cases are executed.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[non_exhaustive]
 pub enum ExecutionPolicy {
     /// Execute cases in input order on the calling thread.
+    #[default]
     Sequential,
     /// Execute cases on Rayon's global thread pool.
-    #[default]
+    #[cfg(feature = "parallel")]
     Parallel,
 }
 
@@ -53,6 +55,7 @@ pub enum ExecutionPolicy {
 /// Outcomes are returned in ascending index order. The explicit index makes
 /// failures unambiguous even when callers later filter or partition results.
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[non_exhaustive]
 pub struct CaseOutcome<T, E> {
     /// Zero-based position of the case in the input iterator.
     pub index: usize,
@@ -94,25 +97,51 @@ where
     R: Fn(C) -> Result<T, E> + Send + Sync,
 {
     match execution {
-        ExecutionPolicy::Sequential => cases
-            .into_iter()
-            .enumerate()
-            .map(|(index, case)| CaseOutcome {
-                index,
-                result: runner(case),
-            })
-            .collect(),
-        ExecutionPolicy::Parallel => cases
-            .into_iter()
-            .collect::<Vec<_>>()
-            .into_par_iter()
-            .enumerate()
-            .map(|(index, case)| CaseOutcome {
-                index,
-                result: runner(case),
-            })
-            .collect(),
+        ExecutionPolicy::Sequential => solve_batch_sequential(cases, runner),
+        #[cfg(feature = "parallel")]
+        ExecutionPolicy::Parallel => solve_batch_parallel(cases, runner),
     }
+}
+
+/// Runs independent fallible cases sequentially without thread-safety bounds.
+///
+/// Prefer this entry point when parallel execution is not required. Unlike
+/// [`solve_batch`], it accepts thread-local inputs, outputs, errors, and runners.
+pub fn solve_batch_sequential<I, C, T, E, R>(cases: I, mut runner: R) -> Vec<CaseOutcome<T, E>>
+where
+    I: IntoIterator<Item = C>,
+    R: FnMut(C) -> Result<T, E>,
+{
+    cases
+        .into_iter()
+        .enumerate()
+        .map(|(index, case)| CaseOutcome {
+            index,
+            result: runner(case),
+        })
+        .collect()
+}
+
+/// Runs independent fallible cases on Rayon's global thread pool.
+#[cfg(feature = "parallel")]
+pub fn solve_batch_parallel<I, C, T, E, R>(cases: I, runner: R) -> Vec<CaseOutcome<T, E>>
+where
+    I: IntoIterator<Item = C>,
+    C: Send,
+    T: Send,
+    E: Send,
+    R: Fn(C) -> Result<T, E> + Send + Sync,
+{
+    cases
+        .into_iter()
+        .collect::<Vec<_>>()
+        .into_par_iter()
+        .enumerate()
+        .map(|(index, case)| CaseOutcome {
+            index,
+            result: runner(case),
+        })
+        .collect()
 }
 
 /// Solves an ensemble of independently constructed ODE problems.
@@ -147,4 +176,44 @@ where
         },
         execution,
     )
+}
+
+/// Solves an ODE ensemble sequentially without requiring transferable problems.
+pub fn solve_ensemble_sequential<I, C, F, P, A, B>(
+    cases: I,
+    mut problem_factory: B,
+    algorithm: A,
+    options: &SolveOptions,
+) -> Vec<CaseOutcome<Solution, SolveError>>
+where
+    I: IntoIterator<Item = C>,
+    A: OdeAlgorithm + Clone,
+    B: FnMut(C) -> OdeProblem<F, P>,
+    F: Fn(&mut [f64], &[f64], &P, f64),
+{
+    solve_batch_sequential(cases, |case| {
+        let problem = problem_factory(case);
+        solve(&problem, algorithm.clone(), options)
+    })
+}
+
+/// Solves an ODE ensemble on Rayon's global thread pool.
+#[cfg(feature = "parallel")]
+pub fn solve_ensemble_parallel<I, C, F, P, A, B>(
+    cases: I,
+    problem_factory: B,
+    algorithm: A,
+    options: &SolveOptions,
+) -> Vec<CaseOutcome<Solution, SolveError>>
+where
+    I: IntoIterator<Item = C>,
+    C: Send,
+    A: OdeAlgorithm + Clone + Send + Sync,
+    B: Fn(C) -> OdeProblem<F, P> + Send + Sync,
+    F: Fn(&mut [f64], &[f64], &P, f64),
+{
+    solve_batch_parallel(cases, |case| {
+        let problem = problem_factory(case);
+        solve(&problem, algorithm.clone(), options)
+    })
 }

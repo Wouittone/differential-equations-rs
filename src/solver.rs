@@ -1,8 +1,9 @@
-use crate::{OdeProblem, Solution};
+use crate::{DEFAULT_EVENT_TOLERANCE, OdeProblem, Solution};
 use thiserror::Error;
 
 /// Controls which accepted states are retained in a [`Solution`].
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[non_exhaustive]
 pub enum SaveMode {
     /// Save the initial state and every accepted step.
     #[default]
@@ -29,7 +30,10 @@ pub struct SolveOptions {
     pub max_step: f64,
     /// Maximum number of attempted steps.
     pub max_steps: usize,
-    /// Absolute time tolerance used when localizing continuous callback roots.
+    /// Requested absolute time tolerance for continuous callback roots.
+    ///
+    /// Localization applies a scale-aware representability floor when this is
+    /// smaller than the spacing between floating-point times near the root.
     pub event_tolerance: f64,
     /// Accepted states retained in the solution.
     pub save: SaveMode,
@@ -56,7 +60,7 @@ impl Default for SolveOptions {
             adaptive: true,
             max_step: f64::INFINITY,
             max_steps: 100_000,
-            event_tolerance: f64::EPSILON,
+            event_tolerance: DEFAULT_EVENT_TOLERANCE,
             save: SaveMode::EveryStep,
             save_at: Vec::new(),
             retain_dense_output: false,
@@ -137,6 +141,7 @@ impl SolveOptions {
 
 /// A failure to configure or complete an ODE solve.
 #[derive(Clone, Copy, Debug, Eq, Error, PartialEq)]
+#[non_exhaustive]
 pub enum SolveError {
     #[error("the initial state is empty")]
     EmptyState,
@@ -154,6 +159,8 @@ pub enum SolveError {
     AdaptiveStepUnsupported,
     #[error("the configured multistep order is unsupported")]
     InvalidMultistepOrder,
+    #[error("the multistep solver history is incomplete or inconsistent")]
+    InvalidMultistepHistory,
     #[error("the maximum step must be positive and not NaN")]
     InvalidMaxStep,
     #[error("the maximum step count must be positive")]
@@ -162,6 +169,8 @@ pub enum SolveError {
     InvalidEventTolerance,
     #[error("the explicit Runge–Kutta tableau is malformed")]
     InvalidTableau,
+    #[error("dense-output interpolation failed for an accepted step")]
+    DenseOutputFailed,
     #[error("the right-hand side produced a non-finite derivative")]
     NonFiniteDerivative,
     #[error("save-at times must be finite, ordered, and inside the time span")]
@@ -170,6 +179,8 @@ pub enum SolveError {
     NonFiniteCallbackCondition,
     #[error("a callback produced a non-finite state")]
     NonFiniteCallbackState,
+    #[error("the callback selected during event localization is no longer available")]
+    InvalidCallbackState,
     #[error("the implicit nonlinear solve did not converge")]
     NonlinearSolveFailed,
     #[error("the implicit linear system is singular")]
@@ -260,7 +271,7 @@ fn validate<F, P>(problem: &OdeProblem<F, P>, options: &SolveOptions) -> Result<
 
 #[cfg(test)]
 mod tests {
-    use crate::{OdeAlgorithm, OdeProblem, Solution, SolverStats};
+    use crate::{DEFAULT_EVENT_TOLERANCE, OdeAlgorithm, OdeProblem, Solution, SolverStats};
 
     use super::{SaveMode, SolveError, SolveOptions, solve};
 
@@ -300,7 +311,7 @@ mod tests {
 
         assert_eq!(options.absolute_tolerance, 1.0e-6);
         assert_eq!(options.relative_tolerance, 1.0e-3);
-        assert_eq!(options.event_tolerance, f64::EPSILON);
+        assert_eq!(options.event_tolerance, DEFAULT_EVENT_TOLERANCE);
         assert!(options.adaptive);
         assert_eq!(options.save, SaveMode::EveryStep);
     }

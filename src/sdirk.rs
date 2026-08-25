@@ -61,7 +61,7 @@ struct Workspace {
 
 impl Workspace {
     fn new(dimension: usize) -> Self {
-        let layout = StateLayout::new(dimension).expect("solver validates non-empty state");
+        let layout = StateLayout::for_validated_state(dimension);
         Self {
             layout,
             current_derivative: vec![0.0; dimension],
@@ -295,7 +295,7 @@ where
         workspace
             .factorization
             .as_ref()
-            .expect("factorization built above")
+            .ok_or(SolveError::NonlinearSolveFailed)?
             .solve(&mut workspace.correction)
             .map_err(|error| match error {
                 crate::linear::LinearError::Singular => SolveError::SingularLinearSystem,
@@ -523,7 +523,7 @@ struct ExtendedWorkspace {
 
 impl ExtendedWorkspace {
     fn new(dimension: usize, stages: usize) -> Self {
-        let layout = StateLayout::new(dimension).expect("solver validates non-empty state");
+        let layout = StateLayout::for_validated_state(dimension);
         Self {
             layout,
             current_derivative: vec![0.0; dimension],
@@ -763,7 +763,7 @@ impl ExtendedKernel {
             self.workspace
                 .factorization
                 .as_ref()
-                .expect("factorization built above")
+                .ok_or(SolveError::NonlinearSolveFailed)?
                 .solve(&mut self.workspace.correction)
                 .map_err(|error| match error {
                     crate::linear::LinearError::Singular => SolveError::SingularLinearSystem,

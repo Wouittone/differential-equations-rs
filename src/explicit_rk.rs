@@ -2,10 +2,7 @@ use crate::callback::CallbackOutcome;
 use crate::dense_coefficients::{BS5_DENSE, BS5_EXTRA_STAGES};
 use crate::generated_coefficients::{
     BS3_A_ROWS, BS3_B as GENERATED_BS3_B, BS3_E as GENERATED_BS3_E, BS3_STAGE_TIMES, DP5_A_ROWS,
-    DP5_B as GENERATED_DP5_B, DP5_E as GENERATED_DP5_E, DP5_STAGE_TIMES, EULER_A_ROWS,
-    EULER_B as GENERATED_EULER_B, EULER_STAGE_TIMES, HEUN_A_ROWS, HEUN_A2,
-    HEUN_B as GENERATED_HEUN_B, HEUN_ERROR, HEUN_STAGE_TIMES, MIDPOINT_A_ROWS, MIDPOINT_A2,
-    MIDPOINT_B as GENERATED_MIDPOINT_B, MIDPOINT_ERROR, MIDPOINT_STAGE_TIMES,
+    DP5_B as GENERATED_DP5_B, DP5_E as GENERATED_DP5_E, DP5_STAGE_TIMES,
 };
 use crate::integrator::{
     KernelCapabilities, StepEstimate, StepKernel, integrate as drive_integration,
@@ -105,25 +102,10 @@ where
 }
 
 const EMPTY: &[f64] = &[];
-const EULER_A: &[&[f64]] = EULER_A_ROWS;
-const EULER_B: &[f64] = &GENERATED_EULER_B;
-const EULER_C: &[f64] = &EULER_STAGE_TIMES;
-
-const MIDPOINT_A: &[&[f64]] = MIDPOINT_A_ROWS;
-const MIDPOINT_B: &[f64] = &GENERATED_MIDPOINT_B;
-const MIDPOINT_E: &[f64] = &MIDPOINT_ERROR;
-const MIDPOINT_C: &[f64] = &MIDPOINT_STAGE_TIMES;
-
-const HEUN_A: &[&[f64]] = HEUN_A_ROWS;
-const HEUN_B: &[f64] = &GENERATED_HEUN_B;
-const HEUN_E: &[f64] = &HEUN_ERROR;
-const HEUN_C: &[f64] = &HEUN_STAGE_TIMES;
-
-const RALSTON_A2: &[f64] = &[2.0 / 3.0];
-const RALSTON_A: &[&[f64]] = &[EMPTY, RALSTON_A2];
-const RALSTON_B: &[f64] = &[0.25, 0.75];
-const RALSTON_E: &[f64] = &[-0.75, 0.75];
-const RALSTON_C: &[f64] = &[0.0, 2.0 / 3.0];
+const HALF_STAGE_ROW: &[f64] = &[0.5];
+const ENDPOINT_STAGE_ROW: &[f64] = &[1.0];
+const EXPLICIT_TRAPEZOID_WEIGHTS: &[f64] = &[0.5, 0.5];
+const EXPLICIT_ENDPOINT_NODES: &[f64] = &[0.0, 1.0];
 
 const RKM_A2: &[f64] = &[0.167_266_187_050_662];
 const RKM_A3: &[f64] = &[0.0, 0.484_574_582_244_783];
@@ -488,9 +470,8 @@ const RALSTON4_B: &[f64] = &[
 ];
 const RALSTON4_C: &[f64] = &[0.0, 0.4, 0.455_737_254_218_789_4, 1.0];
 
-const ALSHINA2_E: &[f64] = &[1.0, 0.0];
 const ALSHINA3_A3: &[f64] = &[0.0, 0.75];
-const ALSHINA3_A: &[&[f64]] = &[EMPTY, MIDPOINT_A2, ALSHINA3_A3];
+const ALSHINA3_A: &[&[f64]] = &[EMPTY, HALF_STAGE_ROW, ALSHINA3_A3];
 const ALSHINA3_B: &[f64] = &[2.0 / 9.0, 1.0 / 3.0, 4.0 / 9.0];
 const ALSHINA3_E: &[f64] = &[0.0, 4.0 / 9.0, 0.0];
 const ALSHINA3_C: &[f64] = &[0.0, 0.5, 0.75];
@@ -890,9 +871,9 @@ const BS5_C: &[f64] = &[
     1.0,
 ];
 
-const SSPRK22_A: &[&[f64]] = &[EMPTY, HEUN_A2];
-const SSPRK22_B: &[f64] = HEUN_B;
-const SSPRK22_C: &[f64] = HEUN_C;
+const SSPRK22_A: &[&[f64]] = &[EMPTY, ENDPOINT_STAGE_ROW];
+const SSPRK22_B: &[f64] = EXPLICIT_TRAPEZOID_WEIGHTS;
+const SSPRK22_C: &[f64] = EXPLICIT_ENDPOINT_NODES;
 const SSPRK22_DENSE_1: &[f64] = &[1.0, -0.5];
 const SSPRK22_DENSE_2: &[f64] = &[0.0, 0.5];
 const SSPRK22_DENSE: &[&[f64]] = &[SSPRK22_DENSE_1, SSPRK22_DENSE_2];
@@ -1081,46 +1062,10 @@ macro_rules! algorithm {
     };
 }
 
-algorithm!(
-    Euler,
-    "The fixed-step forward Euler method.",
-    nodes = EULER_C,
-    coefficients = EULER_A,
-    weights = EULER_B,
-    error_weights = None,
-    order = 1,
-    fsal = false
-);
-algorithm!(
-    Midpoint,
-    "The adaptive second-order explicit midpoint method with an embedded Euler estimate.",
-    nodes = MIDPOINT_C,
-    coefficients = MIDPOINT_A,
-    weights = MIDPOINT_B,
-    error_weights = Some(MIDPOINT_E),
-    order = 2,
-    fsal = false
-);
-algorithm!(
-    Heun,
-    "The adaptive second-order explicit trapezoid (Heun) method.",
-    nodes = HEUN_C,
-    coefficients = HEUN_A,
-    weights = HEUN_B,
-    error_weights = Some(HEUN_E),
-    order = 2,
-    fsal = false
-);
-algorithm!(
-    Ralston,
-    "Ralston's adaptive second-order explicit Runge–Kutta method.",
-    nodes = RALSTON_C,
-    coefficients = RALSTON_A,
-    weights = RALSTON_B,
-    error_weights = Some(RALSTON_E),
-    order = 2,
-    fsal = false
-);
+crate::define_explicit_rk_from_file!(pub Euler, "tableaux/explicit/euler.toml", crate = crate);
+crate::define_explicit_rk_from_file!(pub Midpoint, "tableaux/explicit/midpoint.toml", crate = crate);
+crate::define_explicit_rk_from_file!(pub Heun, "tableaux/explicit/heun.toml", crate = crate);
+crate::define_explicit_rk_from_file!(pub Ralston, "tableaux/explicit/ralston.toml", crate = crate);
 crate::define_explicit_rk_from_file!(pub Rk4, "tableaux/explicit/rk4.toml", crate = crate);
 algorithm!(
     Rkm,
@@ -1192,16 +1137,7 @@ algorithm!(
     order = 4,
     fsal = false
 );
-algorithm!(
-    Alshina2,
-    "The adaptive optimal two-stage, second-order Alshina method.",
-    nodes = RALSTON_C,
-    coefficients = RALSTON_A,
-    weights = RALSTON_B,
-    error_weights = Some(ALSHINA2_E),
-    order = 2,
-    fsal = false
-);
+crate::define_explicit_rk_from_file!(pub Alshina2, "tableaux/explicit/alshina2.toml", crate = crate);
 algorithm!(
     Alshina3,
     "The adaptive optimal three-stage, third-order Alshina method.",
@@ -1599,13 +1535,14 @@ where
         self.dense_stages_prepared = false;
         ensure_finite(candidate)?;
         let error = if options.adaptive {
+            let error_weights = T::ERROR_WEIGHTS.ok_or(SolveError::AdaptiveStepUnsupported)?;
             let primary_error = error_norm(
                 &self.workspace.stages,
                 self.workspace.dimension,
                 (state, candidate),
                 step,
                 options,
-                T::ERROR_WEIGHTS.expect("driver checked adaptive capability"),
+                error_weights,
                 &mut self.workspace.temporary,
             );
             T::SECOND_ERROR_WEIGHTS.map_or(primary_error, |weights| {

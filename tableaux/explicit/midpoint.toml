@@ -1,0 +1,11 @@
+schema_version = 1
+name = "Midpoint"
+description = "The adaptive second-order explicit midpoint method with an embedded Euler estimate."
+order = 2
+embedded_order = 1
+fsal = false
+
+nodes = ["0", "1/2"]
+coefficients = [[], ["1/2"]]
+weights = ["0", "1"]
+error_weights = ["-1", "1"]

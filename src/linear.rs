@@ -26,6 +26,13 @@ impl StateLayout {
         Ok(Self { dimension })
     }
 
+    /// Constructs a layout after the public solver entry point has validated
+    /// that the state is non-empty.
+    pub(crate) fn for_validated_state(dimension: usize) -> Self {
+        debug_assert!(dimension > 0, "validated states are non-empty");
+        Self { dimension }
+    }
+
     pub(crate) fn dimension(self) -> usize {
         self.dimension
     }

@@ -130,7 +130,7 @@ struct NewtonWorkspace {
 impl NewtonWorkspace {
     fn new(dimension: usize) -> Self {
         Self {
-            layout: StateLayout::new(dimension).expect("solver validates non-empty state"),
+            layout: StateLayout::for_validated_state(dimension),
             evaluation_derivative: vec![0.0; dimension],
             perturbed_state: vec![0.0; dimension],
             perturbed_derivative: vec![0.0; dimension],
@@ -852,7 +852,7 @@ where
     }
     stats.jacobian_evaluations += 1;
     stats.linear_factorizations += 1;
-    workspace.factorization = Some(if workspace.factorization.is_none() {
+    let factorization = if workspace.factorization.is_none() {
         let matrix = workspace
             .layout
             .matrix(&workspace.matrix)
@@ -874,8 +874,9 @@ where
         workspace
             .factorization
             .take()
-            .expect("checked factorization")
-    });
+            .ok_or(SolveError::NonlinearSolveFailed)?
+    };
+    workspace.factorization = Some(factorization);
     workspace.factorization_ready = true;
     Ok(())
 }

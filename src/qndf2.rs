@@ -86,7 +86,7 @@ struct Workspace {
 
 impl Workspace {
     fn new(dimension: usize) -> Self {
-        let layout = StateLayout::new(dimension).expect("solver validates non-empty state");
+        let layout = StateLayout::for_validated_state(dimension);
         Self {
             layout,
             current_derivative: vec![0.0; dimension],
@@ -194,7 +194,7 @@ where
         } else {
             (1.0 / ((1.0 - self.kappa) * 1.5), 1.5)
         };
-        build_differences(&mut self.workspace, state, step);
+        build_differences(&mut self.workspace, state, step)?;
         for (((out, &now), &d1), &d2) in self
             .workspace
             .extrapolated_state
@@ -290,7 +290,11 @@ where
     }
 }
 
-fn build_differences(workspace: &mut Workspace, state: &[f64], step: f64) {
+fn build_differences(
+    workspace: &mut Workspace,
+    state: &[f64],
+    step: f64,
+) -> Result<(), SolveError> {
     if workspace.history_count == 0 {
         workspace.difference_one.fill(0.0);
         workspace.difference_two.fill(0.0);
@@ -302,7 +306,9 @@ fn build_differences(workspace: &mut Workspace, state: &[f64], step: f64) {
         workspace.difference_one.fill(0.0);
         workspace.difference_two.fill(0.0);
     } else {
-        let dt_prev = workspace.last_step.expect("two histories imply step");
+        let dt_prev = workspace
+            .last_step
+            .ok_or(SolveError::InvalidMultistepHistory)?;
         let rho_one = step / dt_prev;
         let dt_prior = workspace.prior_step.unwrap_or(dt_prev);
         let rho_two = step / dt_prior;
@@ -350,6 +356,7 @@ fn build_differences(workspace: &mut Workspace, state: &[f64], step: f64) {
             }
         }
     }
+    Ok(())
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -483,7 +490,7 @@ where
     }
     stats.jacobian_evaluations += 1;
     stats.linear_factorizations += 1;
-    workspace.factorization = Some(if workspace.factorization.is_none() {
+    let factorization = if workspace.factorization.is_none() {
         let matrix = workspace
             .layout
             .matrix(&workspace.matrix)
@@ -505,8 +512,9 @@ where
         workspace
             .factorization
             .take()
-            .expect("checked factorization")
-    });
+            .ok_or(SolveError::NonlinearSolveFailed)?
+    };
+    workspace.factorization = Some(factorization);
     workspace.factorization_ready = true;
     Ok(())
 }

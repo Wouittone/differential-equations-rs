@@ -5,7 +5,9 @@ use crate::integrator::{
 };
 use crate::linear::{factorize, solve_factorized};
 use crate::rosenbrock::Rosenbrock23;
-use crate::{OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions, SolverStats};
+use crate::{
+    ConfigurationError, OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions, SolverStats,
+};
 
 const GAMMA: f64 = 1.0 / (2.0 + std::f64::consts::SQRT_2);
 const C32: f64 = 6.0 + std::f64::consts::SQRT_2;
@@ -29,19 +31,34 @@ impl AmfOperator {
     pub fn from_jacobian(
         dimension: usize,
         jacobian: impl Into<Vec<f64>>,
-    ) -> Result<Self, &'static str> {
+    ) -> Result<Self, ConfigurationError> {
         Self::from_split(dimension, vec![jacobian.into()])
     }
 
-    pub fn from_split(dimension: usize, factors: Vec<Vec<f64>>) -> Result<Self, &'static str> {
-        if dimension == 0
-            || factors.is_empty()
-            || factors.iter().any(|factor| {
-                factor.len() != dimension * dimension
-                    || factor.iter().any(|value| !value.is_finite())
-            })
-        {
-            return Err("AMF factors must be a nonempty collection of finite square matrices");
+    pub fn from_split(
+        dimension: usize,
+        factors: Vec<Vec<f64>>,
+    ) -> Result<Self, ConfigurationError> {
+        if dimension == 0 || factors.is_empty() {
+            return Err(ConfigurationError::EmptyData {
+                context: "AMF factor collection",
+            });
+        }
+        let matrix_len =
+            dimension
+                .checked_mul(dimension)
+                .ok_or(ConfigurationError::DimensionOverflow {
+                    context: "AMF operator",
+                })?;
+        if factors.iter().any(|factor| factor.len() != matrix_len) {
+            return Err(ConfigurationError::DimensionMismatch {
+                context: "AMF factor collection",
+            });
+        }
+        if factors.iter().flatten().any(|value| !value.is_finite()) {
+            return Err(ConfigurationError::NonFiniteData {
+                context: "AMF factor collection",
+            });
         }
         Ok(Self {
             dimension,
@@ -101,7 +118,7 @@ pub fn build_amf_function<F, J, S>(
     jacobian: J,
     factor_prototypes: Vec<Vec<f64>>,
     update_factors: S,
-) -> Result<AmfFunction<F, J, S>, &'static str> {
+) -> Result<AmfFunction<F, J, S>, ConfigurationError> {
     AmfOperator::from_split(dimension, factor_prototypes.clone())?;
     Ok(AmfFunction {
         rhs,
@@ -125,7 +142,7 @@ impl<F, J, S, P> AmfProblem<F, J, S, P> {
         initial_state: impl Into<Vec<f64>>,
         time_span: (f64, f64),
         parameters: P,
-    ) -> Result<Self, &'static str> {
+    ) -> Result<Self, ConfigurationError> {
         let initial_state = initial_state.into();
         if initial_state.is_empty()
             || function
@@ -133,7 +150,9 @@ impl<F, J, S, P> AmfProblem<F, J, S, P> {
                 .iter()
                 .any(|factor| factor.len() != initial_state.len() * initial_state.len())
         {
-            return Err("AMF problem dimensions must agree and be nonempty");
+            return Err(ConfigurationError::DimensionMismatch {
+                context: "AMF problem",
+            });
         }
         Ok(Self {
             function,
@@ -278,8 +297,12 @@ impl<E> AmfKernel<E> {
             midpoint_state: vec![0.0; n],
             midpoint_derivative: vec![0.0; n],
             jacobian: vec![0.0; n * n],
-            operator: AmfOperator::from_split(n, vec![vec![0.0; n * n]; factor_count])
-                .expect("checked dimensions"),
+            operator: AmfOperator {
+                dimension: n,
+                jacobian_factors: vec![vec![0.0; n * n]; factor_count],
+                factorizations: vec![vec![0.0; n * n]; factor_count],
+                pivots: vec![vec![0; n]; factor_count],
+            },
             k1: vec![0.0; n],
             k2: vec![0.0; n],
             k3: vec![0.0; n],

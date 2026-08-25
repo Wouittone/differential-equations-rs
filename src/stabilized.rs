@@ -66,20 +66,18 @@ impl StabilizedFamily {
         }
     }
 
-    fn stages(self, scaled_radius: f64) -> usize {
+    fn stages(self, scaled_radius: f64) -> Option<usize> {
         let scaled_radius = scaled_radius.max(0.0);
-        match self {
+        let stages = match self {
             Self::Rkc => ((1.54 * scaled_radius + 1.0).sqrt().floor() as usize + 1)
                 .clamp(2, MAX_POLYNOMIAL_STAGES),
-            Self::Rock2 => unreachable!("ROCK2 selects a tabulated recurrence degree"),
-            Self::Rock4 => unreachable!("ROCK4 selects a tabulated recurrence degree"),
-            Self::Serk2 => unreachable!("SERK2 selects a tabulated recurrence degree"),
-            Self::Eserk4 | Self::Eserk5 => {
-                unreachable!("ESERK selects a tabulated extrapolation degree")
-            }
-            Self::Tsrkc2 | Self::Tsrkc3 => {
-                unreachable!("two-step stage selection is history-dependent")
-            }
+            Self::Rock2
+            | Self::Rock4
+            | Self::Serk2
+            | Self::Eserk4
+            | Self::Eserk5
+            | Self::Tsrkc2
+            | Self::Tsrkc3 => return None,
             Self::Rkl1 => {
                 odd_stage_count((((1.0 + 4.0 * scaled_radius).sqrt() - 1.0) / 2.0).ceil() as usize)
             }
@@ -96,20 +94,12 @@ impl StabilizedFamily {
                 + 1.854_788_782_583_655_3 * scaled_radius.powf(0.533_871_357_807_877))
             .ceil()
             .max(3.0) as usize,
-        }
-        .min(match self {
-            Self::Rkmc2 => MAX_RKMC2_STAGES,
-            Self::Rock2 => unreachable!("ROCK2 selects a tabulated recurrence degree"),
-            Self::Rock4 => unreachable!("ROCK4 selects a tabulated recurrence degree"),
-            Self::Serk2 => unreachable!("SERK2 selects a tabulated recurrence degree"),
-            Self::Eserk4 | Self::Eserk5 => {
-                unreachable!("ESERK selects a tabulated extrapolation degree")
-            }
-            Self::Tsrkc2 | Self::Tsrkc3 => {
-                unreachable!("two-step stage selection is history-dependent")
-            }
-            _ => MAX_POLYNOMIAL_STAGES,
-        })
+        };
+        Some(stages.min(if self == Self::Rkmc2 {
+            MAX_RKMC2_STAGES
+        } else {
+            MAX_POLYNOMIAL_STAGES
+        }))
     }
 }
 
@@ -266,21 +256,13 @@ impl StabilizedKernel {
             StabilizedFamily::Rkc => {
                 self.run_rkc(problem, state, time, step, stages, candidate, stats)
             }
-            StabilizedFamily::Tsrkc2 | StabilizedFamily::Tsrkc3 => {
-                unreachable!("two-step recurrences bypass the one-step dispatcher")
-            }
-            StabilizedFamily::Rock2 => {
-                unreachable!("ROCK2 bypasses the compact recurrence dispatcher")
-            }
-            StabilizedFamily::Rock4 => {
-                unreachable!("ROCK4 bypasses the compact recurrence dispatcher")
-            }
-            StabilizedFamily::Serk2 => {
-                unreachable!("SERK2 bypasses the compact recurrence dispatcher")
-            }
-            StabilizedFamily::Eserk4 | StabilizedFamily::Eserk5 => {
-                unreachable!("ESERK bypasses the compact recurrence dispatcher")
-            }
+            StabilizedFamily::Tsrkc2
+            | StabilizedFamily::Tsrkc3
+            | StabilizedFamily::Rock2
+            | StabilizedFamily::Rock4
+            | StabilizedFamily::Serk2
+            | StabilizedFamily::Eserk4
+            | StabilizedFamily::Eserk5 => Err(SolveError::InvalidTableau),
             StabilizedFamily::Rkl1 => self.run_orthogonal_polynomial(
                 problem,
                 state,
@@ -1440,17 +1422,7 @@ where
     ) -> Result<StepEstimate, SolveError> {
         let radius = self.spectral_radius(problem, state, time, stats)?;
         let scaled_radius = step.abs() * radius;
-        let stages = (!matches!(
-            self.family,
-            StabilizedFamily::Rock2
-                | StabilizedFamily::Rock4
-                | StabilizedFamily::Serk2
-                | StabilizedFamily::Eserk4
-                | StabilizedFamily::Eserk5
-                | StabilizedFamily::Tsrkc2
-                | StabilizedFamily::Tsrkc3
-        ))
-        .then(|| self.family.stages(scaled_radius));
+        let stages = self.family.stages(scaled_radius);
         match self.family {
             StabilizedFamily::Rock2 => {
                 self.run_rock2(problem, state, time, step, scaled_radius, candidate, stats)?
@@ -1493,7 +1465,7 @@ where
                     state,
                     time,
                     step,
-                    stages.expect("one-step stabilized family has a stage count"),
+                    stages.ok_or(SolveError::InvalidTableau)?,
                     candidate,
                     stats,
                 )?;
@@ -1535,11 +1507,10 @@ where
             .enumerate()
         {
             *error = match self.family {
-                StabilizedFamily::Rock2 => unreachable!("ROCK2 returns its tabulated estimate"),
-                StabilizedFamily::Rock4 => unreachable!("ROCK4 returns its embedded estimate"),
-                StabilizedFamily::Eserk4 | StabilizedFamily::Eserk5 => {
-                    unreachable!("ESERK returns its extrapolated estimate")
-                }
+                StabilizedFamily::Rock2
+                | StabilizedFamily::Rock4
+                | StabilizedFamily::Eserk4
+                | StabilizedFamily::Eserk5 => return Err(SolveError::InvalidTableau),
                 StabilizedFamily::Serk2 => final_state - initial - step * last,
                 StabilizedFamily::Rkc => {
                     (4.0 * (initial - final_state) + 2.0 * step * (first + last)) / 5.0
@@ -1555,7 +1526,7 @@ where
                         let older = self
                             .previous_accepted_state
                             .as_ref()
-                            .expect("TSRKC3 history exists when q is nonzero");
+                            .ok_or(SolveError::InvalidMultistepHistory)?;
                         let one_plus_q = 1.0 + q;
                         3.0 / 5.0
                             * (initial / q
@@ -1572,18 +1543,15 @@ where
             };
         }
         let divisor = match self.family {
-            StabilizedFamily::Rock2 => unreachable!("ROCK2 returns before generic scaling"),
-            StabilizedFamily::Rock4 => unreachable!("ROCK4 returns before generic scaling"),
-            StabilizedFamily::Eserk4 | StabilizedFamily::Eserk5 => {
-                unreachable!("ESERK returns before generic scaling")
-            }
+            StabilizedFamily::Rock2
+            | StabilizedFamily::Rock4
+            | StabilizedFamily::Eserk4
+            | StabilizedFamily::Eserk5 => return Err(SolveError::InvalidTableau),
             StabilizedFamily::Serk2 => 1.0,
             StabilizedFamily::Rkl1
             | StabilizedFamily::Rkl2
             | StabilizedFamily::Rkg1
-            | StabilizedFamily::Rkg2 => {
-                stages.expect("orthogonal-polynomial family has a stage count") as f64
-            }
+            | StabilizedFamily::Rkg2 => stages.ok_or(SolveError::InvalidTableau)? as f64,
             StabilizedFamily::Rkc
             | StabilizedFamily::Tsrkc2
             | StabilizedFamily::Tsrkc3

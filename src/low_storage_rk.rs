@@ -3007,11 +3007,11 @@ where
         }
         evaluate(problem, &mut self.derivative, state, time, stats)?;
         for stage in 0..T::C.len() {
-            self.gprev.copy_from_slice(
-                self.history_states
-                    .last()
-                    .expect("validated register pipeline"),
-            );
+            let previous_register = self
+                .history_states
+                .last()
+                .ok_or(SolveError::InvalidTableau)?;
+            self.gprev.copy_from_slice(previous_register);
             for (value, derivative) in self.gprev.iter_mut().zip(&self.derivative) {
                 *value += T::A[0][stage] * step * *derivative;
             }

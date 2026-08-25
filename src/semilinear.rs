@@ -1,4 +1,7 @@
-use crate::{ExponentialAlgorithm, OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions};
+use crate::{
+    ConfigurationError, ExponentialAlgorithm, OdeAlgorithm, OdeProblem, Solution, SolveError,
+    SolveOptions,
+};
 
 /// A semilinear initial-value problem `u' = A u + g(u, p, t)`.
 ///
@@ -21,20 +24,28 @@ impl<G, P> SemilinearOdeProblem<G, P> {
         initial_state: impl Into<Vec<f64>>,
         time_span: (f64, f64),
         parameters: P,
-    ) -> Result<Self, &'static str> {
+    ) -> Result<Self, ConfigurationError> {
         let initial_state = initial_state.into();
         if initial_state.is_empty() {
-            return Err("semilinear ODE state must be non-empty");
+            return Err(ConfigurationError::EmptyData {
+                context: "semilinear ODE state",
+            });
         }
         let linear_operator = linear_operator.into();
-        let expected = initial_state
-            .len()
-            .checked_mul(initial_state.len())
-            .ok_or("semilinear ODE dimension overflow")?;
-        if linear_operator.len() != expected
-            || linear_operator.iter().any(|value| !value.is_finite())
-        {
-            return Err("linear operator must be a finite square dense matrix");
+        let expected = initial_state.len().checked_mul(initial_state.len()).ok_or(
+            ConfigurationError::DimensionOverflow {
+                context: "semilinear ODE",
+            },
+        )?;
+        if linear_operator.len() != expected {
+            return Err(ConfigurationError::DimensionMismatch {
+                context: "semilinear linear operator",
+            });
+        }
+        if linear_operator.iter().any(|value| !value.is_finite()) {
+            return Err(ConfigurationError::NonFiniteData {
+                context: "semilinear linear operator",
+            });
         }
         Ok(Self {
             nonlinear,

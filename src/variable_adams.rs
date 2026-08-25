@@ -178,10 +178,10 @@ impl VariableAdamsKernel {
         }
     }
 
-    fn workspace(&mut self) -> &mut Workspace {
+    fn workspace(&mut self) -> Result<&mut Workspace, SolveError> {
         self.workspace
             .as_mut()
-            .expect("variable Adams kernel is initialized before stepping")
+            .ok_or(SolveError::InvalidMultistepHistory)
     }
 }
 
@@ -231,7 +231,7 @@ where
             direction,
             maximum_step,
             order,
-            self.workspace(),
+            self.workspace()?,
             stats,
         )
     }
@@ -248,7 +248,7 @@ where
     ) -> Result<StepEstimate, SolveError> {
         let method = self.method;
         let step_number = self.step_number;
-        let workspace = self.workspace();
+        let workspace = self.workspace()?;
         prepare_trial_steps(workspace, step, step_number, method.order);
         update_differences(workspace, step_number);
 
@@ -296,7 +296,7 @@ where
     ) -> Result<(), SolveError> {
         let method = self.method;
         let step_number = self.step_number;
-        let workspace = self.workspace();
+        let workspace = self.workspace()?;
 
         if callback_applied {
             workspace.reset_history();

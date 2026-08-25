@@ -4,7 +4,10 @@ use crate::exponential_rk::{mat_vec, matrix_exp};
 use crate::integrator::{
     ControllerConfig, KernelCapabilities, StepEstimate, StepKernel, integrate as drive_integration,
 };
-use crate::{OdeProblem, SemilinearOdeProblem, Solution, SolveError, SolveOptions, SolverStats};
+use crate::{
+    ConfigurationError, OdeProblem, SemilinearOdeProblem, Solution, SolveError, SolveOptions,
+    SolverStats,
+};
 
 const C: [f64; 8] = [
     0.0,
@@ -159,28 +162,43 @@ pub trait InteractionPictureAlgorithm {
         G: Fn(&mut [f64], &[f64], &P, f64);
 }
 
+fn cached_step_grid(dt_min: f64, dt_max: f64, count: usize) -> Vec<f64> {
+    debug_assert!(count >= 2);
+    let ratio = (dt_max / dt_min).powf(1.0 / (count - 1) as f64);
+    (0..count)
+        .map(|index| dt_min * ratio.powi(index as i32))
+        .collect()
+}
+
 impl Default for RKIP {
     fn default() -> Self {
-        Self::new(1.0e-3, 1.0, 100).expect("valid defaults")
+        Self {
+            cached_steps: cached_step_grid(1.0e-3, 1.0, 100),
+            clamp_lower_dt: false,
+            clamp_higher_dt: true,
+            cache: RefCell::new(ExponentialCache::empty()),
+        }
     }
 }
 
 impl RKIP {
-    pub fn new(dt_min: f64, dt_max: f64, cached_step_count: usize) -> Result<Self, &'static str> {
+    pub fn new(
+        dt_min: f64,
+        dt_max: f64,
+        cached_step_count: usize,
+    ) -> Result<Self, ConfigurationError> {
         if !dt_min.is_finite()
             || !dt_max.is_finite()
             || dt_min <= 0.0
             || dt_max < dt_min
             || cached_step_count < 2
         {
-            return Err(
-                "RKIP cache bounds must be finite, positive, ordered, and contain at least two steps",
-            );
+            return Err(ConfigurationError::InvalidBounds {
+                context: "RKIP cache",
+                reason: "step bounds must be finite, positive, ordered, and contain at least two steps",
+            });
         }
-        let ratio = (dt_max / dt_min).powf(1.0 / (cached_step_count - 1) as f64);
-        let cached_steps = (0..cached_step_count)
-            .map(|index| dt_min * ratio.powi(index as i32))
-            .collect();
+        let cached_steps = cached_step_grid(dt_min, dt_max, cached_step_count);
         Ok(Self {
             cached_steps,
             clamp_lower_dt: false,
@@ -210,7 +228,7 @@ impl RKIP {
         let sign = step.signum();
         let magnitude = step.abs();
         let first = self.cached_steps[0];
-        let last = *self.cached_steps.last().expect("nonempty grid");
+        let last = self.cached_steps.last().copied().unwrap_or(magnitude);
         if magnitude < first && !self.clamp_lower_dt {
             return step;
         }

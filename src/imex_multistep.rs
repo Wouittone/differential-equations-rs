@@ -231,7 +231,7 @@ where
     let nominal_step = direction
         * options
             .initial_step
-            .expect("validated fixed-step solve has an initial step")
+            .ok_or(SolveError::InitialStepRequired)?
             .min(options.max_step)
             .min((end - start).abs());
     let mut step = nominal_step;
@@ -382,7 +382,7 @@ where
                     stats,
                 )?;
             }
-            sbdf_forcing(order, state, step, workspace);
+            sbdf_forcing(order, state, step, workspace)?;
         }
         SplitMethod::Cnab2 => {
             if workspace.history_len > 0 {
@@ -419,7 +419,12 @@ where
 }
 
 #[allow(clippy::needless_range_loop)]
-fn sbdf_forcing(order: usize, state: &[f64], step: f64, workspace: &mut Workspace) {
+fn sbdf_forcing(
+    order: usize,
+    state: &[f64],
+    step: f64,
+    workspace: &mut Workspace,
+) -> Result<(), SolveError> {
     match order {
         1 => {
             for index in 0..state.len() {
@@ -463,8 +468,9 @@ fn sbdf_forcing(order: usize, state: &[f64], step: f64, workspace: &mut Workspac
                                 - workspace.explicit_history[2][index]));
             }
         }
-        _ => unreachable!("SBDF order is validated"),
+        _ => return Err(SolveError::InvalidMultistepOrder),
     }
+    Ok(())
 }
 
 fn implicit_scale(method: SplitMethod, workspace: &Workspace) -> f64 {

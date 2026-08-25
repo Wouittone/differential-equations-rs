@@ -1,7 +1,8 @@
-use crate::SolveError;
 use crate::callback::{
     Callback, CallbackAction, CallbackOutcome, ContinuousCallback, DiscreteCallback, EventDirection,
 };
+use crate::event::{MAX_EVENT_ROOT_ITERATIONS, event_interval_converged};
+use crate::{ConfigurationError, SolveError};
 
 /// An initial-value ordinary differential equation problem.
 ///
@@ -238,7 +239,7 @@ impl<FE, FI, P> SplitOdeProblem<FE, FI, P> {
             state.copy_from_slice(state_before_effect);
             *time = root_time;
             let Callback::Continuous(callback) = &self.callbacks[index] else {
-                unreachable!();
+                return Err(SolveError::InvalidCallbackState);
             };
             outcome.invocations += 1;
             outcome.terminate =
@@ -287,18 +288,28 @@ impl<F, P> MassMatrixOdeProblem<F, P> {
         time_span: (f64, f64),
         parameters: P,
         mass_matrix: impl Into<Vec<f64>>,
-    ) -> Result<Self, &'static str> {
+    ) -> Result<Self, ConfigurationError> {
         let initial_state = initial_state.into();
         if initial_state.is_empty() {
-            return Err("mass-matrix ODE state must be non-empty");
+            return Err(ConfigurationError::EmptyData {
+                context: "mass-matrix ODE state",
+            });
         }
         let mass_matrix = mass_matrix.into();
-        let expected = initial_state
-            .len()
-            .checked_mul(initial_state.len())
-            .ok_or("mass-matrix dimension overflow")?;
-        if mass_matrix.len() != expected || mass_matrix.iter().any(|value| !value.is_finite()) {
-            return Err("mass matrix must be a finite square dense matrix");
+        let expected = initial_state.len().checked_mul(initial_state.len()).ok_or(
+            ConfigurationError::DimensionOverflow {
+                context: "mass matrix",
+            },
+        )?;
+        if mass_matrix.len() != expected {
+            return Err(ConfigurationError::DimensionMismatch {
+                context: "mass matrix",
+            });
+        }
+        if mass_matrix.iter().any(|value| !value.is_finite()) {
+            return Err(ConfigurationError::NonFiniteData {
+                context: "mass matrix",
+            });
         }
         Ok(Self {
             rhs,
@@ -552,7 +563,7 @@ impl<F, P> OdeProblem<F, P> {
             state.copy_from_slice(state_before_effect);
             *time = root_time;
             let Callback::Continuous(callback) = &self.callbacks[index] else {
-                unreachable!();
+                return Err(SolveError::InvalidCallbackState);
             };
             outcome.invocations += 1;
             outcome.terminate =
@@ -602,8 +613,11 @@ fn locate_root<P>(
     let mut left = 0.0;
     let mut right = 1.0;
     let mut left_value = before;
-    for _ in 0..64 {
+    for _ in 0..MAX_EVENT_ROOT_ITERATIONS {
         let middle = 0.5 * (left + right);
+        if middle == left || middle == right {
+            break;
+        }
         let middle_time = segment.previous_time + middle * (segment.time - segment.previous_time);
         if let Some(interpolator) = interpolator.as_mut() {
             interpolator(middle_time, interpolation)?;
@@ -623,11 +637,20 @@ fn locate_root<P>(
         } else {
             right = middle;
         }
-        if (right - left) * (segment.time - segment.previous_time).abs() <= event_tolerance {
+        if event_interval_converged(
+            event_tolerance,
+            segment.previous_time,
+            segment.time,
+            left,
+            right,
+        ) {
             break;
         }
     }
-    Ok(0.5 * (left + right))
+    // Return the post-crossing side of the final bracket. This prevents a
+    // continuing callback from immediately detecting the same root again on
+    // the next step when the midpoint lies microscopically before the root.
+    Ok(right)
 }
 
 fn interpolate(state: &[f64], previous_state: &[f64], fraction: f64, output: &mut [f64]) {

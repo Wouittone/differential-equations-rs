@@ -707,7 +707,11 @@ where
             self.raw.push(approximation);
         }
         self.extrapolate(levels);
-        candidate.copy_from_slice(self.diagonal.last().expect("at least two levels"));
+        let approximation = self
+            .diagonal
+            .last()
+            .ok_or(SolveError::InvalidMultistepHistory)?;
+        candidate.copy_from_slice(approximation);
         Self::evaluate(
             problem,
             &mut self.end_derivative,

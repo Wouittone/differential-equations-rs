@@ -73,7 +73,7 @@ struct Workspace {
 
 impl Workspace {
     fn new(dimension: usize) -> Self {
-        let layout = StateLayout::new(dimension).expect("solver validates non-empty state");
+        let layout = StateLayout::for_validated_state(dimension);
         Self {
             layout,
             current_derivative: vec![0.0; dimension],

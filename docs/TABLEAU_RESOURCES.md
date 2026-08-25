@@ -54,7 +54,8 @@ shared explicit driver.
 
 Required fields are `schema_version`, `name`, `description`, `order`, `fsal`,
 `nodes`, `coefficients`, and `weights`. Optional fields are `embedded_order`,
-`error_weights`, `second_error_weights`, and `dense_coefficients`.
+`error_estimator`, `error_weights`, `second_error_weights`, and
+`dense_coefficients`.
 
 Coefficient values may be finite TOML integers/floats or strings containing a
 decimal or exact integer ratio such as `"-2197/4104"`. String ratios preserve
@@ -70,6 +71,10 @@ Compilation fails with a targeted diagnostic when:
 - coefficients are invalid or non-finite;
 - FSAL metadata does not match the final node, row, and weight;
 - dense coefficient rows are missing or malformed.
+
+`error_weights` defaults to an embedded-difference estimator and must sum to
+zero. Specialized methods whose local error is a direct weighted stage
+combination declare `error_estimator = "stage-combination"` explicitly.
 
 Because the expansion contains `include_str!` for the resource, Cargo tracks
 the file and recompiles the method when it changes.
@@ -87,9 +92,10 @@ define_explicit_rk_from_file!(
 
 ## Repository-owned methods
 
-Built-in RK4 is the first canonical resource-backed method at
-`tableaux/explicit/rk4.toml`. `scripts/generate_coefficients.ps1` hashes every
-resource into `docs/coefficients_manifest.txt`; run it after adding or changing
-a repository-owned resource, and use `-Check` in CI. Remaining legacy
-coefficient catalogues can be migrated family by family without changing their
+The canonical low-order built-ins—Euler, midpoint, Heun, Ralston, Alshina2,
+and RK4—are resource-backed under `tableaux/explicit`.
+`scripts/generate_coefficients.ps1` hashes every resource into
+`docs/coefficients_manifest.txt`; run it after adding or changing a
+repository-owned resource, and use `-Check` in CI. Remaining large generated
+coefficient banks can be migrated family by family without changing their
 solver APIs.

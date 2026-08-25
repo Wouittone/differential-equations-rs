@@ -1,5 +1,6 @@
 /// The action requested after an ODE callback changes the state.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[non_exhaustive]
 pub enum CallbackAction {
     /// Resume integration from the callback time and state.
     #[default]
@@ -10,6 +11,7 @@ pub enum CallbackAction {
 
 /// Selects which zero crossings trigger a continuous callback.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[non_exhaustive]
 pub enum EventDirection {
     /// Trigger on either a negative-to-positive or positive-to-negative crossing.
     #[default]

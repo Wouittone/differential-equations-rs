@@ -13,7 +13,7 @@ use crate::integrator::{
     ControllerConfig, KernelCapabilities, StepEstimate, StepKernel, integrate as drive_integration,
 };
 use crate::linear::{factorize, solve_factorized};
-use crate::solution::{CollocationSegment, DenseSegment, TrajectoryRecorder};
+use crate::solution::{CollocationSegment, DenseSegment, InterpolationError, TrajectoryRecorder};
 use crate::{OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions, SolverStats};
 
 const MAX_NEWTON_ITERATIONS: usize = 12;
@@ -868,9 +868,9 @@ struct CollocationAttemptSegment<'a> {
 }
 
 impl DenseSegment for CollocationAttemptSegment<'_> {
-    fn interpolate(&self, time: f64, output: &mut [f64]) -> Result<(), &'static str> {
+    fn interpolate(&self, time: f64, output: &mut [f64]) -> Result<(), InterpolationError> {
         if output.len() != self.dimension {
-            return Err("dense output dimension mismatch");
+            return Err(InterpolationError::DimensionMismatch);
         }
         if time == self.bound_time {
             output.copy_from_slice(self.endpoint_state);
@@ -918,7 +918,9 @@ impl DenseSegment for CollocationAttemptSegment<'_> {
                 &mut weights,
             )
         };
-        result.map_err(|_| "non-finite collocation interpolation")
+        result.map_err(|_| InterpolationError::NonFiniteResult {
+            context: "collocation",
+        })
     }
 }
 

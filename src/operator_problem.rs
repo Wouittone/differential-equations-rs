@@ -17,10 +17,12 @@ impl<O, P> LinearOperatorProblem<O, P> {
         initial_state: impl Into<Vec<f64>>,
         time_span: (f64, f64),
         parameters: P,
-    ) -> Result<Self, &'static str> {
+    ) -> Result<Self, ConfigurationError> {
         let initial_state = initial_state.into();
         if initial_state.is_empty() {
-            return Err("linear operator state must be non-empty");
+            return Err(ConfigurationError::EmptyData {
+                context: "linear operator state",
+            });
         }
         Ok(Self {
             operator,
@@ -80,10 +82,12 @@ impl<O, P> LieGroupProblem<O, P> {
         initial_state: impl Into<Vec<f64>>,
         time_span: (f64, f64),
         parameters: P,
-    ) -> Result<Self, &'static str> {
+    ) -> Result<Self, ConfigurationError> {
         let initial_state = initial_state.into();
         if initial_state.is_empty() {
-            return Err("Lie-group vector state must be non-empty");
+            return Err(ConfigurationError::EmptyData {
+                context: "Lie-group vector state",
+            });
         }
         let group_dimension = initial_state.len();
         Ok(Self {
@@ -102,13 +106,18 @@ impl<O, P> LieGroupProblem<O, P> {
         dimension: usize,
         time_span: (f64, f64),
         parameters: P,
-    ) -> Result<Self, &'static str> {
+    ) -> Result<Self, ConfigurationError> {
         let initial_state = initial_matrix.into();
-        let expected = dimension
-            .checked_mul(dimension)
-            .ok_or("Lie-group matrix dimension overflow")?;
+        let expected =
+            dimension
+                .checked_mul(dimension)
+                .ok_or(ConfigurationError::DimensionOverflow {
+                    context: "Lie-group matrix",
+                })?;
         if dimension == 0 || initial_state.len() != expected {
-            return Err("Lie-group matrix state must be square and non-empty");
+            return Err(ConfigurationError::DimensionMismatch {
+                context: "Lie-group matrix state",
+            });
         }
         Ok(Self {
             operator,
@@ -147,3 +156,4 @@ impl<O, P> LieGroupProblem<O, P> {
         (self.operator)(output, state, &self.parameters, time);
     }
 }
+use crate::ConfigurationError;

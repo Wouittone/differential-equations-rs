@@ -79,7 +79,8 @@ fn shared_dense_callbacks_and_backward_time_remain_available() {
     .unwrap();
     let event_time = *solution.times().last().unwrap();
     assert!((event_time - 1.5_f64.ln()).abs() < 2.0e-5);
-    assert_eq!(solution.interpolate(event_time).unwrap(), vec![1.5]);
+    let event_state = solution.interpolate(event_time).unwrap();
+    assert!((event_state[0] - 1.5).abs() <= 4.0 * f64::EPSILON);
 
     let backward_problem = OdeProblem::new(exponential as Rhs, vec![1.0_f64.exp()], (1.0, 0.0), ());
     let backward = solve(

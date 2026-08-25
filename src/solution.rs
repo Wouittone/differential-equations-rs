@@ -1,5 +1,40 @@
+use thiserror::Error;
+
+use crate::event::times_are_numerically_equal;
+
+/// A dense-output query or retained interpolation segment is invalid.
+#[derive(Clone, Copy, Debug, Eq, Error, PartialEq)]
+#[non_exhaustive]
+pub enum InterpolationError {
+    /// The requested time is NaN or infinite.
+    #[error("interpolation time must be finite")]
+    NonFiniteTime,
+    /// The solution contains no saved state.
+    #[error("cannot interpolate an empty solution")]
+    EmptySolution,
+    /// The requested time is outside the saved trajectory.
+    #[error("interpolation time is outside the saved trajectory")]
+    OutsideTimeSpan,
+    /// An output buffer has the wrong state dimension.
+    #[error("interpolation output dimension does not match the solution")]
+    DimensionMismatch,
+    /// Retained dense data violates a solver invariant.
+    #[error("invalid dense-output data: {context}")]
+    InvalidSegmentData {
+        /// The failed dense-output representation.
+        context: &'static str,
+    },
+    /// Interpolation produced a NaN or infinity.
+    #[error("{context} interpolation produced a non-finite value")]
+    NonFiniteResult {
+        /// The dense-output representation that failed.
+        context: &'static str,
+    },
+}
+
 /// Work performed by an ODE solver.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[non_exhaustive]
 pub struct SolverStats {
     /// Number of right-hand-side evaluations.
     pub rhs_evaluations: usize,
@@ -25,7 +60,7 @@ use crate::{SaveMode, SolveOptions};
 /// data and can be evaluated without mutating the solver kernel.
 #[allow(dead_code)]
 pub(crate) trait DenseSegment {
-    fn interpolate(&self, time: f64, output: &mut [f64]) -> Result<(), &'static str>;
+    fn interpolate(&self, time: f64, output: &mut [f64]) -> Result<(), InterpolationError>;
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -167,7 +202,7 @@ impl HermiteSegment {
         end_state: Vec<f64>,
         start_derivative: Vec<f64>,
         end_derivative: Vec<f64>,
-    ) -> Result<Self, &'static str> {
+    ) -> Result<Self, InterpolationError> {
         Self::new_bounded(
             start_time,
             end_time,
@@ -188,7 +223,7 @@ impl HermiteSegment {
         end_state: Vec<f64>,
         start_derivative: Vec<f64>,
         end_derivative: Vec<f64>,
-    ) -> Result<Self, &'static str> {
+    ) -> Result<Self, InterpolationError> {
         if !start_time.is_finite()
             || !end_time.is_finite()
             || !bound_time.is_finite()
@@ -202,7 +237,9 @@ impl HermiteSegment {
             || !start_derivative.iter().all(|value| value.is_finite())
             || !end_derivative.iter().all(|value| value.is_finite())
         {
-            return Err("invalid dense segment dimensions or times");
+            return Err(InterpolationError::InvalidSegmentData {
+                context: "Hermite segment dimensions or times",
+            });
         }
         let within_step = if start_time < end_time {
             (start_time..=end_time).contains(&bound_time)
@@ -210,7 +247,9 @@ impl HermiteSegment {
             (end_time..=start_time).contains(&bound_time)
         };
         if !within_step {
-            return Err("invalid dense segment bound");
+            return Err(InterpolationError::InvalidSegmentData {
+                context: "Hermite segment bound",
+            });
         }
         Ok(Self {
             start_time,
@@ -243,7 +282,7 @@ impl<'a> BorrowedHermiteSegment<'a> {
         end_state: &'a [f64],
         start_derivative: &'a [f64],
         end_derivative: &'a [f64],
-    ) -> Result<Self, &'static str> {
+    ) -> Result<Self, InterpolationError> {
         if !start_time.is_finite()
             || !end_time.is_finite()
             || end_time == start_time
@@ -256,7 +295,9 @@ impl<'a> BorrowedHermiteSegment<'a> {
             || !start_derivative.iter().all(|value| value.is_finite())
             || !end_derivative.iter().all(|value| value.is_finite())
         {
-            return Err("invalid dense segment dimensions or times");
+            return Err(InterpolationError::InvalidSegmentData {
+                context: "borrowed Hermite segment dimensions or times",
+            });
         }
         Ok(Self {
             start_time,
@@ -288,7 +329,7 @@ impl<'a> BorrowedRungeKuttaSegment<'a> {
         end_state: &'a [f64],
         stages: &'a [f64],
         coefficients: &'static [&'static [f64]],
-    ) -> Result<Self, &'static str> {
+    ) -> Result<Self, InterpolationError> {
         let dimension = start_state.len();
         if !start_time.is_finite()
             || !end_time.is_finite()
@@ -304,7 +345,9 @@ impl<'a> BorrowedRungeKuttaSegment<'a> {
             || !end_state.iter().all(|value| value.is_finite())
             || !stages.iter().all(|value| value.is_finite())
         {
-            return Err("invalid Runge--Kutta dense segment data");
+            return Err(InterpolationError::InvalidSegmentData {
+                context: "Runge--Kutta segment",
+            });
         }
         Ok(Self {
             start_time,
@@ -339,7 +382,7 @@ impl RungeKuttaSegment {
         end_state: &[f64],
         stages: &[f64],
         coefficients: &'static [&'static [f64]],
-    ) -> Result<Self, &'static str> {
+    ) -> Result<Self, InterpolationError> {
         let borrowed = BorrowedRungeKuttaSegment::new(
             start_time,
             end_time,
@@ -349,7 +392,9 @@ impl RungeKuttaSegment {
             coefficients,
         )?;
         if !borrowed.contains(bound_time) {
-            return Err("invalid Runge--Kutta dense segment bound");
+            return Err(InterpolationError::InvalidSegmentData {
+                context: "Runge--Kutta segment bound",
+            });
         }
         Ok(Self {
             start_time,
@@ -383,7 +428,7 @@ impl<'a> BorrowedStiffSegment<'a> {
         end_state: &'a [f64],
         corrections: &'a [f64],
         order: usize,
-    ) -> Result<Self, &'static str> {
+    ) -> Result<Self, InterpolationError> {
         let dimension = start_state.len();
         if !start_time.is_finite()
             || !end_time.is_finite()
@@ -396,7 +441,9 @@ impl<'a> BorrowedStiffSegment<'a> {
             || !end_state.iter().all(|value| value.is_finite())
             || !corrections.iter().all(|value| value.is_finite())
         {
-            return Err("invalid stiff dense segment data");
+            return Err(InterpolationError::InvalidSegmentData {
+                context: "stiff segment",
+            });
         }
         Ok(Self {
             start_time,
@@ -428,7 +475,7 @@ impl StiffSegment {
         end_state: &[f64],
         corrections: &[f64],
         order: usize,
-    ) -> Result<Self, &'static str> {
+    ) -> Result<Self, InterpolationError> {
         let borrowed = BorrowedStiffSegment::new(
             start_time,
             end_time,
@@ -438,7 +485,9 @@ impl StiffSegment {
             order,
         )?;
         if !borrowed.contains(bound_time) {
-            return Err("invalid stiff dense segment bound");
+            return Err(InterpolationError::InvalidSegmentData {
+                context: "stiff segment bound",
+            });
         }
         Ok(Self {
             start_time,
@@ -476,7 +525,7 @@ impl CollocationSegment {
         lagrange: &[f64],
         stage_count: usize,
         adaptive: bool,
-    ) -> Result<Self, &'static str> {
+    ) -> Result<Self, InterpolationError> {
         let dimension = start_state.len();
         let within_step = if start_time < attempted_time {
             (start_time..=attempted_time).contains(&bound_time)
@@ -497,7 +546,9 @@ impl CollocationSegment {
             || first_half_stages.len() != stage_count * dimension
             || second_half_stages.len() != stage_count * dimension
         {
-            return Err("invalid collocation dense segment data");
+            return Err(InterpolationError::InvalidSegmentData {
+                context: "collocation segment",
+            });
         }
         Ok(Self {
             start_time,
@@ -559,7 +610,7 @@ impl<'a> BorrowedTaylorSegment<'a> {
         end_state: &'a [f64],
         coefficients: &'a [f64],
         order: usize,
-    ) -> Result<Self, &'static str> {
+    ) -> Result<Self, InterpolationError> {
         let dimension = start_state.len();
         if !start_time.is_finite()
             || !end_time.is_finite()
@@ -569,7 +620,9 @@ impl<'a> BorrowedTaylorSegment<'a> {
             || order == 0
             || coefficients.len() < (order + 1) * dimension
         {
-            return Err("invalid Taylor dense segment data");
+            return Err(InterpolationError::InvalidSegmentData {
+                context: "Taylor segment",
+            });
         }
         Ok(Self {
             start_time,
@@ -602,7 +655,7 @@ impl TaylorSegment {
         end_state: &[f64],
         coefficients: &[f64],
         order: usize,
-    ) -> Result<Self, &'static str> {
+    ) -> Result<Self, InterpolationError> {
         let borrowed = BorrowedTaylorSegment::new(
             start_time,
             end_time,
@@ -612,7 +665,9 @@ impl TaylorSegment {
             order,
         )?;
         if !borrowed.contains(bound_time) {
-            return Err("invalid Taylor dense segment bound");
+            return Err(InterpolationError::InvalidSegmentData {
+                context: "Taylor segment bound",
+            });
         }
         Ok(Self {
             start_time,
@@ -636,12 +691,24 @@ impl TaylorSegment {
     }
 }
 
+fn validate_dense_query(
+    contains_time: bool,
+    output_dimension: usize,
+    state_dimension: usize,
+) -> Result<(), InterpolationError> {
+    if output_dimension != state_dimension {
+        return Err(InterpolationError::DimensionMismatch);
+    }
+    if !contains_time {
+        return Err(InterpolationError::OutsideTimeSpan);
+    }
+    Ok(())
+}
+
 #[allow(dead_code)]
 impl DenseSegment for HermiteSegment {
-    fn interpolate(&self, time: f64, output: &mut [f64]) -> Result<(), &'static str> {
-        if !self.contains(time) {
-            return Err("dense output dimension or time mismatch");
-        }
+    fn interpolate(&self, time: f64, output: &mut [f64]) -> Result<(), InterpolationError> {
+        validate_dense_query(self.contains(time), output.len(), self.start_state.len())?;
         interpolate_hermite(
             self.start_time,
             self.end_time,
@@ -656,10 +723,8 @@ impl DenseSegment for HermiteSegment {
 }
 
 impl DenseSegment for BorrowedHermiteSegment<'_> {
-    fn interpolate(&self, time: f64, output: &mut [f64]) -> Result<(), &'static str> {
-        if !self.contains(time) {
-            return Err("dense output dimension or time mismatch");
-        }
+    fn interpolate(&self, time: f64, output: &mut [f64]) -> Result<(), InterpolationError> {
+        validate_dense_query(self.contains(time), output.len(), self.start_state.len())?;
         interpolate_hermite(
             self.start_time,
             self.end_time,
@@ -674,10 +739,8 @@ impl DenseSegment for BorrowedHermiteSegment<'_> {
 }
 
 impl DenseSegment for BorrowedRungeKuttaSegment<'_> {
-    fn interpolate(&self, time: f64, output: &mut [f64]) -> Result<(), &'static str> {
-        if !self.contains(time) || output.len() != self.dimension {
-            return Err("dense output dimension or time mismatch");
-        }
+    fn interpolate(&self, time: f64, output: &mut [f64]) -> Result<(), InterpolationError> {
+        validate_dense_query(self.contains(time), output.len(), self.dimension)?;
         if time == self.start_time {
             output.copy_from_slice(self.start_state);
             return Ok(());
@@ -700,10 +763,8 @@ impl DenseSegment for BorrowedRungeKuttaSegment<'_> {
 }
 
 impl DenseSegment for RungeKuttaSegment {
-    fn interpolate(&self, time: f64, output: &mut [f64]) -> Result<(), &'static str> {
-        if !self.contains(time) || output.len() != self.dimension {
-            return Err("dense output dimension or time mismatch");
-        }
+    fn interpolate(&self, time: f64, output: &mut [f64]) -> Result<(), InterpolationError> {
+        validate_dense_query(self.contains(time), output.len(), self.dimension)?;
         if time == self.start_time {
             output.copy_from_slice(&self.start_state);
             return Ok(());
@@ -725,10 +786,8 @@ impl DenseSegment for RungeKuttaSegment {
 }
 
 impl DenseSegment for BorrowedStiffSegment<'_> {
-    fn interpolate(&self, time: f64, output: &mut [f64]) -> Result<(), &'static str> {
-        if !self.contains(time) {
-            return Err("dense output dimension or time mismatch");
-        }
+    fn interpolate(&self, time: f64, output: &mut [f64]) -> Result<(), InterpolationError> {
+        validate_dense_query(self.contains(time), output.len(), self.start_state.len())?;
         interpolate_stiff(
             self.start_time,
             self.end_time,
@@ -743,10 +802,8 @@ impl DenseSegment for BorrowedStiffSegment<'_> {
 }
 
 impl DenseSegment for StiffSegment {
-    fn interpolate(&self, time: f64, output: &mut [f64]) -> Result<(), &'static str> {
-        if !self.contains(time) {
-            return Err("dense output dimension or time mismatch");
-        }
+    fn interpolate(&self, time: f64, output: &mut [f64]) -> Result<(), InterpolationError> {
+        validate_dense_query(self.contains(time), output.len(), self.start_state.len())?;
         interpolate_stiff(
             self.start_time,
             self.end_time,
@@ -761,10 +818,8 @@ impl DenseSegment for StiffSegment {
 }
 
 impl DenseSegment for CollocationSegment {
-    fn interpolate(&self, time: f64, output: &mut [f64]) -> Result<(), &'static str> {
-        if !self.contains(time) || output.len() != self.dimension {
-            return Err("dense output dimension or time mismatch");
-        }
+    fn interpolate(&self, time: f64, output: &mut [f64]) -> Result<(), InterpolationError> {
+        validate_dense_query(self.contains(time), output.len(), self.dimension)?;
         if time == self.bound_time {
             output.copy_from_slice(&self.endpoint_state);
             return Ok(());
@@ -805,15 +860,15 @@ impl DenseSegment for CollocationSegment {
             .iter()
             .all(|value| value.is_finite())
             .then_some(())
-            .ok_or("non-finite collocation interpolation")
+            .ok_or(InterpolationError::NonFiniteResult {
+                context: "collocation",
+            })
     }
 }
 
 impl DenseSegment for BorrowedTaylorSegment<'_> {
-    fn interpolate(&self, time: f64, output: &mut [f64]) -> Result<(), &'static str> {
-        if !self.contains(time) || output.len() != self.dimension {
-            return Err("dense output dimension or time mismatch");
-        }
+    fn interpolate(&self, time: f64, output: &mut [f64]) -> Result<(), InterpolationError> {
+        validate_dense_query(self.contains(time), output.len(), self.dimension)?;
         if time == self.start_time {
             output.copy_from_slice(self.start_state);
             return Ok(());
@@ -836,10 +891,8 @@ impl DenseSegment for BorrowedTaylorSegment<'_> {
 }
 
 impl DenseSegment for TaylorSegment {
-    fn interpolate(&self, time: f64, output: &mut [f64]) -> Result<(), &'static str> {
-        if !self.contains(time) || output.len() != self.dimension {
-            return Err("dense output dimension or time mismatch");
-        }
+    fn interpolate(&self, time: f64, output: &mut [f64]) -> Result<(), InterpolationError> {
+        validate_dense_query(self.contains(time), output.len(), self.dimension)?;
         if time == self.start_time {
             output.copy_from_slice(&self.start_state);
             return Ok(());
@@ -874,7 +927,7 @@ impl OwnedDenseSegment {
 }
 
 impl DenseSegment for OwnedDenseSegment {
-    fn interpolate(&self, time: f64, output: &mut [f64]) -> Result<(), &'static str> {
+    fn interpolate(&self, time: f64, output: &mut [f64]) -> Result<(), InterpolationError> {
         match self {
             Self::Hermite(segment) => segment.interpolate(time, output),
             Self::RungeKutta(segment) => segment.interpolate(time, output),
@@ -895,7 +948,18 @@ fn interpolate_taylor(
     order: usize,
     time: f64,
     output: &mut [f64],
-) -> Result<(), &'static str> {
+) -> Result<(), InterpolationError> {
+    if output.len() != dimension {
+        return Err(InterpolationError::DimensionMismatch);
+    }
+    if !time.is_finite() {
+        return Err(InterpolationError::NonFiniteTime);
+    }
+    if coefficients.len() < (order + 1) * dimension {
+        return Err(InterpolationError::InvalidSegmentData {
+            context: "Taylor coefficients",
+        });
+    }
     let theta = (time - start_time) / (end_time - start_time);
     output.copy_from_slice(start_state);
     for component in 0..dimension {
@@ -909,7 +973,7 @@ fn interpolate_taylor(
         .iter()
         .all(|value| value.is_finite())
         .then_some(())
-        .ok_or("non-finite Taylor interpolation")
+        .ok_or(InterpolationError::NonFiniteResult { context: "Taylor" })
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -922,10 +986,18 @@ fn interpolate_stiff(
     order: usize,
     time: f64,
     output: &mut [f64],
-) -> Result<(), &'static str> {
+) -> Result<(), InterpolationError> {
     let dimension = start_state.len();
-    if output.len() != dimension || corrections.len() != order * dimension || !time.is_finite() {
-        return Err("dense output dimension or time mismatch");
+    if output.len() != dimension {
+        return Err(InterpolationError::DimensionMismatch);
+    }
+    if !time.is_finite() {
+        return Err(InterpolationError::NonFiniteTime);
+    }
+    if order == 0 || corrections.len() != order * dimension {
+        return Err(InterpolationError::InvalidSegmentData {
+            context: "stiff interpolation corrections",
+        });
     }
     if time == start_time {
         output.copy_from_slice(start_state);
@@ -957,14 +1029,18 @@ pub(crate) fn interpolate_runge_kutta(
     coefficients: &'static [&'static [f64]],
     time: f64,
     output: &mut [f64],
-) -> Result<(), &'static str> {
+) -> Result<(), InterpolationError> {
     let dimension = start_state.len();
-    if !time.is_finite()
-        || output.len() != dimension
-        || end_time == start_time
-        || stages.len() != coefficients.len() * dimension
-    {
-        return Err("dense output dimension or time mismatch");
+    if output.len() != dimension {
+        return Err(InterpolationError::DimensionMismatch);
+    }
+    if !time.is_finite() {
+        return Err(InterpolationError::NonFiniteTime);
+    }
+    if end_time == start_time || stages.len() != coefficients.len() * dimension {
+        return Err(InterpolationError::InvalidSegmentData {
+            context: "Runge--Kutta interpolation stages",
+        });
     }
     let step = end_time - start_time;
     let theta = (time - start_time) / step;
@@ -996,9 +1072,12 @@ fn interpolate_hermite(
     end_derivative: &[f64],
     time: f64,
     output: &mut [f64],
-) -> Result<(), &'static str> {
-    if output.len() != start_state.len() || !time.is_finite() {
-        return Err("dense output dimension or time mismatch");
+) -> Result<(), InterpolationError> {
+    if output.len() != start_state.len() {
+        return Err(InterpolationError::DimensionMismatch);
+    }
+    if !time.is_finite() {
+        return Err(InterpolationError::NonFiniteTime);
     }
     if time == start_time {
         output.copy_from_slice(start_state);
@@ -1097,8 +1176,7 @@ impl<'a> TrajectoryRecorder<'a> {
             {
                 *output = previous + fraction * (current - previous);
             }
-            self.times.push(target);
-            self.values.extend_from_slice(&self.interpolation);
+            self.push_interpolation_target(target);
             self.next_save += 1;
         }
     }
@@ -1119,7 +1197,7 @@ impl<'a> TrajectoryRecorder<'a> {
         time: f64,
         final_time: bool,
         segment: &dyn DenseSegment,
-    ) -> Result<(), &'static str> {
+    ) -> Result<(), InterpolationError> {
         let _ = previous_state;
         if self.save_at.is_empty() {
             if self.save_mode == SaveMode::EveryStep || final_time {
@@ -1138,8 +1216,7 @@ impl<'a> TrajectoryRecorder<'a> {
                 break;
             }
             segment.interpolate(target, &mut self.interpolation)?;
-            self.times.push(target);
-            self.values.extend_from_slice(&self.interpolation);
+            self.push_interpolation_target(target);
             self.next_save += 1;
         }
         Ok(())
@@ -1196,11 +1273,36 @@ impl<'a> TrajectoryRecorder<'a> {
     }
 
     pub(crate) fn force_state(&mut self, time: f64, state: &[f64]) {
-        self.push_unique(time, state);
+        let canonical_time = self
+            .save_at
+            .iter()
+            .copied()
+            .find(|target| times_are_numerically_equal(*target, time))
+            .unwrap_or(time);
+        self.push_unique(canonical_time, state);
+    }
+
+    fn push_interpolation_target(&mut self, time: f64) {
+        if let Some(saved) = self
+            .times
+            .last_mut()
+            .filter(|saved| times_are_numerically_equal(**saved, time))
+        {
+            *saved = time;
+            let start = self.values.len() - self.dimension;
+            self.values[start..].copy_from_slice(&self.interpolation);
+        } else {
+            self.times.push(time);
+            self.values.extend_from_slice(&self.interpolation);
+        }
     }
 
     fn push_unique(&mut self, time: f64, state: &[f64]) {
-        if self.times.last() == Some(&time) {
+        if self
+            .times
+            .last()
+            .is_some_and(|saved| times_are_numerically_equal(*saved, time))
+        {
             let start = self.values.len() - self.dimension;
             self.values[start..].copy_from_slice(state);
         } else {
@@ -1284,23 +1386,38 @@ impl Solution {
         &self.values[start..]
     }
 
-    /// Interpolates a saved trajectory segment at `time` using the recorder's
-    /// stable linear fallback. Method-specific dense segments can replace this
-    /// path without changing the query contract.
+    /// Interpolates the saved trajectory at `time`.
+    ///
+    /// Retained method-specific dense output is preferred. When none covers the
+    /// requested time, the query uses a stable linear interpolation between
+    /// adjacent saved states. Use [`try_interpolate`](Self::try_interpolate) to
+    /// retain the reason a query fails.
     pub fn interpolate(&self, time: f64) -> Option<Vec<f64>> {
-        if !time.is_finite() || self.times.is_empty() {
-            return None;
+        self.try_interpolate(time).ok()
+    }
+
+    /// Interpolates the saved trajectory and reports why a query cannot be served.
+    pub fn try_interpolate(&self, time: f64) -> Result<Vec<f64>, InterpolationError> {
+        if !time.is_finite() {
+            return Err(InterpolationError::NonFiniteTime);
+        }
+        if self.times.is_empty() {
+            return Err(InterpolationError::EmptySolution);
         }
         for (index, &saved_time) in self.times.iter().enumerate() {
             if time == saved_time {
-                return Some(self.state(index)?.to_vec());
+                return self.state(index).map(<[f64]>::to_vec).ok_or(
+                    InterpolationError::InvalidSegmentData {
+                        context: "saved solution state",
+                    },
+                );
             }
         }
         for segment in &self.dense_segments {
             if segment.contains(time) {
                 let mut output = vec![0.0; self.dimension];
-                segment.interpolate(time, &mut output).ok()?;
-                return Some(output);
+                segment.interpolate(time, &mut output)?;
+                return Ok(output);
             }
         }
         for index in 1..self.times.len() {
@@ -1310,18 +1427,24 @@ impl Solution {
                 || (left >= right && time >= right && time <= left)
             {
                 let fraction = (time - left) / (right - left);
-                let previous = self.state(index - 1)?;
-                let current = self.state(index)?;
-                return Some(
-                    previous
-                        .iter()
-                        .zip(current)
-                        .map(|(previous, current)| previous + fraction * (current - previous))
-                        .collect(),
-                );
+                let previous =
+                    self.state(index - 1)
+                        .ok_or(InterpolationError::InvalidSegmentData {
+                            context: "saved solution state",
+                        })?;
+                let current = self
+                    .state(index)
+                    .ok_or(InterpolationError::InvalidSegmentData {
+                        context: "saved solution state",
+                    })?;
+                return Ok(previous
+                    .iter()
+                    .zip(current)
+                    .map(|(previous, current)| previous + fraction * (current - previous))
+                    .collect());
             }
         }
-        None
+        Err(InterpolationError::OutsideTimeSpan)
     }
 
     /// Solver work counters.

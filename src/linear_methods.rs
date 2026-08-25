@@ -539,7 +539,7 @@ where
             (exp_apply(&scale_matrix(&a, step), state), Vec::new())
         }
         Scheme::LinearExponential => {
-            let a = constant_operator.expect("constant operator initialized");
+            let a = constant_operator.ok_or(SolveError::InvalidTableau)?;
             (exp_apply(&scale_matrix(a, step), state), Vec::new())
         }
         Scheme::MagnusMidpoint => {
@@ -1015,7 +1015,7 @@ where
         _: &SolveOptions,
         _: &mut SolverStats,
     ) -> Result<f64, SolveError> {
-        unreachable!()
+        Err(SolveError::InitialStepRequired)
     }
     fn attempt_step(
         &mut self,

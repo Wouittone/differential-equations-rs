@@ -55,9 +55,21 @@ struct ExplicitTableau {
     nodes: Vec<Scalar>,
     coefficients: Vec<Vec<Scalar>>,
     weights: Vec<Scalar>,
+    #[serde(default)]
+    error_estimator: ErrorEstimator,
     error_weights: Option<Vec<Scalar>>,
     second_error_weights: Option<Vec<Scalar>>,
     dense_coefficients: Option<Vec<Vec<Scalar>>>,
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq)]
+#[serde(rename_all = "kebab-case")]
+enum ErrorEstimator {
+    /// Difference between primary and embedded weights; coefficients sum to zero.
+    #[default]
+    EmbeddedDifference,
+    /// Direct weighted stage combination used by specialized upstream methods.
+    StageCombination,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -182,11 +194,17 @@ impl ExplicitTableau {
             return Err(format!("weights must sum to one; found {weight_sum}"));
         }
 
-        self.validate_estimator("error_weights", self.error_weights.as_deref(), stages)?;
+        self.validate_estimator(
+            "error_weights",
+            self.error_weights.as_deref(),
+            stages,
+            self.error_estimator == ErrorEstimator::EmbeddedDifference,
+        )?;
         self.validate_estimator(
             "second_error_weights",
             self.second_error_weights.as_deref(),
             stages,
+            true,
         )?;
         if self.error_weights.is_some() != self.embedded_order.is_some() {
             return Err(
@@ -196,6 +214,9 @@ impl ExplicitTableau {
         }
         if self.second_error_weights.is_some() && self.error_weights.is_none() {
             return Err("second_error_weights requires error_weights".into());
+        }
+        if self.error_weights.is_none() && self.error_estimator != ErrorEstimator::default() {
+            return Err("error_estimator requires error_weights".into());
         }
 
         if let Some(rows) = &self.dense_coefficients {
@@ -231,6 +252,7 @@ impl ExplicitTableau {
         label: &str,
         estimator: Option<&[Scalar]>,
         stages: usize,
+        require_zero_sum: bool,
     ) -> Result<(), String> {
         let Some(estimator) = estimator else {
             return Ok(());
@@ -240,7 +262,7 @@ impl ExplicitTableau {
         }
         let estimator = values(estimator, label)?;
         let sum = estimator.iter().sum::<f64>();
-        if !approximately_equal(sum, 0.0) {
+        if require_zero_sum && !approximately_equal(sum, 0.0) {
             return Err(format!("{label} must sum to zero; found {sum}"));
         }
         Ok(())
@@ -409,5 +431,20 @@ error_weights = ["-1/2", "1/2"]
     fn rejects_inconsistent_nodes() {
         let invalid = HEUN.replace("nodes = [\"0\", \"1\"]", "nodes = [\"0\", \"1/2\"]");
         assert!(parse(&invalid).validate("FileHeun").is_err());
+    }
+
+    #[test]
+    fn direct_stage_estimators_require_an_explicit_schema_marker() {
+        let direct = HEUN.replace(
+            "error_weights = [\"-1/2\", \"1/2\"]",
+            "error_estimator = \"stage-combination\"\nerror_weights = [\"1\", \"0\"]",
+        );
+        parse(&direct).validate("FileHeun").unwrap();
+
+        let unmarked = HEUN.replace(
+            "error_weights = [\"-1/2\", \"1/2\"]",
+            "error_weights = [\"1\", \"0\"]",
+        );
+        assert!(parse(&unmarked).validate("FileHeun").is_err());
     }
 }

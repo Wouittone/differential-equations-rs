@@ -64,7 +64,7 @@ struct Workspace {
 
 impl Workspace {
     fn new(dimension: usize) -> Self {
-        let layout = StateLayout::new(dimension).expect("solver validates non-empty state");
+        let layout = StateLayout::for_validated_state(dimension);
         Self {
             layout,
             current_derivative: vec![0.0; dimension],
@@ -204,7 +204,10 @@ where
             let defect = if startup {
                 candidate[index] - (state[index] + step * self.workspace.current_derivative[index])
             } else {
-                let previous_step = self.workspace.last_step.expect("non-startup has history");
+                let previous_step = self
+                    .workspace
+                    .last_step
+                    .ok_or(SolveError::InvalidMultistepHistory)?;
                 let rho = step / previous_step;
                 (previous_step + step) / 6.0
                     * (self.workspace.evaluation_derivative[index]
@@ -389,7 +392,7 @@ where
         }
     }
     stats.jacobian_evaluations += 1;
-    workspace.factorization = Some(if workspace.factorization.is_none() {
+    let factorization = if workspace.factorization.is_none() {
         let dense = DenseLu::factorize(
             workspace.layout,
             &workspace.matrix,
@@ -407,8 +410,9 @@ where
         workspace
             .factorization
             .take()
-            .expect("checked factorization")
-    });
+            .ok_or(SolveError::NonlinearSolveFailed)?
+    };
+    workspace.factorization = Some(factorization);
     workspace.factorization_ready = true;
     Ok(())
 }

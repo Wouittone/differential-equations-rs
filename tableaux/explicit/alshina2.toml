@@ -1,0 +1,12 @@
+schema_version = 1
+name = "Alshina2"
+description = "The adaptive optimal two-stage, second-order Alshina method."
+order = 2
+embedded_order = 1
+fsal = false
+
+nodes = ["0", "2/3"]
+coefficients = [[], ["2/3"]]
+weights = ["1/4", "3/4"]
+error_estimator = "stage-combination"
+error_weights = ["1", "0"]

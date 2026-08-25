@@ -13,11 +13,12 @@ mod anas5;
 mod autodp5;
 mod bdf;
 mod callback;
-mod coefficients;
 mod compatibility;
 mod composites;
 mod dense_coefficients;
 mod ensemble;
+mod error;
+mod event;
 mod explicit_rk;
 mod exponential_rk;
 mod extrapolation;
@@ -76,7 +77,14 @@ pub use amf::{
 pub use callback::{CallbackAction, EventDirection};
 pub use compatibility::algorithms;
 pub use differential_equations_tableau_macros::define_explicit_rk_from_file;
-pub use ensemble::{CaseOutcome, ExecutionPolicy, solve_batch, solve_ensemble};
+pub use ensemble::{
+    CaseOutcome, ExecutionPolicy, solve_batch, solve_batch_sequential, solve_ensemble,
+    solve_ensemble_sequential,
+};
+#[cfg(feature = "parallel")]
+pub use ensemble::{solve_batch_parallel, solve_ensemble_parallel};
+pub use error::ConfigurationError;
+pub use event::DEFAULT_EVENT_TOLERANCE;
 pub use exponential_rk::ExponentialAlgorithm;
 pub use irkc::{IRKC, solve_irkc};
 pub use linear_methods::{
@@ -90,7 +98,7 @@ pub use second_order::{
     solve_second_order,
 };
 pub use semilinear::{SemilinearOdeProblem, solve_exponential};
-pub use solution::{Solution, SolverStats};
+pub use solution::{InterpolationError, Solution, SolverStats};
 pub use solver::{OdeAlgorithm, SaveMode, SolveError, SolveOptions, solve};
 pub use split_euler::{SplitOdeAlgorithm, solve_split, solve_split_euler};
 pub use symplectic::{

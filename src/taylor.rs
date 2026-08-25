@@ -111,7 +111,7 @@ impl OdeAlgorithm for ExplicitTaylor2 {
         drive_integration(
             problem,
             options,
-            TaylorKernel::new(problem.initial_state().len(), TaylorMode::SecondOrder),
+            TaylorKernel::new(problem.initial_state().len(), TaylorMode::SecondOrder)?,
         )
     }
 }
@@ -128,7 +128,7 @@ impl OdeAlgorithm for ExplicitTaylor {
         drive_integration(
             problem,
             options,
-            TaylorKernel::new(problem.initial_state().len(), TaylorMode::Fixed(self.order)),
+            TaylorKernel::new(problem.initial_state().len(), TaylorMode::Fixed(self.order))?,
         )
     }
 }
@@ -151,7 +151,7 @@ impl OdeAlgorithm for ExplicitTaylorAdaptiveOrder {
                     min: self.min_order,
                     max: self.max_order,
                 },
-            ),
+            )?,
         )
     }
 }
@@ -180,7 +180,7 @@ struct TaylorKernel {
 }
 
 impl TaylorKernel {
-    fn new(dimension: usize, mode: TaylorMode) -> Self {
+    fn new(dimension: usize, mode: TaylorMode) -> Result<Self, SolveError> {
         let maximum = match mode {
             TaylorMode::SecondOrder => 2,
             TaylorMode::Fixed(order) => order + 1,
@@ -196,8 +196,8 @@ impl TaylorKernel {
         let nodes = (0..node_count)
             .map(|index| (PI * index as f64 / maximum as f64).cos())
             .collect::<Vec<_>>();
-        let inverse = interpolation_inverse(&nodes);
-        Self {
+        let inverse = interpolation_inverse(&nodes)?;
+        Ok(Self {
             dimension,
             mode,
             current_order,
@@ -211,7 +211,7 @@ impl TaylorKernel {
             endpoint_state: vec![0.0; dimension],
             order_errors: vec![f64::INFINITY; maximum + 1],
             endpoint_valid: false,
-        }
+        })
     }
 
     fn adaptive(&self) -> bool {
@@ -511,7 +511,7 @@ where
     }
 }
 
-fn interpolation_inverse(nodes: &[f64]) -> Vec<f64> {
+fn interpolation_inverse(nodes: &[f64]) -> Result<Vec<f64>, SolveError> {
     let size = nodes.len();
     let mut vandermonde = vec![0.0; size * size];
     for (row, &node) in nodes.iter().enumerate() {
@@ -522,7 +522,7 @@ fn interpolation_inverse(nodes: &[f64]) -> Vec<f64> {
         }
     }
     let mut pivots = vec![0; size];
-    factorize(&mut vandermonde, &mut pivots, size).expect("distinct Chebyshev nodes");
+    factorize(&mut vandermonde, &mut pivots, size).map_err(|_| SolveError::SingularLinearSystem)?;
     let mut inverse = vec![0.0; size * size];
     for node in 0..size {
         let mut basis = vec![0.0; size];
@@ -532,7 +532,7 @@ fn interpolation_inverse(nodes: &[f64]) -> Vec<f64> {
             inverse[coefficient * size + node] = basis[coefficient];
         }
     }
-    inverse
+    Ok(inverse)
 }
 
 fn scaled_error(error: &[f64], old: &[f64], new: &[f64], options: &SolveOptions) -> f64 {

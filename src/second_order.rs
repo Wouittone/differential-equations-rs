@@ -1,8 +1,14 @@
+use crate::event::{
+    MAX_EVENT_ROOT_ITERATIONS, event_interval_converged, times_are_numerically_equal,
+};
 use crate::integrator::{ControllerConfig, ControllerState};
 use crate::irkn_coefficients::*;
 use crate::linear::{factorize, solve_factorized};
 use crate::rkn_adaptive_coefficients::*;
-use crate::{CallbackAction, EventDirection, SaveMode, SolveError, SolveOptions, SolverStats};
+use crate::{
+    CallbackAction, ConfigurationError, EventDirection, InterpolationError, SaveMode, SolveError,
+    SolveOptions, SolverStats,
+};
 use thiserror::Error;
 
 type DiscreteCondition<P> = dyn Fn(&[f64], &[f64], &P, f64) -> bool;
@@ -216,14 +222,30 @@ impl SecondOrderSolution {
     /// consistent with `q' = v` and velocities use a stable linear segment.
     /// Without retained segments, saved states are linearly interpolated.
     pub fn interpolate(&self, time: f64) -> Option<(Vec<f64>, Vec<f64>)> {
-        if !time.is_finite() || self.times.is_empty() {
-            return None;
+        self.try_interpolate(time).ok()
+    }
+
+    /// Interpolates `(velocity, position)` and reports why the query fails.
+    pub fn try_interpolate(&self, time: f64) -> Result<(Vec<f64>, Vec<f64>), InterpolationError> {
+        if !time.is_finite() {
+            return Err(InterpolationError::NonFiniteTime);
+        }
+        if self.times.is_empty() {
+            return Err(InterpolationError::EmptySolution);
         }
         for (index, &saved_time) in self.times.iter().enumerate() {
             if time == saved_time {
-                return Some((
-                    self.velocity(index)?.to_vec(),
-                    self.position(index)?.to_vec(),
+                return Ok((
+                    self.velocity(index)
+                        .ok_or(InterpolationError::InvalidSegmentData {
+                            context: "saved second-order velocity",
+                        })?
+                        .to_vec(),
+                    self.position(index)
+                        .ok_or(InterpolationError::InvalidSegmentData {
+                            context: "saved second-order position",
+                        })?
+                        .to_vec(),
                 ));
             }
         }
@@ -231,8 +253,12 @@ impl SecondOrderSolution {
             if segment.contains(time) {
                 let mut velocity = vec![0.0; self.dimension];
                 let mut position = vec![0.0; self.dimension];
-                segment.interpolate(time, &mut velocity, &mut position)?;
-                return Some((velocity, position));
+                segment
+                    .interpolate(time, &mut velocity, &mut position)
+                    .ok_or(InterpolationError::InvalidSegmentData {
+                        context: "second-order dense segment",
+                    })?;
+                return Ok((velocity, position));
             }
         }
         for index in 1..self.times.len() {
@@ -243,21 +269,33 @@ impl SecondOrderSolution {
                 let mut velocity = vec![0.0; self.dimension];
                 let mut position = vec![0.0; self.dimension];
                 interpolate(
-                    self.velocity(index)?,
-                    self.velocity(index - 1)?,
+                    self.velocity(index)
+                        .ok_or(InterpolationError::InvalidSegmentData {
+                            context: "saved second-order velocity",
+                        })?,
+                    self.velocity(index - 1)
+                        .ok_or(InterpolationError::InvalidSegmentData {
+                            context: "saved second-order velocity",
+                        })?,
                     fraction,
                     &mut velocity,
                 );
                 interpolate(
-                    self.position(index)?,
-                    self.position(index - 1)?,
+                    self.position(index)
+                        .ok_or(InterpolationError::InvalidSegmentData {
+                            context: "saved second-order position",
+                        })?,
+                    self.position(index - 1)
+                        .ok_or(InterpolationError::InvalidSegmentData {
+                            context: "saved second-order position",
+                        })?,
                     fraction,
                     &mut position,
                 );
-                return Some((velocity, position));
+                return Ok((velocity, position));
             }
         }
-        None
+        Err(InterpolationError::OutsideTimeSpan)
     }
 }
 
@@ -342,6 +380,7 @@ fn partition(values: &[f64], dimension: usize, index: usize) -> Option<&[f64]> {
 
 /// Configuration or integration failure specific to partitioned ODE states.
 #[derive(Clone, Copy, Debug, Eq, Error, PartialEq)]
+#[non_exhaustive]
 pub enum SecondOrderSolveError {
     /// Position and velocity partitions do not have the same dimension.
     #[error("position and velocity dimensions must match")]
@@ -433,12 +472,18 @@ pub struct NewmarkBeta {
 
 impl NewmarkBeta {
     /// Creates a Newmark method with parameters in the upstream admissible ranges.
-    pub fn new(beta: f64, gamma: f64) -> Result<Self, &'static str> {
+    pub fn new(beta: f64, gamma: f64) -> Result<Self, ConfigurationError> {
         if !beta.is_finite() || !(0.0..=0.5).contains(&beta) {
-            return Err("Newmark beta must be finite and in [0, 0.5]");
+            return Err(ConfigurationError::InvalidParameter {
+                parameter: "Newmark beta",
+                reason: "must be finite and in [0, 0.5]",
+            });
         }
         if !gamma.is_finite() || !(0.0..=1.0).contains(&gamma) {
-            return Err("Newmark gamma must be finite and in [0, 1]");
+            return Err(ConfigurationError::InvalidParameter {
+                parameter: "Newmark gamma",
+                reason: "must be finite and in [0, 1]",
+            });
         }
         Ok(Self { beta, gamma })
     }
@@ -474,19 +519,32 @@ pub struct GeneralizedAlpha {
 
 impl GeneralizedAlpha {
     /// Creates a method from all four generalized-alpha parameters.
-    pub fn new(alpha_m: f64, alpha_f: f64, beta: f64, gamma: f64) -> Result<Self, &'static str> {
+    pub fn new(
+        alpha_m: f64,
+        alpha_f: f64,
+        beta: f64,
+        gamma: f64,
+    ) -> Result<Self, ConfigurationError> {
         if ![alpha_m, alpha_f, beta, gamma]
             .iter()
             .all(|value| value.is_finite())
         {
-            return Err("generalized-alpha parameters must be finite");
+            return Err(ConfigurationError::NonFiniteData {
+                context: "generalized-alpha parameters",
+            });
         }
         if alpha_m > alpha_f || alpha_f > 0.5 {
-            return Err("generalized-alpha parameters violate alpha_m <= alpha_f <= 0.5");
+            return Err(ConfigurationError::InvalidParameter {
+                parameter: "generalized-alpha alpha values",
+                reason: "must satisfy alpha_m <= alpha_f <= 0.5",
+            });
         }
         let minimum_beta = (0.5 + alpha_f - alpha_m).powi(2) / 4.0;
         if beta < minimum_beta || !(0.0..=1.0).contains(&gamma) {
-            return Err("generalized-alpha beta or gamma violates unconditional stability");
+            return Err(ConfigurationError::InvalidParameter {
+                parameter: "generalized-alpha beta or gamma",
+                reason: "must satisfy the unconditional-stability bounds",
+            });
         }
         Ok(Self {
             alpha_m,
@@ -497,9 +555,12 @@ impl GeneralizedAlpha {
     }
 
     /// Uses the recommended spectral-radius-at-infinity parameterization.
-    pub fn from_spectral_radius(rho_infinity: f64) -> Result<Self, &'static str> {
+    pub fn from_spectral_radius(rho_infinity: f64) -> Result<Self, ConfigurationError> {
         if !rho_infinity.is_finite() || !(0.0..=1.0).contains(&rho_infinity) {
-            return Err("generalized-alpha spectral radius must be in [0, 1]");
+            return Err(ConfigurationError::InvalidParameter {
+                parameter: "generalized-alpha spectral radius",
+                reason: "must be finite and in [0, 1]",
+            });
         }
         let alpha_m = (2.0 * rho_infinity - 1.0) / (rho_infinity + 1.0);
         let alpha_f = rho_infinity / (rho_infinity + 1.0);
@@ -509,9 +570,12 @@ impl GeneralizedAlpha {
     }
 
     /// Uses the Hilber--Hughes--Taylor alpha parameterization.
-    pub fn from_hht_alpha(alpha: f64) -> Result<Self, &'static str> {
+    pub fn from_hht_alpha(alpha: f64) -> Result<Self, ConfigurationError> {
         if !alpha.is_finite() || !(-1.0 / 3.0..=0.0).contains(&alpha) {
-            return Err("HHT alpha must be in [-1/3, 0]");
+            return Err(ConfigurationError::InvalidParameter {
+                parameter: "HHT alpha",
+                reason: "must be finite and in [-1/3, 0]",
+            });
         }
         Self::new(
             0.0,
@@ -529,7 +593,12 @@ impl GeneralizedAlpha {
 
 impl Default for GeneralizedAlpha {
     fn default() -> Self {
-        Self::from_spectral_radius(1.0).expect("rho infinity one is valid")
+        Self {
+            alpha_m: 0.5,
+            alpha_f: 0.5,
+            beta: 0.25,
+            gamma: 0.5,
+        }
     }
 }
 
@@ -1425,7 +1494,7 @@ where
             next_time,
             next_time == end,
             None,
-        );
+        )?;
         if callback.invocations > 0 {
             recorder.force_state(
                 next_time,
@@ -1854,7 +1923,7 @@ where
             time,
             time == end,
             None,
-        );
+        )?;
         if callback.invocations > 0 {
             recorder.force_state(time, &velocity, &position);
         }
@@ -2099,7 +2168,7 @@ where
                     time,
                     time == end,
                     Some(&mut interpolate),
-                );
+                )?;
             } else {
                 recorder.record_step(
                     &workspace.candidate_velocity,
@@ -2110,7 +2179,7 @@ where
                     time,
                     time == end,
                     None,
-                );
+                )?;
             }
             if callback.invocations > 0 {
                 recorder.force_state(time, &velocity, &position);
@@ -2207,10 +2276,10 @@ fn interpolate_dprkn6(
 ) -> Result<(), SolveError> {
     let position_coefficients = tableau
         .dense_position_coefficients
-        .expect("DPRKN6 dense position coefficients");
+        .ok_or(SolveError::InvalidTableau)?;
     let velocity_coefficients = tableau
         .dense_velocity_coefficients
-        .expect("DPRKN6 dense velocity coefficients");
+        .ok_or(SolveError::InvalidTableau)?;
     let dimension = previous_position.len();
     let stages = tableau.nodes.len();
     debug_assert_eq!(position_coefficients.len(), stages * 5);
@@ -2595,7 +2664,7 @@ where
             time,
             time == end,
             None,
-        );
+        )?;
         if callback.invocations > 0 {
             recorder.force_state(time, &velocity, &position);
         }
@@ -2741,7 +2810,7 @@ where
             time,
             time == end,
             None,
-        );
+        )?;
         if callback.invocations > 0 {
             recorder.force_state(time, &velocity, &position);
         }
@@ -3051,7 +3120,7 @@ fn apply_step_callbacks<F, P>(
         position.copy_from_slice(state_before_position);
         *time = previous_time + fraction * (end_time - previous_time);
         let PartitionedCallback::Continuous(callback) = &problem.callbacks[index] else {
-            unreachable!();
+            return Err(SolveError::InvalidCallbackState);
         };
         outcome.invocations += 1;
         outcome.terminate = (callback.affect)(velocity, position, &problem.parameters, *time)
@@ -3101,8 +3170,11 @@ fn locate_root<P>(
     let mut left = 0.0;
     let mut right = 1.0;
     let mut left_value = before;
-    for _ in 0..64 {
+    for _ in 0..MAX_EVENT_ROOT_ITERATIONS {
         let middle = 0.5 * (left + right);
+        if middle == left || middle == right {
+            break;
+        }
         if let Some(interpolator) = interpolator.as_deref_mut() {
             interpolator(middle, interpolation_velocity, interpolation_position)?;
         } else {
@@ -3136,11 +3208,13 @@ fn locate_root<P>(
         } else {
             right = middle;
         }
-        if (right - left) * (time - previous_time).abs() <= event_tolerance {
+        if event_interval_converged(event_tolerance, previous_time, time, left, right) {
             break;
         }
     }
-    Ok(0.5 * (left + right))
+    // Keep the accepted state on the post-crossing side so a continuing
+    // callback cannot immediately retrigger the same root.
+    Ok(right)
 }
 
 fn interpolate(current: &[f64], previous: &[f64], fraction: f64, output: &mut [f64]) {
@@ -3245,7 +3319,7 @@ impl<'a> PartitionedRecorder<'a> {
         time: f64,
         final_time: bool,
         mut interpolator: Option<&mut PartitionedInterpolator<'_>>,
-    ) {
+    ) -> Result<(), SolveError> {
         let generic_segment = PartitionedDenseSegment::new(
             previous_time,
             time,
@@ -3261,7 +3335,7 @@ impl<'a> PartitionedRecorder<'a> {
             if self.save_mode == SaveMode::EveryStep || final_time {
                 self.push_unique(time, velocity, position);
             }
-            return;
+            return Ok(());
         }
         let direction = (time - previous_time).signum();
         while let Some(&target) = self.save_at.get(self.next_save) {
@@ -3278,7 +3352,7 @@ impl<'a> PartitionedRecorder<'a> {
                     &mut self.interpolation_velocity,
                     &mut self.interpolation_position,
                 )
-                .expect("accepted finite DPRKN6 stage data must interpolate");
+                .map_err(|_| SolveError::DenseOutputFailed)?;
             } else {
                 generic_segment
                     .interpolate(
@@ -3286,7 +3360,7 @@ impl<'a> PartitionedRecorder<'a> {
                         &mut self.interpolation_velocity,
                         &mut self.interpolation_position,
                     )
-                    .expect("accepted finite partitioned states must interpolate");
+                    .ok_or(SolveError::DenseOutputFailed)?;
             }
             self.times.push(target);
             self.velocities
@@ -3295,6 +3369,7 @@ impl<'a> PartitionedRecorder<'a> {
                 .extend_from_slice(&self.interpolation_position);
             self.next_save += 1;
         }
+        Ok(())
     }
 
     fn force_state(&mut self, time: f64, velocity: &[f64], position: &[f64]) {
@@ -3302,7 +3377,11 @@ impl<'a> PartitionedRecorder<'a> {
     }
 
     fn push_unique(&mut self, time: f64, velocity: &[f64], position: &[f64]) {
-        if self.times.last() == Some(&time) {
+        if self
+            .times
+            .last()
+            .is_some_and(|saved| times_are_numerically_equal(*saved, time))
+        {
             let start = self.velocities.len() - self.dimension;
             self.velocities[start..].copy_from_slice(velocity);
             self.positions[start..].copy_from_slice(position);

@@ -6,7 +6,8 @@
 
 #![allow(clippy::excessive_precision)]
 
-use crate::{SaveMode, SecondOrderOdeProblem, SolveError, SolveOptions};
+use crate::event::times_are_numerically_equal;
+use crate::{InterpolationError, SaveMode, SecondOrderOdeProblem, SolveError, SolveOptions};
 use thiserror::Error;
 
 /// A pinned alternating drift/kick composition.
@@ -421,14 +422,30 @@ impl SymplecticSolution {
     /// with `q' = v` and linear velocity interpolation. Saved-only solutions
     /// retain the stable linear compatibility fallback.
     pub fn interpolate(&self, time: f64) -> Option<(Vec<f64>, Vec<f64>)> {
-        if !time.is_finite() || self.times.is_empty() {
-            return None;
+        self.try_interpolate(time).ok()
+    }
+
+    /// Interpolates `(position, velocity)` and reports why the query fails.
+    pub fn try_interpolate(&self, time: f64) -> Result<(Vec<f64>, Vec<f64>), InterpolationError> {
+        if !time.is_finite() {
+            return Err(InterpolationError::NonFiniteTime);
+        }
+        if self.times.is_empty() {
+            return Err(InterpolationError::EmptySolution);
         }
         for (index, &saved_time) in self.times.iter().enumerate() {
             if time == saved_time {
-                return Some((
-                    self.position(index)?.to_vec(),
-                    self.velocity(index)?.to_vec(),
+                return Ok((
+                    self.position(index)
+                        .ok_or(InterpolationError::InvalidSegmentData {
+                            context: "saved symplectic position",
+                        })?
+                        .to_vec(),
+                    self.velocity(index)
+                        .ok_or(InterpolationError::InvalidSegmentData {
+                            context: "saved symplectic velocity",
+                        })?
+                        .to_vec(),
                 ));
             }
         }
@@ -436,8 +453,12 @@ impl SymplecticSolution {
             if segment.contains(time) {
                 let mut position = vec![0.0; self.dimension];
                 let mut velocity = vec![0.0; self.dimension];
-                segment.interpolate(time, &mut position, &mut velocity)?;
-                return Some((position, velocity));
+                segment
+                    .interpolate(time, &mut position, &mut velocity)
+                    .ok_or(InterpolationError::InvalidSegmentData {
+                        context: "symplectic dense segment",
+                    })?;
+                return Ok((position, velocity));
             }
         }
         for index in 1..self.times.len() {
@@ -448,21 +469,33 @@ impl SymplecticSolution {
                 let mut position = vec![0.0; self.dimension];
                 let mut velocity = vec![0.0; self.dimension];
                 interpolate(
-                    self.position(index)?,
-                    self.position(index - 1)?,
+                    self.position(index)
+                        .ok_or(InterpolationError::InvalidSegmentData {
+                            context: "saved symplectic position",
+                        })?,
+                    self.position(index - 1)
+                        .ok_or(InterpolationError::InvalidSegmentData {
+                            context: "saved symplectic position",
+                        })?,
                     fraction,
                     &mut position,
                 );
                 interpolate(
-                    self.velocity(index)?,
-                    self.velocity(index - 1)?,
+                    self.velocity(index)
+                        .ok_or(InterpolationError::InvalidSegmentData {
+                            context: "saved symplectic velocity",
+                        })?,
+                    self.velocity(index - 1)
+                        .ok_or(InterpolationError::InvalidSegmentData {
+                            context: "saved symplectic velocity",
+                        })?,
                     fraction,
                     &mut velocity,
                 );
-                return Some((position, velocity));
+                return Ok((position, velocity));
             }
         }
-        None
+        Err(InterpolationError::OutsideTimeSpan)
     }
 }
 
@@ -548,6 +581,7 @@ fn partition(values: &[f64], dimension: usize, index: usize) -> Option<&[f64]> {
 
 /// Failure specific to a fixed-step symplectic composition.
 #[derive(Clone, Copy, Debug, Eq, Error, PartialEq)]
+#[non_exhaustive]
 pub enum SymplecticSolveError {
     /// Position and velocity partitions differ in size.
     #[error("position and velocity dimensions must match")]
@@ -638,7 +672,7 @@ where
             &candidate_velocity,
             time,
             time == end,
-        );
+        )?;
         std::mem::swap(&mut position, &mut candidate_position);
         std::mem::swap(&mut velocity, &mut candidate_velocity);
     }
@@ -791,7 +825,7 @@ impl<'a> SymplecticRecorder<'a> {
         velocity: &[f64],
         time: f64,
         final_time: bool,
-    ) {
+    ) -> Result<(), SolveError> {
         let segment = SymplecticDenseSegment::new(
             previous_time,
             time,
@@ -807,7 +841,7 @@ impl<'a> SymplecticRecorder<'a> {
             if self.save_mode == SaveMode::EveryStep || final_time {
                 self.push_unique(time, position, velocity);
             }
-            return;
+            return Ok(());
         }
 
         let direction = (time - previous_time).signum();
@@ -825,7 +859,7 @@ impl<'a> SymplecticRecorder<'a> {
                     &mut self.interpolation_position,
                     &mut self.interpolation_velocity,
                 )
-                .expect("accepted finite symplectic states must interpolate");
+                .ok_or(SolveError::DenseOutputFailed)?;
             self.times.push(target);
             self.positions
                 .extend_from_slice(&self.interpolation_position);
@@ -833,10 +867,15 @@ impl<'a> SymplecticRecorder<'a> {
                 .extend_from_slice(&self.interpolation_velocity);
             self.next_save += 1;
         }
+        Ok(())
     }
 
     fn push_unique(&mut self, time: f64, position: &[f64], velocity: &[f64]) {
-        if self.times.last() == Some(&time) {
+        if self
+            .times
+            .last()
+            .is_some_and(|saved| times_are_numerically_equal(*saved, time))
+        {
             let start = self.positions.len() - self.dimension;
             self.positions[start..].copy_from_slice(position);
             self.velocities[start..].copy_from_slice(velocity);

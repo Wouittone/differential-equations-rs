@@ -79,7 +79,7 @@ struct Workspace {
 
 impl Workspace {
     fn new(dimension: usize) -> Self {
-        let layout = StateLayout::new(dimension).expect("solver validates non-empty state");
+        let layout = StateLayout::for_validated_state(dimension);
         Self {
             layout,
             current_derivative: vec![0.0; dimension],
@@ -175,7 +175,11 @@ where
         if startup {
             self.workspace.extrapolated_state.copy_from_slice(state);
         } else {
-            let rho = step / self.workspace.last_step.expect("history implies step");
+            let rho = step
+                / self
+                    .workspace
+                    .last_step
+                    .ok_or(SolveError::InvalidMultistepHistory)?;
             for ((out, &now), &previous) in self
                 .workspace
                 .extrapolated_state
@@ -208,7 +212,11 @@ where
         if !options.adaptive || startup {
             return Ok(StepEstimate::new(if options.adaptive { 1.0 } else { 0.0 }));
         }
-        let rho = step / self.workspace.last_step.expect("history implies step");
+        let rho = step
+            / self
+                .workspace
+                .last_step
+                .ok_or(SolveError::InvalidMultistepHistory)?;
         let difference = candidate
             .iter()
             .zip(state)
@@ -382,7 +390,7 @@ where
     }
     stats.jacobian_evaluations += 1;
     stats.linear_factorizations += 1;
-    workspace.factorization = Some(if workspace.factorization.is_none() {
+    let factorization = if workspace.factorization.is_none() {
         let matrix = workspace
             .layout
             .matrix(&workspace.matrix)
@@ -404,8 +412,9 @@ where
         workspace
             .factorization
             .take()
-            .expect("checked factorization")
-    });
+            .ok_or(SolveError::NonlinearSolveFailed)?
+    };
+    workspace.factorization = Some(factorization);
     workspace.factorization_ready = true;
     Ok(())
 }

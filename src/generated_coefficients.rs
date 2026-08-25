@@ -17,37 +17,12 @@
 // coefficient-method: method=ABDF2|family=multistep|order=2|variable-step=true
 // coefficient-method: method=BS3|family=explicit|order=3|embedded-order=2|fsal=true
 // coefficient-method: method=DP5|family=explicit|order=5|embedded-order=4|fsal=true
-// coefficient-method: method=Euler|family=explicit|order=1|embedded-order=none
-// coefficient-method: method=Heun|family=explicit|order=2|embedded-order=1
-// coefficient-method: method=Midpoint|family=explicit|order=2|embedded-order=1
 // coefficient-method: method=SDIRK2|family=sdirk|order=2|embedded-order=1
 // coefficient-method: method=VelocityVerlet|family=symplectic|order=2|embedded-order=none
 // coefficient-method: method=Vern6|family=explicit|order=6|embedded-order=5|fsal=true
 // coefficient-method: method=Vern7|family=explicit|order=7|embedded-order=6|fsal=true
 // coefficient-method: method=Vern8|family=explicit|order=8|embedded-order=7|fsal=true
 // coefficient-method: method=Vern9|family=explicit|order=9|embedded-order=8|fsal=true
-
-pub(crate) const EULER_STAGE_TIMES: [f64; 1] = [0.0];
-pub(crate) const EULER_A: [[f64; 1]; 1] = [[0.0]];
-pub(crate) const EULER_EMPTY: &[f64] = &[];
-pub(crate) const EULER_A_ROWS: &[&[f64]] = &[EULER_EMPTY];
-pub(crate) const EULER_B: [f64; 1] = [1.0];
-
-pub(crate) const HEUN_STAGE_TIMES: [f64; 2] = [0.0, 1.0];
-pub(crate) const HEUN_A: [[f64; 2]; 2] = [[0.0, 0.0], [1.0, 0.0]];
-pub(crate) const HEUN_EMPTY: &[f64] = &[];
-pub(crate) const HEUN_A2: &[f64] = &[1.0];
-pub(crate) const HEUN_A_ROWS: &[&[f64]] = &[HEUN_EMPTY, HEUN_A2];
-pub(crate) const HEUN_B: [f64; 2] = [0.5, 0.5];
-pub(crate) const HEUN_ERROR: [f64; 2] = [-0.5, 0.5];
-
-pub(crate) const MIDPOINT_STAGE_TIMES: [f64; 2] = [0.0, 0.5];
-pub(crate) const MIDPOINT_A: [[f64; 2]; 2] = [[0.0, 0.0], [0.5, 0.0]];
-pub(crate) const MIDPOINT_EMPTY: &[f64] = &[];
-pub(crate) const MIDPOINT_A2: &[f64] = &[0.5];
-pub(crate) const MIDPOINT_A_ROWS: &[&[f64]] = &[MIDPOINT_EMPTY, MIDPOINT_A2];
-pub(crate) const MIDPOINT_B: [f64; 2] = [0.0, 1.0];
-pub(crate) const MIDPOINT_ERROR: [f64; 2] = [-1.0, 1.0];
 
 /// Bogacki-Shampine 3(2) explicit tableau from OrdinaryDiffEqLowOrderRK.
 /// The fourth stage is FSAL and is retained in the generated rows so the
@@ -704,12 +679,10 @@ pub(crate) const SDIRK2_STAGE_TIMES: [f64; 2] = [1.0, 0.0];
 mod tests {
     use super::{
         AB3_HISTORY, BS3_A_ROWS, BS3_B, BS3_E, BS3_STAGE_TIMES, DP5_A_ROWS, DP5_B, DP5_E,
-        DP5_STAGE_TIMES, EULER_A, EULER_A_ROWS, EULER_B, EULER_STAGE_TIMES, HEUN_A, HEUN_A_ROWS,
-        HEUN_B, HEUN_ERROR, HEUN_STAGE_TIMES, MIDPOINT_A, MIDPOINT_A_ROWS, MIDPOINT_B,
-        MIDPOINT_ERROR, MIDPOINT_STAGE_TIMES, SDIRK2_A, SDIRK2_B, SDIRK2_B_EMBEDDED,
-        SDIRK2_STAGE_TIMES, VELOCITY_VERLET_COMPOSITION, VERN6_A_ROWS, VERN6_B, VERN6_E,
-        VERN6_STAGE_TIMES, VERN7_A_ROWS, VERN7_B, VERN7_E, VERN7_STAGE_TIMES, VERN8_A_ROWS,
-        VERN8_B, VERN8_E, VERN8_STAGE_TIMES, VERN9_A_ROWS, VERN9_B, VERN9_E, VERN9_STAGE_TIMES,
+        DP5_STAGE_TIMES, SDIRK2_A, SDIRK2_B, SDIRK2_B_EMBEDDED, SDIRK2_STAGE_TIMES,
+        VELOCITY_VERLET_COMPOSITION, VERN6_A_ROWS, VERN6_B, VERN6_E, VERN6_STAGE_TIMES,
+        VERN7_A_ROWS, VERN7_B, VERN7_E, VERN7_STAGE_TIMES, VERN8_A_ROWS, VERN8_B, VERN8_E,
+        VERN8_STAGE_TIMES, VERN9_A_ROWS, VERN9_B, VERN9_E, VERN9_STAGE_TIMES,
     };
 
     #[test]
@@ -744,36 +717,5 @@ mod tests {
         assert_eq!(SDIRK2_B.len(), SDIRK2_STAGE_TIMES.len());
         assert_eq!(SDIRK2_B_EMBEDDED.len(), SDIRK2_STAGE_TIMES.len());
         assert!((SDIRK2_B.iter().sum::<f64>() - 1.0).abs() < 1.0e-15);
-    }
-
-    #[test]
-    fn generated_low_order_explicit_fixtures_match_their_tableau_shapes() {
-        fn validate<const STAGES: usize>(
-            dense_rows: &[[f64; STAGES]],
-            lower_rows: &[&[f64]],
-            weights: &[f64],
-            stage_times: &[f64],
-        ) {
-            assert_eq!(dense_rows.len(), stage_times.len());
-            assert_eq!(lower_rows.len(), stage_times.len());
-            assert_eq!(weights.len(), stage_times.len());
-            assert!(
-                lower_rows
-                    .iter()
-                    .enumerate()
-                    .all(|(stage, row)| row.len() == stage)
-            );
-            assert!((weights.iter().sum::<f64>() - 1.0).abs() < 1.0e-15);
-        }
-        validate(&EULER_A, EULER_A_ROWS, &EULER_B, &EULER_STAGE_TIMES);
-        validate(&HEUN_A, HEUN_A_ROWS, &HEUN_B, &HEUN_STAGE_TIMES);
-        validate(
-            &MIDPOINT_A,
-            MIDPOINT_A_ROWS,
-            &MIDPOINT_B,
-            &MIDPOINT_STAGE_TIMES,
-        );
-        assert_eq!(HEUN_ERROR, [-0.5, 0.5]);
-        assert_eq!(MIDPOINT_ERROR, [-1.0, 1.0]);
     }
 }

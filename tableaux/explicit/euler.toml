@@ -1,0 +1,9 @@
+schema_version = 1
+name = "Euler"
+description = "The fixed-step forward Euler method."
+order = 1
+fsal = false
+
+nodes = ["0"]
+coefficients = [[]]
+weights = ["1"]

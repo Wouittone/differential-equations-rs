@@ -164,10 +164,10 @@ impl AdamsKernel {
         }
     }
 
-    fn workspace(&mut self) -> &mut Workspace {
+    fn workspace(&mut self) -> Result<&mut Workspace, SolveError> {
         self.workspace
             .as_mut()
-            .expect("Adams kernel is initialized before stepping")
+            .ok_or(SolveError::InvalidMultistepHistory)
     }
 }
 
@@ -219,7 +219,7 @@ where
         stats: &mut SolverStats,
     ) -> Result<StepEstimate, SolveError> {
         let method = self.method;
-        let workspace = self.workspace();
+        let workspace = self.workspace()?;
         let used_bootstrap =
             workspace.history_len < method.order || method.repeating_bootstrap_predictor;
         if used_bootstrap {
@@ -283,7 +283,7 @@ where
         stats: &mut SolverStats,
     ) -> Result<(), SolveError> {
         let method = self.method;
-        let workspace = self.workspace();
+        let workspace = self.workspace()?;
         evaluate(problem, &mut workspace.next_derivative, state, time, stats);
         ensure_finite(&workspace.next_derivative)?;
         if callback_applied {

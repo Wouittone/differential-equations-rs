@@ -11,11 +11,13 @@ members = ["tableau-macros"]
 resolver = "2"
 
 [features]
+default = ["parallel"]
 allocation-metrics = []
+parallel = ["dep:rayon"]
 
 [dependencies]
 differential-equations-tableau-macros = { version = "=0.1.0-beta.1", path = "tableau-macros" }
-rayon = "1.11.0"
+rayon = { version = "1.11.0", optional = true }
 thiserror = "2.0.20"
 
 [dev-dependencies]

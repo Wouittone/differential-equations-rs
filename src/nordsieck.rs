@@ -674,17 +674,17 @@ impl<F, P> NordsieckKernel<F, P> {
         }
         candidate.copy_from_slice(state);
         let mut error = vec![0.0; self.dimension];
+        let error_weights =
+            <Tsit5 as ButcherTableau>::ERROR_WEIGHTS.ok_or(SolveError::InvalidTableau)?;
         for stage in 0..stages_count {
             for component in 0..self.dimension {
                 candidate[component] +=
                     step * <Tsit5 as ButcherTableau>::WEIGHTS[stage] * stages[stage][component];
-                error[component] += step
-                    * <Tsit5 as ButcherTableau>::ERROR_WEIGHTS.expect("Tsit5 embedded pair")[stage]
-                    * stages[stage][component];
+                error[component] += step * error_weights[stage] * stages[stage][component];
             }
         }
         let dense =
-            <Tsit5 as ButcherTableau>::DENSE_COEFFICIENTS.expect("Tsit5 continuous extension");
+            <Tsit5 as ButcherTableau>::DENSE_COEFFICIENTS.ok_or(SolveError::InvalidTableau)?;
         self.z[0].copy_from_slice(state);
         for derivative in 1..=4 {
             self.z[derivative].fill(0.0);
