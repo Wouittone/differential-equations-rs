@@ -7,6 +7,12 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $repository = Split-Path -Parent $PSScriptRoot
+$juliaProject = Join-Path $repository 'tests/julia'
+$pinnedEnvironment = Join-Path $juliaProject 'pinned_environment.jl'
+& $JuliaPath --startup-file=no "--project=$juliaProject" $pinnedEnvironment --check
+if ($LASTEXITCODE -ne 0) {
+    throw 'Pinned Julia submodule environment check failed'
+}
 $results = Join-Path $PSScriptRoot 'results'
 New-Item -ItemType Directory -Force -Path $results | Out-Null
 
@@ -40,7 +46,6 @@ $rust = foreach ($timingRow in $rustTiming) {
 }
 $rust | Export-Csv -LiteralPath $rustPath -NoTypeInformation
 
-$juliaProject = Join-Path $repository 'tests/julia'
 $juliaTimingOutput = & $JuliaPath --startup-file=no "--project=$juliaProject" (Join-Path $PSScriptRoot 'julia_matrix.jl') --repetitions $Repetitions --mode timing
 if ($LASTEXITCODE -ne 0) {
     throw 'Julia timing benchmark failed'

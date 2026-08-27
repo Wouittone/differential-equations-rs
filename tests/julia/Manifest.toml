@@ -1057,36 +1057,28 @@ version = "2.0.1"
 [[deps.OrdinaryDiffEqAMF]]
 deps = ["LinearAlgebra", "LinearSolve", "OrdinaryDiffEqCore", "Reexport", "SciMLBase", "SciMLOperators"]
 git-tree-sha1 = "53bd11c2f45045779ffd14598cebb9dab9613301"
-repo-rev = "211142263781255a9aa2f910f6760b9f18ec29c8"
-repo-subdir = "lib/OrdinaryDiffEqAMF"
-repo-url = "https://github.com/SciML/OrdinaryDiffEq.jl.git"
+path = "../../reference/OrdinaryDiffEq.jl/lib/OrdinaryDiffEqAMF"
 uuid = "08082164-f6a1-4363-b3df-3aa6fcf571ad"
 version = "2.2.0"
 
 [[deps.OrdinaryDiffEqAdamsBashforthMoulton]]
 deps = ["DiffEqBase", "FastBroadcast", "MuladdMacro", "OrdinaryDiffEqCore", "OrdinaryDiffEqLowOrderRK", "RecursiveArrayTools", "Reexport", "SciMLBase"]
 git-tree-sha1 = "a78b15abdf1bb59bc99204609c82bc34a3349336"
-repo-rev = "211142263781255a9aa2f910f6760b9f18ec29c8"
-repo-subdir = "lib/OrdinaryDiffEqAdamsBashforthMoulton"
-repo-url = "https://github.com/SciML/OrdinaryDiffEq.jl.git"
+path = "../../reference/OrdinaryDiffEq.jl/lib/OrdinaryDiffEqAdamsBashforthMoulton"
 uuid = "89bda076-bce5-4f1c-845f-551c83cdda9a"
 version = "2.1.1"
 
 [[deps.OrdinaryDiffEqBDF]]
 deps = ["ADTypes", "ArrayInterface", "DiffEqBase", "FastBroadcast", "LinearAlgebra", "MacroTools", "MuladdMacro", "OrdinaryDiffEqCore", "OrdinaryDiffEqDifferentiation", "OrdinaryDiffEqNonlinearSolve", "OrdinaryDiffEqSDIRK", "PrecompileTools", "Preferences", "RecursiveArrayTools", "Reexport", "SciMLBase", "TruncatedStacktraces"]
 git-tree-sha1 = "bf697b7b67e4bc2fefb327de5f8049ada06186ed"
-repo-rev = "211142263781255a9aa2f910f6760b9f18ec29c8"
-repo-subdir = "lib/OrdinaryDiffEqBDF"
-repo-url = "https://github.com/SciML/OrdinaryDiffEq.jl.git"
+path = "../../reference/OrdinaryDiffEq.jl/lib/OrdinaryDiffEqBDF"
 uuid = "6ad6398a-0878-4a85-9266-38940aa047c8"
 version = "2.4.1"
 
 [[deps.OrdinaryDiffEqCore]]
 deps = ["ADTypes", "Accessors", "Adapt", "ArrayInterface", "BinaryHeaps", "CommonSolve", "ConstructionBase", "DiffEqBase", "DocStringExtensions", "EnumX", "EnzymeCore", "FastBroadcast", "FastClosures", "FastPower", "FindFirstFunctions", "FunctionWrappers", "FunctionWrappersWrappers", "InteractiveUtils", "LinearAlgebra", "Logging", "MacroTools", "MuladdMacro", "PrecompileTools", "Preferences", "Random", "RecursiveArrayTools", "Reexport", "SciMLBase", "SciMLLogging", "SciMLOperators", "SciMLStructures", "SymbolicIndexingInterface", "TruncatedStacktraces"]
 git-tree-sha1 = "1b638bb80b01f6b65fec6e344f31709e7205fdfd"
-repo-rev = "211142263781255a9aa2f910f6760b9f18ec29c8"
-repo-subdir = "lib/OrdinaryDiffEqCore"
-repo-url = "https://github.com/SciML/OrdinaryDiffEq.jl.git"
+path = "../../reference/OrdinaryDiffEq.jl/lib/OrdinaryDiffEqCore"
 uuid = "bbf590c4-e513-4bbe-9b18-05decba2e5d8"
 version = "4.12.0"
 
@@ -1103,18 +1095,14 @@ version = "4.12.0"
 [[deps.OrdinaryDiffEqDefault]]
 deps = ["ADTypes", "DiffEqBase", "EnumX", "LinearAlgebra", "LinearSolve", "OrdinaryDiffEqBDF", "OrdinaryDiffEqCore", "OrdinaryDiffEqRosenbrock", "OrdinaryDiffEqTsit5", "OrdinaryDiffEqVerner", "PrecompileTools", "Preferences", "Reexport", "SciMLBase"]
 git-tree-sha1 = "fc95572a740ac01972b916b3f9f42bc69173da76"
-repo-rev = "211142263781255a9aa2f910f6760b9f18ec29c8"
-repo-subdir = "lib/OrdinaryDiffEqDefault"
-repo-url = "https://github.com/SciML/OrdinaryDiffEq.jl.git"
+path = "../../reference/OrdinaryDiffEq.jl/lib/OrdinaryDiffEqDefault"
 uuid = "50262376-6c5a-4cf5-baba-aaf4f84d72d7"
 version = "2.4.2"
 
 [[deps.OrdinaryDiffEqDifferentiation]]
 deps = ["ADTypes", "ArrayInterface", "ConcreteStructs", "ConstructionBase", "DiffEqBase", "DifferentiationInterface", "FastBroadcast", "FiniteDiff", "ForwardDiff", "FunctionWrappersWrappers", "LinearAlgebra", "LinearSolve", "OrdinaryDiffEqCore", "SciMLBase", "SciMLOperators", "SparseMatrixColorings", "StaticArraysCore"]
 git-tree-sha1 = "8ffd66c0fb5dc1919ebf1882dc84d211de492571"
-repo-rev = "211142263781255a9aa2f910f6760b9f18ec29c8"
-repo-subdir = "lib/OrdinaryDiffEqDifferentiation"
-repo-url = "https://github.com/SciML/OrdinaryDiffEq.jl.git"
+path = "../../reference/OrdinaryDiffEq.jl/lib/OrdinaryDiffEqDifferentiation"
 uuid = "4302a76b-040a-498a-8c04-15b101fed76b"
 version = "3.6.0"
 weakdeps = ["SparseArrays"]
@@ -1125,278 +1113,216 @@ weakdeps = ["SparseArrays"]
 [[deps.OrdinaryDiffEqExplicitRK]]
 deps = ["DiffEqBase", "FastBroadcast", "LinearAlgebra", "MuladdMacro", "OrdinaryDiffEqCore", "RecursiveArrayTools", "Reexport", "SciMLBase", "TruncatedStacktraces"]
 git-tree-sha1 = "d8e1d93914966ed726e7f3d1b359168d2c011d32"
-repo-rev = "211142263781255a9aa2f910f6760b9f18ec29c8"
-repo-subdir = "lib/OrdinaryDiffEqExplicitRK"
-repo-url = "https://github.com/SciML/OrdinaryDiffEq.jl.git"
+path = "../../reference/OrdinaryDiffEq.jl/lib/OrdinaryDiffEqExplicitRK"
 uuid = "9286f039-9fbf-40e8-bf65-aa933bdc4db0"
 version = "2.1.1"
 
 [[deps.OrdinaryDiffEqExplicitTableaus]]
 deps = ["DiffEqBase"]
 git-tree-sha1 = "0062cf07e25105aff3f078a782b2b831a965c508"
-repo-rev = "211142263781255a9aa2f910f6760b9f18ec29c8"
-repo-subdir = "lib/OrdinaryDiffEqExplicitTableaus"
-repo-url = "https://github.com/SciML/OrdinaryDiffEq.jl.git"
+path = "../../reference/OrdinaryDiffEq.jl/lib/OrdinaryDiffEqExplicitTableaus"
 uuid = "3278f1b1-0f5c-4cde-98e0-ba5eb00db955"
 version = "2.2.0"
 
 [[deps.OrdinaryDiffEqExponentialRK]]
 deps = ["ADTypes", "DiffEqBase", "ExponentialUtilities", "FastBroadcast", "LinearAlgebra", "MuladdMacro", "OrdinaryDiffEqCore", "OrdinaryDiffEqDifferentiation", "RecursiveArrayTools", "Reexport", "SciMLBase"]
 git-tree-sha1 = "50d271bb77e8f35d70c75c7442c9c628c121c072"
-repo-rev = "211142263781255a9aa2f910f6760b9f18ec29c8"
-repo-subdir = "lib/OrdinaryDiffEqExponentialRK"
-repo-url = "https://github.com/SciML/OrdinaryDiffEq.jl.git"
+path = "../../reference/OrdinaryDiffEq.jl/lib/OrdinaryDiffEqExponentialRK"
 uuid = "e0540318-69ee-4070-8777-9e2de6de23de"
 version = "2.2.0"
 
 [[deps.OrdinaryDiffEqExtrapolation]]
 deps = ["ADTypes", "DiffEqBase", "FastBroadcast", "FastPower", "LinearSolve", "MuladdMacro", "OrdinaryDiffEqCore", "OrdinaryDiffEqDifferentiation", "RecursiveArrayTools", "Reexport", "SciMLBase", "SciMLLogging", "SciMLOperators"]
 git-tree-sha1 = "66b811d207e365f060c1087b8a2a57c39c3465db"
-repo-rev = "211142263781255a9aa2f910f6760b9f18ec29c8"
-repo-subdir = "lib/OrdinaryDiffEqExtrapolation"
-repo-url = "https://github.com/SciML/OrdinaryDiffEq.jl.git"
+path = "../../reference/OrdinaryDiffEq.jl/lib/OrdinaryDiffEqExtrapolation"
 uuid = "becaefa8-8ca2-5cf9-886d-c06f3d2bd2c4"
 version = "2.4.0"
 
 [[deps.OrdinaryDiffEqFIRK]]
 deps = ["ADTypes", "DiffEqBase", "FastBroadcast", "FastGaussQuadrature", "FastPower", "LinearAlgebra", "LinearSolve", "MuladdMacro", "OrdinaryDiffEqCore", "OrdinaryDiffEqDifferentiation", "OrdinaryDiffEqNonlinearSolve", "Polyester", "RecursiveArrayTools", "Reexport", "SciMLBase", "SciMLOperators"]
 git-tree-sha1 = "1c80f6b93e9f78636e1c9b64e0df3d82e384cc47"
-repo-rev = "211142263781255a9aa2f910f6760b9f18ec29c8"
-repo-subdir = "lib/OrdinaryDiffEqFIRK"
-repo-url = "https://github.com/SciML/OrdinaryDiffEq.jl.git"
+path = "../../reference/OrdinaryDiffEq.jl/lib/OrdinaryDiffEqFIRK"
 uuid = "5960d6e9-dd7a-4743-88e7-cf307b64f125"
 version = "2.5.0"
 
 [[deps.OrdinaryDiffEqFeagin]]
 deps = ["DiffEqBase", "FastBroadcast", "MuladdMacro", "OrdinaryDiffEqCore", "RecursiveArrayTools", "Reexport", "SciMLBase"]
 git-tree-sha1 = "2b794301619df53331e00baebe8b5d1d5cbdc167"
-repo-rev = "211142263781255a9aa2f910f6760b9f18ec29c8"
-repo-subdir = "lib/OrdinaryDiffEqFeagin"
-repo-url = "https://github.com/SciML/OrdinaryDiffEq.jl.git"
+path = "../../reference/OrdinaryDiffEq.jl/lib/OrdinaryDiffEqFeagin"
 uuid = "101fe9f7-ebb6-4678-b671-3a81e7194747"
 version = "2.1.0"
 
 [[deps.OrdinaryDiffEqHighOrderRK]]
 deps = ["DiffEqBase", "FastBroadcast", "MuladdMacro", "OrdinaryDiffEqCore", "RecursiveArrayTools", "Reexport", "SciMLBase"]
 git-tree-sha1 = "3a8fcd6b6032b4b0516067d1bd807370efa5a59f"
-repo-rev = "211142263781255a9aa2f910f6760b9f18ec29c8"
-repo-subdir = "lib/OrdinaryDiffEqHighOrderRK"
-repo-url = "https://github.com/SciML/OrdinaryDiffEq.jl.git"
+path = "../../reference/OrdinaryDiffEq.jl/lib/OrdinaryDiffEqHighOrderRK"
 uuid = "d28bc4f8-55e1-4f49-af69-84c1a99f0f58"
 version = "2.1.1"
 
 [[deps.OrdinaryDiffEqIMEXMultistep]]
 deps = ["ADTypes", "DiffEqBase", "FastBroadcast", "OrdinaryDiffEqCore", "OrdinaryDiffEqDifferentiation", "OrdinaryDiffEqNonlinearSolve", "Reexport", "SciMLBase"]
 git-tree-sha1 = "98cb9aaae083680a3b65aee64dd487e1a9a1e868"
-repo-rev = "211142263781255a9aa2f910f6760b9f18ec29c8"
-repo-subdir = "lib/OrdinaryDiffEqIMEXMultistep"
-repo-url = "https://github.com/SciML/OrdinaryDiffEq.jl.git"
+path = "../../reference/OrdinaryDiffEq.jl/lib/OrdinaryDiffEqIMEXMultistep"
 uuid = "9f002381-b378-40b7-97a6-27a27c83f129"
 version = "2.1.0"
 
 [[deps.OrdinaryDiffEqLinear]]
 deps = ["DiffEqBase", "ExponentialUtilities", "LinearAlgebra", "OrdinaryDiffEqCore", "RecursiveArrayTools", "Reexport", "SciMLBase", "SciMLOperators"]
 git-tree-sha1 = "3532c476f7c4b025fddb9365d0373dfcc2fc8bbd"
-repo-rev = "211142263781255a9aa2f910f6760b9f18ec29c8"
-repo-subdir = "lib/OrdinaryDiffEqLinear"
-repo-url = "https://github.com/SciML/OrdinaryDiffEq.jl.git"
+path = "../../reference/OrdinaryDiffEq.jl/lib/OrdinaryDiffEqLinear"
 uuid = "521117fe-8c41-49f8-b3b6-30780b3f0fb5"
 version = "2.2.0"
 
 [[deps.OrdinaryDiffEqLowOrderRK]]
 deps = ["DiffEqBase", "FastBroadcast", "LinearAlgebra", "MuladdMacro", "OrdinaryDiffEqCore", "RecursiveArrayTools", "Reexport", "SciMLBase"]
 git-tree-sha1 = "ea83686f046c43a77f2745a6ce28c01a5514235d"
-repo-rev = "211142263781255a9aa2f910f6760b9f18ec29c8"
-repo-subdir = "lib/OrdinaryDiffEqLowOrderRK"
-repo-url = "https://github.com/SciML/OrdinaryDiffEq.jl.git"
+path = "../../reference/OrdinaryDiffEq.jl/lib/OrdinaryDiffEqLowOrderRK"
 uuid = "1344f307-1e59-4825-a18e-ace9aa3fa4c6"
 version = "2.2.2"
 
 [[deps.OrdinaryDiffEqLowStorageRK]]
 deps = ["Adapt", "CommonSolve", "DiffEqBase", "FastBroadcast", "MuladdMacro", "OrdinaryDiffEqCore", "PrecompileTools", "Preferences", "RecursiveArrayTools", "Reexport", "SciMLBase"]
 git-tree-sha1 = "5f886f19d2132aaccc9d0a3f7a5de74293cfee7e"
-repo-rev = "211142263781255a9aa2f910f6760b9f18ec29c8"
-repo-subdir = "lib/OrdinaryDiffEqLowStorageRK"
-repo-url = "https://github.com/SciML/OrdinaryDiffEq.jl.git"
+path = "../../reference/OrdinaryDiffEq.jl/lib/OrdinaryDiffEqLowStorageRK"
 uuid = "b0944070-b475-4768-8dec-fb6eb410534d"
 version = "3.2.2"
 
 [[deps.OrdinaryDiffEqMultirate]]
 deps = ["ADTypes", "DiffEqBase", "FastBroadcast", "LinearAlgebra", "MuladdMacro", "OrdinaryDiffEqCore", "OrdinaryDiffEqDifferentiation", "OrdinaryDiffEqLowOrderRK", "OrdinaryDiffEqNonlinearSolve", "RecursiveArrayTools", "Reexport", "SciMLBase"]
 git-tree-sha1 = "dfb8b652323348a607a2ce21448a9379c7a67468"
-repo-rev = "211142263781255a9aa2f910f6760b9f18ec29c8"
-repo-subdir = "lib/OrdinaryDiffEqMultirate"
-repo-url = "https://github.com/SciML/OrdinaryDiffEq.jl.git"
+path = "../../reference/OrdinaryDiffEq.jl/lib/OrdinaryDiffEqMultirate"
 uuid = "d4b830b4-ac80-426b-8507-16693d424963"
 version = "2.6.0"
 
 [[deps.OrdinaryDiffEqNewmark]]
 deps = ["ADTypes", "ConcreteStructs", "DiffEqBase", "FastBroadcast", "LinearAlgebra", "MacroTools", "MuladdMacro", "NonlinearSolveFirstOrder", "OrdinaryDiffEqCore", "PreallocationTools", "RecursiveArrayTools", "Reexport", "SciMLBase", "TruncatedStacktraces"]
 git-tree-sha1 = "6f8c9768259434e7279f5946ab2b92ec1d5afc63"
-repo-rev = "211142263781255a9aa2f910f6760b9f18ec29c8"
-repo-subdir = "lib/OrdinaryDiffEqNewmark"
-repo-url = "https://github.com/SciML/OrdinaryDiffEq.jl.git"
+path = "../../reference/OrdinaryDiffEq.jl/lib/OrdinaryDiffEqNewmark"
 uuid = "d204908a-63b9-11ef-18f5-cfec7123a93b"
 version = "2.2.1"
 
 [[deps.OrdinaryDiffEqNonlinearSolve]]
 deps = ["ADTypes", "ArrayInterface", "ConstructionBase", "DiffEqBase", "FastBroadcast", "FastClosures", "ForwardDiff", "LinearAlgebra", "LinearSolve", "MuladdMacro", "NonlinearSolve", "NonlinearSolveBase", "OrdinaryDiffEqCore", "OrdinaryDiffEqDifferentiation", "PreallocationTools", "RecursiveArrayTools", "SciMLBase", "SciMLOperators", "SimpleNonlinearSolve", "SparseArrays", "StaticArraysCore"]
 git-tree-sha1 = "cbd6b3e6c9d3288f0eda536a9f7a0e4a63e9eae2"
-repo-rev = "211142263781255a9aa2f910f6760b9f18ec29c8"
-repo-subdir = "lib/OrdinaryDiffEqNonlinearSolve"
-repo-url = "https://github.com/SciML/OrdinaryDiffEq.jl.git"
+path = "../../reference/OrdinaryDiffEq.jl/lib/OrdinaryDiffEqNonlinearSolve"
 uuid = "127b3ac7-2247-4354-8eb6-78cf4e7c58e8"
 version = "2.6.0"
 
 [[deps.OrdinaryDiffEqNordsieck]]
 deps = ["DiffEqBase", "FastBroadcast", "LinearAlgebra", "MuladdMacro", "OrdinaryDiffEqCore", "OrdinaryDiffEqTsit5", "RecursiveArrayTools", "Reexport", "SciMLBase"]
 git-tree-sha1 = "f79732e44dda5f35f81f74cbc671b1146634bcda"
-repo-rev = "211142263781255a9aa2f910f6760b9f18ec29c8"
-repo-subdir = "lib/OrdinaryDiffEqNordsieck"
-repo-url = "https://github.com/SciML/OrdinaryDiffEq.jl.git"
+path = "../../reference/OrdinaryDiffEq.jl/lib/OrdinaryDiffEqNordsieck"
 uuid = "c9986a66-5c92-4813-8696-a7ec84c806c8"
 version = "2.2.1"
 
 [[deps.OrdinaryDiffEqPDIRK]]
 deps = ["ADTypes", "DiffEqBase", "FastBroadcast", "MuladdMacro", "OrdinaryDiffEqCore", "OrdinaryDiffEqDifferentiation", "OrdinaryDiffEqNonlinearSolve", "Reexport", "SciMLBase"]
 git-tree-sha1 = "d756a3b2efe80a87495295364466b7d124cdd9ca"
-repo-rev = "211142263781255a9aa2f910f6760b9f18ec29c8"
-repo-subdir = "lib/OrdinaryDiffEqPDIRK"
-repo-url = "https://github.com/SciML/OrdinaryDiffEq.jl.git"
+path = "../../reference/OrdinaryDiffEq.jl/lib/OrdinaryDiffEqPDIRK"
 uuid = "5dd0a6cf-3d4b-4314-aa06-06d4e299bc89"
 version = "2.2.1"
 
 [[deps.OrdinaryDiffEqPRK]]
 deps = ["DiffEqBase", "FastBroadcast", "MuladdMacro", "OrdinaryDiffEqCore", "Reexport", "SciMLBase"]
 git-tree-sha1 = "aa026b053a95672392ce64cf8a8773190160133e"
-repo-rev = "211142263781255a9aa2f910f6760b9f18ec29c8"
-repo-subdir = "lib/OrdinaryDiffEqPRK"
-repo-url = "https://github.com/SciML/OrdinaryDiffEq.jl.git"
+path = "../../reference/OrdinaryDiffEq.jl/lib/OrdinaryDiffEqPRK"
 uuid = "5b33eab2-c0f1-4480-b2c3-94bc1e80bda1"
 version = "2.2.1"
 
 [[deps.OrdinaryDiffEqQPRK]]
 deps = ["DiffEqBase", "FastBroadcast", "MuladdMacro", "OrdinaryDiffEqCore", "RecursiveArrayTools", "Reexport", "SciMLBase"]
 git-tree-sha1 = "8380506cf95d45e11d68dc775d22fa0cbb43bcfa"
-repo-rev = "211142263781255a9aa2f910f6760b9f18ec29c8"
-repo-subdir = "lib/OrdinaryDiffEqQPRK"
-repo-url = "https://github.com/SciML/OrdinaryDiffEq.jl.git"
+path = "../../reference/OrdinaryDiffEq.jl/lib/OrdinaryDiffEqQPRK"
 uuid = "04162be5-8125-4266-98ed-640baecc6514"
 version = "2.1.2"
 
 [[deps.OrdinaryDiffEqRKIP]]
 deps = ["Compat", "DiffEqBase", "LinearAlgebra", "MaybeInplace", "OrdinaryDiffEqCore", "OrdinaryDiffEqExplicitTableaus", "SciMLBase", "SciMLOperators"]
 git-tree-sha1 = "7b2e9698c36ae5f0da75e60766000b5987272587"
-repo-rev = "211142263781255a9aa2f910f6760b9f18ec29c8"
-repo-subdir = "lib/OrdinaryDiffEqRKIP"
-repo-url = "https://github.com/SciML/OrdinaryDiffEq.jl.git"
+path = "../../reference/OrdinaryDiffEq.jl/lib/OrdinaryDiffEqRKIP"
 uuid = "a4daff8c-1d43-4ff3-8eff-f78720aeecdc"
 version = "2.1.1"
 
 [[deps.OrdinaryDiffEqRKN]]
 deps = ["DiffEqBase", "FastBroadcast", "MuladdMacro", "OrdinaryDiffEqCore", "RecursiveArrayTools", "Reexport", "SciMLBase"]
 git-tree-sha1 = "36d81d5310af43d048eb1cdfa43719c81f051378"
-repo-rev = "211142263781255a9aa2f910f6760b9f18ec29c8"
-repo-subdir = "lib/OrdinaryDiffEqRKN"
-repo-url = "https://github.com/SciML/OrdinaryDiffEq.jl.git"
+path = "../../reference/OrdinaryDiffEq.jl/lib/OrdinaryDiffEqRKN"
 uuid = "af6ede74-add8-4cfd-b1df-9a4dbb109d7a"
 version = "2.1.1"
 
 [[deps.OrdinaryDiffEqRosenbrock]]
 deps = ["ADTypes", "ArrayInterface", "DiffEqBase", "DifferentiationInterface", "FastBroadcast", "FiniteDiff", "ForwardDiff", "LinearAlgebra", "LinearSolve", "MacroTools", "MuladdMacro", "OrdinaryDiffEqCore", "OrdinaryDiffEqDifferentiation", "OrdinaryDiffEqRosenbrockTableaus", "PrecompileTools", "Preferences", "RecursiveArrayTools", "Reexport", "SciMLBase"]
 git-tree-sha1 = "25956e057af9c34226d2d01eb56d65da392dea8f"
-repo-rev = "211142263781255a9aa2f910f6760b9f18ec29c8"
-repo-subdir = "lib/OrdinaryDiffEqRosenbrock"
-repo-url = "https://github.com/SciML/OrdinaryDiffEq.jl.git"
+path = "../../reference/OrdinaryDiffEq.jl/lib/OrdinaryDiffEqRosenbrock"
 uuid = "43230ef6-c299-4910-a778-202eb28ce4ce"
 version = "2.6.2"
 
 [[deps.OrdinaryDiffEqRosenbrockTableaus]]
 git-tree-sha1 = "8b525187543e498f3dcbdca47826bcd2a6a8bb49"
-repo-rev = "211142263781255a9aa2f910f6760b9f18ec29c8"
-repo-subdir = "lib/OrdinaryDiffEqRosenbrockTableaus"
-repo-url = "https://github.com/SciML/OrdinaryDiffEq.jl.git"
+path = "../../reference/OrdinaryDiffEq.jl/lib/OrdinaryDiffEqRosenbrockTableaus"
 uuid = "b4bd8bb3-f80f-41d2-9b21-73a655b304b9"
 version = "2.4.0"
 
 [[deps.OrdinaryDiffEqSDIRK]]
 deps = ["ADTypes", "CommonSolve", "ConstructionBase", "DiffEqBase", "FastBroadcast", "LinearAlgebra", "MacroTools", "MuladdMacro", "OrdinaryDiffEqCore", "OrdinaryDiffEqDifferentiation", "OrdinaryDiffEqNonlinearSolve", "PrecompileTools", "Preferences", "RecursiveArrayTools", "Reexport", "SciMLBase", "TruncatedStacktraces"]
 git-tree-sha1 = "488327983b811833ad8ee0cd48c24ead3a2a5af4"
-repo-rev = "211142263781255a9aa2f910f6760b9f18ec29c8"
-repo-subdir = "lib/OrdinaryDiffEqSDIRK"
-repo-url = "https://github.com/SciML/OrdinaryDiffEq.jl.git"
+path = "../../reference/OrdinaryDiffEq.jl/lib/OrdinaryDiffEqSDIRK"
 uuid = "2d112036-d095-4a1e-ab9a-08536f3ecdbf"
 version = "2.8.2"
 
 [[deps.OrdinaryDiffEqSIMDRK]]
 deps = ["FastBroadcast", "MuladdMacro", "OrdinaryDiffEqCore", "Reexport", "SLEEFPirates", "VectorizationBase"]
 git-tree-sha1 = "ea5618c937d975c768a5d353ceee9a05ad362834"
-repo-rev = "211142263781255a9aa2f910f6760b9f18ec29c8"
-repo-subdir = "lib/OrdinaryDiffEqSIMDRK"
-repo-url = "https://github.com/SciML/OrdinaryDiffEq.jl.git"
+path = "../../reference/OrdinaryDiffEq.jl/lib/OrdinaryDiffEqSIMDRK"
 uuid = "dc97f408-7a72-40e4-9b0d-228a53b292f8"
 version = "2.1.0"
 
 [[deps.OrdinaryDiffEqSSPRK]]
 deps = ["DiffEqBase", "FastBroadcast", "MuladdMacro", "OrdinaryDiffEqCore", "PrecompileTools", "Preferences", "RecursiveArrayTools", "Reexport", "SciMLBase"]
 git-tree-sha1 = "e39f76a98fa2b36817efa170b7b6177c3f0efefe"
-repo-rev = "211142263781255a9aa2f910f6760b9f18ec29c8"
-repo-subdir = "lib/OrdinaryDiffEqSSPRK"
-repo-url = "https://github.com/SciML/OrdinaryDiffEq.jl.git"
+path = "../../reference/OrdinaryDiffEq.jl/lib/OrdinaryDiffEqSSPRK"
 uuid = "669c94d9-1f4b-4b64-b377-1aa079aa2388"
 version = "2.2.2"
 
 [[deps.OrdinaryDiffEqStabilizedIRK]]
 deps = ["ADTypes", "DiffEqBase", "FastBroadcast", "OrdinaryDiffEqCore", "OrdinaryDiffEqDifferentiation", "OrdinaryDiffEqNonlinearSolve", "OrdinaryDiffEqStabilizedRK", "RecursiveArrayTools", "Reexport", "SciMLBase"]
 git-tree-sha1 = "9f610f86134c51269b94e2af8b7788953a55acaf"
-repo-rev = "211142263781255a9aa2f910f6760b9f18ec29c8"
-repo-subdir = "lib/OrdinaryDiffEqStabilizedIRK"
-repo-url = "https://github.com/SciML/OrdinaryDiffEq.jl.git"
+path = "../../reference/OrdinaryDiffEq.jl/lib/OrdinaryDiffEqStabilizedIRK"
 uuid = "e3e12d00-db14-5390-b879-ac3dd2ef6296"
 version = "2.1.0"
 
 [[deps.OrdinaryDiffEqStabilizedRK]]
 deps = ["DiffEqBase", "FastBroadcast", "MuladdMacro", "OrdinaryDiffEqCore", "RecursiveArrayTools", "Reexport", "SciMLBase"]
 git-tree-sha1 = "431af445de4a4dd3d29cfacd570914296ec29094"
-repo-rev = "211142263781255a9aa2f910f6760b9f18ec29c8"
-repo-subdir = "lib/OrdinaryDiffEqStabilizedRK"
-repo-url = "https://github.com/SciML/OrdinaryDiffEq.jl.git"
+path = "../../reference/OrdinaryDiffEq.jl/lib/OrdinaryDiffEqStabilizedRK"
 uuid = "358294b1-0aab-51c3-aafe-ad5ab194a2ad"
 version = "2.5.0"
 
 [[deps.OrdinaryDiffEqSymplecticRK]]
 deps = ["DiffEqBase", "FastBroadcast", "MuladdMacro", "OrdinaryDiffEqCore", "RecursiveArrayTools", "Reexport", "SciMLBase"]
 git-tree-sha1 = "e8fd1d9ad9f114b60bc45f482c931c41279184b3"
-repo-rev = "211142263781255a9aa2f910f6760b9f18ec29c8"
-repo-subdir = "lib/OrdinaryDiffEqSymplecticRK"
-repo-url = "https://github.com/SciML/OrdinaryDiffEq.jl.git"
+path = "../../reference/OrdinaryDiffEq.jl/lib/OrdinaryDiffEqSymplecticRK"
 uuid = "fa646aed-7ef9-47eb-84c4-9443fc8cbfa8"
 version = "2.2.0"
 
 [[deps.OrdinaryDiffEqTaylorSeries]]
 deps = ["DiffEqBase", "FastBroadcast", "FunctionWrappers", "LinearAlgebra", "MuladdMacro", "OrdinaryDiffEqCore", "PrecompileTools", "Preferences", "RecursiveArrayTools", "Reexport", "SciMLBase", "SymbolicUtils", "Symbolics", "TaylorDiff", "TruncatedStacktraces"]
 git-tree-sha1 = "61f21769baf3f4cc81f4b262e84f6a41aea34794"
-repo-rev = "211142263781255a9aa2f910f6760b9f18ec29c8"
-repo-subdir = "lib/OrdinaryDiffEqTaylorSeries"
-repo-url = "https://github.com/SciML/OrdinaryDiffEq.jl.git"
+path = "../../reference/OrdinaryDiffEq.jl/lib/OrdinaryDiffEqTaylorSeries"
 uuid = "9c7f1690-dd92-42a3-8318-297ee24d8d39"
 version = "2.1.0"
 
 [[deps.OrdinaryDiffEqTsit5]]
 deps = ["CommonSolve", "DiffEqBase", "FastBroadcast", "LinearAlgebra", "MuladdMacro", "OrdinaryDiffEqCore", "PrecompileTools", "Preferences", "RecursiveArrayTools", "Reexport", "SciMLBase", "TruncatedStacktraces"]
 git-tree-sha1 = "a680d5d89faf72bfb4886f7d5b80292f65ff81a6"
-repo-rev = "211142263781255a9aa2f910f6760b9f18ec29c8"
-repo-subdir = "lib/OrdinaryDiffEqTsit5"
-repo-url = "https://github.com/SciML/OrdinaryDiffEq.jl.git"
+path = "../../reference/OrdinaryDiffEq.jl/lib/OrdinaryDiffEqTsit5"
 uuid = "b1df2697-797e-41e3-8120-5422d3b24e4a"
 version = "2.1.2"
 
 [[deps.OrdinaryDiffEqVerner]]
 deps = ["DiffEqBase", "FastBroadcast", "LinearAlgebra", "MuladdMacro", "OrdinaryDiffEqCore", "PrecompileTools", "Preferences", "RecursiveArrayTools", "Reexport", "SciMLBase", "TruncatedStacktraces"]
 git-tree-sha1 = "f7ffc12bf6572a1c55fc58d297d864e6d6cb99e6"
-repo-rev = "211142263781255a9aa2f910f6760b9f18ec29c8"
-repo-subdir = "lib/OrdinaryDiffEqVerner"
-repo-url = "https://github.com/SciML/OrdinaryDiffEq.jl.git"
+path = "../../reference/OrdinaryDiffEq.jl/lib/OrdinaryDiffEqVerner"
 uuid = "79d7bb75-1356-48c1-b8c0-6832512096c2"
 version = "2.2.2"
 

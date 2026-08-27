@@ -1,3 +1,6 @@
+include("pinned_environment.jl")
+check_pins()
+
 using Test
 using SciMLBase: ODEProblem, solve
 using OrdinaryDiffEqTsit5: Tsit5

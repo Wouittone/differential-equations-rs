@@ -120,7 +120,7 @@ gcloud compute instances create ode-bench-smoke `
   --boot-disk-size 50GB --boot-disk-type pd-balanced
 
 gcloud compute ssh ode-bench-smoke --project YOUR_PROJECT_ID --zone europe-west4-a `
-  --command "git clone --depth 1 --branch YOUR_BENCHMARK_REF https://github.com/Wouittone/differential-equations-rs.git /tmp/ode-benchmark; cd /tmp/ode-benchmark; export REPO_ROOT=/tmp/ode-benchmark; bash benchmarks/cloud/bootstrap_vm.sh; bash benchmarks/cloud/run_case.sh --language rust --mode timing --algorithm Tsit5 --samples 5 --repetitions 50"
+  --command "git clone --recurse-submodules --shallow-submodules --depth 1 --branch YOUR_BENCHMARK_REF https://github.com/Wouittone/differential-equations-rs.git /tmp/ode-benchmark; cd /tmp/ode-benchmark; export REPO_ROOT=/tmp/ode-benchmark; bash benchmarks/cloud/bootstrap_vm.sh; bash benchmarks/cloud/run_case.sh --language rust --mode timing --algorithm Tsit5 --samples 5 --repetitions 50"
 
 gcloud compute scp --recurse `
   ode-bench-smoke:/tmp/ode-benchmark/benchmarks/cloud/results `

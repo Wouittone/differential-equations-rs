@@ -13,44 +13,88 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
-  RUSTDOCFLAGS: -D warnings
+  RUSTDOCFLAGS: -D warnings -D missing-docs
 
 jobs:
   quality:
-    name: Format, lint, test, and document
+    name: Latest stable quality gates
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    env:
+      RUSTUP_TOOLCHAIN: stable
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@85c23e28f7ccc75a9a153d45d385d94a85464876
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
       - uses: Swatinem/rust-cache@49a0bdc70d2e1b713ca9e2869b211fcce03d3c1c # v2
       - name: Check formatting
         run: cargo fmt --all -- --check
       - name: Lint all targets
-        run: cargo clippy --locked --all-targets --all-features -- -D warnings
+        run: cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
       - name: Test all targets
-        run: cargo test --locked --all-targets --all-features
+        run: cargo test --locked --workspace --all-targets --all-features
+      - name: Test documentation
+        run: cargo test --locked --workspace --doc --all-features
       - name: Build documentation
-        run: cargo doc --locked --no-deps --all-features
+        run: cargo doc --locked --workspace --no-deps --all-features
 
   msrv:
     name: Minimum supported Rust
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    env:
+      RUSTUP_TOOLCHAIN: "1.85"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: dtolnay/rust-toolchain@85c23e28f7ccc75a9a153d45d385d94a85464876 # 1.85
+        with:
+          toolchain: "1.85"
       - uses: Swatinem/rust-cache@49a0bdc70d2e1b713ca9e2869b211fcce03d3c1c # v2
-      - run: cargo check --locked --all-targets --all-features
+      - run: cargo check --locked --workspace --all-targets --all-features
+      - run: cargo check --locked --workspace --all-targets --no-default-features
+
+  platform-smoke:
+    name: ${{ matrix.os }} smoke tests
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    env:
+      RUSTUP_TOOLCHAIN: stable
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@85c23e28f7ccc75a9a153d45d385d94a85464876
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@49a0bdc70d2e1b713ca9e2869b211fcce03d3c1c # v2
+      - run: cargo test --locked --workspace --lib --no-default-features
 
   package:
     name: Feature boundaries and package policy
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    env:
+      RUSTUP_TOOLCHAIN: stable
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@85c23e28f7ccc75a9a153d45d385d94a85464876
+        with:
+          toolchain: stable
       - uses: Swatinem/rust-cache@49a0bdc70d2e1b713ca9e2869b211fcce03d3c1c # v2
-      - name: Check the minimal feature set
-        run: cargo check --locked --all-targets --no-default-features
+      - name: Test the minimal feature set
+        run: cargo test --locked --workspace --all-targets --no-default-features
       - name: Check publishable package contents
         shell: pwsh
         run: ./scripts/check_package_policy.ps1
@@ -61,6 +105,8 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: EmbarkStudios/cargo-deny-action@c3bbe7e4e3f7baeee1a3dd9aec0a3b2aded580fb # v2.1.1
         with:
           rust-version: "1.85"
@@ -73,12 +119,9 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Fetch pinned OrdinaryDiffEq source
-        run: |
-          git init "$RUNNER_TEMP/OrdinaryDiffEq.jl"
-          git -C "$RUNNER_TEMP/OrdinaryDiffEq.jl" remote add origin https://github.com/SciML/OrdinaryDiffEq.jl.git
-          git -C "$RUNNER_TEMP/OrdinaryDiffEq.jl" fetch --depth=1 origin 211142263781255a9aa2f910f6760b9f18ec29c8
-          git -C "$RUNNER_TEMP/OrdinaryDiffEq.jl" checkout --detach FETCH_HEAD
+        with:
+          persist-credentials: false
+          submodules: recursive
       - name: Check generated inventory
         shell: pwsh
-        run: ./scripts/generate_ode_inventory.ps1 -UpstreamPath "$env:RUNNER_TEMP/OrdinaryDiffEq.jl" -RepositoryPath . -OutputDirectory docs -Check
+        run: ./scripts/generate_ode_inventory.ps1 -UpstreamPath reference/OrdinaryDiffEq.jl -RepositoryPath . -OutputDirectory docs -Check

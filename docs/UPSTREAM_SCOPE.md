@@ -1,7 +1,9 @@
 # Upstream scope
 
 The numerical reference is SciML/OrdinaryDiffEq.jl revision
-`211142263781255a9aa2f910f6760b9f18ec29c8`, retrieved on 2026-07-30.
+`211142263781255a9aa2f910f6760b9f18ec29c8`, retained as the
+`reference/OrdinaryDiffEq.jl` Git submodule. Initialize it with
+`git submodule update --init --recursive` after cloning this repository.
 
 ## Included
 

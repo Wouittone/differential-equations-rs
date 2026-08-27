@@ -1,3 +1,6 @@
+include(joinpath(@__DIR__, "..", "tests", "julia", "pinned_environment.jl"))
+check_pins()
+
 using SciMLBase: ODEProblem, solve
 using OrdinaryDiffEqAdamsBashforthMoulton: AB3, AB4, AB5, ABM32, ABM43, ABM54
 using OrdinaryDiffEqLowOrderRK:

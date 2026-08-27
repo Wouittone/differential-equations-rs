@@ -1,0 +1,3 @@
+[submodule "reference/OrdinaryDiffEq.jl"]
+	path = reference/OrdinaryDiffEq.jl
+	url = https://github.com/SciML/OrdinaryDiffEq.jl.git

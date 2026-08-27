@@ -36,6 +36,8 @@ if [[ -d /sys/devices/system/cpu/cpu0/cpufreq ]]; then
 fi
 
 cd "${REPO_ROOT:-$PWD}"
+git submodule update --init --recursive
 cargo --version
 julia --version
+julia --startup-file=no --project=tests/julia tests/julia/pinned_environment.jl --check
 julia --startup-file=no --project=tests/julia -e 'using Pkg; Pkg.instantiate(); Pkg.precompile()'

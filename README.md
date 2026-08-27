@@ -5,16 +5,122 @@ A beta Rust port of the ODE solvers in Julia's
 
 The minimum supported Rust version (MSRV) is 1.85.
 
+## Quickstart
+
+The crate is still protected by an intentional publication lock while its
+prerelease API is finalized. From a checkout, add it as a path dependency:
+
+```toml
+[dependencies]
+differential-equations = { path = "../differential-equations-rs" }
+```
+
+After publication, replace `path` with the released version. Define an
+in-place right-hand side, select an algorithm from its family, and call
+`solve`:
+
+```rust
+use differential_equations::solvers::explicit::Tsit5;
+use differential_equations::{OdeProblem, SaveMode, SolveOptions, solve};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let problem = OdeProblem::new(
+        |derivative: &mut [f64], state: &[f64], rate: &f64, _time: f64| {
+            derivative[0] = rate * state[0];
+        },
+        [1.0],
+        (0.0, 1.0),
+        -2.0,
+    );
+    let options = SolveOptions::new()
+        .with_tolerances(1.0e-9, 1.0e-9)
+        .with_save(SaveMode::Endpoints);
+
+    let solution = solve(&problem, Tsit5, &options)?;
+    println!("u(1) = {}", solution.last_state()[0]);
+    println!("accepted steps = {}", solution.stats().accepted_steps);
+    Ok(())
+}
+```
+
+Run the packaged version as `cargo run --example quickstart`. The state is a
+contiguous `f64` vector; every right-hand-side call must overwrite the complete
+derivative slice.
+
+## Choosing a solver
+
+Start with the simplest family that matches the problem:
+
+| Problem | Suggested starting point | Canonical import |
+| --- | --- | --- |
+| Non-stiff, adaptive first-order ODE | Tsit5 | `solvers::explicit::Tsit5` |
+| Stiff first-order ODE | Rodas5P | `solvers::rosenbrock::Rodas5P` |
+| Known fixed step, simple baseline | RK4 | `solvers::explicit::Rk4` |
+| Automatic non-stiff/stiff fallback | DefaultOdeAlgorithm | `solvers::automatic::DefaultOdeAlgorithm` |
+| Separable second-order or Hamiltonian system | RKN or symplectic family | `solvers::second_order` |
+| Independent parameter sweep | `solve_ensemble` | crate root |
+
+Stiff solvers benefit from an analytic Jacobian supplied with
+`OdeProblem::with_jacobian`; otherwise they use finite differences. Fixed-step
+algorithms require `adaptive = false` and a positive initial step. Solver names
+and numerical coverage are detailed in the
+[algorithm coverage guide](docs/ALGORITHM_COVERAGE.md), while callbacks, dense
+output, and problem-type limits are in the
+[feature coverage guide](docs/FEATURE_COVERAGE.md).
+
+## Cargo features
+
+| Feature | Default | Effect |
+| --- | --- | --- |
+| `parallel` | yes | Enables Rayon-backed batch and ensemble entry points. |
+| `allocation-metrics` | no | Enables allocation instrumentation used by benchmark targets. |
+
+Disable default features when the application does not need Rayon:
+
+```toml
+differential-equations = { version = "0.1.0-beta.1", default-features = false }
+```
+
+## Migrating prerelease imports
+
+The supported solver surface is hierarchical. Core problem, option, solution,
+and primary driver types remain at the crate root; algorithms and specialized
+drivers live below `solvers`. Replace prerelease compatibility paths as
+follows:
+
+| Previous path or pattern | Canonical replacement |
+| --- | --- |
+| `differential_equations::algorithms::<Name>` | `differential_equations::solvers::<family>::<Name>` |
+| `differential_equations::solvers::*` | Import the required `solvers::<family>` items explicitly |
+| `algorithms::explicit::low_storage::*` | `solvers::explicit::low_storage_rk::*` |
+| `algorithms::implicit::basic::*` | `solvers::implicit::general::*` |
+| `algorithms::implicit::diagonally_implicit::*` | `solvers::implicit::sdirk::*` |
+| `algorithms::implicit::fully_implicit::*` | `solvers::implicit::firk::*` |
+| `algorithms::second_order::structural::*` | `solvers::second_order::general::*` |
+| `algorithms::simd::*` | `solvers::explicit::simd_rk::*` |
+| `algorithms::interaction_picture::*` | `solvers::exponential::rkip::*` |
+| `algorithms::amf::*` | `solvers::rosenbrock::amf::*` |
+| Root split-ODE traits and drivers | `solvers::explicit::split_euler::*` |
+| Root second-order traits and drivers | `solvers::second_order::*` |
+| Root symplectic traits and drivers | `solvers::second_order::symplectic::*` |
+
+Family-level solver facades such as `solvers::explicit::Tsit5` are preferred
+for ordinary use. Implementation-module paths are public for users who need a
+specific kernel or extension type. The exact changes for the pending release
+are also recorded in the [changelog](CHANGELOG.md).
+
 ## Goals
 
-This project exists first and foremost as a proof of concept to answer a
-specific performance question:
+This project began as a proof of concept around a specific performance
+question:
 
 > Can Rust ODE solvers reach performance comparable to Julia's
 > DifferentialEquations.jl while retaining Rust's substantially lower memory
 > usage observed in earlier `orskit` experiments?
 
-The working goals are:
+The project now uses that comparison as one release gate alongside numerical
+compliance, API stability, and predictable memory behavior. Its working goals
+are:
 
 - port representative high-value OrdinaryDiffEq.jl algorithms faithfully,
   beginning with `Tsit5` for non-stiff systems;
@@ -28,11 +134,11 @@ The working goals are:
 The solver target is native OrdinaryDiffEq.jl **ODE algorithm parity**.
 SDEs, RODEs, DDEs, DAEs, boundary-value problems, and external solver wrappers
 are explicitly out of scope. Basic discrete and continuous event callbacks and
-`save_at` sampling are implemented. Tsit5 and DPRKN6 have method-specific
-high-order interpolation, with retained post-solve Tsit5 segments; dense
-extensions for the other method families, arbitrary numeric types, and
-sensitivities remain separate API features and are not implied by algorithm
-parity.
+`save_at` sampling are implemented. Several explicit, Rosenbrock, SSP, and
+second-order methods have method-specific continuous extensions; other
+implemented methods use their documented retained fallback. Arbitrary numeric
+types and sensitivities remain separate API features and are not implied by
+algorithm parity.
 
 ## Method
 
@@ -43,7 +149,8 @@ Each algorithm is developed in three layers:
    compare endpoints, saved trajectories, and solver statistics;
 3. benchmark matched Rust and Julia workloads for elapsed time and peak memory.
 
-Julia tests use an isolated project under `tests/julia`. Rust tests remain
+In a source checkout, Julia tests use an isolated project under `tests/julia`
+and the pinned `reference/OrdinaryDiffEq.jl` Git submodule. Rust tests remain
 usable without Julia; cross-language compliance tests are explicit so normal
 `cargo test` runs stay fast and deterministic.
 
@@ -56,8 +163,8 @@ use differential_equations::{OdeProblem, SolveOptions, solve};
 ```
 
 Family façades such as `solvers::explicit::Tsit5` provide shorter focused
-imports. The historical `differential_equations::algorithms` namespace remains
-an alias for `solvers`, including its glob-import prelude.
+imports. Prefer these canonical family paths in downstream code; implementation
+modules remain useful when distinguishing closely related solver variants.
 
 Stiff problems may optionally provide an analytic state Jacobian. Implicit and
 Rosenbrock methods use it directly; otherwise they fall back to finite
@@ -94,8 +201,9 @@ and known callback/interpolation limits are in
 [`docs/FEATURE_COVERAGE.md`](docs/FEATURE_COVERAGE.md).
 
 Tableau-defined explicit Runge–Kutta methods share one generic kernel. The
-named algorithms (`Rk4`, `Tsit5`, `Dp5`, and others) are zero-sized facades over
-`ExplicitRungeKutta<T>`. New methods can provide their coefficients by
+resource-backed low-order algorithms, including `Rk4`, are zero-sized facades
+over `ExplicitRungeKutta<T>`; methods with specialized staging or dense output
+retain their dedicated kernels. New methods can provide their coefficients by
 implementing `ButcherTableau`; malformed dimensions, non-finite coefficients,
 and invalid FSAL layouts are rejected before integration. Solver workspaces use
 flat stage-major storage with separate candidate, error, and temporary arrays
@@ -107,9 +215,10 @@ runtime parser or dynamic dispatch. See
 [`docs/TABLEAU_RESOURCES.md`](docs/TABLEAU_RESOURCES.md) for the schema and a
 complete downstream example.
 
-Run both test layers with:
+From a source checkout, run both test layers with:
 
 ```console
+git submodule update --init --recursive
 cargo test
 julia --project=tests/julia tests/julia/pinned_environment.jl --check
 julia --project=tests/julia tests/julia/runtests.jl
@@ -117,7 +226,9 @@ julia --project=tests/julia tests/julia/runtests.jl
 
 If the pin check fails after cloning or changing Julia dependencies, run the
 same `pinned_environment.jl` command without `--check` once to bind the full
-OrdinaryDiffEq subpackage closure to the reference Git revision.
+OrdinaryDiffEq subpackage closure to the checked-out reference submodule. The
+Julia manifest uses local submodule paths and does not fetch OrdinaryDiffEq
+from a second remote checkout.
 
 Run the matched 31-algorithm steady-state benchmark matrix with:
 
@@ -130,9 +241,22 @@ If Julia is not on `PATH`, pass its executable explicitly with
 
 Raw Rust and Julia measurements plus a ratio table are written beneath
 `benchmarks/results/`. Allocation totals exclude compilation and warm-up.
-For the reproducible, VM-per-case speed/RSS/allocation harness, see
-[`benchmarks/cloud/README.md`](benchmarks/cloud/README.md); it is designed to
-run through `gcloud` and never starts cloud resources on its own.
+For lightweight regression tracking on every pull request, run the
+Criterion-compatible CodSpeed suite:
+
+```console
+cargo bench --bench solver_performance
+```
+
+Its stable benchmark IDs cover representative explicit, stiff, dense-output,
+and sequential/parallel ensemble paths. Baseline comparison and CI details are
+in the [performance regression guide](docs/BENCHMARKING.md).
+
+For the reproducible, VM-per-case speed/RSS/allocation harness, see the
+[cloud benchmark guide](https://github.com/Wouittone/differential-equations-rs/blob/main/benchmarks/cloud/README.md);
+it is designed to run through `gcloud` and never starts cloud resources on its
+own.
+
 The exact generated implemented/remaining algorithm inventory is maintained in
 [`docs/ODE_PARITY_INVENTORY.md`](docs/ODE_PARITY_INVENTORY.md); the coverage
 policy and interpretation are in
@@ -197,11 +321,23 @@ assert!(outcomes.iter().all(|case| case.result.is_ok()));
 
 ## Status
 
-Beta. Implemented algorithms now use method-specific kernels and are covered by
-Rust regression tests, with a growing set of comparisons against the pinned
-Julia SciML reference environment. The API may still change before 1.0, and
-users should validate solver choice and tolerances for scientific or production
-workloads.
+Prerelease. The pinned native-ODE algorithm-name scope is implemented and has
+matched Rust/Julia compliance coverage. The API may still change before 1.0,
+and users should validate solver choice and tolerances for scientific or
+production workloads. The intentional Cargo publication lock is removed only
+as part of the reviewed release process.
+
+## Project documentation
+
+- [Feature coverage and limitations](docs/FEATURE_COVERAGE.md)
+- [Algorithm coverage](docs/ALGORITHM_COVERAGE.md)
+- [Performance regression benchmarks](docs/BENCHMARKING.md)
+- [Compile-time tableau resources](docs/TABLEAU_RESOURCES.md)
+- [Pinned upstream scope](docs/UPSTREAM_SCOPE.md)
+- [Changelog and migration notes](CHANGELOG.md)
+- [Contributing guide](CONTRIBUTING.md)
+- [Security policy](SECURITY.md)
+- [Release process](docs/RELEASING.md)
 
 ## License
 

@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory = $true, ParameterSetName = 'Generate')]
+    [Parameter(ParameterSetName = 'Generate')]
     [string] $UpstreamPath,
 
     [string] $RepositoryPath,
@@ -27,6 +27,12 @@ if ([string]::IsNullOrWhiteSpace($RepositoryPath)) {
 }
 if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
     $OutputDirectory = Join-Path $RepositoryPath 'docs'
+}
+if (
+    $PSCmdlet.ParameterSetName -eq 'Generate' -and
+    [string]::IsNullOrWhiteSpace($UpstreamPath)
+) {
+    $UpstreamPath = Join-Path $RepositoryPath 'reference/OrdinaryDiffEq.jl'
 }
 
 function Normalize-AlgorithmName {
@@ -1088,7 +1094,7 @@ revision ``$actualRevision`` under the scope in
 [`UPSTREAM_SCOPE.md`](UPSTREAM_SCOPE.md). Regenerate it with:
 
 ``````powershell
-./scripts/generate_ode_inventory.ps1 -UpstreamPath <path-to-OrdinaryDiffEq.jl>
+./scripts/generate_ode_inventory.ps1 -UpstreamPath reference/OrdinaryDiffEq.jl
 ``````
 
 The full machine-readable records, including upstream definition paths and line

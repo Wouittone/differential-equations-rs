@@ -103,7 +103,7 @@ $cloudJobScript = {
         '--boot-disk-type', 'pd-balanced', '--quiet'
     ) + $spotArgs
     $repoDir = "/tmp/ode-benchmark-$($row.run_id)"
-    $remote = "set -euo pipefail; sudo apt-get update; sudo apt-get install -y --no-install-recommends git; rm -rf '$repoDir'; git clone --depth 1 --branch '$ref' '$repositoryUrl' '$repoDir'; cd '$repoDir'; export REPO_ROOT='$repoDir'; export JULIA_VERSION='$juliaVersion'; export RUST_TOOLCHAIN='$rustToolchain'; export RUSTFLAGS='-C target-cpu=native'; bash benchmarks/cloud/bootstrap_vm.sh;"
+    $remote = "set -euo pipefail; sudo apt-get update; sudo apt-get install -y --no-install-recommends git; rm -rf '$repoDir'; git clone --recurse-submodules --shallow-submodules --depth 1 --branch '$ref' '$repositoryUrl' '$repoDir'; cd '$repoDir'; export REPO_ROOT='$repoDir'; export JULIA_VERSION='$juliaVersion'; export RUST_TOOLCHAIN='$rustToolchain'; export RUSTFLAGS='-C target-cpu=native'; bash benchmarks/cloud/bootstrap_vm.sh;"
     if ($row.language -eq 'tests') {
         $remote += " bash benchmarks/cloud/run_tests.sh benchmarks/cloud/results;"
     } else {
