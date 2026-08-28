@@ -11,9 +11,11 @@ sequential/parallel ensemble paths with stable Criterion-compatible IDs:
 cargo bench --locked --bench solver_performance
 ```
 
-CI builds this target with `cargo codspeed build` and uploads measurements on
-trusted branches and pull requests. Dependabot pull requests still build the
-target, but skip upload because GitHub does not grant them an OIDC token.
+CI builds this target with `cargo codspeed build` and always executes a smoke
+pass. Uploads are enabled only after the repository is connected to CodSpeed
+and its `CODSPEED_ENABLED` repository variable is set to `true`. Fork and
+Dependabot pull requests remain smoke-only because GitHub does not grant them
+an upload-capable OIDC token.
 
 To compare a local branch against a saved baseline:
 
