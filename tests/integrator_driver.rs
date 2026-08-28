@@ -73,30 +73,49 @@ fn adaptive_trbdf2_allocations_for(maximum_step: f64) -> usize {
     region.change().allocations
 }
 
+fn minimum_allocations(mut measure: impl FnMut() -> usize) -> usize {
+    (0..3)
+        .map(|_| measure())
+        .min()
+        .expect("the allocation sample count is non-zero")
+}
+
 #[test]
 fn callback_free_fixed_steps_do_not_allocate_per_step() {
-    let hundred_steps = allocations_for(0.01);
-    let thousand_steps = allocations_for(0.001);
+    // `StatsAlloc` observes the entire process, including occasional test-harness
+    // allocations from other threads. Taking the minimum of repeated samples
+    // removes that bounded noise without hiding per-step allocation growth.
+    let hundred_steps = minimum_allocations(|| allocations_for(0.01));
+    let thousand_steps = minimum_allocations(|| allocations_for(0.001));
 
-    assert!(thousand_steps <= hundred_steps);
+    assert!(
+        thousand_steps <= hundred_steps,
+        "fixed allocations grew with the step count: {hundred_steps} -> {thousand_steps}"
+    );
     assert!(
         hundred_steps <= 7,
         "unexpected fixed solve allocation count: {hundred_steps}"
     );
 
-    let hundred_implicit_steps = fixed_implicit_allocations_for(0.01);
-    let thousand_implicit_steps = fixed_implicit_allocations_for(0.001);
+    let hundred_implicit_steps = minimum_allocations(|| fixed_implicit_allocations_for(0.01));
+    let thousand_implicit_steps = minimum_allocations(|| fixed_implicit_allocations_for(0.001));
 
-    assert!(thousand_implicit_steps <= hundred_implicit_steps);
+    assert!(
+        thousand_implicit_steps <= hundred_implicit_steps,
+        "fixed implicit allocations grew with the step count: {hundred_implicit_steps} -> {thousand_implicit_steps}"
+    );
     assert!(
         hundred_implicit_steps <= 20,
         "unexpected fixed implicit solve allocation count: {hundred_implicit_steps}"
     );
 
-    let hundred_trbdf2_steps = adaptive_trbdf2_allocations_for(0.01);
-    let many_trbdf2_steps = adaptive_trbdf2_allocations_for(0.001);
+    let hundred_trbdf2_steps = minimum_allocations(|| adaptive_trbdf2_allocations_for(0.01));
+    let many_trbdf2_steps = minimum_allocations(|| adaptive_trbdf2_allocations_for(0.001));
 
-    assert!(many_trbdf2_steps <= hundred_trbdf2_steps);
+    assert!(
+        many_trbdf2_steps <= hundred_trbdf2_steps,
+        "adaptive TRBDF2 allocations grew with the step count: {hundred_trbdf2_steps} -> {many_trbdf2_steps}"
+    );
     assert!(
         hundred_trbdf2_steps <= 25,
         "unexpected adaptive TRBDF2 solve allocation count: {hundred_trbdf2_steps}"
