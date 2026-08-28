@@ -269,6 +269,56 @@ function Get-RustAlgorithmImplementationNames {
             [void] $names.Add($invocation.Groups['name'].Value)
         }
 
+        # Solver families may wrap the public file-backed proc macro to keep
+        # repetitive invocations compact. Resolve the identifier parameter in
+        # those local wrappers as well; otherwise valid hierarchical exports
+        # are incorrectly reported as missing from the implementation.
+        foreach ($macro in [regex]::Matches(
+                $text,
+                '(?ms)^\s*macro_rules!\s*(?<macro>[A-Za-z_][A-Za-z0-9_]*)\s*\{(?<body>.*?)(?=^\})^\}'
+            )) {
+            $fileBacked = [regex]::Match(
+                $macro.Groups['body'].Value,
+                '(?s)\bdefine_explicit_rk_from_file!\s*\(\s*(?:pub(?:\s*\([^)]*\))?\s+)?\$(?<parameter>[A-Za-z_][A-Za-z0-9_]*)\s*,'
+            )
+            if (-not $fileBacked.Success) { continue }
+
+            $signature = [regex]::Match(
+                $macro.Groups['body'].Value,
+                '(?s)^\s*\((?<parameters>.*?)\)\s*=>'
+            )
+            if (-not $signature.Success) { continue }
+
+            $parameterIndexes = @{}
+            $parameterIndex = 0
+            foreach ($parameter in [regex]::Matches(
+                    $signature.Groups['parameters'].Value,
+                    '\$(?<parameter>[A-Za-z_][A-Za-z0-9_]*)\s*:\s*(?:ident|literal|path|ty|expr)'
+                )) {
+                $parameterName = $parameter.Groups['parameter'].Value
+                if (-not $parameterIndexes.ContainsKey($parameterName)) {
+                    $parameterIndexes[$parameterName] = $parameterIndex
+                    $parameterIndex++
+                }
+            }
+
+            $publicParameter = $fileBacked.Groups['parameter'].Value
+            if (-not $parameterIndexes.ContainsKey($publicParameter)) { continue }
+            $publicIndex = $parameterIndexes[$publicParameter]
+            $macroName = [regex]::Escape($macro.Groups['macro'].Value)
+            foreach ($invocation in [regex]::Matches(
+                    $text,
+                    "(?ms)^\s*$macroName!\s*\((?<arguments>.*?)\)\s*;"
+                )) {
+                $arguments = @($invocation.Groups['arguments'].Value -split ',' |
+                    ForEach-Object { $_.Trim() })
+                if ($publicIndex -lt $arguments.Count -and
+                    $arguments[$publicIndex] -match '^[A-Za-z_][A-Za-z0-9_]*$') {
+                    [void] $names.Add($arguments[$publicIndex])
+                }
+            }
+        }
+
         # Compatibility aliases intentionally expose substitute algorithms and
         # are public API names, not method implementations. Legitimate spelling
         # aliases in method modules inherit the implementation of their target.
@@ -1094,7 +1144,8 @@ $markdown = @"
 
 This is a generated summary of native solver exports at SciML/OrdinaryDiffEq.jl
 revision ``$actualRevision`` under the scope in
-[`UPSTREAM_SCOPE.md`](UPSTREAM_SCOPE.md). Regenerate it with:
+[`UPSTREAM_SCOPE.md`](UPSTREAM_SCOPE.md). From a source checkout, regenerate it
+with:
 
 ``````powershell
 ./scripts/generate_ode_inventory.ps1 -UpstreamPath reference/OrdinaryDiffEq.jl
@@ -1103,8 +1154,11 @@ revision ``$actualRevision`` under the scope in
 The full machine-readable records, including upstream definition paths and line
 numbers, problem representations, fixed/adaptive behavior, Jacobian, linear-solver,
 dense-output and controller requirements, aliases, exclusions, and current Rust and
-Julia status, are in [`ode_algorithm_inventory.json`](ode_algorithm_inventory.json)
-and [`ode_algorithm_inventory.csv`](ode_algorithm_inventory.csv).
+Julia status, are maintained in the source repository as
+[JSON](https://github.com/Wouittone/differential-equations-rs/blob/main/docs/ode_algorithm_inventory.json)
+and [CSV](https://github.com/Wouittone/differential-equations-rs/blob/main/docs/ode_algorithm_inventory.csv).
+Those generated machine-readable files are intentionally excluded from the
+published crate archive.
 
 ## Totals
 

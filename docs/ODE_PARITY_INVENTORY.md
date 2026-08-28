@@ -21,50 +21,49 @@ published crate archive.
 ## Totals
 
 - Public solver names inspected: **349**.
-- In-scope regular ODE names: **345**
-  (333 canonical/composite constructors and
+- In-scope regular ODE names: **342**
+  (330 canonical/composite constructors and
   12 public aliases).
-- Implemented and detected in matched Julia tests: **345**.
+- Implemented and detected in matched Julia tests: **342**.
 - Implemented without a detected matched Julia test: **0**.
 - Missing in-scope public names: **0**.
-- Explicitly excluded public names: **4**.
+- Explicitly excluded public names: **7**.
 
 Aliases are public parity obligations but do not require a second numerical kernel.
 
 ## Family status
 
-| Family                                   | In scope | Implemented + Julia-tested | Implemented, Julia test not detected | Missing Rust implementation |
-| ---------------------------------------- | -------: | -------------------------: | -----------------------------------: | --------------------------: |
-| Adams multistep                          |       13 |                         13 |                                    0 |                           0 |
-| approximate-matrix-factorization wrapper |        1 |                          1 |                                    0 |                           0 |
-| automatic/default composite              |        2 |                          2 |                                    0 |                           0 |
-| BDF and IMEX multistep                   |       15 |                         15 |                                    0 |                           0 |
-| explicit Runge-Kutta                     |        2 |                          2 |                                    0 |                           0 |
-| exponential Runge-Kutta                  |       17 |                         17 |                                    0 |                           0 |
-| extrapolation                            |        7 |                          7 |                                    0 |                           0 |
-| fully implicit Runge-Kutta               |        5 |                          5 |                                    0 |                           0 |
-| high-order explicit Runge-Kutta          |       16 |                         16 |                                    0 |                           0 |
-| IMEX multistep                           |        2 |                          2 |                                    0 |                           0 |
-| linear and Lie-group methods             |       18 |                         18 |                                    0 |                           0 |
-| low-order explicit Runge-Kutta           |       28 |                         28 |                                    0 |                           0 |
-| low-storage explicit Runge-Kutta         |       44 |                         44 |                                    0 |                           0 |
-| multirate and MRI-GARK                   |        9 |                          9 |                                    0 |                           0 |
-| Nordsieck variable-order multistep       |        4 |                          4 |                                    0 |                           0 |
-| parallel diagonally implicit Runge-Kutta |        1 |                          1 |                                    0 |                           0 |
-| parallel explicit Runge-Kutta            |        1 |                          1 |                                    0 |                           0 |
-| QPRK explicit Runge-Kutta                |        1 |                          1 |                                    0 |                           0 |
-| Rosenbrock and Rosenbrock-W              |       40 |                         40 |                                    0 |                           0 |
-| Runge-Kutta interval prediction          |        1 |                          1 |                                    0 |                           0 |
-| Runge-Kutta-Nystrom                      |       17 |                         17 |                                    0 |                           0 |
-| SDIRK, ESDIRK, and additive IMEX RK      |       39 |                         39 |                                    0 |                           0 |
-| second-order structural dynamics         |        2 |                          2 |                                    0 |                           0 |
-| SIMD explicit Runge-Kutta                |        3 |                          3 |                                    0 |                           0 |
-| stabilized explicit Runge-Kutta          |       13 |                         13 |                                    0 |                           0 |
-| stabilized implicit Runge-Kutta          |        1 |                          1 |                                    0 |                           0 |
-| strong-stability-preserving Runge-Kutta  |       21 |                         21 |                                    0 |                           0 |
-| symplectic and partitioned Runge-Kutta   |       18 |                         18 |                                    0 |                           0 |
-| Taylor series                            |        3 |                          3 |                                    0 |                           0 |
-| user-tableau explicit Runge-Kutta        |        1 |                          1 |                                    0 |                           0 |
+| Family | In scope | Implemented + Julia-tested | Implemented, Julia test not detected | Missing Rust implementation |
+| --- | ---: | ---: | ---: | ---: |
+| Adams multistep | 13 | 13 | 0 | 0 |
+| approximate-matrix-factorization wrapper | 1 | 1 | 0 | 0 |
+| automatic/default composite | 2 | 2 | 0 | 0 |
+| BDF and IMEX multistep | 15 | 15 | 0 | 0 |
+| explicit Runge-Kutta | 2 | 2 | 0 | 0 |
+| exponential Runge-Kutta | 17 | 17 | 0 | 0 |
+| extrapolation | 7 | 7 | 0 | 0 |
+| fully implicit Runge-Kutta | 5 | 5 | 0 | 0 |
+| high-order explicit Runge-Kutta | 16 | 16 | 0 | 0 |
+| IMEX multistep | 2 | 2 | 0 | 0 |
+| linear and Lie-group methods | 18 | 18 | 0 | 0 |
+| low-order explicit Runge-Kutta | 28 | 28 | 0 | 0 |
+| low-storage explicit Runge-Kutta | 44 | 44 | 0 | 0 |
+| multirate and MRI-GARK | 9 | 9 | 0 | 0 |
+| Nordsieck variable-order multistep | 4 | 4 | 0 | 0 |
+| parallel diagonally implicit Runge-Kutta | 1 | 1 | 0 | 0 |
+| parallel explicit Runge-Kutta | 1 | 1 | 0 | 0 |
+| QPRK explicit Runge-Kutta | 1 | 1 | 0 | 0 |
+| Rosenbrock and Rosenbrock-W | 40 | 40 | 0 | 0 |
+| Runge-Kutta interval prediction | 1 | 1 | 0 | 0 |
+| Runge-Kutta-Nystrom | 17 | 17 | 0 | 0 |
+| SDIRK, ESDIRK, and additive IMEX RK | 39 | 39 | 0 | 0 |
+| second-order structural dynamics | 2 | 2 | 0 | 0 |
+| stabilized explicit Runge-Kutta | 13 | 13 | 0 | 0 |
+| stabilized implicit Runge-Kutta | 1 | 1 | 0 | 0 |
+| strong-stability-preserving Runge-Kutta | 21 | 21 | 0 | 0 |
+| symplectic and partitioned Runge-Kutta | 18 | 18 | 0 | 0 |
+| Taylor series | 3 | 3 | 0 | 0 |
+| user-tableau explicit Runge-Kutta | 1 | 1 | 0 | 0 |
 
 ## Missing Rust solver names by family
 
@@ -83,29 +82,32 @@ count until a matched compliance invocation is detected.
 
 ## Aliases
 
-| Public name    | Kind             | Canonical target                                    | Package                     |
-| -------------- | ---------------- | --------------------------------------------------- | --------------------------- |
-| `ETD1`         | exact-alias      | `NorsettEuler`                                      | OrdinaryDiffEqExponentialRK |
-| `IMEXEuler`    | configured-alias | `SBDF(order=1)`                                     | OrdinaryDiffEqBDF           |
-| `IMEXEulerARK` | configured-alias | `SBDF(order=1, ark=true)`                           | OrdinaryDiffEqBDF           |
-| `JVODE_Adams`  | configured-alias | `JVODE(:Adams)`                                     | OrdinaryDiffEqNordsieck     |
-| `JVODE_BDF`    | configured-alias | `JVODE(:BDF)`                                       | OrdinaryDiffEqNordsieck     |
-| `QBDF`         | configured-alias | `QNDF(kappa=(0,0,0,0,0))`                           | OrdinaryDiffEqBDF           |
-| `QBDF1`        | configured-alias | `QNDF1(kappa=0)`                                    | OrdinaryDiffEqBDF           |
-| `QBDF2`        | configured-alias | `QNDF2(kappa=0)`                                    | OrdinaryDiffEqBDF           |
-| `SBDF2`        | configured-alias | `SBDF(order=2)`                                     | OrdinaryDiffEqBDF           |
-| `SBDF3`        | configured-alias | `SBDF(order=3)`                                     | OrdinaryDiffEqBDF           |
-| `SBDF4`        | configured-alias | `SBDF(order=4)`                                     | OrdinaryDiffEqBDF           |
-| `Tsit5DA`      | configured-alias | `HybridExplicitImplicitRK(Tsit5DATableau, order=5)` | OrdinaryDiffEqRosenbrock    |
+| Public name | Kind | Canonical target | Package |
+| --- | --- | --- | --- |
+| `ETD1` | exact-alias | `NorsettEuler` | OrdinaryDiffEqExponentialRK |
+| `IMEXEuler` | configured-alias | `SBDF(order=1)` | OrdinaryDiffEqBDF |
+| `IMEXEulerARK` | configured-alias | `SBDF(order=1, ark=true)` | OrdinaryDiffEqBDF |
+| `JVODE_Adams` | configured-alias | `JVODE(:Adams)` | OrdinaryDiffEqNordsieck |
+| `JVODE_BDF` | configured-alias | `JVODE(:BDF)` | OrdinaryDiffEqNordsieck |
+| `QBDF` | configured-alias | `QNDF(kappa=(0,0,0,0,0))` | OrdinaryDiffEqBDF |
+| `QBDF1` | configured-alias | `QNDF1(kappa=0)` | OrdinaryDiffEqBDF |
+| `QBDF2` | configured-alias | `QNDF2(kappa=0)` | OrdinaryDiffEqBDF |
+| `SBDF2` | configured-alias | `SBDF(order=2)` | OrdinaryDiffEqBDF |
+| `SBDF3` | configured-alias | `SBDF(order=3)` | OrdinaryDiffEqBDF |
+| `SBDF4` | configured-alias | `SBDF(order=4)` | OrdinaryDiffEqBDF |
+| `Tsit5DA` | configured-alias | `HybridExplicitImplicitRK(Tsit5DATableau, order=5)` | OrdinaryDiffEqRosenbrock |
 
 ## Explicit exclusions
 
-| Public name      | Package                   | Rationale                                                                    |
-| ---------------- | ------------------------- | ---------------------------------------------------------------------------- |
-| `DABDF2`         | OrdinaryDiffEqBDF         | DAE residual-form algorithm; DAE-only behavior is outside regular ODE scope. |
-| `DFBDF`          | OrdinaryDiffEqBDF         | DAE residual-form algorithm; DAE-only behavior is outside regular ODE scope. |
-| `DImplicitEuler` | OrdinaryDiffEqBDF         | DAE residual-form algorithm; DAE-only behavior is outside regular ODE scope. |
-| `FunctionMap`    | OrdinaryDiffEqFunctionMap | Discrete dynamical-system map, not a continuous initial-value ODE solver.    |
+| Public name | Package | Rationale |
+| --- | --- | --- |
+| `DABDF2` | OrdinaryDiffEqBDF | DAE residual-form algorithm; DAE-only behavior is outside regular ODE scope. |
+| `DFBDF` | OrdinaryDiffEqBDF | DAE residual-form algorithm; DAE-only behavior is outside regular ODE scope. |
+| `DImplicitEuler` | OrdinaryDiffEqBDF | DAE residual-form algorithm; DAE-only behavior is outside regular ODE scope. |
+| `FunctionMap` | OrdinaryDiffEqFunctionMap | Discrete dynamical-system map, not a continuous initial-value ODE solver. |
+| `MER5v2` | OrdinaryDiffEqSIMDRK | SIMD-lane specialization removed: scalar-state kernels and LLVM autovectorization avoid imposing lane-shaped user inputs. |
+| `MER6v2` | OrdinaryDiffEqSIMDRK | SIMD-lane specialization removed: scalar-state kernels and LLVM autovectorization avoid imposing lane-shaped user inputs. |
+| `RK6v4` | OrdinaryDiffEqSIMDRK | SIMD-lane specialization removed: scalar-state kernels and LLVM autovectorization avoid imposing lane-shaped user inputs. |
 
 Package-level exclusions from [UPSTREAM_SCOPE.md](UPSTREAM_SCOPE.md), such as
 DelayDiffEq, StochasticDiffEq, external wrappers, BVP, PDE, and steady-state
@@ -114,19 +116,19 @@ the OrdinaryDiffEq native ODE solver export surface.
 
 ## Classified support-only subpackages
 
-| Package                            | Why it has no solver rows                                                                             |
-| ---------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `OrdinaryDiffEqCore`               | Shared integrator abstractions and internal composite types; no public numerical method constructors. |
-| `OrdinaryDiffEqDifferentiation`    | Jacobian, time-derivative, and differentiation support used by solver packages.                       |
-| `OrdinaryDiffEqExplicitTableaus`   | Butcher-tableau data and constructors, not solver algorithms.                                         |
-| `OrdinaryDiffEqImplicitTableaus`   | Implicit tableau data and constructors, not solver algorithms.                                        |
-| `OrdinaryDiffEqNonlinearSolve`     | Nonlinear-solver and DAE-initialization support, not time-integration algorithms.                     |
-| `OrdinaryDiffEqRosenbrockTableaus` | Rosenbrock tableau data and constructors, not solver algorithms.                                      |
+| Package | Why it has no solver rows |
+| --- | --- |
+| `OrdinaryDiffEqCore` | Shared integrator abstractions and internal composite types; no public numerical method constructors. |
+| `OrdinaryDiffEqDifferentiation` | Jacobian, time-derivative, and differentiation support used by solver packages. |
+| `OrdinaryDiffEqExplicitTableaus` | Butcher-tableau data and constructors, not solver algorithms. |
+| `OrdinaryDiffEqImplicitTableaus` | Implicit tableau data and constructors, not solver algorithms. |
+| `OrdinaryDiffEqNonlinearSolve` | Nonlinear-solver and DAE-initialization support, not time-integration algorithms. |
+| `OrdinaryDiffEqRosenbrockTableaus` | Rosenbrock tableau data and constructors, not solver algorithms. |
 
 ## Audited non-algorithm exports
 
-| Export      | Package               | Why it has no solver row                                                    |
-| ----------- | --------------------- | --------------------------------------------------------------------------- |
+| Export | Package | Why it has no solver row |
+| --- | --- | --- |
 | `Predictor` | `OrdinaryDiffEqSDIRK` | Nonlinear-stage predictor enum namespace, not an ODE algorithm constructor. |
 
 ## Interpretation notes and uncertainties
