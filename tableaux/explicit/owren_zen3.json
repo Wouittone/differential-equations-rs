@@ -1,21 +1,21 @@
 {
-  "$schema": "../../docs/tableau.schema.json",
-  "name": "OwrenZen3",
-  "description": "The adaptive Owren-Zennaro 3/2 method with a third-order interpolant.",
-  "kind": "explicit-runge-kutta",
-  "order": 3,
-  "embedded_order": 2,
-  "fsal": true,
-  "A": [
+  "$schema"        : "../../docs/tableau.schema.json",
+  "name"           : "OwrenZen3",
+  "description"    : "The adaptive Owren-Zennaro 3/2 method with a third-order interpolant.",
+  "kind"           : "explicit-runge-kutta",
+  "order"          : 3,
+  "embedded_order" : 2,
+  "fsal"           : true,
+  "A"              : [
     ["0", "0", "0", "0"],
     ["12.0 / 23.0", "0", "0", "0"],
     ["-68.0 / 375.0", "368.0 / 375.0", "0", "0"],
     ["31.0 / 144.0", "529.0 / 1_152.0", "125.0 / 384.0", "0"]
   ],
-  "b": ["31.0 / 144.0", "529.0 / 1_152.0", "125.0 / 384.0", "0.0"],
-  "c": ["0.0", "12.0 / 23.0", "4.0 / 5.0", "1.0"],
-  "error": ["-25.0 / 144.0", "575.0 / 1_152.0", "-125.0 / 384.0", "0.0"],
-  "dense": [
+  "b"              : ["31.0 / 144.0", "529.0 / 1_152.0", "125.0 / 384.0", "0.0"],
+  "c"              : ["0.0", "12.0 / 23.0", "4.0 / 5.0", "1.0"],
+  "error"          : ["-25.0 / 144.0", "575.0 / 1_152.0", "-125.0 / 384.0", "0.0"],
+  "dense"          : [
     ["1.0", "-65.0 / 48.0", "41.0 / 72.0"],
     ["0.0", "529.0 / 384.0", "-529.0 / 576.0"],
     ["0.0", "125.0 / 128.0", "-125.0 / 192.0"],

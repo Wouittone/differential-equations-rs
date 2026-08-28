@@ -1,12 +1,12 @@
 {
-  "$schema": "../../docs/tableau.schema.json",
-  "name": "Euler",
-  "description": "The fixed-step forward Euler method.",
-  "kind": "explicit-runge-kutta",
-  "order": 1,
-  "A": [
+  "$schema"     : "../../docs/tableau.schema.json",
+  "name"        : "Euler",
+  "description" : "The fixed-step forward Euler method.",
+  "kind"        : "explicit-runge-kutta",
+  "order"       : 1,
+  "A"           : [
     ["0"]
   ],
-  "b": ["1"],
-  "c": ["0"]
+  "b"           : ["1"],
+  "c"           : ["0"]
 }

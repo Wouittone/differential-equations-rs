@@ -1,10 +1,10 @@
 {
-  "$schema": "../../docs/tableau.schema.json",
-  "name": "KuttaPRK2p5",
-  "description": "Kutta's six-stage, fifth-order explicit method optimized for two processors.",
-  "kind": "explicit-runge-kutta",
-  "order": 5,
-  "A": [
+  "$schema"     : "../../docs/tableau.schema.json",
+  "name"        : "KuttaPRK2p5",
+  "description" : "Kutta's six-stage, fifth-order explicit method optimized for two processors.",
+  "kind"        : "explicit-runge-kutta",
+  "order"       : 5,
+  "A"           : [
     [0, 0, 0, 0, 0, 0],
     ["1.0 / 3.0", 0, 0, 0, 0, 0],
     ["4.0 / 25.0", "6.0 / 25.0", 0, 0, 0, 0],
@@ -12,6 +12,6 @@
     ["6.0 / 81.0", "90.0 / 81.0", "-50.0 / 81.0", "8.0 / 81.0", 0, 0],
     ["6.0 / 75.0", "36.0 / 75.0", "10.0 / 75.0", "8.0 / 75.0", "0.0", 0]
   ],
-  "b": ["23.0 / 192.0", "0.0", "125.0 / 192.0", "0.0", "-81.0 / 192.0", "125.0 / 192.0"],
-  "c": ["0.0", "1.0 / 3.0", "2.0 / 5.0", "1.0", "2.0 / 3.0", "4.0 / 5.0"]
+  "b"           : ["23.0 / 192.0", "0.0", "125.0 / 192.0", "0.0", "-81.0 / 192.0", "125.0 / 192.0"],
+  "c"           : ["0.0", "1.0 / 3.0", "2.0 / 5.0", "1.0", "2.0 / 3.0", "4.0 / 5.0"]
 }

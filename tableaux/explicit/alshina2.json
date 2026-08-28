@@ -1,15 +1,15 @@
 {
-  "$schema": "../../docs/tableau.schema.json",
-  "name": "Alshina2",
-  "description": "The adaptive optimal two-stage, second-order Alshina method.",
-  "kind": "explicit-runge-kutta",
-  "order": 2,
-  "embedded_order": 1,
-  "A": [
+  "$schema"        : "../../docs/tableau.schema.json",
+  "name"           : "Alshina2",
+  "description"    : "The adaptive optimal two-stage, second-order Alshina method.",
+  "kind"           : "explicit-runge-kutta",
+  "order"          : 2,
+  "embedded_order" : 1,
+  "A"              : [
     ["0", "0"],
     ["2/3", "0"]
   ],
-  "b": ["1/4", "3/4"],
-  "c": ["0", "2/3"],
-  "error": ["1", "0"]
+  "b"              : ["1/4", "3/4"],
+  "c"              : ["0", "2/3"],
+  "error"          : ["1", "0"]
 }

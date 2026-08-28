@@ -1,12 +1,12 @@
 {
-  "$schema": "../../docs/tableau.schema.json",
-  "name": "ImplicitEuler",
-  "description": "First-order implicit Euler tableau.",
-  "kind": "implicit-runge-kutta",
-  "order": 1,
-  "A": [
+  "$schema"     : "../../docs/tableau.schema.json",
+  "name"        : "ImplicitEuler",
+  "description" : "First-order implicit Euler tableau.",
+  "kind"        : "implicit-runge-kutta",
+  "order"       : 1,
+  "A"           : [
     [1]
   ],
-  "b": [1],
-  "c": [1]
+  "b"           : [1],
+  "c"           : [1]
 }

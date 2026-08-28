@@ -33,6 +33,8 @@ jobs:
       - uses: Swatinem/rust-cache@49a0bdc70d2e1b713ca9e2869b211fcce03d3c1c # v2
       - name: Check formatting
         run: cargo fmt --all -- --check
+      - name: Check tableau JSON formatting
+        run: python3 scripts/format_tableaux_json.py --check
       - name: Lint all targets
         run: cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
       - name: Test all targets

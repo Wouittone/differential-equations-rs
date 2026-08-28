@@ -1,14 +1,14 @@
 {
-  "$schema": "../../docs/tableau.schema.json",
-  "name": "Kyk2014DgSsprk3S2",
-  "description": "Fixed-step KYK2014 discontinuous-Galerkin SSPRK(3,2) method in equivalent Butcher form.",
-  "kind": "explicit-runge-kutta",
-  "order": 2,
-  "A": [
+  "$schema"     : "../../docs/tableau.schema.json",
+  "name"        : "Kyk2014DgSsprk3S2",
+  "description" : "Fixed-step KYK2014 discontinuous-Galerkin SSPRK(3,2) method in equivalent Butcher form.",
+  "kind"        : "explicit-runge-kutta",
+  "order"       : 2,
+  "A"           : [
     [0, 0, 0],
     [0.528005024856522, 0, 0],
     ["0.912646880140844 * 0.528005024856522", 0.481882138633993, 0]
   ],
-  "b": ["0.655043082833159 * 0.912646880140844 * 0.528005024856522 + 0.022826837460491", "0.655043082833159 * 0.481882138633993", 0.345866039233415],
-  "c": [0, 0.528005024856522, "0.912646880140844 * 0.528005024856522 + 0.481882138633993"]
+  "b"           : ["0.655043082833159 * 0.912646880140844 * 0.528005024856522 + 0.022826837460491", "0.655043082833159 * 0.481882138633993", 0.345866039233415],
+  "c"           : [0, 0.528005024856522, "0.912646880140844 * 0.528005024856522 + 0.481882138633993"]
 }

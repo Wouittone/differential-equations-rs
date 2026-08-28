@@ -11,6 +11,9 @@ Resource files use a FracturedJson-style layout: stable object ordering,
 single-line vectors, and one compact line per matrix row. Long rows intentionally
 remain wide because these are machine-oriented resource files.
 
+Run `python3 scripts/format_tableaux_json.py` after editing resources. CI runs
+the same formatter with `--check` so width-based wrapping cannot reappear.
+
 The shared parser uses Serde/`serde_json` for the document model and maintained
 `exmex` for exact-style arithmetic expressions. Plain decimal and scientific
 notation literals are parsed directly as `f64`; expression strings are limited

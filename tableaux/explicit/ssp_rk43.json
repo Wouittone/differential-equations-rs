@@ -1,20 +1,20 @@
 {
-  "$schema": "../../docs/tableau.schema.json",
-  "name": "SspRk43",
-  "description": "The adaptive four-stage, third-order SSP Runge-Kutta method.",
-  "kind": "explicit-runge-kutta",
-  "order": 3,
-  "embedded_order": 2,
-  "A": [
+  "$schema"        : "../../docs/tableau.schema.json",
+  "name"           : "SspRk43",
+  "description"    : "The adaptive four-stage, third-order SSP Runge-Kutta method.",
+  "kind"           : "explicit-runge-kutta",
+  "order"          : 3,
+  "embedded_order" : 2,
+  "A"              : [
     ["0", "0", "0", "0"],
     ["0.5", "0", "0", "0"],
     ["0.5", "0.5", "0", "0"],
     ["1.0 / 6.0", "1.0 / 6.0", "1.0 / 6.0", "0"]
   ],
-  "b": ["1.0 / 6.0", "1.0 / 6.0", "1.0 / 6.0", "0.5"],
-  "c": ["0.0", "0.5", "1.0", "0.5"],
-  "error": ["-1.0 / 12.0", "-1.0 / 12.0", "-1.0 / 12.0", "0.25"],
-  "dense": [
+  "b"              : ["1.0 / 6.0", "1.0 / 6.0", "1.0 / 6.0", "0.5"],
+  "c"              : ["0.0", "0.5", "1.0", "0.5"],
+  "error"          : ["-1.0 / 12.0", "-1.0 / 12.0", "-1.0 / 12.0", "0.25"],
+  "dense"          : [
     ["1.0", "-5.0 / 6.0"],
     ["0.0", "1.0 / 6.0"],
     ["0.0", "1.0 / 6.0"],

@@ -1,15 +1,15 @@
 {
-  "$schema": "../../docs/tableau.schema.json",
-  "name": "Midpoint",
-  "description": "The adaptive second-order explicit midpoint method with an embedded Euler estimate.",
-  "kind": "explicit-runge-kutta",
-  "order": 2,
-  "embedded_order": 1,
-  "A": [
+  "$schema"        : "../../docs/tableau.schema.json",
+  "name"           : "Midpoint",
+  "description"    : "The adaptive second-order explicit midpoint method with an embedded Euler estimate.",
+  "kind"           : "explicit-runge-kutta",
+  "order"          : 2,
+  "embedded_order" : 1,
+  "A"              : [
     ["0", "0"],
     ["1/2", "0"]
   ],
-  "b": ["0", "1"],
-  "c": ["0", "1/2"],
-  "error": ["-1", "1"]
+  "b"              : ["0", "1"],
+  "c"              : ["0", "1/2"],
+  "error"          : ["-1", "1"]
 }
