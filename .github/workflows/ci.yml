@@ -30,7 +30,7 @@ jobs:
         with:
           toolchain: stable
           components: rustfmt, clippy
-      - uses: Swatinem/rust-cache@49a0bdc70d2e1b713ca9e2869b211fcce03d3c1c # v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
       - name: Check formatting
         run: cargo fmt --all -- --check
       - name: Check tableau JSON formatting
@@ -57,7 +57,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@85c23e28f7ccc75a9a153d45d385d94a85464876 # 1.85
         with:
           toolchain: "1.85"
-      - uses: Swatinem/rust-cache@49a0bdc70d2e1b713ca9e2869b211fcce03d3c1c # v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
       - run: cargo check --locked --workspace --all-targets --all-features
       - run: cargo check --locked --workspace --all-targets --no-default-features
 
@@ -78,7 +78,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@85c23e28f7ccc75a9a153d45d385d94a85464876
         with:
           toolchain: stable
-      - uses: Swatinem/rust-cache@49a0bdc70d2e1b713ca9e2869b211fcce03d3c1c # v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
       - run: cargo test --locked --workspace --lib --no-default-features
 
   package:
@@ -94,7 +94,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@85c23e28f7ccc75a9a153d45d385d94a85464876
         with:
           toolchain: stable
-      - uses: Swatinem/rust-cache@49a0bdc70d2e1b713ca9e2869b211fcce03d3c1c # v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
       - name: Test the minimal feature set
         run: cargo test --locked --workspace --all-targets --no-default-features
       - name: Check publishable package contents
@@ -109,7 +109,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: EmbarkStudios/cargo-deny-action@c3bbe7e4e3f7baeee1a3dd9aec0a3b2aded580fb # v2.1.1
+      - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
         with:
           rust-version: "1.85"
           command: check
