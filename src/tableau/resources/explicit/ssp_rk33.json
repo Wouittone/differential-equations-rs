@@ -1,0 +1,19 @@
+{
+  "$schema"     : "../schema.json",
+  "name"        : "SspRk33",
+  "description" : "The fixed-step three-stage, third-order SSP Runge-Kutta method.",
+  "kind"        : "explicit-runge-kutta",
+  "order"       : 3,
+  "A"           : [
+    ["0", "0", "0"],
+    ["1.0", "0", "0"],
+    ["0.25", "0.25", "0"]
+  ],
+  "b"           : ["1.0 / 6.0", "1.0 / 6.0", "2.0 / 3.0"],
+  "c"           : ["0.0", "1.0", "0.5"],
+  "dense"       : [
+    ["1.0", "-5.0 / 6.0"],
+    ["0.0", "1.0 / 6.0"],
+    ["0.0", "2.0 / 3.0"]
+  ]
+}

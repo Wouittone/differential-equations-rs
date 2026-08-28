@@ -61,11 +61,11 @@
 //! # Further reading
 //!
 //! The packaged repository documentation includes the solver-selection and
-//! migration guide in the README, the [feature coverage guide], and the
-//! [compile-time tableau resource guide]. Contributors can use the
+//! scope guide in the [README] and the [compile-time tableau resource guide].
+//! Contributors can use the
 //! [performance regression guide] to compare stable benchmark IDs locally.
 //!
-//! [feature coverage guide]: https://github.com/Wouittone/differential-equations-rs/blob/main/docs/FEATURE_COVERAGE.md
+//! [README]: https://github.com/Wouittone/differential-equations-rs/blob/main/README.md
 //! [compile-time tableau resource guide]: https://github.com/Wouittone/differential-equations-rs/blob/main/docs/TABLEAU_RESOURCES.md
 //! [performance regression guide]: https://github.com/Wouittone/differential-equations-rs/blob/main/docs/BENCHMARKING.md
 

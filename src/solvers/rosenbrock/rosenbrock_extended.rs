@@ -21,11 +21,11 @@ use crate::solution::{
 use crate::{OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions, SolverStats};
 
 mod coefficient_data {
-    use differential_equations_tableau_macros::define_coefficients_from_file;
+    use differential_equations_tableau_macros::define_tableau_data_from_file;
 
-    define_coefficients_from_file!(
+    define_tableau_data_from_file!(
         pub(super),
-        "coefficients/rosenbrock/extended.toml",
+        "src/tableau/resources/methods/rosenbrock/extended.json",
         crate = crate
     );
 }

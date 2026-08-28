@@ -166,17 +166,20 @@ macro_rules! fixed_ssprk {
 
 crate::define_explicit_rk_from_file!(
     pub SspRk432,
-    "tableaux/explicit/ssp_rk432.json",
+    "src/tableau/resources/explicit/ssp_rk432.json",
     crate = crate
 );
 crate::define_explicit_rk_from_file!(
     pub SspRk932,
-    "tableaux/explicit/ssp_rk932.json",
+    "src/tableau/resources/explicit/ssp_rk932.json",
     crate = crate
 );
 
-fixed_ssprk!(SspRk53, "tableaux/explicit/ssp_rk53.json");
-fixed_ssprk!(SspRk53TwoN1, "tableaux/explicit/ssp_rk53_two_n1.json");
+fixed_ssprk!(SspRk53, "src/tableau/resources/explicit/ssp_rk53.json");
+fixed_ssprk!(
+    SspRk53TwoN1,
+    "src/tableau/resources/explicit/ssp_rk53_two_n1.json"
+);
 
 /// Parametric relaxation SSPRK22. The default `kappa = 0` is the standard
 /// fixed-step two-stage SSPRK22 method; nonzero values apply the pinned
@@ -1088,13 +1091,16 @@ impl OdeAlgorithm for Prrk54 {
     }
 }
 
-fixed_ssprk!(SspRk53TwoN2, "tableaux/explicit/ssp_rk53_two_n2.json");
-fixed_ssprk!(SspRk53H, "tableaux/explicit/ssp_rk53_h.json");
-fixed_ssprk!(SspRk63, "tableaux/explicit/ssp_rk63.json");
-fixed_ssprk!(SspRk73, "tableaux/explicit/ssp_rk73.json");
-fixed_ssprk!(SspRk83, "tableaux/explicit/ssp_rk83.json");
-fixed_ssprk!(SspRk54, "tableaux/explicit/ssp_rk54.json");
-fixed_ssprk!(SspRk104, "tableaux/explicit/ssp_rk104.json");
+fixed_ssprk!(
+    SspRk53TwoN2,
+    "src/tableau/resources/explicit/ssp_rk53_two_n2.json"
+);
+fixed_ssprk!(SspRk53H, "src/tableau/resources/explicit/ssp_rk53_h.json");
+fixed_ssprk!(SspRk63, "src/tableau/resources/explicit/ssp_rk63.json");
+fixed_ssprk!(SspRk73, "src/tableau/resources/explicit/ssp_rk73.json");
+fixed_ssprk!(SspRk83, "src/tableau/resources/explicit/ssp_rk83.json");
+fixed_ssprk!(SspRk54, "src/tableau/resources/explicit/ssp_rk54.json");
+fixed_ssprk!(SspRk104, "src/tableau/resources/explicit/ssp_rk104.json");
 
 #[cfg(test)]
 mod tests {

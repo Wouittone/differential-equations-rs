@@ -8,7 +8,7 @@ use differential_equations_tableau_macros::define_explicit_rk_tableau_from_file;
 define_explicit_rk_tableau_from_file!(
     pub(super) FRK65_TABLEAU,
     "Frk65",
-    "tableaux/explicit/frk65.json",
+    "src/tableau/resources/explicit/frk65.json",
     crate = crate
 );
 

@@ -1,6 +1,2 @@
-.worktrees/
-.argyph/
 target/
-benchmarks/output/
-benchmarks/results/
 **/.venv/

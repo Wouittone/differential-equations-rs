@@ -153,33 +153,33 @@ where
     }
 }
 
-crate::define_explicit_rk_from_file!(pub Rkm, "tableaux/explicit/rkm.json", crate = crate);
-crate::define_explicit_rk_from_file!(pub Rko65, "tableaux/explicit/rko65.json", crate = crate);
-crate::define_explicit_rk_from_file!(pub Msrk5, "tableaux/explicit/msrk5.json", crate = crate);
-crate::define_explicit_rk_from_file!(pub Msrk6, "tableaux/explicit/msrk6.json", crate = crate);
-crate::define_explicit_rk_from_file!(pub Stepanov5, "tableaux/explicit/stepanov5.json", crate = crate);
-crate::define_explicit_rk_from_file!(pub Sir54, "tableaux/explicit/sir54.json", crate = crate);
-crate::define_explicit_rk_from_file!(pub Ralston4, "tableaux/explicit/ralston4.json", crate = crate);
-crate::define_explicit_rk_from_file!(pub Alshina3, "tableaux/explicit/alshina3.json", crate = crate);
-crate::define_explicit_rk_from_file!(pub Alshina6, "tableaux/explicit/alshina6.json", crate = crate);
-crate::define_explicit_rk_from_file!(pub Bs3, "tableaux/explicit/bs3.json", crate = crate);
-crate::define_explicit_rk_from_file!(pub Dp5, "tableaux/explicit/dp5.json", crate = crate);
-crate::define_explicit_rk_from_file!(pub OwrenZen3, "tableaux/explicit/owren_zen3.json", crate = crate);
-crate::define_explicit_rk_from_file!(pub OwrenZen4, "tableaux/explicit/owren_zen4.json", crate = crate);
-crate::define_explicit_rk_from_file!(pub OwrenZen5, "tableaux/explicit/owren_zen5.json", crate = crate);
-crate::define_explicit_rk_from_file!(pub Bs5, "tableaux/explicit/bs5.json", crate = crate);
-crate::define_explicit_rk_from_file!(pub SspRk22, "tableaux/explicit/ssp_rk22.json", crate = crate);
-crate::define_explicit_rk_from_file!(pub SspRk33, "tableaux/explicit/ssp_rk33.json", crate = crate);
-crate::define_explicit_rk_from_file!(pub SspRk43, "tableaux/explicit/ssp_rk43.json", crate = crate);
-crate::define_explicit_rk_from_file!(pub Psrk3p5q4, "tableaux/explicit/psrk3p5q4.json", crate = crate);
-crate::define_explicit_rk_from_file!(pub Psrk3p6q5, "tableaux/explicit/psrk3p6q5.json", crate = crate);
-crate::define_explicit_rk_from_file!(pub Psrk4p7q6, "tableaux/explicit/psrk4p7q6.json", crate = crate);
-crate::define_explicit_rk_from_file!(pub Euler, "tableaux/explicit/euler.json", crate = crate);
-crate::define_explicit_rk_from_file!(pub Midpoint, "tableaux/explicit/midpoint.json", crate = crate);
-crate::define_explicit_rk_from_file!(pub Heun, "tableaux/explicit/heun.json", crate = crate);
-crate::define_explicit_rk_from_file!(pub Ralston, "tableaux/explicit/ralston.json", crate = crate);
-crate::define_explicit_rk_from_file!(pub Rk4, "tableaux/explicit/rk4.json", crate = crate);
-crate::define_explicit_rk_from_file!(pub Alshina2, "tableaux/explicit/alshina2.json", crate = crate);
+crate::define_explicit_rk_from_file!(pub Rkm, "src/tableau/resources/explicit/rkm.json", crate = crate);
+crate::define_explicit_rk_from_file!(pub Rko65, "src/tableau/resources/explicit/rko65.json", crate = crate);
+crate::define_explicit_rk_from_file!(pub Msrk5, "src/tableau/resources/explicit/msrk5.json", crate = crate);
+crate::define_explicit_rk_from_file!(pub Msrk6, "src/tableau/resources/explicit/msrk6.json", crate = crate);
+crate::define_explicit_rk_from_file!(pub Stepanov5, "src/tableau/resources/explicit/stepanov5.json", crate = crate);
+crate::define_explicit_rk_from_file!(pub Sir54, "src/tableau/resources/explicit/sir54.json", crate = crate);
+crate::define_explicit_rk_from_file!(pub Ralston4, "src/tableau/resources/explicit/ralston4.json", crate = crate);
+crate::define_explicit_rk_from_file!(pub Alshina3, "src/tableau/resources/explicit/alshina3.json", crate = crate);
+crate::define_explicit_rk_from_file!(pub Alshina6, "src/tableau/resources/explicit/alshina6.json", crate = crate);
+crate::define_explicit_rk_from_file!(pub Bs3, "src/tableau/resources/explicit/bs3.json", crate = crate);
+crate::define_explicit_rk_from_file!(pub Dp5, "src/tableau/resources/explicit/dp5.json", crate = crate);
+crate::define_explicit_rk_from_file!(pub OwrenZen3, "src/tableau/resources/explicit/owren_zen3.json", crate = crate);
+crate::define_explicit_rk_from_file!(pub OwrenZen4, "src/tableau/resources/explicit/owren_zen4.json", crate = crate);
+crate::define_explicit_rk_from_file!(pub OwrenZen5, "src/tableau/resources/explicit/owren_zen5.json", crate = crate);
+crate::define_explicit_rk_from_file!(pub Bs5, "src/tableau/resources/explicit/bs5.json", crate = crate);
+crate::define_explicit_rk_from_file!(pub SspRk22, "src/tableau/resources/explicit/ssp_rk22.json", crate = crate);
+crate::define_explicit_rk_from_file!(pub SspRk33, "src/tableau/resources/explicit/ssp_rk33.json", crate = crate);
+crate::define_explicit_rk_from_file!(pub SspRk43, "src/tableau/resources/explicit/ssp_rk43.json", crate = crate);
+crate::define_explicit_rk_from_file!(pub Psrk3p5q4, "src/tableau/resources/explicit/psrk3p5q4.json", crate = crate);
+crate::define_explicit_rk_from_file!(pub Psrk3p6q5, "src/tableau/resources/explicit/psrk3p6q5.json", crate = crate);
+crate::define_explicit_rk_from_file!(pub Psrk4p7q6, "src/tableau/resources/explicit/psrk4p7q6.json", crate = crate);
+crate::define_explicit_rk_from_file!(pub Euler, "src/tableau/resources/explicit/euler.json", crate = crate);
+crate::define_explicit_rk_from_file!(pub Midpoint, "src/tableau/resources/explicit/midpoint.json", crate = crate);
+crate::define_explicit_rk_from_file!(pub Heun, "src/tableau/resources/explicit/heun.json", crate = crate);
+crate::define_explicit_rk_from_file!(pub Ralston, "src/tableau/resources/explicit/ralston.json", crate = crate);
+crate::define_explicit_rk_from_file!(pub Rk4, "src/tableau/resources/explicit/rk4.json", crate = crate);
+crate::define_explicit_rk_from_file!(pub Alshina2, "src/tableau/resources/explicit/alshina2.json", crate = crate);
 
 struct Workspace {
     // Flat stage-major storage: every stage is one contiguous component array.

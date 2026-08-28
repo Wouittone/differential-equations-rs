@@ -7,11 +7,11 @@ pub mod irkc;
 mod coefficient_data {
     #![allow(clippy::excessive_precision)]
 
-    use differential_equations_tableau_macros::define_coefficients_from_file;
+    use differential_equations_tableau_macros::define_tableau_data_from_file;
 
-    define_coefficients_from_file!(
+    define_tableau_data_from_file!(
         pub(super),
-        "coefficients/stabilized/methods.toml",
+        "src/tableau/resources/methods/stabilized/methods.json",
         crate = crate
     );
 }

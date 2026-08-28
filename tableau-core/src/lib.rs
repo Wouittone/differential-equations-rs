@@ -612,10 +612,7 @@ mod tests {
 
     #[test]
     fn schema_reference_is_ignored() {
-        let source = RESOURCE.replace(
-            "{\n",
-            "{\n      \"$schema\": \"../../docs/tableau.schema.json\",\n",
-        );
+        let source = RESOURCE.replace("{\n", "{\n      \"$schema\": \"../schema.json\",\n");
         assert!(parse_tableau(&source, "Heun").is_ok());
     }
 

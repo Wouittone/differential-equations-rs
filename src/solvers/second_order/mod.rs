@@ -7,17 +7,17 @@ pub mod symplectic;
 mod coefficient_data {
     #![allow(clippy::excessive_precision)]
 
-    use differential_equations_tableau_macros::define_coefficients_from_file;
+    use differential_equations_tableau_macros::define_tableau_data_from_file;
 
-    define_coefficients_from_file!(pub(super), "coefficients/second_order/irkn.toml", crate = crate);
-    define_coefficients_from_file!(
+    define_tableau_data_from_file!(pub(super), "src/tableau/resources/methods/second_order/irkn.json", crate = crate);
+    define_tableau_data_from_file!(
         pub(super),
-        "coefficients/second_order/adaptive_rkn.toml",
+        "src/tableau/resources/methods/second_order/adaptive_rkn.json",
         crate = crate
     );
-    define_coefficients_from_file!(
+    define_tableau_data_from_file!(
         pub(super),
-        "coefficients/second_order/general.toml",
+        "src/tableau/resources/methods/second_order/general.json",
         crate = crate
     );
 }

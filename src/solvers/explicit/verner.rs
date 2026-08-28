@@ -6,10 +6,10 @@
 //! stages for the method-specific dense interpolants are evaluated lazily only
 //! when continuous output is requested.
 
-crate::define_explicit_rk_from_file!(pub Vern6, "tableaux/explicit/vern6.json", crate = crate);
-crate::define_explicit_rk_from_file!(pub Vern7, "tableaux/explicit/vern7.json", crate = crate);
-crate::define_explicit_rk_from_file!(pub Vern8, "tableaux/explicit/vern8.json", crate = crate);
-crate::define_explicit_rk_from_file!(pub Vern9, "tableaux/explicit/vern9.json", crate = crate);
+crate::define_explicit_rk_from_file!(pub Vern6, "src/tableau/resources/explicit/vern6.json", crate = crate);
+crate::define_explicit_rk_from_file!(pub Vern7, "src/tableau/resources/explicit/vern7.json", crate = crate);
+crate::define_explicit_rk_from_file!(pub Vern8, "src/tableau/resources/explicit/vern8.json", crate = crate);
+crate::define_explicit_rk_from_file!(pub Vern9, "src/tableau/resources/explicit/vern9.json", crate = crate);
 
 #[cfg(test)]
 mod tests {

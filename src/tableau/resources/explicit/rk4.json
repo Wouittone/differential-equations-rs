@@ -1,0 +1,15 @@
+{
+  "$schema"     : "../schema.json",
+  "name"        : "Rk4",
+  "description" : "The fixed-step classical fourth-order Runge--Kutta method.",
+  "kind"        : "explicit-runge-kutta",
+  "order"       : 4,
+  "A"           : [
+    ["0", "0", "0", "0"],
+    ["1/2", "0", "0", "0"],
+    ["0", "1/2", "0", "0"],
+    ["0", "0", "1", "0"]
+  ],
+  "b"           : ["1/6", "1/3", "1/3", "1/6"],
+  "c"           : ["0", "1/2", "1/2", "1"]
+}

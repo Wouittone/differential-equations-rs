@@ -7,7 +7,7 @@ use differential_equations_tableau_macros::define_implicit_rk_tableau_from_file;
 define_implicit_rk_tableau_from_file!(
     pub(super) PDIRK44_TABLEAU,
     "Pdirk44",
-    "tableaux/implicit/pdirk44.json",
+    "src/tableau/resources/implicit/pdirk44.json",
     crate = crate
 );
 
