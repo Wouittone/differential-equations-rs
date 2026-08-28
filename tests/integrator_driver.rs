@@ -6,6 +6,9 @@ use differential_equations::solvers::{explicit::*, implicit::*};
 use differential_equations::*;
 use stats_alloc::{INSTRUMENTED_SYSTEM, Region, StatsAlloc};
 
+#[path = "support/allocation.rs"]
+mod allocation_support;
+
 #[global_allocator]
 static GLOBAL: &StatsAlloc<System> = &INSTRUMENTED_SYSTEM;
 
@@ -73,20 +76,13 @@ fn adaptive_trbdf2_allocations_for(maximum_step: f64) -> usize {
     region.change().allocations
 }
 
-fn minimum_allocations(mut measure: impl FnMut() -> usize) -> usize {
-    (0..3)
-        .map(|_| measure())
-        .min()
-        .expect("the allocation sample count is non-zero")
-}
-
 #[test]
 fn callback_free_fixed_steps_do_not_allocate_per_step() {
     // `StatsAlloc` observes the entire process, including occasional test-harness
     // allocations from other threads. Taking the minimum of repeated samples
     // removes that bounded noise without hiding per-step allocation growth.
-    let hundred_steps = minimum_allocations(|| allocations_for(0.01));
-    let thousand_steps = minimum_allocations(|| allocations_for(0.001));
+    let hundred_steps = allocation_support::minimum_measurement(|| allocations_for(0.01));
+    let thousand_steps = allocation_support::minimum_measurement(|| allocations_for(0.001));
 
     assert!(
         thousand_steps <= hundred_steps,
@@ -97,8 +93,10 @@ fn callback_free_fixed_steps_do_not_allocate_per_step() {
         "unexpected fixed solve allocation count: {hundred_steps}"
     );
 
-    let hundred_implicit_steps = minimum_allocations(|| fixed_implicit_allocations_for(0.01));
-    let thousand_implicit_steps = minimum_allocations(|| fixed_implicit_allocations_for(0.001));
+    let hundred_implicit_steps =
+        allocation_support::minimum_measurement(|| fixed_implicit_allocations_for(0.01));
+    let thousand_implicit_steps =
+        allocation_support::minimum_measurement(|| fixed_implicit_allocations_for(0.001));
 
     assert!(
         thousand_implicit_steps <= hundred_implicit_steps,
@@ -109,8 +107,10 @@ fn callback_free_fixed_steps_do_not_allocate_per_step() {
         "unexpected fixed implicit solve allocation count: {hundred_implicit_steps}"
     );
 
-    let hundred_trbdf2_steps = minimum_allocations(|| adaptive_trbdf2_allocations_for(0.01));
-    let many_trbdf2_steps = minimum_allocations(|| adaptive_trbdf2_allocations_for(0.001));
+    let hundred_trbdf2_steps =
+        allocation_support::minimum_measurement(|| adaptive_trbdf2_allocations_for(0.01));
+    let many_trbdf2_steps =
+        allocation_support::minimum_measurement(|| adaptive_trbdf2_allocations_for(0.001));
 
     assert!(
         many_trbdf2_steps <= hundred_trbdf2_steps,

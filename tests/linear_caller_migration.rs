@@ -6,6 +6,9 @@ use differential_equations::solvers::implicit::*;
 use differential_equations::*;
 use stats_alloc::{INSTRUMENTED_SYSTEM, Region, StatsAlloc};
 
+#[path = "support/allocation.rs"]
+mod allocation_support;
+
 #[global_allocator]
 static GLOBAL: &StatsAlloc<System> = &INSTRUMENTED_SYSTEM;
 static TEST_LOCK: Mutex<()> = Mutex::new(());
@@ -47,10 +50,12 @@ fn implicit_methods_retain_compliance_endpoints() {
 }
 
 fn allocations_for<A: OdeAlgorithm + Copy>(algorithm: A, step: f64) -> usize {
-    let region = Region::new(GLOBAL);
-    let solution = solve(&problem(), algorithm, &options(step)).unwrap();
-    black_box(solution.last_state());
-    region.change().allocations
+    allocation_support::minimum_measurement(|| {
+        let region = Region::new(GLOBAL);
+        let solution = solve(&problem(), algorithm, &options(step)).unwrap();
+        black_box(solution.last_state());
+        region.change().allocations
+    })
 }
 
 #[test]
