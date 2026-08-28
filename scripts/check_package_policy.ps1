@@ -271,12 +271,7 @@ try {
     foreach ($required in @(
         "LICENSE-APACHE",
         "LICENSE-MIT",
-        "THIRD_PARTY_NOTICES.md",
         "README.md",
-        "CHANGELOG.md",
-        "CONTRIBUTING.md",
-        "SECURITY.md",
-        "SUPPLY_CHAIN.md",
         "docs/ALGORITHM_COVERAGE.md",
         "docs/BENCHMARKING.md",
         "docs/FEATURE_COVERAGE.md",

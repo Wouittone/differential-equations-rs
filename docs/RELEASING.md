@@ -16,11 +16,11 @@ below passes. A release is not ready while the lock remains.
 1. Confirm the working tree is clean and CI is green on the intended commit.
 2. Choose the version and update it in both package manifests and in the exact
    proc-macro dependency requirement.
-3. Move the relevant `CHANGELOG.md` entries from Unreleased into a dated
-   version section, update comparison links, and document every breaking path.
+3. Prepare tagged-release notes covering user-visible changes, migration
+   guidance, and every breaking path.
 4. For 1.0, remove prerelease/beta wording from the manifests, crate-level
-   documentation, README, changelog, and security policy. Confirm GitHub
-   private vulnerability reporting is enabled.
+   documentation, README, and release notes. Confirm GitHub private
+   vulnerability reporting is enabled.
 5. Verify latest stable Rust, the MSRV, both feature modes, Linux/Windows/macOS
    CI, doctests, missing public documentation, docs.rs warnings, license files,
    notices, `cargo-deny`, and the extracted-package build.

@@ -105,8 +105,8 @@ follows:
 
 Family-level solver facades such as `solvers::explicit::Tsit5` are preferred
 for ordinary use. Implementation-module paths are public for users who need a
-specific kernel or extension type. The exact changes for the pending release
-are also recorded in the [changelog](CHANGELOG.md).
+specific kernel or extension type. Breaking changes and migration notes are
+recorded in the release notes for each tagged version.
 
 ## Goals
 
@@ -333,9 +333,6 @@ as part of the reviewed release process.
 - [Performance regression benchmarks](docs/BENCHMARKING.md)
 - [Compile-time tableau resources](docs/TABLEAU_RESOURCES.md)
 - [Pinned upstream scope](docs/UPSTREAM_SCOPE.md)
-- [Changelog and migration notes](CHANGELOG.md)
-- [Contributing guide](CONTRIBUTING.md)
-- [Security policy](SECURITY.md)
 - [Release process](docs/RELEASING.md)
 
 ## License
@@ -343,9 +340,12 @@ as part of the reviewed release process.
 Licensed under either the [Apache License, Version 2.0](LICENSE-APACHE) or the
 [MIT License](LICENSE-MIT), at your option.
 
-Portions are derived from MIT-licensed SciML/OrdinaryDiffEq.jl. Its retained
-copyright and permission notice are in
-[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+Portions are derived from MIT-licensed
+[SciML/OrdinaryDiffEq.jl](https://github.com/SciML/OrdinaryDiffEq.jl) at
+revision `211142263781255a9aa2f910f6760b9f18ec29c8`. Copyright (c) 2016-2020
+Chris Rackauckas, Yingbo Ma, Julia Computing Inc, and other contributors. The
+upstream work is distributed under the permission terms in
+[LICENSE-MIT](LICENSE-MIT).
 
 Unless explicitly stated otherwise, contributions intentionally submitted for
 inclusion in this project are licensed under the same dual-license terms.

@@ -16,10 +16,6 @@ include = [
     "/coefficients/**/*.toml",
     "/tableaux/**/*.json",
     "/README.md",
-    "/CHANGELOG.md",
-    "/CONTRIBUTING.md",
-    "/SECURITY.md",
-    "/SUPPLY_CHAIN.md",
     "/docs/*.md",
     "/docs/tableau.schema.json",
     "/benches/solver_performance.rs",
@@ -28,7 +24,6 @@ include = [
     "/examples/resources/file_heun.json",
     "/LICENSE-APACHE",
     "/LICENSE-MIT",
-    "/THIRD_PARTY_NOTICES.md",
 ]
 publish = false
 
