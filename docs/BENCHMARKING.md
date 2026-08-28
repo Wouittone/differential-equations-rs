@@ -1,35 +1,41 @@
-# Performance regression benchmarks
+# Benchmarks
 
-The `solver_performance` suite tracks representative hot paths with stable
-benchmark IDs:
+All benchmark sources live under `benches/`.
 
-- adaptive Tsit5 on the Lorenz system;
-- Rodas5P on a stiff tracking problem with an analytic Jacobian;
-- retained Tsit5 dense-output queries; and
-- the same 64-case ensemble executed sequentially and with Rayon.
+## Regression suite
 
-Problem definitions, solver options, dense-query grids, and Rayon's one-time
-thread-pool initialization are prepared outside timed iterations. Per-case
-problem construction remains timed for ensemble benchmarks because it is part
-of the public ensemble API's execution contract.
-
-Run the Criterion-compatible suite locally with:
+`solver_performance` tracks representative explicit, stiff, dense-output, and
+sequential/parallel ensemble paths with stable Criterion-compatible IDs:
 
 ```console
-cargo bench --bench solver_performance
+cargo bench --locked --bench solver_performance
 ```
 
-To compare a branch against a local baseline:
+CI builds this target with `cargo codspeed build` and uploads measurements on
+trusted branches and pull requests. Dependabot pull requests still build the
+target, but skip upload because GitHub does not grant them an OIDC token.
+
+To compare a local branch against a saved baseline:
 
 ```console
-git switch main
 cargo bench --bench solver_performance -- --save-baseline main
-git switch -
 cargo bench --bench solver_performance -- --baseline main
 ```
 
-CI builds the same target with `cargo codspeed build` and runs it through
-CodSpeed's deterministic simulation mode. `workflow_dispatch` is enabled so a
-maintainer can populate or rebuild the baseline. Benchmark IDs should only be
-renamed deliberately because CodSpeed uses them to associate historical
-measurements.
+## Matched Rust/Julia matrix
+
+The matched 31-algorithm sources are in `benches/comparison`. Run timing and
+allocation measurements separately so allocation instrumentation cannot skew
+the timing lane:
+
+```console
+cargo bench --locked --bench comparison_matrix -- --repetitions 20
+cargo bench --locked --features allocation-metrics --bench comparison_matrix -- --repetitions 20
+julia --startup-file=no --project=tests/julia benches/comparison/julia_matrix.jl --repetitions 20 --mode timing
+julia --startup-file=no --project=tests/julia benches/comparison/julia_matrix.jl --repetitions 20 --mode allocation
+```
+
+Each command writes CSV to standard output. Compare rows with matching
+algorithm names, dimensions, tolerances, and solver modes. Benchmark results
+are machine- and revision-specific artifacts and are deliberately not checked
+into the repository.

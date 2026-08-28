@@ -9,7 +9,7 @@
 
 crate::define_explicit_rk_from_file!(
     pub Kyk2014DgSsprk3S2,
-    "tableaux/explicit/kyk2014_dg_ssprk3_s2.json",
+    "src/tableau/resources/explicit/kyk2014_dg_ssprk3_s2.json",
     crate = crate
 );
 

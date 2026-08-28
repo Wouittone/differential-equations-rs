@@ -1,0 +1,15 @@
+{
+  "$schema"        : "../schema.json",
+  "name"           : "Sdirk2",
+  "description"    : "Pinned adaptive second-order two-stage SDIRK/ESDIRK tableau.",
+  "kind"           : "implicit-runge-kutta",
+  "order"          : 2,
+  "embedded_order" : 1,
+  "A"              : [
+    [1, 0],
+    [-1, 1]
+  ],
+  "b"              : ["1/2", "1/2"],
+  "c"              : [1, 0],
+  "error"          : ["1/2", "-1/2"]
+}

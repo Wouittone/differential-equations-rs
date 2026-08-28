@@ -10,11 +10,11 @@ use crate::integrator::{
 use crate::{OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions, SolverStats};
 
 mod coefficient_data {
-    use differential_equations_tableau_macros::define_coefficients_from_file;
+    use differential_equations_tableau_macros::define_tableau_data_from_file;
 
-    define_coefficients_from_file!(
+    define_tableau_data_from_file!(
         pub(super),
-        "coefficients/explicit/low_storage.toml",
+        "src/tableau/resources/methods/explicit/low_storage.json",
         crate = crate
     );
 }

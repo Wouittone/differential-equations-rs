@@ -5,14 +5,14 @@
 //! RK kernel; method-specific dense interpolation stages are not required for
 //! the endpoint solver surface implemented here.
 
-crate::define_explicit_rk_from_file!(pub TanYam7, "tableaux/explicit/tan_yam7.json", crate = crate);
-crate::define_explicit_rk_from_file!(pub TsitPap8, "tableaux/explicit/tsit_pap8.json", crate = crate);
-crate::define_explicit_rk_from_file!(pub DP8, "tableaux/explicit/dp8.json", crate = crate);
-crate::define_explicit_rk_from_file!(pub PFRK87, "tableaux/explicit/pfrk87.json", crate = crate);
-crate::define_explicit_rk_from_file!(pub Feagin10, "tableaux/explicit/feagin10.json", crate = crate);
-crate::define_explicit_rk_from_file!(pub Feagin12, "tableaux/explicit/feagin12.json", crate = crate);
-crate::define_explicit_rk_from_file!(pub Feagin14, "tableaux/explicit/feagin14.json", crate = crate);
-crate::define_explicit_rk_from_file!(pub RKV76IIa, "tableaux/explicit/rkv76_iia.json", crate = crate);
+crate::define_explicit_rk_from_file!(pub TanYam7, "src/tableau/resources/explicit/tan_yam7.json", crate = crate);
+crate::define_explicit_rk_from_file!(pub TsitPap8, "src/tableau/resources/explicit/tsit_pap8.json", crate = crate);
+crate::define_explicit_rk_from_file!(pub DP8, "src/tableau/resources/explicit/dp8.json", crate = crate);
+crate::define_explicit_rk_from_file!(pub PFRK87, "src/tableau/resources/explicit/pfrk87.json", crate = crate);
+crate::define_explicit_rk_from_file!(pub Feagin10, "src/tableau/resources/explicit/feagin10.json", crate = crate);
+crate::define_explicit_rk_from_file!(pub Feagin12, "src/tableau/resources/explicit/feagin12.json", crate = crate);
+crate::define_explicit_rk_from_file!(pub Feagin14, "src/tableau/resources/explicit/feagin14.json", crate = crate);
+crate::define_explicit_rk_from_file!(pub RKV76IIa, "src/tableau/resources/explicit/rkv76_iia.json", crate = crate);
 
 #[cfg(test)]
 mod tests {

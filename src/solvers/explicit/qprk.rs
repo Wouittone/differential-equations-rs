@@ -6,7 +6,7 @@ use differential_equations_tableau_macros::define_explicit_rk_tableau_from_file;
 define_explicit_rk_tableau_from_file!(
     pub(super) QPRK98_TABLEAU,
     "QPRK98",
-    "tableaux/explicit/qprk98.json",
+    "src/tableau/resources/explicit/qprk98.json",
     crate = crate
 );
 

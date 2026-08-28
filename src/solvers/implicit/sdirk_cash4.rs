@@ -17,7 +17,7 @@ const MAX_NEWTON_ITERATIONS: usize = 12;
 const NEWTON_TOLERANCE: f64 = 1.0e-12;
 const CONTROLLER: ControllerConfig = ControllerConfig::proportional(4, 0.9, 0.2, 10.0, 0.2);
 
-define_implicit_rk_tableau_from_file!(pub(super) CASH4_TABLEAU, "Cash4", "tableaux/implicit/cash4.json", crate = crate);
+define_implicit_rk_tableau_from_file!(pub(super) CASH4_TABLEAU, "Cash4", "src/tableau/resources/implicit/cash4.json", crate = crate);
 
 /// The pinned fourth-order Cash SDIRK method.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]

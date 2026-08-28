@@ -10,7 +10,7 @@ use differential_equations_tableau_macros::define_explicit_rk_tableau_from_file;
 define_explicit_rk_tableau_from_file!(
     pub(super) KUTTA_PRK2P5_TABLEAU,
     "KuttaPRK2p5",
-    "tableaux/explicit/kutta_prk2p5.json",
+    "src/tableau/resources/explicit/kutta_prk2p5.json",
     crate = crate
 );
 

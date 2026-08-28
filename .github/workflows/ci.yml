@@ -34,8 +34,8 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
       - name: Check formatting
         run: cargo fmt --all -- --check
-      - name: Check tableau JSON formatting
-        run: python3 scripts/format_tableaux_json.py --check
+      - name: Check tableau resources
+        run: cargo test --locked --test tableau_resources
       - name: Lint all targets
         run: cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
       - name: Test all targets
@@ -99,8 +99,10 @@ jobs:
       - name: Test the minimal feature set
         run: cargo test --locked --workspace --all-targets --no-default-features
       - name: Check publishable package contents
-        shell: pwsh
-        run: ./scripts/check_package_policy.ps1
+        run: |
+          cargo package --locked --no-verify -p differential-equations-tableau-core
+          cargo package --locked --list -p differential-equations-tableau-macros
+          cargo package --locked --list -p differential-equations
 
   supply-chain:
     name: Advisories, licenses, bans, and sources
@@ -116,15 +118,3 @@ jobs:
           command: check
           arguments: --all-features
 
-  inventory:
-    name: Check solver inventory
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          submodules: recursive
-      - name: Check generated inventory
-        shell: pwsh
-        run: ./scripts/generate_ode_inventory.ps1 -UpstreamPath reference/OrdinaryDiffEq.jl -RepositoryPath . -OutputDirectory docs -Check

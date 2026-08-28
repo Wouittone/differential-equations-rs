@@ -13,11 +13,11 @@ keywords = ["ode", "differential-equations", "numerical", "simulation", "sciml"]
 categories = ["science", "mathematics", "algorithms", "simulation"]
 include = [
     "/src/**/*.rs",
-    "/coefficients/**/*.toml",
-    "/tableaux/**/*.json",
+    "/src/tableau/resources/**/*.json",
     "/README.md",
-    "/docs/*.md",
-    "/docs/tableau.schema.json",
+    "/docs/BENCHMARKING.md",
+    "/docs/RELEASING.md",
+    "/docs/TABLEAU_RESOURCES.md",
     "/benches/solver_performance.rs",
     "/examples/quickstart.rs",
     "/examples/tableau_from_file.rs",
@@ -45,11 +45,17 @@ thiserror = "2.0.20"
 [dev-dependencies]
 criterion = { package = "codspeed-criterion-compat", version = "5.0.0", default-features = false, features = ["cargo_bench_support"] }
 stats_alloc = "0.1.10"
+serde_json = "1.0"
 
 [[bench]]
 name = "solver_performance"
 harness = false
 required-features = ["parallel"]
+
+[[bench]]
+name = "comparison_matrix"
+path = "benches/comparison/rust_matrix.rs"
+harness = false
 
 [package.metadata.docs.rs]
 all-features = true

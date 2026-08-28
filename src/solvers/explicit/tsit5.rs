@@ -1,4 +1,4 @@
-crate::define_explicit_rk_from_file!(pub Tsit5, "tableaux/explicit/tsit5.json", crate = crate);
+crate::define_explicit_rk_from_file!(pub Tsit5, "src/tableau/resources/explicit/tsit5.json", crate = crate);
 
 #[cfg(test)]
 mod tests {

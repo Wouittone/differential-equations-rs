@@ -10,8 +10,8 @@
 //! The two-step TSRKC recurrences keep their accepted-step history inside the
 //! kernel. ROCK2, ROCK4, SERK2, ESERK4, and ESERK5 select their full
 //! degree-indexed coefficient banks from the compile-time resources in
-//! `coefficients/stabilized`. No degree subset or substitute recurrence is
-//! used.
+//! `src/tableau/resources/methods/stabilized`. No degree subset or substitute
+//! recurrence is used.
 
 use super::coefficient_data::{
     ESERK4_DEGREES, ESERK4_ERROR_COMBINATION, ESERK4_SOLUTION_COMBINATION, ESERK4_WEIGHTS,

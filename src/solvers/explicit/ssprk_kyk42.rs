@@ -7,7 +7,7 @@
 
 crate::define_explicit_rk_from_file!(
     pub KykSsprk42,
-    "tableaux/explicit/kyk_ssprk42.json",
+    "src/tableau/resources/explicit/kyk_ssprk42.json",
     crate = crate
 );
 

@@ -6,9 +6,9 @@ use crate::tableau::{RungeKuttaTableau, load_tableau};
 use crate::{OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions, SolverStats};
 use differential_equations_tableau_macros::define_implicit_rk_tableau_from_file;
 
-define_implicit_rk_tableau_from_file!(pub(super) IMPLICIT_EULER_TABLEAU, "ImplicitEuler", "tableaux/implicit/implicit_euler.json", crate = crate);
-define_implicit_rk_tableau_from_file!(pub(super) IMPLICIT_MIDPOINT_TABLEAU, "ImplicitMidpoint", "tableaux/implicit/implicit_midpoint.json", crate = crate);
-define_implicit_rk_tableau_from_file!(pub(super) TRAPEZOID_TABLEAU, "Trapezoid", "tableaux/implicit/trapezoid.json", crate = crate);
+define_implicit_rk_tableau_from_file!(pub(super) IMPLICIT_EULER_TABLEAU, "ImplicitEuler", "src/tableau/resources/implicit/implicit_euler.json", crate = crate);
+define_implicit_rk_tableau_from_file!(pub(super) IMPLICIT_MIDPOINT_TABLEAU, "ImplicitMidpoint", "src/tableau/resources/implicit/implicit_midpoint.json", crate = crate);
+define_implicit_rk_tableau_from_file!(pub(super) TRAPEZOID_TABLEAU, "Trapezoid", "src/tableau/resources/implicit/trapezoid.json", crate = crate);
 
 const MAX_NEWTON_ITERATIONS: usize = 12;
 const NEWTON_TOLERANCE: f64 = 1.0e-12;

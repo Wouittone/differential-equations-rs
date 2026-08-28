@@ -1,0 +1,15 @@
+{
+  "$schema"        : "../schema.json",
+  "name"           : "SspSdirk2",
+  "description"    : "Pinned implicit Runge--Kutta tableau for SspSdirk2.",
+  "kind"           : "implicit-runge-kutta",
+  "order"          : 2,
+  "embedded_order" : 1,
+  "A"              : [
+    ["0.25", "0.0"],
+    ["0.5", "0.25"]
+  ],
+  "b"              : ["0.5", "0.5"],
+  "c"              : ["1.0", "1.0"],
+  "error"          : ["0.0", "0.0"]
+}

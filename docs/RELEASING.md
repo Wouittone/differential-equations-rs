@@ -1,66 +1,45 @@
 # Release process
 
-The workspace contains two crates that share a version. The main crate pins
-`differential-equations-tableau-macros` exactly, so publication order is
-mandatory.
+The workspace contains three versioned crates: `tableau-core`,
+`tableau-macros`, and the main `differential-equations` crate. Internal
+dependencies use exact versions, so publication order is mandatory.
 
-## Intentional publication lock
-
-The main `Cargo.toml` currently contains `publish = false`. This is the final
-release lock: ordinary development and automated checks must leave it in place.
-Removing it requires an explicit, reviewed release change after every item
-below passes. A release is not ready while the lock remains.
+The main manifest currently contains `publish = false`. Removing that lock
+requires an explicit reviewed release change.
 
 ## Prepare
 
-1. Confirm the working tree is clean and CI is green on the intended commit.
-2. Choose the version and update it in both package manifests and in the exact
-   proc-macro dependency requirement.
-3. Prepare tagged-release notes covering user-visible changes, migration
-   guidance, and every breaking path.
-4. For 1.0, remove prerelease/beta wording from the manifests, crate-level
-   documentation, README, and release notes. Confirm GitHub private
-   vulnerability reporting is enabled.
-5. Verify latest stable Rust, the MSRV, both feature modes, Linux/Windows/macOS
-   CI, doctests, missing public documentation, docs.rs warnings, license files,
-   notices, `cargo-deny`, and the extracted-package build.
-6. Run the full Rust suite, pinned Julia compliance suite, and the agreed
-   benchmark comparison for a release that changes numerical kernels. Build
-   the lightweight regression target with
-   `cargo bench --locked --bench solver_performance --no-run` for every release.
-7. Run `cargo semver-checks` against the previous published version once such
-   a baseline exists. Review every allowed break explicitly.
+1. Update all three package versions and their exact internal dependency
+   requirements.
+2. Confirm the working tree is clean and the full CI matrix is green.
+3. Run the latest-stable and Rust 1.85 formatting, lint, test, documentation,
+   supply-chain, and package checks.
+4. Run Julia compliance and the matched comparison benchmarks when numerical
+   kernels change.
+5. Review user-visible and breaking changes. For 1.0, remove beta wording and
+   run `cargo semver-checks` against the latest published release.
 
-From a source checkout, the package gate is:
+The Cargo-native package gate used by CI is:
 
 ```console
-pwsh ./scripts/check_package_policy.ps1
+cargo package --locked --no-verify -p differential-equations-tableau-core
+cargo package --locked --list -p differential-equations-tableau-macros
+cargo package --locked --list -p differential-equations
 ```
 
-The policy script verifies the proc-macro archive, checks both curated file
-lists, and compiles an isolated copy of the root files selected by Cargo against
-the extracted proc-macro archive. Before the matching proc-macro version exists
-on crates.io, Cargo cannot assemble and verify the final root archive; that
-ordinary registry-backed verification must wait for the first publication
-step.
+The two dependent crates can only perform registry-backed archive verification
+after their exact internal versions have been published. Until then, their
+Cargo-selected file lists are the deterministic package-content gate.
 
 ## Publish
 
-1. In the reviewed release commit only, remove the main crate's
-   `publish = false` lock.
-2. Run `cargo publish --locked --dry-run -p differential-equations-tableau-macros`.
-3. Publish `differential-equations-tableau-macros` with `--locked`.
-4. Wait until the exact version is visible in the crates.io index.
-5. Run `cargo publish --locked --dry-run -p differential-equations` so verification
-   resolves the published macro crate rather than the workspace path.
-6. Publish `differential-equations` with `--locked`.
-7. Create a signed `v<version>` tag and GitHub release from the same commit,
-   using the changelog section as release notes.
-8. Confirm both crates render correctly on crates.io and docs.rs, and test a
-   fresh downstream project with default and no-default features.
+1. Publish `differential-equations-tableau-core` with `--locked`.
+2. Wait for that exact version to appear in the crates.io index, then publish
+   `differential-equations-tableau-macros`.
+3. Wait for the macro version, remove the main crate's publication lock in the
+   reviewed release commit, and run its registry-backed dry run.
+4. Publish the main crate, create a signed `v<version>` tag and GitHub release,
+   and verify crates.io, docs.rs, and fresh downstream default/no-default builds.
 
-If any publication or verification step fails, stop. Do not publish the main
-crate with a different macro version or weaken the exact dependency to bypass
-the release order. If a published archive is unusable or contains a security
-issue, stop further publication and yank the affected version; never reuse a
-published version number.
+Stop on any failure. Do not weaken exact internal versions or reuse a published
+version number.
