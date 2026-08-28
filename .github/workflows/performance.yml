@@ -41,7 +41,10 @@ jobs:
           tool: cargo-codspeed
       - name: Build benchmarks
         run: cargo codspeed build --locked --bench solver_performance
-      - name: Run benchmarks
+      # Dependabot pull requests receive a read-only token without OIDC access,
+      # so CodSpeed can build them but cannot authenticate an upload.
+      - name: Run and upload benchmarks
+        if: github.event_name != 'pull_request' || github.event.pull_request.user.login != 'dependabot[bot]'
         uses: CodSpeedHQ/action@4296e51e7041e24dadb86d1d6e8b9320d223dbe8 # v5.0.3
         with:
           mode: simulation

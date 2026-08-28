@@ -27,13 +27,22 @@ fn fixed_allocations_for<A: OdeAlgorithm>(algorithm: A, step: f64) -> usize {
     region.change().allocations
 }
 
+fn minimum_fixed_allocations_for<A: OdeAlgorithm + Copy>(algorithm: A, step: f64) -> usize {
+    (0..3)
+        .map(|_| fixed_allocations_for(algorithm, step))
+        .min()
+        .expect("the allocation sample count is non-zero")
+}
+
 fn assert_allocation_invariant<A: OdeAlgorithm + Copy>(algorithm: A) {
-    let one_step = fixed_allocations_for(algorithm, 1.0);
-    let thousand_steps = fixed_allocations_for(algorithm, 0.001);
+    // `StatsAlloc` is process-wide, so take the minimum of repeated samples to
+    // exclude bounded test-harness noise while retaining per-step regressions.
+    let one_step = minimum_fixed_allocations_for(algorithm, 1.0);
+    let thousand_steps = minimum_fixed_allocations_for(algorithm, 0.001);
 
     assert_eq!(
         thousand_steps, one_step,
-        "Rosenbrock allocations grew with the step count"
+        "Rosenbrock allocations grew with the step count: {one_step} -> {thousand_steps}"
     );
     assert!(
         one_step <= 25,
