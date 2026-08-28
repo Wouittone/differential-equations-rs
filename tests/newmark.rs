@@ -1,7 +1,7 @@
-use differential_equations::algorithms::second_order::structural::{GeneralizedAlpha, NewmarkBeta};
-use differential_equations::{
-    CallbackAction, SaveMode, SecondOrderOdeProblem, SolveOptions, solve_second_order,
+use differential_equations::solvers::second_order::{
+    GeneralizedAlpha, NewmarkBeta, SecondOrderOdeProblem, solve_second_order,
 };
+use differential_equations::{CallbackAction, SaveMode, SolveOptions};
 
 fn fixed_options(step: f64) -> SolveOptions {
     SolveOptions {

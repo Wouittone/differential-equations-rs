@@ -1,9 +1,9 @@
-use differential_equations::algorithms::extrapolation::{
+use differential_equations::solvers::extrapolation::{
     AitkenNeville, ExtrapolationMidpointDeuflhard, ExtrapolationMidpointHairerWanner,
     ImplicitDeuflhardExtrapolation, ImplicitEulerBarycentricExtrapolation,
     ImplicitEulerExtrapolation, ImplicitHairerWannerExtrapolation,
 };
-use differential_equations::algorithms::implicit::fully_implicit::{
+use differential_equations::solvers::implicit::firk::{
     AdaptiveRadau, GaussLegendre, RadauIIA3, RadauIIA5, RadauIIA9,
 };
 use differential_equations::{

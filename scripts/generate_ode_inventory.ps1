@@ -554,6 +554,9 @@ $excludedAlgorithms = @{
     DFBDF = 'DAE residual-form algorithm; DAE-only behavior is outside regular ODE scope.'
     DImplicitEuler = 'DAE residual-form algorithm; DAE-only behavior is outside regular ODE scope.'
     FunctionMap = 'Discrete dynamical-system map, not a continuous initial-value ODE solver.'
+    MER5v2 = 'SIMD-lane specialization removed: scalar-state kernels and LLVM autovectorization avoid imposing lane-shaped user inputs.'
+    MER6v2 = 'SIMD-lane specialization removed: scalar-state kernels and LLVM autovectorization avoid imposing lane-shaped user inputs.'
+    RK6v4 = 'SIMD-lane specialization removed: scalar-state kernels and LLVM autovectorization avoid imposing lane-shaped user inputs.'
 }
 
 # Exported helper namespaces and configuration types are audited here rather than

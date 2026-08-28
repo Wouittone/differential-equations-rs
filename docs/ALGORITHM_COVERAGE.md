@@ -12,12 +12,13 @@ ODE names as both implemented and Julia-tested, with **zero** included names
 missing a Rust implementation or matched compliance fixture. The complete
 per-name and per-family ledger is generated in
 [`ODE_PARITY_INVENTORY.md`](ODE_PARITY_INVENTORY.md), with JSON and CSV forms
-alongside it.
+maintained in the source repository. The generated machine-readable forms are
+excluded from the published crate archive to keep it lean.
 
 Coverage includes automatic/default composite facades and the generic
 user-tableau alias in addition to every included family in the pinned ledger:
 explicit, implicit, split/IMEX, multistep, exponential, linear/Lie,
-multirate, second-order, symplectic, stabilized, SIMD RK, Taylor, AMF, RKIP,
+multirate, second-order, symplectic, stabilized, Taylor, AMF, RKIP,
 IRKC, and structural methods. A representative **31-algorithm** slice appears in
 the matched benchmark matrix; the benchmark is not intended to cover every
 implemented method.

@@ -11,7 +11,6 @@
 // upstream decimal Shu--Osher coefficients.
 #![allow(clippy::excessive_precision)]
 
-use super::general::{ButcherTableau, ExplicitRungeKutta};
 use crate::SolverStats;
 use crate::callback::CallbackOutcome;
 use crate::integrator::{
@@ -19,18 +18,6 @@ use crate::integrator::{
 };
 use crate::solution::{BorrowedHermiteSegment, DenseSegment, HermiteSegment, TrajectoryRecorder};
 use crate::{OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions};
-
-mod coefficient_data {
-    use differential_equations_tableau_macros::define_coefficients_from_file;
-
-    define_coefficients_from_file!(
-        pub(super),
-        "coefficients/explicit/ssprk_extended.toml",
-        crate = crate
-    );
-}
-
-use coefficient_data::*;
 
 #[allow(clippy::too_many_arguments)]
 fn apply_hermite_callbacks<F, P>(
@@ -172,236 +159,31 @@ where
 }
 
 macro_rules! fixed_ssprk {
-    ($algorithm:ident, $tableau:ident, $order:expr, $nodes:ident, $rows:ident, $weights:ident) => {
-        #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-        pub struct $algorithm;
-
-        struct $tableau;
-
-        impl ButcherTableau for $tableau {
-            const NODES: &'static [f64] = $nodes;
-            const COEFFICIENTS: &'static [&'static [f64]] = $rows;
-            const WEIGHTS: &'static [f64] = $weights;
-            const ERROR_WEIGHTS: Option<&'static [f64]> = None;
-            const ORDER: usize = $order;
-            const FSAL: bool = false;
-        }
-
-        impl OdeAlgorithm for $algorithm {
-            fn solve<F, P>(
-                &self,
-                problem: &OdeProblem<F, P>,
-                options: &SolveOptions,
-            ) -> Result<Solution, SolveError>
-            where
-                F: Fn(&mut [f64], &[f64], &P, f64),
-            {
-                ExplicitRungeKutta::<$tableau>::new().solve(problem, options)
-            }
-        }
+    ($algorithm:ident, $path:literal) => {
+        crate::define_explicit_rk_from_file!(pub $algorithm, $path, crate = crate);
     };
 }
 
-/// Adaptive SSPRK432 uses the same four-stage, third-order main method as
-/// [`crate::algorithms::explicit::SspRk43`], but retains the full third/second-order embedded residual
-/// from OrdinaryDiffEqSSPRK's dedicated constructor.  The shared explicit
-/// kernel applies this tableau for both fixed and adaptive stepping.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct SspRk432;
-
-struct SspRk432Tableau;
-
-const SSPRK432_DENSE: &[&[f64]] = &[
-    SSPRK432_DENSE_1,
-    SSPRK432_DENSE_2,
-    SSPRK432_DENSE_3,
-    SSPRK432_DENSE_4,
-];
-
-impl ButcherTableau for SspRk432Tableau {
-    const NODES: &'static [f64] = &[0.0, 0.5, 1.0, 0.5];
-    const COEFFICIENTS: &'static [&'static [f64]] = &[
-        EMPTY,
-        &[0.5],
-        &[0.5, 0.5],
-        &[1.0 / 6.0, 1.0 / 6.0, 1.0 / 6.0],
-    ];
-    const WEIGHTS: &'static [f64] = &[1.0 / 6.0, 1.0 / 6.0, 1.0 / 6.0, 0.5];
-    // utilde = uprev + dt * (f₁ + f₂ + f₃) / 3, while the accepted state is
-    // uprev + dt * (f₁ + f₂ + f₃) / 6 + dt * f₄ / 2.  The sign is immaterial
-    // to the norm, but this is the conventional high-minus-low difference.
-    const ERROR_WEIGHTS: Option<&'static [f64]> = Some(&[-1.0 / 6.0, -1.0 / 6.0, -1.0 / 6.0, 0.5]);
-    const DENSE_COEFFICIENTS: Option<&'static [&'static [f64]]> = Some(SSPRK432_DENSE);
-    const ORDER: usize = 3;
-    const FSAL: bool = false;
-}
-
-impl OdeAlgorithm for SspRk432 {
-    fn solve<F, P>(
-        &self,
-        problem: &OdeProblem<F, P>,
-        options: &SolveOptions,
-    ) -> Result<Solution, SolveError>
-    where
-        F: Fn(&mut [f64], &[f64], &P, f64),
-    {
-        ExplicitRungeKutta::<SspRk432Tableau>::new().solve(problem, options)
-    }
-}
-
-/// Adaptive nine-stage, third-order SSPRK932.
-///
-/// This is the regular explicit SSPRK932 method from the pinned
-/// `OrdinaryDiffEqSSPRK` implementation.  Its Shu--Osher recurrence is
-/// expanded into an equivalent Butcher tableau so the shared explicit driver
-/// provides fixed/adaptive stepping, callbacks, backward integration, and
-/// `save_at` handling.  Stage and step limiter hooks from the Julia wrapper
-/// are intentionally outside this regular ODE facade.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct SspRk932;
-
-struct SspRk932Tableau;
-
-impl ButcherTableau for SspRk932Tableau {
-    // The first six stages are the six equal SSP substeps.  Stage 7 is the
-    // endpoint derivative used only by the adaptive embedded estimate. Stages
-    // 8--10 are the second SSP branch; the final state is stage 10 plus one
-    // further dt/6 derivative increment. The endpoint stage has zero primary
-    // weight, so fixed-step results retain the upstream main method.
-    const NODES: &'static [f64] = &[
-        0.0,
-        1.0 / 6.0,
-        1.0 / 3.0,
-        1.0 / 2.0,
-        2.0 / 3.0,
-        5.0 / 6.0,
-        1.0,
-        1.0 / 2.0,
-        2.0 / 3.0,
-        5.0 / 6.0,
-    ];
-    const COEFFICIENTS: &'static [&'static [f64]] = &[
-        EMPTY,
-        &[1.0 / 6.0],
-        &[1.0 / 6.0, 1.0 / 6.0],
-        &[1.0 / 6.0, 1.0 / 6.0, 1.0 / 6.0],
-        &[1.0 / 6.0, 1.0 / 6.0, 1.0 / 6.0, 1.0 / 6.0],
-        &[1.0 / 6.0, 1.0 / 6.0, 1.0 / 6.0, 1.0 / 6.0, 1.0 / 6.0],
-        &[
-            1.0 / 6.0,
-            1.0 / 6.0,
-            1.0 / 6.0,
-            1.0 / 6.0,
-            1.0 / 6.0,
-            1.0 / 6.0,
-        ],
-        &[
-            1.0 / 6.0,
-            1.0 / 15.0,
-            1.0 / 15.0,
-            1.0 / 15.0,
-            1.0 / 15.0,
-            1.0 / 15.0,
-            0.0,
-        ],
-        &[
-            1.0 / 6.0,
-            1.0 / 15.0,
-            1.0 / 15.0,
-            1.0 / 15.0,
-            1.0 / 15.0,
-            1.0 / 15.0,
-            0.0,
-            1.0 / 6.0,
-        ],
-        &[
-            1.0 / 6.0,
-            1.0 / 15.0,
-            1.0 / 15.0,
-            1.0 / 15.0,
-            1.0 / 15.0,
-            1.0 / 15.0,
-            0.0,
-            1.0 / 6.0,
-            1.0 / 6.0,
-        ],
-    ];
-    const WEIGHTS: &'static [f64] = &[
-        1.0 / 6.0,
-        1.0 / 15.0,
-        1.0 / 15.0,
-        1.0 / 15.0,
-        1.0 / 15.0,
-        1.0 / 15.0,
-        0.0,
-        1.0 / 6.0,
-        1.0 / 6.0,
-        1.0 / 6.0,
-    ];
-    // The pinned perform-step source writes the low estimate as
-    // (uprev + 6*u6 + 6*dt*f7) / 7.  That expression has derivative weights
-    // summing to 12/7 (an upstream inconsistency); the shared driver requires
-    // a consistent embedded estimate, so the endpoint weight is normalized to
-    // 1/7 here.  The main SSPRK932 update remains an exact tableau expansion.
-    const ERROR_WEIGHTS: Option<&'static [f64]> = Some(&[
-        1.0 / 42.0,
-        -8.0 / 105.0,
-        -8.0 / 105.0,
-        -8.0 / 105.0,
-        -8.0 / 105.0,
-        -8.0 / 105.0,
-        -1.0 / 7.0,
-        1.0 / 6.0,
-        1.0 / 6.0,
-        1.0 / 6.0,
-    ]);
-    const ORDER: usize = 3;
-    const FSAL: bool = false;
-}
-
-impl OdeAlgorithm for SspRk932 {
-    fn solve<F, P>(
-        &self,
-        problem: &OdeProblem<F, P>,
-        options: &SolveOptions,
-    ) -> Result<Solution, SolveError>
-    where
-        F: Fn(&mut [f64], &[f64], &P, f64),
-    {
-        ExplicitRungeKutta::<SspRk932Tableau>::new().solve(problem, options)
-    }
-}
-
-// SSPRK53 (Ruuth 2006).
-
-const SSPRK53_A: &[&[f64]] = &[EMPTY, SSPRK53_A2, SSPRK53_A3, SSPRK53_A4, SSPRK53_A5];
-
-fixed_ssprk!(SspRk53, SspRk53Tableau, 3, SSPRK53_C, SSPRK53_A, SSPRK53_B);
-
-// Low-storage SSPRK53_2N1 (Higueras and Roldan 2018).
-
-const SSPRK53_2N1_A: &[&[f64]] = &[
-    EMPTY,
-    SSPRK53_2N1_A2,
-    SSPRK53_2N1_A3,
-    SSPRK53_2N1_A4,
-    SSPRK53_2N1_A5,
-];
-
-fixed_ssprk!(
-    SspRk53TwoN1,
-    SspRk53TwoN1Tableau,
-    3,
-    SSPRK53_2N1_C,
-    SSPRK53_2N1_A,
-    SSPRK53_2N1_B
+crate::define_explicit_rk_from_file!(
+    pub SspRk432,
+    "tableaux/explicit/ssp_rk432.json",
+    crate = crate
 );
+crate::define_explicit_rk_from_file!(
+    pub SspRk932,
+    "tableaux/explicit/ssp_rk932.json",
+    crate = crate
+);
+
+fixed_ssprk!(SspRk53, "tableaux/explicit/ssp_rk53.json");
+fixed_ssprk!(SspRk53TwoN1, "tableaux/explicit/ssp_rk53_two_n1.json");
 
 /// Parametric relaxation SSPRK22. The default `kappa = 0` is the standard
 /// fixed-step two-stage SSPRK22 method; nonzero values apply the pinned
 /// OrdinaryDiffEqSSPRK coefficient rescaling before each step.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Prrk22 {
+    /// Relaxation parameter applied to the SSPRK22 coefficients.
     pub kappa: f64,
 }
 
@@ -412,12 +194,14 @@ impl Default for Prrk22 {
 }
 
 impl Prrk22 {
+    /// Creates the method with relaxation parameter `kappa`.
     pub const fn new(kappa: f64) -> Self {
         Self { kappa }
     }
 }
 
 #[allow(non_camel_case_types)]
+/// SciML-compatible spelling of [`Prrk22`].
 pub type pRRK22 = Prrk22;
 
 /// Parametric relaxation SSPRK33. The default `kappa = 0` is the standard
@@ -425,6 +209,7 @@ pub type pRRK22 = Prrk22;
 /// OrdinaryDiffEqSSPRK coefficient rescaling before each step.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Prrk33 {
+    /// Relaxation parameter applied to the SSPRK33 coefficients.
     pub kappa: f64,
 }
 
@@ -435,12 +220,14 @@ impl Default for Prrk33 {
 }
 
 impl Prrk33 {
+    /// Creates the method with relaxation parameter `kappa`.
     pub const fn new(kappa: f64) -> Self {
         Self { kappa }
     }
 }
 
 #[allow(non_camel_case_types)]
+/// SciML-compatible spelling of [`Prrk33`].
 pub type pRRK33 = Prrk33;
 
 struct Prrk22Kernel {
@@ -652,7 +439,7 @@ where
 }
 
 impl OdeAlgorithm for Prrk22 {
-    fn solve<F, P>(
+    fn solve_validated<F, P>(
         &self,
         problem: &OdeProblem<F, P>,
         options: &SolveOptions,
@@ -910,7 +697,7 @@ where
 }
 
 impl OdeAlgorithm for Prrk33 {
-    fn solve<F, P>(
+    fn solve_validated<F, P>(
         &self,
         problem: &OdeProblem<F, P>,
         options: &SolveOptions,
@@ -933,6 +720,7 @@ impl OdeAlgorithm for Prrk33 {
 /// attempted step; `kappa = 0` is the ordinary SSPRK(5,4) method.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Prrk54 {
+    /// Relaxation parameter applied to the SSPRK(5,4) coefficients.
     pub kappa: f64,
 }
 
@@ -943,12 +731,14 @@ impl Default for Prrk54 {
 }
 
 impl Prrk54 {
+    /// Creates the method with relaxation parameter `kappa`.
     pub const fn new(kappa: f64) -> Self {
         Self { kappa }
     }
 }
 
 #[allow(non_camel_case_types)]
+/// SciML-compatible spelling of [`Prrk54`].
 pub type pRRK54 = Prrk54;
 
 struct Prrk54Kernel {
@@ -1282,7 +1072,7 @@ where
 }
 
 impl OdeAlgorithm for Prrk54 {
-    fn solve<F, P>(
+    fn solve_validated<F, P>(
         &self,
         problem: &OdeProblem<F, P>,
         options: &SolveOptions,
@@ -1298,98 +1088,13 @@ impl OdeAlgorithm for Prrk54 {
     }
 }
 
-// Low-storage SSPRK53_2N2 (Higueras and Roldan 2018).
-
-const SSPRK53_2N2_A: &[&[f64]] = &[
-    EMPTY,
-    SSPRK53_2N2_A2,
-    SSPRK53_2N2_A3,
-    SSPRK53_2N2_A4,
-    SSPRK53_2N2_A5,
-];
-
-fixed_ssprk!(
-    SspRk53TwoN2,
-    SspRk53TwoN2Tableau,
-    3,
-    SSPRK53_2N2_C,
-    SSPRK53_2N2_A,
-    SSPRK53_2N2_B
-);
-
-// Low-storage SSPRK53_H (Higueras and Roldan 2018).
-
-const SSPRK53_H_A: &[&[f64]] = &[
-    EMPTY,
-    SSPRK53_H_A2,
-    SSPRK53_H_A3,
-    SSPRK53_H_A4,
-    SSPRK53_H_A5,
-];
-
-fixed_ssprk!(
-    SspRk53H,
-    SspRk53HTableau,
-    3,
-    SSPRK53_H_C,
-    SSPRK53_H_A,
-    SSPRK53_H_B
-);
-
-// SSPRK63 (Ruuth 2006).
-
-const SSPRK63_A: &[&[f64]] = &[
-    EMPTY, SSPRK63_A2, SSPRK63_A3, SSPRK63_A4, SSPRK63_A5, SSPRK63_A6,
-];
-
-fixed_ssprk!(SspRk63, SspRk63Tableau, 3, SSPRK63_C, SSPRK63_A, SSPRK63_B);
-
-// SSPRK73 (Ruuth 2006).
-
-const SSPRK73_A: &[&[f64]] = &[
-    EMPTY, SSPRK73_A2, SSPRK73_A3, SSPRK73_A4, SSPRK73_A5, SSPRK73_A6, SSPRK73_A7,
-];
-
-fixed_ssprk!(SspRk73, SspRk73Tableau, 3, SSPRK73_C, SSPRK73_A, SSPRK73_B);
-
-// SSPRK83 (Ruuth 2006).
-
-const SSPRK83_A: &[&[f64]] = &[
-    EMPTY, SSPRK83_A2, SSPRK83_A3, SSPRK83_A4, SSPRK83_A5, SSPRK83_A6, SSPRK83_A7, SSPRK83_A8,
-];
-
-fixed_ssprk!(SspRk83, SspRk83Tableau, 3, SSPRK83_C, SSPRK83_A, SSPRK83_B);
-
-// SSPRK54 (Ruuth 2006).
-
-const SSPRK54_A: &[&[f64]] = &[EMPTY, SSPRK54_A2, SSPRK54_A3, SSPRK54_A4, SSPRK54_A5];
-
-fixed_ssprk!(SspRk54, SspRk54Tableau, 4, SSPRK54_C, SSPRK54_A, SSPRK54_B);
-
-// SSPRK104 (Ketcheson 2008); exact rational coefficients.
-
-const SSPRK104_A: &[&[f64]] = &[
-    EMPTY,
-    SSPRK104_A2,
-    SSPRK104_A3,
-    SSPRK104_A4,
-    SSPRK104_A5,
-    SSPRK104_A6,
-    SSPRK104_A7,
-    SSPRK104_A8,
-    SSPRK104_A9,
-    SSPRK104_A10,
-];
-const SSPRK104_B: &[f64] = &[0.1; 10];
-
-fixed_ssprk!(
-    SspRk104,
-    SspRk104Tableau,
-    4,
-    SSPRK104_C,
-    SSPRK104_A,
-    SSPRK104_B
-);
+fixed_ssprk!(SspRk53TwoN2, "tableaux/explicit/ssp_rk53_two_n2.json");
+fixed_ssprk!(SspRk53H, "tableaux/explicit/ssp_rk53_h.json");
+fixed_ssprk!(SspRk63, "tableaux/explicit/ssp_rk63.json");
+fixed_ssprk!(SspRk73, "tableaux/explicit/ssp_rk73.json");
+fixed_ssprk!(SspRk83, "tableaux/explicit/ssp_rk83.json");
+fixed_ssprk!(SspRk54, "tableaux/explicit/ssp_rk54.json");
+fixed_ssprk!(SspRk104, "tableaux/explicit/ssp_rk104.json");
 
 #[cfg(test)]
 mod tests {

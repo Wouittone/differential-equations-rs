@@ -18,7 +18,7 @@ const NEWTON_TOLERANCE: f64 = 1.0e-12;
 pub struct Mebdf2;
 
 impl OdeAlgorithm for Mebdf2 {
-    fn solve<F, P>(
+    fn solve_validated<F, P>(
         &self,
         problem: &OdeProblem<F, P>,
         options: &SolveOptions,

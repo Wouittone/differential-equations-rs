@@ -7,8 +7,10 @@
 #![allow(clippy::excessive_precision)]
 
 use crate::event::times_are_numerically_equal;
-use crate::{InterpolationError, SaveMode, SecondOrderOdeProblem, SolveError, SolveOptions};
+use crate::{InterpolationError, SaveMode, SolveError, SolveOptions};
 use thiserror::Error;
+
+use super::general::SecondOrderOdeProblem;
 
 /// A pinned alternating drift/kick composition.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -39,6 +41,7 @@ pub trait SymplecticAlgorithm: Copy {
 
 macro_rules! symplectic_algorithm {
     ($name:ident, $a:expr, $b:expr) => {
+        #[doc = concat!("Named explicit symplectic composition `", stringify!($name), "`.")]
         #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
         pub struct $name;
 
@@ -903,4 +906,3 @@ fn interpolate(current: &[f64], previous: &[f64], fraction: f64, output: &mut [f
         *output = previous + fraction * (current - previous);
     }
 }
-pub use super::general::{LeapfrogDriftKickDrift, SymplecticEuler, VelocityVerlet, VerletLeapfrog};

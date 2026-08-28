@@ -1,4 +1,4 @@
-use differential_equations::algorithms::*;
+use differential_equations::solvers::explicit::*;
 use differential_equations::*;
 
 fn unit_rate(du: &mut [f64], _: &[f64], _: &(), _: f64) {

@@ -96,7 +96,7 @@ macro_rules! method {
         }
 
         impl OdeAlgorithm for $name {
-            fn solve<F, P>(
+            fn solve_validated<F, P>(
                 &self,
                 problem: &OdeProblem<F, P>,
                 options: &SolveOptions,
@@ -165,7 +165,7 @@ macro_rules! method_3s {
         }
 
         impl OdeAlgorithm for $name {
-            fn solve<F, P>(
+            fn solve_validated<F, P>(
                 &self,
                 problem: &OdeProblem<F, P>,
                 options: &SolveOptions,
@@ -214,7 +214,7 @@ macro_rules! method_2c {
         }
 
         impl OdeAlgorithm for $name {
-            fn solve<F, P>(
+            fn solve_validated<F, P>(
                 &self,
                 problem: &OdeProblem<F, P>,
                 options: &SolveOptions,
@@ -284,7 +284,7 @@ macro_rules! method_3sp {
         }
 
         impl OdeAlgorithm for $name {
-            fn solve<F, P>(
+            fn solve_validated<F, P>(
                 &self,
                 problem: &OdeProblem<F, P>,
                 options: &SolveOptions,
@@ -339,7 +339,7 @@ macro_rules! method_rp {
         }
 
         impl OdeAlgorithm for $name {
-            fn solve<F, P>(
+            fn solve_validated<F, P>(
                 &self,
                 problem: &OdeProblem<F, P>,
                 options: &SolveOptions,
@@ -403,7 +403,7 @@ macro_rules! method_alternating_2n {
         }
 
         impl OdeAlgorithm for $name {
-            fn solve<F, P>(
+            fn solve_validated<F, P>(
                 &self,
                 problem: &OdeProblem<F, P>,
                 options: &SolveOptions,

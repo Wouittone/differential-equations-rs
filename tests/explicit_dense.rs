@@ -1,4 +1,4 @@
-use differential_equations::algorithms::*;
+use differential_equations::solvers::explicit::*;
 use differential_equations::*;
 
 fn cubic_rate(derivative: &mut [f64], _: &[f64], _: &(), time: f64) {

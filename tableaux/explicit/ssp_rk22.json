@@ -1,0 +1,17 @@
+{
+  "$schema": "../../docs/tableau.schema.json",
+  "name": "SspRk22",
+  "description": "The fixed-step two-stage, second-order SSP Runge-Kutta method.",
+  "kind": "explicit-runge-kutta",
+  "order": 2,
+  "A": [
+    ["0", "0"],
+    ["1.0", "0"]
+  ],
+  "b": ["0.5", "0.5"],
+  "c": ["0.0", "1.0"],
+  "dense": [
+    ["1.0", "-0.5"],
+    ["0.0", "0.5"]
+  ]
+}

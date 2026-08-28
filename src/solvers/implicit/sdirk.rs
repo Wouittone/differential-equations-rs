@@ -7,15 +7,48 @@
 // literals, including values with more written digits than f64 can represent.
 #![allow(clippy::excessive_precision)]
 
-use super::coefficient_data::*;
 use crate::integrator::{
     ControllerConfig, KernelCapabilities, StepEstimate, StepKernel, integrate as drive_integration,
 };
 use crate::linear::{DenseLu, StateLayout};
-use crate::solvers::explicit::coefficient_data::{
-    SDIRK2_A, SDIRK2_B, SDIRK2_B_EMBEDDED, SDIRK2_STAGE_TIMES,
-};
+use crate::tableau::{LazyTableau, RungeKuttaTableau, load_tableau};
 use crate::{OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions, SolverStats};
+use differential_equations_tableau_macros::define_implicit_rk_tableau_from_file;
+
+define_implicit_rk_tableau_from_file!(pub(super) ARS222_TABLEAU, "Ars222", "tableaux/implicit/ars222.json", crate = crate);
+define_implicit_rk_tableau_from_file!(pub(super) ARS232_TABLEAU, "Ars232", "tableaux/implicit/ars232.json", crate = crate);
+define_implicit_rk_tableau_from_file!(pub(super) ARS343_TABLEAU, "Ars343", "tableaux/implicit/ars343.json", crate = crate);
+define_implicit_rk_tableau_from_file!(pub(super) ARS443_TABLEAU, "Ars443", "tableaux/implicit/ars443.json", crate = crate);
+define_implicit_rk_tableau_from_file!(pub(super) BHR553_TABLEAU, "Bhr553", "tableaux/implicit/bhr553.json", crate = crate);
+define_implicit_rk_tableau_from_file!(pub(super) CFNLIRK3_TABLEAU, "Cfnlirk3", "tableaux/implicit/cfnlirk3.json", crate = crate);
+define_implicit_rk_tableau_from_file!(pub(super) ESDIRK325_TABLEAU, "Esdirk325L2Sa", "tableaux/implicit/esdirk325_l2_sa.json", crate = crate);
+define_implicit_rk_tableau_from_file!(pub(super) ESDIRK436_TABLEAU, "Esdirk436L2Sa2", "tableaux/implicit/esdirk436_l2_sa2.json", crate = crate);
+define_implicit_rk_tableau_from_file!(pub(super) ESDIRK437_TABLEAU, "Esdirk437L2Sa", "tableaux/implicit/esdirk437_l2_sa.json", crate = crate);
+define_implicit_rk_tableau_from_file!(pub(super) ESDIRK547_TABLEAU, "Esdirk547L2Sa2", "tableaux/implicit/esdirk547_l2_sa2.json", crate = crate);
+define_implicit_rk_tableau_from_file!(pub(super) ESDIRK54_TABLEAU, "Esdirk54I8L2Sa", "tableaux/implicit/esdirk54_i8_l2_sa.json", crate = crate);
+define_implicit_rk_tableau_from_file!(pub(super) ESDIRK659_TABLEAU, "Esdirk659L2Sa", "tableaux/implicit/esdirk659_l2_sa.json", crate = crate);
+define_implicit_rk_tableau_from_file!(pub(super) HAIRER4_TABLEAU, "Hairer4", "tableaux/implicit/hairer4.json", crate = crate);
+define_implicit_rk_tableau_from_file!(pub(super) HAIRER42_TABLEAU, "Hairer42", "tableaux/implicit/hairer42.json", crate = crate);
+define_implicit_rk_tableau_from_file!(pub(super) IMEX_SSP222_TABLEAU, "ImexSsp222", "tableaux/implicit/imex_ssp222.json", crate = crate);
+define_implicit_rk_tableau_from_file!(pub(super) IMEX_SSP2322_TABLEAU, "ImexSsp2322", "tableaux/implicit/imex_ssp2322.json", crate = crate);
+define_implicit_rk_tableau_from_file!(pub(super) IMEX_SSP3332_TABLEAU, "ImexSsp3332", "tableaux/implicit/imex_ssp3332.json", crate = crate);
+define_implicit_rk_tableau_from_file!(pub(super) IMEX_SSP3433_TABLEAU, "ImexSsp3433", "tableaux/implicit/imex_ssp3433.json", crate = crate);
+define_implicit_rk_tableau_from_file!(pub(super) KENCARP3_TABLEAU, "KenCarp3", "tableaux/implicit/ken_carp3.json", crate = crate);
+define_implicit_rk_tableau_from_file!(pub(super) KENCARP4_TABLEAU, "KenCarp4", "tableaux/implicit/ken_carp4.json", crate = crate);
+define_implicit_rk_tableau_from_file!(pub(super) KENCARP47_TABLEAU, "KenCarp47", "tableaux/implicit/ken_carp47.json", crate = crate);
+define_implicit_rk_tableau_from_file!(pub(super) KENCARP5_TABLEAU, "KenCarp5", "tableaux/implicit/ken_carp5.json", crate = crate);
+define_implicit_rk_tableau_from_file!(pub(super) KENCARP58_TABLEAU, "KenCarp58", "tableaux/implicit/ken_carp58.json", crate = crate);
+define_implicit_rk_tableau_from_file!(pub(super) KVAERNO3_TABLEAU, "Kvaerno3", "tableaux/implicit/kvaerno3.json", crate = crate);
+define_implicit_rk_tableau_from_file!(pub(super) KVAERNO4_TABLEAU, "Kvaerno4", "tableaux/implicit/kvaerno4.json", crate = crate);
+define_implicit_rk_tableau_from_file!(pub(super) KVAERNO5_TABLEAU, "Kvaerno5", "tableaux/implicit/kvaerno5.json", crate = crate);
+define_implicit_rk_tableau_from_file!(pub(super) SDIRK22_TABLEAU, "Sdirk22", "tableaux/implicit/sdirk22.json", crate = crate);
+define_implicit_rk_tableau_from_file!(pub(super) SFSDIRK4_TABLEAU, "Sfsdirk4", "tableaux/implicit/sfsdirk4.json", crate = crate);
+define_implicit_rk_tableau_from_file!(pub(super) SFSDIRK5_TABLEAU, "Sfsdirk5", "tableaux/implicit/sfsdirk5.json", crate = crate);
+define_implicit_rk_tableau_from_file!(pub(super) SFSDIRK6_TABLEAU, "Sfsdirk6", "tableaux/implicit/sfsdirk6.json", crate = crate);
+define_implicit_rk_tableau_from_file!(pub(super) SFSDIRK7_TABLEAU, "Sfsdirk7", "tableaux/implicit/sfsdirk7.json", crate = crate);
+define_implicit_rk_tableau_from_file!(pub(super) SFSDIRK8_TABLEAU, "Sfsdirk8", "tableaux/implicit/sfsdirk8.json", crate = crate);
+define_implicit_rk_tableau_from_file!(pub(super) SSP_SDIRK2_TABLEAU, "SspSdirk2", "tableaux/implicit/ssp_sdirk2.json", crate = crate);
+define_implicit_rk_tableau_from_file!(pub(super) SDIRK2_TABLEAU, "Sdirk2", "tableaux/implicit/sdirk2.json", crate = crate);
 
 const MAX_NEWTON_ITERATIONS: usize = 12;
 const NEWTON_TOLERANCE: f64 = 1.0e-12;
@@ -29,8 +62,15 @@ const CONTROLLER: ControllerConfig = ControllerConfig::proportional(2, 0.9, 0.2,
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Sdirk2;
 
+impl Sdirk2 {
+    /// Returns this method's lazily materialized, validated tableau.
+    pub fn tableau(self) -> Result<&'static RungeKuttaTableau, crate::tableau::TableauError> {
+        load_tableau(&SDIRK2_TABLEAU)
+    }
+}
+
 impl OdeAlgorithm for Sdirk2 {
-    fn solve<F, P>(
+    fn solve_validated<F, P>(
         &self,
         problem: &OdeProblem<F, P>,
         options: &SolveOptions,
@@ -38,10 +78,11 @@ impl OdeAlgorithm for Sdirk2 {
     where
         F: Fn(&mut [f64], &[f64], &P, f64),
     {
+        let tableau = self.tableau().map_err(|_| SolveError::InvalidTableau)?;
         drive_integration(
             problem,
             options,
-            Sdirk2Kernel::new(problem.initial_state().len()),
+            Sdirk2Kernel::new(problem.initial_state().len(), tableau),
         )
     }
 }
@@ -85,12 +126,14 @@ impl Workspace {
 
 struct Sdirk2Kernel {
     workspace: Workspace,
+    tableau: &'static RungeKuttaTableau,
 }
 
 impl Sdirk2Kernel {
-    fn new(dimension: usize) -> Self {
+    fn new(dimension: usize, tableau: &'static RungeKuttaTableau) -> Self {
         Self {
             workspace: Workspace::new(dimension),
+            tableau,
         }
     }
 }
@@ -163,9 +206,9 @@ where
         solve_stage(
             problem,
             state,
-            time + SDIRK2_STAGE_TIMES[0] * step,
-            step,
+            (time + self.tableau.c()[0] * step, step),
             false,
+            self.tableau,
             &mut self.workspace,
             stats,
         )?;
@@ -181,19 +224,20 @@ where
         solve_stage(
             problem,
             state,
-            time + SDIRK2_STAGE_TIMES[1] * step,
-            step,
+            (time + self.tableau.c()[1] * step, step),
             true,
+            self.tableau,
             &mut self.workspace,
             stats,
         )?;
 
         for index in 0..dimension {
             candidate[index] = state[index]
-                + SDIRK2_B[0] * self.workspace.stage_one[index]
-                + SDIRK2_B[1] * self.workspace.stage_two[index];
-            self.workspace.error[index] = SDIRK2_B_EMBEDDED[0] * self.workspace.stage_one[index]
-                + SDIRK2_B_EMBEDDED[1] * self.workspace.stage_two[index];
+                + self.tableau.b()[0] * self.workspace.stage_one[index]
+                + self.tableau.b()[1] * self.workspace.stage_two[index];
+            self.workspace.error[index] = self.tableau.error().unwrap()[0]
+                * self.workspace.stage_one[index]
+                + self.tableau.error().unwrap()[1] * self.workspace.stage_two[index];
         }
         if !options.adaptive {
             return Ok(StepEstimate::new(0.0));
@@ -236,15 +280,16 @@ where
 fn solve_stage<F, P>(
     problem: &OdeProblem<F, P>,
     previous: &[f64],
-    stage_time: f64,
-    step: f64,
+    time_and_step: (f64, f64),
     second_stage: bool,
+    tableau: &RungeKuttaTableau,
     workspace: &mut Workspace,
     stats: &mut SolverStats,
 ) -> Result<(), SolveError>
 where
     F: Fn(&mut [f64], &[f64], &P, f64),
 {
+    let (stage_time, step) = time_and_step;
     let dimension = workspace.layout.dimension();
     for _ in 0..MAX_NEWTON_ITERATIONS {
         stats.nonlinear_iterations += 1;
@@ -256,14 +301,14 @@ where
                 workspace.stage_one[index]
             };
             let explicit_coupling = if coupling {
-                SDIRK2_A[1][0] * workspace.stage_one[index]
+                tableau.a()[1][0] * workspace.stage_one[index]
             } else {
                 0.0
             };
             let diagonal = if second_stage {
-                SDIRK2_A[1][1]
+                tableau.a()[1][1]
             } else {
-                SDIRK2_A[0][0]
+                tableau.a()[0][0]
             };
             workspace.stage_state[index] = previous_value + explicit_coupling + diagonal * stage;
         }
@@ -434,39 +479,6 @@ fn infinity_norm(values: &[f64]) -> f64 {
 // The additive IMEX names retain their pinned implicit tableau here.  A split
 // RHS and its explicit tableau need the typed SplitOdeProblem driver and are
 // intentionally not claimed by this regular-Ode module.
-const EXTENDED_MAX_STAGES: usize = 9;
-
-#[derive(Clone, Copy)]
-struct ExtendedTableau {
-    order: usize,
-    a: &'static [&'static [f64]],
-    c: &'static [f64],
-    b: &'static [f64],
-    error_weights: &'static [f64],
-}
-
-impl ExtendedTableau {
-    fn from_resource(
-        order: usize,
-        rows: &'static [&'static [f64]],
-        c: &'static [f64],
-        b: &'static [f64],
-        error_weights: &'static [f64],
-    ) -> Self {
-        assert!(rows.len() <= EXTENDED_MAX_STAGES);
-        assert_eq!(rows.len(), c.len());
-        assert_eq!(rows.len(), b.len());
-        assert_eq!(rows.len(), error_weights.len());
-        Self {
-            order,
-            a: rows,
-            c,
-            b,
-            error_weights,
-        }
-    }
-}
-
 #[derive(Clone, Copy)]
 enum ExtendedKind {
     Ars222,
@@ -540,14 +552,13 @@ impl ExtendedWorkspace {
 }
 
 struct ExtendedKernel {
-    tableau: ExtendedTableau,
+    tableau: &'static RungeKuttaTableau,
     workspace: ExtendedWorkspace,
 }
 
 impl ExtendedKernel {
-    fn new(kind: ExtendedKind, dimension: usize) -> Self {
-        let tableau = extended_tableau(kind);
-        let stages = tableau.a.len();
+    fn new(tableau: &'static RungeKuttaTableau, dimension: usize) -> Self {
+        let stages = tableau.a().len();
         Self {
             tableau,
             workspace: ExtendedWorkspace::new(dimension, stages),
@@ -562,7 +573,7 @@ where
     fn capabilities(&self) -> KernelCapabilities {
         KernelCapabilities::with_controller(
             true,
-            ControllerConfig::proportional(self.tableau.order, 0.9, 0.2, 10.0, 0.2),
+            ControllerConfig::proportional(self.tableau.order(), 0.9, 0.2, 10.0, 0.2),
         )
         .recover_nonlinear_and_singular_failures()
     }
@@ -612,14 +623,14 @@ where
         options: &SolveOptions,
         stats: &mut SolverStats,
     ) -> Result<StepEstimate, SolveError> {
-        let stages = self.tableau.a.len();
+        let stages = self.tableau.a().len();
         for stage_index in 0..stages {
-            let diagonal = self.tableau.a[stage_index][stage_index];
+            let diagonal = self.tableau.a()[stage_index][stage_index];
             for (index, &previous) in state.iter().enumerate() {
                 let mut stage_value = previous;
                 for prior in 0..stage_index {
                     stage_value +=
-                        self.tableau.a[stage_index][prior] * self.workspace.stages[prior][index];
+                        self.tableau.a()[stage_index][prior] * self.workspace.stages[prior][index];
                 }
                 self.workspace.stage_state[index] =
                     stage_value + diagonal * self.workspace.stages[stage_index][index];
@@ -629,7 +640,7 @@ where
                     problem,
                     &mut self.workspace.stage_derivative,
                     &self.workspace.stage_state,
-                    time + self.tableau.c[stage_index] * step,
+                    time + self.tableau.c()[stage_index] * step,
                     stats,
                 )?;
                 for index in 0..self.workspace.layout.dimension() {
@@ -641,7 +652,7 @@ where
                     problem,
                     state,
                     stage_index,
-                    time + self.tableau.c[stage_index] * step,
+                    time + self.tableau.c()[stage_index] * step,
                     step,
                     stats,
                 )?;
@@ -652,14 +663,15 @@ where
             candidate[index] = state[index]
                 + self
                     .tableau
-                    .b
+                    .b()
                     .iter()
                     .zip(&self.workspace.stages)
                     .map(|(weight, stage)| weight * stage[index])
                     .sum::<f64>();
             self.workspace.error[index] = self
                 .tableau
-                .error_weights
+                .error()
+                .expect("compile-time validation requires an error estimator")
                 .iter()
                 .zip(&self.workspace.stages)
                 .map(|(weight, stage)| weight * stage[index])
@@ -717,14 +729,14 @@ impl ExtendedKernel {
     where
         F: Fn(&mut [f64], &[f64], &P, f64),
     {
-        let diagonal = self.tableau.a[stage_index][stage_index];
+        let diagonal = self.tableau.a()[stage_index][stage_index];
         for _ in 0..MAX_NEWTON_ITERATIONS {
             stats.nonlinear_iterations += 1;
             for (index, &previous_value) in previous.iter().enumerate() {
                 let mut value = previous_value;
                 for prior in 0..stage_index {
                     value +=
-                        self.tableau.a[stage_index][prior] * self.workspace.stages[prior][index];
+                        self.tableau.a()[stage_index][prior] * self.workspace.stages[prior][index];
                 }
                 self.workspace.stage_state[index] =
                     value + diagonal * self.workspace.stages[stage_index][index];
@@ -858,8 +870,17 @@ macro_rules! extended_algorithm {
         #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
         pub struct $name;
 
+        impl $name {
+            /// Returns this method's lazily materialized, validated tableau.
+            pub fn tableau(
+                self,
+            ) -> Result<&'static RungeKuttaTableau, crate::tableau::TableauError> {
+                load_tableau(extended_resource(ExtendedKind::$kind))
+            }
+        }
+
         impl OdeAlgorithm for $name {
-            fn solve<F, P>(
+            fn solve_validated<F, P>(
                 &self,
                 problem: &OdeProblem<F, P>,
                 options: &SolveOptions,
@@ -867,10 +888,11 @@ macro_rules! extended_algorithm {
             where
                 F: Fn(&mut [f64], &[f64], &P, f64),
             {
+                let tableau = self.tableau().map_err(|_| SolveError::InvalidTableau)?;
                 drive_integration(
                     problem,
                     options,
-                    ExtendedKernel::new(ExtendedKind::$kind, problem.initial_state().len()),
+                    ExtendedKernel::new(tableau, problem.initial_state().len()),
                 )
             }
         }
@@ -971,212 +993,48 @@ extended_algorithm!(Sfsdirk7, Sfsdirk7, "Pinned SFSDIRK7 regular-ODE method.");
 extended_algorithm!(Sfsdirk8, Sfsdirk8, "Pinned SFSDIRK8 regular-ODE method.");
 extended_algorithm!(SspSdirk2, SspSdirk2, "Pinned SSPSDIRK2 regular-ODE method.");
 
-fn extended_tableau(kind: ExtendedKind) -> ExtendedTableau {
-    macro_rules! resource {
-        ($order:ident, $rows:ident, $nodes:ident, $weights:ident, $error:ident) => {
-            ExtendedTableau::from_resource($order, $rows, $nodes, $weights, $error)
-        };
-    }
+fn extended_resource(kind: ExtendedKind) -> &'static LazyTableau {
     match kind {
-        ExtendedKind::Ars222 => resource!(ARS222_ORDER, ARS222_A, ARS222_C, ARS222_B, ARS222_E),
-        ExtendedKind::Ars232 => resource!(ARS232_ORDER, ARS232_A, ARS232_C, ARS232_B, ARS232_E),
-        ExtendedKind::Ars343 => resource!(ARS343_ORDER, ARS343_A, ARS343_C, ARS343_B, ARS343_E),
-        ExtendedKind::Ars443 => resource!(ARS443_ORDER, ARS443_A, ARS443_C, ARS443_B, ARS443_E),
-        ExtendedKind::Bhr553 => resource!(BHR553_ORDER, BHR553_A, BHR553_C, BHR553_B, BHR553_E),
-        ExtendedKind::Cfnlirk3 => resource!(
-            CFNLIRK3_ORDER,
-            CFNLIRK3_A,
-            CFNLIRK3_C,
-            CFNLIRK3_B,
-            CFNLIRK3_E
-        ),
-        ExtendedKind::Esdirk325 => resource!(
-            ESDIRK325_ORDER,
-            ESDIRK325_A,
-            ESDIRK325_C,
-            ESDIRK325_B,
-            ESDIRK325_E
-        ),
-        ExtendedKind::Esdirk436 => resource!(
-            ESDIRK436_ORDER,
-            ESDIRK436_A,
-            ESDIRK436_C,
-            ESDIRK436_B,
-            ESDIRK436_E
-        ),
-        ExtendedKind::Esdirk437 => resource!(
-            ESDIRK437_ORDER,
-            ESDIRK437_A,
-            ESDIRK437_C,
-            ESDIRK437_B,
-            ESDIRK437_E
-        ),
-        ExtendedKind::Esdirk547 => resource!(
-            ESDIRK547_ORDER,
-            ESDIRK547_A,
-            ESDIRK547_C,
-            ESDIRK547_B,
-            ESDIRK547_E
-        ),
-        ExtendedKind::Esdirk54 => resource!(
-            ESDIRK54_ORDER,
-            ESDIRK54_A,
-            ESDIRK54_C,
-            ESDIRK54_B,
-            ESDIRK54_E
-        ),
-        ExtendedKind::Esdirk659 => resource!(
-            ESDIRK659_ORDER,
-            ESDIRK659_A,
-            ESDIRK659_C,
-            ESDIRK659_B,
-            ESDIRK659_E
-        ),
-        ExtendedKind::Hairer4 => {
-            resource!(HAIRER4_ORDER, HAIRER4_A, HAIRER4_C, HAIRER4_B, HAIRER4_E)
-        }
-        ExtendedKind::Hairer42 => resource!(
-            HAIRER42_ORDER,
-            HAIRER42_A,
-            HAIRER42_C,
-            HAIRER42_B,
-            HAIRER42_E
-        ),
-        ExtendedKind::ImexSsp222 => resource!(
-            IMEX_SSP222_ORDER,
-            IMEX_SSP222_A,
-            IMEX_SSP222_C,
-            IMEX_SSP222_B,
-            IMEX_SSP222_E
-        ),
-        ExtendedKind::ImexSsp2322 => resource!(
-            IMEX_SSP2322_ORDER,
-            IMEX_SSP2322_A,
-            IMEX_SSP2322_C,
-            IMEX_SSP2322_B,
-            IMEX_SSP2322_E
-        ),
-        ExtendedKind::ImexSsp3332 => resource!(
-            IMEX_SSP3332_ORDER,
-            IMEX_SSP3332_A,
-            IMEX_SSP3332_C,
-            IMEX_SSP3332_B,
-            IMEX_SSP3332_E
-        ),
-        ExtendedKind::ImexSsp3433 => resource!(
-            IMEX_SSP3433_ORDER,
-            IMEX_SSP3433_A,
-            IMEX_SSP3433_C,
-            IMEX_SSP3433_B,
-            IMEX_SSP3433_E
-        ),
-        ExtendedKind::KenCarp3 => resource!(
-            KENCARP3_ORDER,
-            KENCARP3_A,
-            KENCARP3_C,
-            KENCARP3_B,
-            KENCARP3_E
-        ),
-        ExtendedKind::KenCarp4 => resource!(
-            KENCARP4_ORDER,
-            KENCARP4_A,
-            KENCARP4_C,
-            KENCARP4_B,
-            KENCARP4_E
-        ),
-        ExtendedKind::KenCarp47 => resource!(
-            KENCARP47_ORDER,
-            KENCARP47_A,
-            KENCARP47_C,
-            KENCARP47_B,
-            KENCARP47_E
-        ),
-        ExtendedKind::KenCarp5 => resource!(
-            KENCARP5_ORDER,
-            KENCARP5_A,
-            KENCARP5_C,
-            KENCARP5_B,
-            KENCARP5_E
-        ),
-        ExtendedKind::KenCarp58 => resource!(
-            KENCARP58_ORDER,
-            KENCARP58_A,
-            KENCARP58_C,
-            KENCARP58_B,
-            KENCARP58_E
-        ),
-        ExtendedKind::Kvaerno3 => resource!(
-            KVAERNO3_ORDER,
-            KVAERNO3_A,
-            KVAERNO3_C,
-            KVAERNO3_B,
-            KVAERNO3_E
-        ),
-        ExtendedKind::Kvaerno4 => resource!(
-            KVAERNO4_ORDER,
-            KVAERNO4_A,
-            KVAERNO4_C,
-            KVAERNO4_B,
-            KVAERNO4_E
-        ),
-        ExtendedKind::Kvaerno5 => resource!(
-            KVAERNO5_ORDER,
-            KVAERNO5_A,
-            KVAERNO5_C,
-            KVAERNO5_B,
-            KVAERNO5_E
-        ),
-        ExtendedKind::Sdirk22 => {
-            resource!(SDIRK22_ORDER, SDIRK22_A, SDIRK22_C, SDIRK22_B, SDIRK22_E)
-        }
-        ExtendedKind::Sfsdirk4 => resource!(
-            SFSDIRK4_ORDER,
-            SFSDIRK4_A,
-            SFSDIRK4_C,
-            SFSDIRK4_B,
-            SFSDIRK4_E
-        ),
-        ExtendedKind::Sfsdirk5 => resource!(
-            SFSDIRK5_ORDER,
-            SFSDIRK5_A,
-            SFSDIRK5_C,
-            SFSDIRK5_B,
-            SFSDIRK5_E
-        ),
-        ExtendedKind::Sfsdirk6 => resource!(
-            SFSDIRK6_ORDER,
-            SFSDIRK6_A,
-            SFSDIRK6_C,
-            SFSDIRK6_B,
-            SFSDIRK6_E
-        ),
-        ExtendedKind::Sfsdirk7 => resource!(
-            SFSDIRK7_ORDER,
-            SFSDIRK7_A,
-            SFSDIRK7_C,
-            SFSDIRK7_B,
-            SFSDIRK7_E
-        ),
-        ExtendedKind::Sfsdirk8 => resource!(
-            SFSDIRK8_ORDER,
-            SFSDIRK8_A,
-            SFSDIRK8_C,
-            SFSDIRK8_B,
-            SFSDIRK8_E
-        ),
-        ExtendedKind::SspSdirk2 => resource!(
-            SSP_SDIRK2_ORDER,
-            SSP_SDIRK2_A,
-            SSP_SDIRK2_C,
-            SSP_SDIRK2_B,
-            SSP_SDIRK2_E
-        ),
+        ExtendedKind::Ars222 => &ARS222_TABLEAU,
+        ExtendedKind::Ars232 => &ARS232_TABLEAU,
+        ExtendedKind::Ars343 => &ARS343_TABLEAU,
+        ExtendedKind::Ars443 => &ARS443_TABLEAU,
+        ExtendedKind::Bhr553 => &BHR553_TABLEAU,
+        ExtendedKind::Cfnlirk3 => &CFNLIRK3_TABLEAU,
+        ExtendedKind::Esdirk325 => &ESDIRK325_TABLEAU,
+        ExtendedKind::Esdirk436 => &ESDIRK436_TABLEAU,
+        ExtendedKind::Esdirk437 => &ESDIRK437_TABLEAU,
+        ExtendedKind::Esdirk547 => &ESDIRK547_TABLEAU,
+        ExtendedKind::Esdirk54 => &ESDIRK54_TABLEAU,
+        ExtendedKind::Esdirk659 => &ESDIRK659_TABLEAU,
+        ExtendedKind::Hairer4 => &HAIRER4_TABLEAU,
+        ExtendedKind::Hairer42 => &HAIRER42_TABLEAU,
+        ExtendedKind::ImexSsp222 => &IMEX_SSP222_TABLEAU,
+        ExtendedKind::ImexSsp2322 => &IMEX_SSP2322_TABLEAU,
+        ExtendedKind::ImexSsp3332 => &IMEX_SSP3332_TABLEAU,
+        ExtendedKind::ImexSsp3433 => &IMEX_SSP3433_TABLEAU,
+        ExtendedKind::KenCarp3 => &KENCARP3_TABLEAU,
+        ExtendedKind::KenCarp4 => &KENCARP4_TABLEAU,
+        ExtendedKind::KenCarp47 => &KENCARP47_TABLEAU,
+        ExtendedKind::KenCarp5 => &KENCARP5_TABLEAU,
+        ExtendedKind::KenCarp58 => &KENCARP58_TABLEAU,
+        ExtendedKind::Kvaerno3 => &KVAERNO3_TABLEAU,
+        ExtendedKind::Kvaerno4 => &KVAERNO4_TABLEAU,
+        ExtendedKind::Kvaerno5 => &KVAERNO5_TABLEAU,
+        ExtendedKind::Sdirk22 => &SDIRK22_TABLEAU,
+        ExtendedKind::Sfsdirk4 => &SFSDIRK4_TABLEAU,
+        ExtendedKind::Sfsdirk5 => &SFSDIRK5_TABLEAU,
+        ExtendedKind::Sfsdirk6 => &SFSDIRK6_TABLEAU,
+        ExtendedKind::Sfsdirk7 => &SFSDIRK7_TABLEAU,
+        ExtendedKind::Sfsdirk8 => &SFSDIRK8_TABLEAU,
+        ExtendedKind::SspSdirk2 => &SSP_SDIRK2_TABLEAU,
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{ExtendedKind, Sdirk2, Sfsdirk4, extended_tableau};
+    use super::{ExtendedKind, Sdirk2, Sfsdirk4, extended_resource};
+    use crate::tableau::load_tableau;
     use crate::{OdeProblem, SaveMode, SolveOptions, solve};
 
     #[test]
@@ -1259,19 +1117,19 @@ mod tests {
             ExtendedKind::SspSdirk2,
         ];
         for kind in kinds {
-            let tableau = extended_tableau(kind);
-            assert!((2..=9).contains(&tableau.a.len()));
-            assert_eq!(tableau.a.len(), tableau.c.len());
-            assert_eq!(tableau.a.len(), tableau.b.len());
-            assert_eq!(tableau.a.len(), tableau.error_weights.len());
+            let tableau = load_tableau(extended_resource(kind)).unwrap();
+            assert!((2..=9).contains(&tableau.a().len()));
+            assert_eq!(tableau.a().len(), tableau.c().len());
+            assert_eq!(tableau.a().len(), tableau.b().len());
+            assert_eq!(tableau.a().len(), tableau.error().unwrap().len());
             assert!(
                 tableau
-                    .a
+                    .a()
                     .iter()
                     .flat_map(|row| row.iter())
-                    .chain(tableau.c.iter())
-                    .chain(tableau.b.iter())
-                    .chain(tableau.error_weights.iter())
+                    .chain(tableau.c().iter())
+                    .chain(tableau.b().iter())
+                    .chain(tableau.error().unwrap().iter())
                     .all(|value| value.is_finite())
             );
         }

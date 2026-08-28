@@ -1,4 +1,4 @@
-use differential_equations::algorithms::taylor::{
+use differential_equations::solvers::taylor::{
     ExplicitTaylor, ExplicitTaylor2, ExplicitTaylorAdaptiveOrder,
 };
 use differential_equations::{

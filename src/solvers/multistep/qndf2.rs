@@ -24,7 +24,7 @@ pub struct Qndf2;
 pub struct Qbdf2;
 
 impl OdeAlgorithm for Qndf2 {
-    fn solve<F, P>(
+    fn solve_validated<F, P>(
         &self,
         problem: &OdeProblem<F, P>,
         options: &SolveOptions,
@@ -41,7 +41,7 @@ impl OdeAlgorithm for Qndf2 {
 }
 
 impl OdeAlgorithm for Qbdf2 {
-    fn solve<F, P>(
+    fn solve_validated<F, P>(
         &self,
         problem: &OdeProblem<F, P>,
         options: &SolveOptions,

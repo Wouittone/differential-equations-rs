@@ -395,7 +395,27 @@ pub enum SecondOrderSolveError {
 
 /// An algorithm for `q' = v` second-order ODE problems.
 pub trait SecondOrderOdeAlgorithm {
+    /// Solves a problem after validating its partitioned state and options.
     fn solve<F, P>(
+        &self,
+        problem: &SecondOrderOdeProblem<F, P>,
+        options: &SolveOptions,
+    ) -> Result<SecondOrderSolution, SecondOrderSolveError>
+    where
+        F: Fn(&mut [f64], &[f64], &[f64], &P, f64),
+    {
+        validate(problem, options)?;
+        self.solve_validated(problem, options)
+    }
+
+    /// Executes the numerical method after common inputs have been checked.
+    ///
+    /// Implementors may rely on [`SecondOrderOdeAlgorithm::solve`] having
+    /// validated both state partitions, the time span, solver options, and
+    /// requested output times. User code should normally call
+    /// [`SecondOrderOdeAlgorithm::solve`] or [`solve_second_order`]; direct
+    /// callers of this lower-level hook are responsible for those invariants.
+    fn solve_validated<F, P>(
         &self,
         problem: &SecondOrderOdeProblem<F, P>,
         options: &SolveOptions,
@@ -414,7 +434,6 @@ where
     F: Fn(&mut [f64], &[f64], &[f64], &P, f64),
     A: SecondOrderOdeAlgorithm,
 {
-    validate(problem, options)?;
     algorithm.solve(problem, options)
 }
 
@@ -681,30 +700,43 @@ pub type IRKN3 = Irkn3;
 pub type IRKN4 = Irkn4;
 
 #[allow(non_upper_case_globals)]
+/// Value-form SciML-compatible constructor spelling for [`Dprkn4`].
 pub const DPRKN4: Dprkn4 = Dprkn4;
 #[allow(non_upper_case_globals)]
+/// Value-form SciML-compatible constructor spelling for [`Dprkn5`].
 pub const DPRKN5: Dprkn5 = Dprkn5;
 #[allow(non_upper_case_globals)]
+/// Value-form SciML-compatible constructor spelling for [`Dprkn6`].
 pub const DPRKN6: Dprkn6 = Dprkn6;
 #[allow(non_upper_case_globals)]
+/// Value-form SciML-compatible constructor spelling for [`Dprkn6Fm`].
 pub const DPRKN6FM: Dprkn6Fm = Dprkn6Fm;
 #[allow(non_upper_case_globals)]
+/// Value-form SciML-compatible constructor spelling for [`Dprkn8`].
 pub const DPRKN8: Dprkn8 = Dprkn8;
 #[allow(non_upper_case_globals)]
+/// Value-form SciML-compatible constructor spelling for [`Dprkn12`].
 pub const DPRKN12: Dprkn12 = Dprkn12;
 #[allow(non_upper_case_globals)]
+/// Value-form SciML-compatible constructor spelling for [`Erkn4`].
 pub const ERKN4: Erkn4 = Erkn4;
 #[allow(non_upper_case_globals)]
+/// Value-form SciML-compatible constructor spelling for [`Erkn5`].
 pub const ERKN5: Erkn5 = Erkn5;
 #[allow(non_upper_case_globals)]
+/// Value-form SciML-compatible constructor spelling for [`Erkn7`].
 pub const ERKN7: Erkn7 = Erkn7;
 #[allow(non_upper_case_globals)]
+/// Value-form SciML-compatible constructor spelling for [`FineRkn4`].
 pub const FineRKN4: FineRkn4 = FineRkn4;
 #[allow(non_upper_case_globals)]
+/// Value-form SciML-compatible constructor spelling for [`FineRkn5`].
 pub const FineRKN5: FineRkn5 = FineRkn5;
 #[allow(non_upper_case_globals)]
+/// Value-form SciML-compatible constructor spelling for [`Irkn3`].
 pub const IRKN3: Irkn3 = Irkn3;
 #[allow(non_upper_case_globals)]
+/// Value-form SciML-compatible constructor spelling for [`Irkn4`].
 pub const IRKN4: Irkn4 = Irkn4;
 
 struct RknTableau {
@@ -947,7 +979,7 @@ enum Method {
 macro_rules! impl_algorithm {
     ($algorithm:ty, $method:expr) => {
         impl SecondOrderOdeAlgorithm for $algorithm {
-            fn solve<F, P>(
+            fn solve_validated<F, P>(
                 &self,
                 problem: &SecondOrderOdeProblem<F, P>,
                 options: &SolveOptions,
@@ -969,7 +1001,7 @@ impl_algorithm!(LeapfrogDriftKickDrift, Method::LeapfrogDriftKickDrift);
 macro_rules! impl_rkn_algorithm {
     ($algorithm:ty, $tableau:expr) => {
         impl SecondOrderOdeAlgorithm for $algorithm {
-            fn solve<F, P>(
+            fn solve_validated<F, P>(
                 &self,
                 problem: &SecondOrderOdeProblem<F, P>,
                 options: &SolveOptions,
@@ -991,7 +1023,7 @@ impl_rkn_algorithm!(Rkn4, RKN4_TABLEAU);
 macro_rules! impl_adaptive_rkn_algorithm {
     ($algorithm:ty, $tableau:ident) => {
         impl SecondOrderOdeAlgorithm for $algorithm {
-            fn solve<F, P>(
+            fn solve_validated<F, P>(
                 &self,
                 problem: &SecondOrderOdeProblem<F, P>,
                 options: &SolveOptions,
@@ -1018,7 +1050,7 @@ impl_adaptive_rkn_algorithm!(FineRkn4, FINERKN4_ADAPTIVE_TABLEAU);
 impl_adaptive_rkn_algorithm!(FineRkn5, FINERKN5_ADAPTIVE_TABLEAU);
 
 impl SecondOrderOdeAlgorithm for NewmarkBeta {
-    fn solve<F, P>(
+    fn solve_validated<F, P>(
         &self,
         problem: &SecondOrderOdeProblem<F, P>,
         options: &SolveOptions,
@@ -1040,7 +1072,7 @@ impl SecondOrderOdeAlgorithm for NewmarkBeta {
 }
 
 impl SecondOrderOdeAlgorithm for GeneralizedAlpha {
-    fn solve<F, P>(
+    fn solve_validated<F, P>(
         &self,
         problem: &SecondOrderOdeProblem<F, P>,
         options: &SolveOptions,
@@ -1062,7 +1094,7 @@ impl SecondOrderOdeAlgorithm for GeneralizedAlpha {
 }
 
 impl SecondOrderOdeAlgorithm for Irkn3 {
-    fn solve<F, P>(
+    fn solve_validated<F, P>(
         &self,
         problem: &SecondOrderOdeProblem<F, P>,
         options: &SolveOptions,
@@ -1075,7 +1107,7 @@ impl SecondOrderOdeAlgorithm for Irkn3 {
 }
 
 impl SecondOrderOdeAlgorithm for Irkn4 {
-    fn solve<F, P>(
+    fn solve_validated<F, P>(
         &self,
         problem: &SecondOrderOdeProblem<F, P>,
         options: &SolveOptions,

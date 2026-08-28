@@ -1,4 +1,5 @@
-use differential_equations::algorithms::multistep::*;
+use differential_equations::solvers::explicit::solve_split;
+use differential_equations::solvers::multistep::*;
 use differential_equations::*;
 
 type SplitRhs = fn(&mut [f64], &[f64], &(), f64);
@@ -259,6 +260,82 @@ fn imex_multistep_dense_output_uses_total_split_derivatives() {
     let saved = solve_split(&problem, SBDF2, &fixed(0.02).with_save_at([0.375, 1.0])).unwrap();
     assert_eq!(saved.times(), &[0.375, 1.0]);
     assert!((saved.state(0).unwrap()[0] - expected).abs() < 1.0e-3);
+}
+
+#[test]
+fn every_imex_multistep_method_applies_initial_callbacks() {
+    macro_rules! check {
+        ($algorithm:expr) => {{
+            let problem = SplitOdeProblem::new(
+                |du: &mut [f64], _: &[f64], _: &(), _: f64| du[0] = 1.0,
+                |du: &mut [f64], _: &[f64], _: &(), _: f64| du[0] = 0.0,
+                vec![0.0],
+                (0.0, 1.0),
+                (),
+            )
+            .with_discrete_callback(
+                |_, _, time| time == 0.0,
+                |state, _, _| {
+                    state[0] = 7.0;
+                    CallbackAction::Terminate
+                },
+            );
+            let solution = solve_split(&problem, $algorithm, &fixed(0.1)).unwrap();
+            assert_eq!(solution.last_state(), &[7.0], "{}", stringify!($algorithm));
+            assert_eq!(solution.stats().callback_invocations, 1);
+            assert_eq!(solution.stats().rhs_evaluations, 0);
+        }};
+    }
+
+    check!(IMEXEuler);
+    check!(IMEXEulerARK);
+    check!(SBDF2);
+    check!(SBDF3);
+    check!(SBDF4);
+    check!(CNAB2);
+    check!(CNLF2);
+}
+
+#[test]
+fn imex_multistep_continuous_effect_restarts_history() {
+    let problem = SplitOdeProblem::new(
+        |du: &mut [f64], state: &[f64], _: &(), _: f64| du[0] = state[0],
+        |du: &mut [f64], _: &[f64], _: &(), _: f64| du[0] = 0.0,
+        vec![1.0],
+        (0.0, 1.0),
+        (),
+    )
+    .with_continuous_callback(
+        |_, _, time| time - 0.35,
+        |state, _, _| {
+            state[0] *= 2.0;
+            CallbackAction::Continue
+        },
+    );
+    let solution = solve_split(&problem, SBDF4, &fixed(0.1)).unwrap();
+    assert_eq!(solution.stats().callback_invocations, 1);
+    let event_index = solution
+        .times()
+        .iter()
+        .rposition(|time| (*time - 0.35).abs() < 1.0e-10)
+        .expect("post-effect callback state must be retained");
+    let event_state = solution.state(event_index).unwrap().to_vec();
+    let event_time = solution.times()[event_index];
+
+    let restarted = SplitOdeProblem::new(
+        |du: &mut [f64], state: &[f64], _: &(), _: f64| du[0] = state[0],
+        |du: &mut [f64], _: &[f64], _: &(), _: f64| du[0] = 0.0,
+        event_state,
+        (event_time, 1.0),
+        (),
+    );
+    let restarted = solve_split(&restarted, SBDF4, &fixed(0.1)).unwrap();
+    assert!(
+        (solution.last_state()[0] - restarted.last_state()[0]).abs() < 1.0e-12,
+        "continued={} restarted={}",
+        solution.last_state()[0],
+        restarted.last_state()[0]
+    );
 }
 
 #[test]

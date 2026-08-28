@@ -835,7 +835,7 @@ trait ExtendedRosenbrockMethod {
 macro_rules! algorithm {
     ($name:ident) => {
         impl OdeAlgorithm for $name {
-            fn solve<F, P>(
+            fn solve_validated<F, P>(
                 &self,
                 problem: &OdeProblem<F, P>,
                 options: &SolveOptions,

@@ -10,9 +10,8 @@ algorithms.
 - in-place first-order ODE right-hand sides with vector `f64` state;
 - arbitrary vector initial conditions, parameters, forward or backward time
   spans, and optional dense analytic state Jacobians;
-- downstream explicit Runge--Kutta methods defined from validated TOML
-  resources at compile time, producing the same static `ButcherTableau` kernel
-  and zero-sized algorithm representation as built-in methods;
+- downstream Runge--Kutta methods defined from compile-time-validated JSON
+  resources and materialized lazily only when used;
 - a separate in-place `SecondOrderOdeProblem` API for the `q' = v`,
   `v' = f(v, q, p, t)` specialization, with separate position and velocity
   storage; this is not yet a general `DynamicalODEProblem` with an independent
@@ -55,6 +54,10 @@ algorithms.
 
 ## Remaining feature work
 
+- immediately after the tableau refactor, introduce a generic state abstraction
+  so scalar, vector, and matrix initial states are accepted without requiring
+  solver-specific lane-shaped wrappers; preserve contiguous fast paths so LLVM
+  can autovectorize ordinary numerical loops;
 - Julia's full integrator callback interface, including parameter and step-size
   mutation, `save_positions`, callback initialization/finalization hooks,
   callback sets, vector continuous callbacks, preset-time stops, and the

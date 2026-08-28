@@ -3,6 +3,7 @@ use crate::integrator::{
 };
 use crate::linear::{factorize, solve_factorized};
 use crate::operator_problem::{LieGroupProblem, LieRepresentation, LinearOperatorProblem};
+use crate::solver::validate_state_time_options;
 use crate::solvers::exponential::general::{identity, mat_mul, mat_vec, matrix_exp};
 use crate::{OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions, SolverStats};
 
@@ -58,8 +59,26 @@ pub trait LinearOperatorAlgorithm {
     /// Classical order reported by OrdinaryDiffEqLinear.
     fn order(&self) -> usize;
 
-    #[doc(hidden)]
+    /// Solves a linear-operator problem after validating its common inputs.
     fn solve_operator<O, P>(
+        &self,
+        problem: &LinearOperatorProblem<O, P>,
+        options: &SolveOptions,
+    ) -> Result<Solution, SolveError>
+    where
+        O: Fn(&mut [f64], &[f64], &P, f64),
+    {
+        validate_inputs(problem.initial_state(), problem.time_span(), options)?;
+        self.solve_operator_validated(problem, options)
+    }
+
+    /// Executes the numerical method after common inputs have been checked.
+    ///
+    /// Implementors may rely on [`LinearOperatorAlgorithm::solve_operator`]
+    /// having validated the state, time span, tolerances, step bounds, callback
+    /// tolerance, and requested output times. Direct callers of this lower-level
+    /// hook are responsible for preserving those invariants.
+    fn solve_operator_validated<O, P>(
         &self,
         problem: &LinearOperatorProblem<O, P>,
         options: &SolveOptions,
@@ -73,8 +92,26 @@ pub trait LieGroupAlgorithm {
     /// Classical order reported by OrdinaryDiffEqLinear.
     fn order(&self) -> usize;
 
-    #[doc(hidden)]
+    /// Solves a Lie-group problem after validating its common inputs.
     fn solve_group<O, P>(
+        &self,
+        problem: &LieGroupProblem<O, P>,
+        options: &SolveOptions,
+    ) -> Result<Solution, SolveError>
+    where
+        O: Fn(&mut [f64], &[f64], &P, f64),
+    {
+        validate_inputs(problem.initial_state(), problem.time_span(), options)?;
+        self.solve_group_validated(problem, options)
+    }
+
+    /// Executes the numerical method after common inputs have been checked.
+    ///
+    /// Implementors may rely on [`LieGroupAlgorithm::solve_group`] having
+    /// validated the state, time span, tolerances, step bounds, callback
+    /// tolerance, and requested output times. Direct callers of this lower-level
+    /// hook are responsible for preserving those invariants.
+    fn solve_group_validated<O, P>(
         &self,
         problem: &LieGroupProblem<O, P>,
         options: &SolveOptions,
@@ -93,7 +130,6 @@ where
     O: Fn(&mut [f64], &[f64], &P, f64),
     A: LinearOperatorAlgorithm,
 {
-    validate_inputs(problem.initial_state(), problem.time_span(), options)?;
     algorithm.solve_operator(problem, options)
 }
 
@@ -107,7 +143,6 @@ where
     O: Fn(&mut [f64], &[f64], &P, f64),
     A: LieGroupAlgorithm,
 {
-    validate_inputs(problem.initial_state(), problem.time_span(), options)?;
     algorithm.solve_group(problem, options)
 }
 
@@ -118,7 +153,7 @@ macro_rules! linear_algorithm {
         pub struct $name;
 
         impl OdeAlgorithm for $name {
-            fn solve<F, P>(
+            fn solve_validated<F, P>(
                 &self,
                 problem: &OdeProblem<F, P>,
                 options: &SolveOptions,
@@ -135,7 +170,7 @@ macro_rules! linear_algorithm {
                 Scheme::$scheme.order()
             }
 
-            fn solve_operator<O, P>(
+            fn solve_operator_validated<O, P>(
                 &self,
                 problem: &LinearOperatorProblem<O, P>,
                 options: &SolveOptions,
@@ -152,7 +187,7 @@ macro_rules! linear_algorithm {
                 Scheme::$scheme.order()
             }
 
-            fn solve_group<O, P>(
+            fn solve_group_validated<O, P>(
                 &self,
                 problem: &LieGroupProblem<O, P>,
                 options: &SolveOptions,
@@ -260,7 +295,7 @@ impl LieGroupAlgorithm for CayleyEuler {
         2
     }
 
-    fn solve_group<O, P>(
+    fn solve_group_validated<O, P>(
         &self,
         problem: &LieGroupProblem<O, P>,
         options: &SolveOptions,
@@ -1169,47 +1204,5 @@ fn scaled_error_norm(error: &[f64], old: &[f64], new: &[f64], options: &SolveOpt
 }
 
 fn validate_inputs(state: &[f64], time_span: (f64, f64), options: &SolveOptions) -> OperatorResult {
-    if state.is_empty() {
-        return Err(SolveError::EmptyState);
-    }
-    if !state.iter().all(|value| value.is_finite()) {
-        return Err(SolveError::NonFiniteInitialState);
-    }
-    let (start, end) = time_span;
-    if !start.is_finite() || !end.is_finite() || start == end {
-        return Err(SolveError::InvalidTimeSpan);
-    }
-    if !options.absolute_tolerance.is_finite()
-        || options.absolute_tolerance <= 0.0
-        || !options.relative_tolerance.is_finite()
-        || options.relative_tolerance <= 0.0
-    {
-        return Err(SolveError::InvalidTolerance);
-    }
-    if options
-        .initial_step
-        .is_some_and(|step| !step.is_finite() || step <= 0.0)
-    {
-        return Err(SolveError::InvalidInitialStep);
-    }
-    if options.max_step.is_nan() || options.max_step <= 0.0 {
-        return Err(SolveError::InvalidMaxStep);
-    }
-    if options.max_steps == 0 {
-        return Err(SolveError::InvalidMaxSteps);
-    }
-    if !options.event_tolerance.is_finite() || options.event_tolerance <= 0.0 {
-        return Err(SolveError::InvalidEventTolerance);
-    }
-    let direction = (end - start).signum();
-    if !options.save_at.iter().all(|time| {
-        time.is_finite() && direction * (*time - start) >= 0.0 && direction * (end - *time) >= 0.0
-    }) || options
-        .save_at
-        .windows(2)
-        .any(|pair| direction * (pair[1] - pair[0]) <= 0.0)
-    {
-        return Err(SolveError::InvalidSaveAt);
-    }
-    Ok(())
+    validate_state_time_options(state, time_span, options)
 }

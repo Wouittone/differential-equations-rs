@@ -1,4 +1,4 @@
-use differential_equations::algorithms::*;
+use differential_equations::solvers::rosenbrock::*;
 use differential_equations::*;
 
 fn options(adaptive: bool, step: Option<f64>) -> SolveOptions {

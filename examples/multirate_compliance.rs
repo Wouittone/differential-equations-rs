@@ -1,10 +1,9 @@
-use differential_equations::algorithms::multirate::{
+use differential_equations::solvers::explicit::{SplitOdeAlgorithm, solve_split};
+use differential_equations::solvers::multirate::{
     MIS, MRAB, MREEF, MRIGARKERK22a, MRIGARKERK22b, MRIGARKERK33a, MRIGARKERK45a, MRIGARKESDIRK34a,
     MRIGARKIRK21a,
 };
-use differential_equations::{
-    SaveMode, SolveOptions, SplitOdeAlgorithm, SplitOdeProblem, solve_split,
-};
+use differential_equations::{SaveMode, SolveOptions, SplitOdeProblem};
 
 fn endpoint<A: SplitOdeAlgorithm>(algorithm: A) -> f64 {
     let problem = SplitOdeProblem::new(

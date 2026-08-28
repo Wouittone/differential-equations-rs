@@ -1,7 +1,7 @@
-use differential_equations::algorithms::explicit::Euler;
-use differential_equations::algorithms::second_order::NewmarkBeta;
+use differential_equations::solvers::explicit::Euler;
 use differential_equations::solvers::exponential::rkip::RKIP;
 use differential_equations::solvers::rosenbrock::amf::AmfOperator;
+use differential_equations::solvers::second_order::NewmarkBeta;
 use differential_equations::{
     ConfigurationError, DEFAULT_EVENT_TOLERANCE, InterpolationError, LieGroupProblem, OdeProblem,
     SemilinearOdeProblem, SolveOptions, solve,

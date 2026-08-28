@@ -7,7 +7,7 @@
 //! # Example
 //!
 //! ```
-//! use differential_equations::algorithms::explicit::Tsit5;
+//! use differential_equations::solvers::explicit::Tsit5;
 //! use differential_equations::{
 //!     OdeProblem, SolveOptions, solve_ensemble_sequential,
 //! };

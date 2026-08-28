@@ -1,4 +1,4 @@
-use differential_equations::algorithms::*;
+use differential_equations::solvers::{automatic::*, explicit::*, rosenbrock::*};
 use differential_equations::*;
 
 type TestRhs = fn(&mut [f64], &[f64], &(), f64);
@@ -46,10 +46,7 @@ fn main() {
             "default_implicit_ode_algorithm",
             solve(&problem(), DefaultImplicitODEAlgorithm::default(), &options),
         ),
-        (
-            "explicit_rk",
-            solve(&problem(), ExplicitRK::<Dp5>::new(), &options),
-        ),
+        ("explicit_rk", solve(&problem(), Dp5, &options)),
     ] {
         println!("{name},{:.17e}", endpoint.unwrap().last_state()[0]);
     }

@@ -1,6 +1,6 @@
 use std::cell::Cell;
 
-use differential_equations::algorithms::*;
+use differential_equations::solvers::{automatic::*, explicit::*, rosenbrock::*};
 use differential_equations::*;
 
 type TestRhs = fn(&mut [f64], &[f64], &(), f64);
@@ -26,7 +26,7 @@ struct RecordingStiff<'a> {
 }
 
 impl OdeAlgorithm for RecordingStiff<'_> {
-    fn solve<F, P>(
+    fn solve_validated<F, P>(
         &self,
         problem: &OdeProblem<F, P>,
         options: &SolveOptions,
@@ -76,7 +76,7 @@ fn automatic_and_default_facades_delegate_to_native_components() {
             solve(&problem(), Rodas5P, &options).unwrap(),
         ),
         (
-            solve(&problem(), ExplicitRK::<Dp5>::new(), &options).unwrap(),
+            solve(&problem(), Dp5, &options).unwrap(),
             solve(&problem(), Dp5, &options).unwrap(),
         ),
     ];
@@ -86,9 +86,8 @@ fn automatic_and_default_facades_delegate_to_native_components() {
 }
 
 #[test]
-fn explicit_rk_alias_exposes_the_existing_tableau_kernel() {
-    fn assert_tableau<T: ButcherTableau>() {}
-    assert_tableau::<Dp5>();
+fn explicit_rk_resource_exposes_the_materialized_tableau() {
+    assert_eq!(Dp5.tableau().unwrap().name(), "Dp5");
 }
 
 #[test]

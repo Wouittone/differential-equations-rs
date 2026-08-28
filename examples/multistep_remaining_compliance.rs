@@ -1,4 +1,5 @@
-use differential_equations::algorithms::multistep::*;
+use differential_equations::solvers::explicit::solve_split;
+use differential_equations::solvers::multistep::*;
 use differential_equations::*;
 
 type Rhs = fn(&mut [f64], &[f64], &(), f64);

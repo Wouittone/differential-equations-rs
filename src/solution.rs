@@ -100,7 +100,44 @@ pub(crate) struct BorrowedRungeKuttaSegment<'a> {
     end_state: &'a [f64],
     stages: &'a [f64],
     dimension: usize,
-    coefficients: &'static [&'static [f64]],
+    coefficients: RungeKuttaCoefficients,
+}
+
+/// Process-lifetime continuous-extension rows from either legacy static
+/// tableaus or lazily materialized resource tableaus.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum RungeKuttaCoefficients {
+    Static(&'static [&'static [f64]]),
+    Resource(&'static [Vec<f64>]),
+}
+
+impl RungeKuttaCoefficients {
+    fn len(self) -> usize {
+        match self {
+            Self::Static(rows) => rows.len(),
+            Self::Resource(rows) => rows.len(),
+        }
+    }
+
+    fn row(self, index: usize) -> &'static [f64] {
+        match self {
+            Self::Static(rows) => rows[index],
+            Self::Resource(rows) => &rows[index],
+        }
+    }
+
+    fn rows_are_valid(self) -> bool {
+        (0..self.len()).all(|index| {
+            let row = self.row(index);
+            !row.is_empty() && row.iter().all(|coefficient| coefficient.is_finite())
+        })
+    }
+}
+
+impl From<&'static [&'static [f64]]> for RungeKuttaCoefficients {
+    fn from(rows: &'static [&'static [f64]]) -> Self {
+        Self::Static(rows)
+    }
 }
 
 /// Owning Runge--Kutta continuous extension retained after a solve.
@@ -113,7 +150,7 @@ pub(crate) struct RungeKuttaSegment {
     end_state: Vec<f64>,
     stages: Vec<f64>,
     dimension: usize,
-    coefficients: &'static [&'static [f64]],
+    coefficients: RungeKuttaCoefficients,
 }
 
 /// Borrowed Rosenbrock/Rodas continuous extension for one accepted step.
@@ -328,19 +365,18 @@ impl<'a> BorrowedRungeKuttaSegment<'a> {
         start_state: &'a [f64],
         end_state: &'a [f64],
         stages: &'a [f64],
-        coefficients: &'static [&'static [f64]],
+        coefficients: impl Into<RungeKuttaCoefficients>,
     ) -> Result<Self, InterpolationError> {
+        let coefficients = coefficients.into();
         let dimension = start_state.len();
         if !start_time.is_finite()
             || !end_time.is_finite()
             || end_time == start_time
             || dimension == 0
             || end_state.len() != dimension
-            || coefficients.is_empty()
+            || coefficients.len() == 0
             || stages.len() != coefficients.len() * dimension
-            || coefficients
-                .iter()
-                .any(|row| row.is_empty() || row.iter().any(|coefficient| !coefficient.is_finite()))
+            || !coefficients.rows_are_valid()
             || !start_state.iter().all(|value| value.is_finite())
             || !end_state.iter().all(|value| value.is_finite())
             || !stages.iter().all(|value| value.is_finite())
@@ -381,8 +417,9 @@ impl RungeKuttaSegment {
         start_state: &[f64],
         end_state: &[f64],
         stages: &[f64],
-        coefficients: &'static [&'static [f64]],
+        coefficients: impl Into<RungeKuttaCoefficients>,
     ) -> Result<Self, InterpolationError> {
+        let coefficients = coefficients.into();
         let borrowed = BorrowedRungeKuttaSegment::new(
             start_time,
             end_time,
@@ -1026,10 +1063,11 @@ pub(crate) fn interpolate_runge_kutta(
     end_time: f64,
     start_state: &[f64],
     stages: &[f64],
-    coefficients: &'static [&'static [f64]],
+    coefficients: impl Into<RungeKuttaCoefficients>,
     time: f64,
     output: &mut [f64],
 ) -> Result<(), InterpolationError> {
+    let coefficients = coefficients.into();
     let dimension = start_state.len();
     if output.len() != dimension {
         return Err(InterpolationError::DimensionMismatch);
@@ -1045,8 +1083,9 @@ pub(crate) fn interpolate_runge_kutta(
     let step = end_time - start_time;
     let theta = (time - start_time) / step;
     output.copy_from_slice(start_state);
-    for (stage_index, coefficients) in coefficients.iter().enumerate() {
+    for stage_index in 0..coefficients.len() {
         let polynomial = coefficients
+            .row(stage_index)
             .iter()
             .rev()
             .fold(0.0, |value, coefficient| value * theta + coefficient);

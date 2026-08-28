@@ -1,4 +1,4 @@
-use differential_equations::algorithms::implicit::PDIRK44;
+use differential_equations::solvers::implicit::PDIRK44;
 use differential_equations::{OdeProblem, SaveMode, SolveError, SolveOptions, solve};
 
 fn fixed_options(step: f64) -> SolveOptions {

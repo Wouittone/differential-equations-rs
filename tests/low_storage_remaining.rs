@@ -2,7 +2,7 @@ use std::any::TypeId;
 use std::collections::HashSet;
 use std::fmt::Debug;
 
-use differential_equations::algorithms::*;
+use differential_equations::solvers::explicit::*;
 use differential_equations::*;
 
 fn exercise_public_algorithm<A>(name: &'static str, algorithm: A, identities: &mut HashSet<TypeId>)

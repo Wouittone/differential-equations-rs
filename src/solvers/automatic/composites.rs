@@ -49,7 +49,7 @@ macro_rules! automatic_facade {
         }
 
         impl<A: OdeAlgorithm> OdeAlgorithm for $name<A> {
-            fn solve<F, P>(
+            fn solve_validated<F, P>(
                 &self,
                 problem: &OdeProblem<F, P>,
                 options: &SolveOptions,
@@ -99,7 +99,7 @@ automatic_facade!(
 pub struct DefaultOdeAlgorithm;
 
 impl OdeAlgorithm for DefaultOdeAlgorithm {
-    fn solve<F, P>(
+    fn solve_validated<F, P>(
         &self,
         problem: &OdeProblem<F, P>,
         options: &SolveOptions,
@@ -120,7 +120,7 @@ pub type DefaultODEAlgorithm = DefaultOdeAlgorithm;
 pub struct DefaultImplicitOdeAlgorithm;
 
 impl OdeAlgorithm for DefaultImplicitOdeAlgorithm {
-    fn solve<F, P>(
+    fn solve_validated<F, P>(
         &self,
         problem: &OdeProblem<F, P>,
         options: &SolveOptions,

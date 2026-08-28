@@ -28,6 +28,7 @@ pub struct AmfOperator {
 pub type AMFOperator = AmfOperator;
 
 impl AmfOperator {
+    /// Constructs an AMF operator from one dense row-major Jacobian.
     pub fn from_jacobian(
         dimension: usize,
         jacobian: impl Into<Vec<f64>>,
@@ -35,6 +36,7 @@ impl AmfOperator {
         Self::from_split(dimension, vec![jacobian.into()])
     }
 
+    /// Constructs an AMF operator from ordered dense row-major factors.
     pub fn from_split(
         dimension: usize,
         factors: Vec<Vec<f64>>,
@@ -68,16 +70,20 @@ impl AmfOperator {
         })
     }
 
+    /// Returns the number of ordered Jacobian factors.
     pub fn factor_count(&self) -> usize {
         self.jacobian_factors.len()
     }
+    /// Returns the unfactorized Jacobian factors.
     pub fn factors(&self) -> &[Vec<f64>] {
         &self.jacobian_factors
     }
+    /// Returns mutable access to the unfactorized Jacobian factors.
     pub fn factors_mut(&mut self) -> &mut [Vec<f64>] {
         &mut self.jacobian_factors
     }
 
+    /// Factorizes each `I - scaled_gamma * J_i` matrix in product order.
     pub fn factorize(&mut self, scaled_gamma: f64) -> Result<(), SolveError> {
         for ((jacobian, matrix), pivots) in self
             .jacobian_factors
@@ -96,6 +102,7 @@ impl AmfOperator {
         Ok(())
     }
 
+    /// Applies every factor solve to `right_hand_side` in product order.
     pub fn solve_ordered(&self, right_hand_side: &mut [f64]) {
         for (matrix, pivots) in self.factorizations.iter().zip(&self.pivots) {
             solve_factorized(matrix, pivots, right_hand_side, self.dimension);
@@ -137,6 +144,7 @@ pub struct AmfProblem<F, J, S, P> {
 }
 
 impl<F, J, S, P> AmfProblem<F, J, S, P> {
+    /// Constructs a checked structured AMF problem.
     pub fn new(
         function: AmfFunction<F, J, S>,
         initial_state: impl Into<Vec<f64>>,
@@ -161,12 +169,15 @@ impl<F, J, S, P> AmfProblem<F, J, S, P> {
             parameters,
         })
     }
+    /// Returns the initial state.
     pub fn initial_state(&self) -> &[f64] {
         &self.initial_state
     }
+    /// Returns the integration time span.
     pub fn time_span(&self) -> (f64, f64) {
         self.time_span
     }
+    /// Returns the number of AMF Jacobian factors.
     pub fn factor_count(&self) -> usize {
         self.function.factor_prototypes.len()
     }
@@ -182,16 +193,18 @@ pub struct AMF<A = Rosenbrock23> {
 }
 
 impl<A> AMF<A> {
+    /// Wraps a Rosenbrock-W algorithm with approximate matrix factorization.
     pub const fn new(inner: A) -> Self {
         Self { inner }
     }
+    /// Returns the wrapped algorithm.
     pub fn inner(&self) -> &A {
         &self.inner
     }
 }
 
 impl OdeAlgorithm for AMF<Rosenbrock23> {
-    fn solve<F, P>(
+    fn solve_validated<F, P>(
         &self,
         problem: &OdeProblem<F, P>,
         options: &SolveOptions,

@@ -1,6 +1,6 @@
 use std::cell::Cell;
 
-use differential_equations::algorithms::*;
+use differential_equations::solvers::{automatic::*, explicit::*, rosenbrock::*};
 use differential_equations::*;
 
 type TestRhs = fn(&mut [f64], &[f64], &(), f64);
@@ -27,7 +27,7 @@ struct RecordingStiff<'a> {
 }
 
 impl OdeAlgorithm for RecordingStiff<'_> {
-    fn solve<F, P>(
+    fn solve_validated<F, P>(
         &self,
         problem: &OdeProblem<F, P>,
         options: &SolveOptions,

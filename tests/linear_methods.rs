@@ -1,7 +1,7 @@
-use differential_equations::algorithms::linear::*;
 use differential_equations::solvers::linear::general::{
-    LinearOperatorAlgorithm, solve_lie_group, solve_linear_operator,
+    LieGroupAlgorithm, LinearOperatorAlgorithm, solve_lie_group, solve_linear_operator,
 };
+use differential_equations::solvers::linear::*;
 use differential_equations::{
     CallbackAction, LieGroupProblem, LinearOperatorProblem, OdeProblem, SaveMode, SolveError,
     SolveOptions, solve,
@@ -168,6 +168,23 @@ fn fixed_only_methods_reject_adaptive_mode_and_nonfinite_operators_fail() {
     assert_eq!(
         solve_linear_operator(&invalid, LieEuler, &fixed(0.1)).unwrap_err(),
         SolveError::NonFiniteDerivative
+    );
+}
+
+#[test]
+fn direct_typed_algorithm_methods_validate_before_dispatch() {
+    let operator =
+        LinearOperatorProblem::new(rotation_operator, vec![1.0, 0.0], (0.0, 1.0), ()).unwrap();
+    let group = LieGroupProblem::vector(rotation_operator, vec![1.0, 0.0], (0.0, 1.0), ()).unwrap();
+    let invalid = SolveOptions::new().with_tolerances(0.0, 1.0e-3);
+
+    assert_eq!(
+        LinearOperatorAlgorithm::solve_operator(&MagnusMidpoint, &operator, &invalid),
+        Err(SolveError::InvalidTolerance)
+    );
+    assert_eq!(
+        LieGroupAlgorithm::solve_group(&MagnusMidpoint, &group, &invalid),
+        Err(SolveError::InvalidTolerance)
     );
 }
 

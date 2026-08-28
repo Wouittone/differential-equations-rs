@@ -1,4 +1,4 @@
-use differential_equations::algorithms::*;
+use differential_equations::solvers::second_order::*;
 use differential_equations::*;
 
 type Acceleration = fn(&mut [f64], &[f64], &[f64], &(), f64);

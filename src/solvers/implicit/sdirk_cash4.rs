@@ -9,49 +9,29 @@ use crate::integrator::{
     ControllerConfig, KernelCapabilities, StepEstimate, StepKernel, integrate as drive_integration,
 };
 use crate::linear::{DenseLu, StateLayout};
+use crate::tableau::{RungeKuttaTableau, load_tableau};
 use crate::{OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions, SolverStats};
+use differential_equations_tableau_macros::define_implicit_rk_tableau_from_file;
 
 const MAX_NEWTON_ITERATIONS: usize = 12;
 const NEWTON_TOLERANCE: f64 = 1.0e-12;
 const CONTROLLER: ControllerConfig = ControllerConfig::proportional(4, 0.9, 0.2, 10.0, 0.2);
 
-// Cash4Tableau(::Type{T}, ::Type{T2}) at pinned revision
-// 211142263781255a9aa2f910f6760b9f18ec29c8.
-const GAMMA: f64 = 0.435866521508;
-const A21: f64 = -1.1358665215;
-const A31: f64 = 1.08543330679;
-const A32: f64 = -0.721299828287;
-const A41: f64 = 0.416349501547;
-const A42: f64 = 0.190984004184;
-const A43: f64 = -0.118643265417;
-const A51: f64 = 0.896869652944;
-const A52: f64 = 0.0182725272734;
-const A53: f64 = -0.0845900310706;
-const A54: f64 = -0.266418670647;
-const C: [f64; 5] = [GAMMA, -0.7, 0.8, 0.924556761814, 1.0];
-const B: [f64; 5] = [A51, A52, A53, A54, GAMMA];
-// Cash4's `embedding=3` is the default in the pinned Julia constructor.
-const BHAT2: [f64; 5] = [
-    0.77669193291,
-    0.0297472791484,
-    -0.0267440239074,
-    0.220304811849,
-    0.0,
-];
-const ERROR: [f64; 5] = [
-    BHAT2[0] - B[0],
-    BHAT2[1] - B[1],
-    BHAT2[2] - B[2],
-    BHAT2[3] - B[3],
-    BHAT2[4] - B[4],
-];
+define_implicit_rk_tableau_from_file!(pub(super) CASH4_TABLEAU, "Cash4", "tableaux/implicit/cash4.json", crate = crate);
 
 /// The pinned fourth-order Cash SDIRK method.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Cash4;
 
+impl Cash4 {
+    /// Returns this method's lazily materialized, validated tableau.
+    pub fn tableau(self) -> Result<&'static RungeKuttaTableau, crate::tableau::TableauError> {
+        load_tableau(&CASH4_TABLEAU)
+    }
+}
+
 impl OdeAlgorithm for Cash4 {
-    fn solve<F, P>(
+    fn solve_validated<F, P>(
         &self,
         problem: &OdeProblem<F, P>,
         options: &SolveOptions,
@@ -59,10 +39,11 @@ impl OdeAlgorithm for Cash4 {
     where
         F: Fn(&mut [f64], &[f64], &P, f64),
     {
+        let tableau = self.tableau().map_err(|_| SolveError::InvalidTableau)?;
         drive_integration(
             problem,
             options,
-            Cash4Kernel::new(problem.initial_state().len()),
+            Cash4Kernel::new(problem.initial_state().len(), tableau),
         )
     }
 }
@@ -104,12 +85,14 @@ impl Workspace {
 
 struct Cash4Kernel {
     workspace: Workspace,
+    tableau: &'static RungeKuttaTableau,
 }
 
 impl Cash4Kernel {
-    fn new(dimension: usize) -> Self {
+    fn new(dimension: usize, tableau: &'static RungeKuttaTableau) -> Self {
         Self {
             workspace: Workspace::new(dimension),
+            tableau,
         }
     }
 }
@@ -187,20 +170,26 @@ where
             solve_stage(
                 problem,
                 state,
-                time + C[stage] * step,
-                step,
+                (time + self.tableau.c()[stage] * step, step),
                 stage,
+                self.tableau,
                 &mut self.workspace,
                 stats,
             )?;
         }
         for (index, candidate_value) in candidate.iter_mut().enumerate() {
             *candidate_value = state[index]
-                + B.iter()
+                + self
+                    .tableau
+                    .b()
+                    .iter()
                     .zip(&self.workspace.stages)
                     .map(|(&weight, stage)| weight * stage[index])
                     .sum::<f64>();
-            self.workspace.error[index] = ERROR
+            self.workspace.error[index] = self
+                .tableau
+                .error()
+                .unwrap()
                 .iter()
                 .zip(&self.workspace.stages)
                 .map(|(&weight, stage)| weight * stage[index])
@@ -248,38 +237,28 @@ where
 fn solve_stage<F, P>(
     problem: &OdeProblem<F, P>,
     previous: &[f64],
-    stage_time: f64,
-    step: f64,
+    time_and_step: (f64, f64),
     stage_index: usize,
+    tableau: &RungeKuttaTableau,
     workspace: &mut Workspace,
     stats: &mut SolverStats,
 ) -> Result<(), SolveError>
 where
     F: Fn(&mut [f64], &[f64], &P, f64),
 {
+    let (stage_time, step) = time_and_step;
     let dimension = workspace.layout.dimension();
     for _ in 0..MAX_NEWTON_ITERATIONS {
         stats.nonlinear_iterations += 1;
         for (index, &previous_value) in previous.iter().enumerate() {
-            let coupling = match stage_index {
-                0 => 0.0,
-                1 => A21 * workspace.stages[0][index],
-                2 => A31 * workspace.stages[0][index] + A32 * workspace.stages[1][index],
-                3 => {
-                    A41 * workspace.stages[0][index]
-                        + A42 * workspace.stages[1][index]
-                        + A43 * workspace.stages[2][index]
-                }
-                4 => {
-                    A51 * workspace.stages[0][index]
-                        + A52 * workspace.stages[1][index]
-                        + A53 * workspace.stages[2][index]
-                        + A54 * workspace.stages[3][index]
-                }
-                _ => return Err(SolveError::InvalidTableau),
-            };
-            workspace.stage_state[index] =
-                previous_value + coupling + GAMMA * workspace.stages[stage_index][index];
+            let coupling = tableau.a()[stage_index][..stage_index]
+                .iter()
+                .zip(&workspace.stages[..stage_index])
+                .map(|(coefficient, stage)| coefficient * stage[index])
+                .sum::<f64>();
+            workspace.stage_state[index] = previous_value
+                + coupling
+                + tableau.a()[stage_index][stage_index] * workspace.stages[stage_index][index];
         }
         evaluate_checked(
             problem,
@@ -299,7 +278,13 @@ where
             return Ok(());
         }
         if workspace.factorization.is_none() {
-            build_factorization(problem, stage_time, step, workspace, stats)?;
+            build_factorization(
+                problem,
+                stage_time,
+                step * tableau.a()[stage_index][stage_index],
+                workspace,
+                stats,
+            )?;
         }
         for (correction, &residual) in workspace.correction.iter_mut().zip(&workspace.residual) {
             *correction = -residual;
@@ -327,7 +312,7 @@ where
 fn build_factorization<F, P>(
     problem: &OdeProblem<F, P>,
     evaluation_time: f64,
-    step: f64,
+    diagonal_step: f64,
     workspace: &mut Workspace,
     stats: &mut SolverStats,
 ) -> Result<(), SolveError>
@@ -347,7 +332,7 @@ where
                 if !derivative.is_finite() {
                     return Err(SolveError::NonFiniteDerivative);
                 }
-                workspace.matrix[index] = f64::from(row == column) - step * GAMMA * derivative;
+                workspace.matrix[index] = f64::from(row == column) - diagonal_step * derivative;
             }
         }
     } else {
@@ -372,7 +357,7 @@ where
                     return Err(SolveError::NonFiniteDerivative);
                 }
                 workspace.matrix[row * dimension + column] =
-                    f64::from(row == column) - step * GAMMA * derivative;
+                    f64::from(row == column) - diagonal_step * derivative;
             }
         }
     }

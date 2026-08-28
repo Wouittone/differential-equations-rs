@@ -1,10 +1,14 @@
-use differential_equations::algorithms::rosenbrock::Rosenbrock23;
-use differential_equations::algorithms::{amf::AMF, interaction_picture::RKIP, stabilized::IRKC};
 use differential_equations::solvers::exponential::rkip::solve_rkip;
+use differential_equations::solvers::rosenbrock::Rosenbrock23;
 use differential_equations::solvers::rosenbrock::amf::{
     AMFOperator, AmfProblem, build_amf_function, solve_amf,
 };
 use differential_equations::solvers::stabilized::irkc::solve_irkc;
+use differential_equations::solvers::{
+    exponential::{InteractionPictureAlgorithm, rkip::RKIP},
+    rosenbrock::amf::AMF,
+    stabilized::IRKC,
+};
 use differential_equations::{
     CallbackAction, OdeProblem, SaveMode, SemilinearOdeProblem, SolveError, SolveOptions,
     SplitOdeProblem, solve,
@@ -92,6 +96,29 @@ fn rkip_matches_affine_semilinear_solution_and_recycles_cache() {
 }
 
 #[test]
+fn rkip_rejects_invalid_inputs_before_mutating_its_cache() {
+    fn zero(output: &mut [f64], _: &[f64], _: &(), _: f64) {
+        output.fill(0.0);
+    }
+    let problem = SemilinearOdeProblem::new(vec![-1.0], zero, vec![1.0], (0.0, 1.0), ()).unwrap();
+    let algorithm = RKIP::new(0.1, 0.2, 2).unwrap();
+    solve_rkip(&problem, &algorithm, &fixed(0.1)).unwrap();
+    let before = algorithm.cache_stats();
+    let invalid = SolveOptions::new().with_tolerances(0.0, 1.0e-3);
+    assert_eq!(
+        solve_rkip(&problem, &algorithm, &invalid),
+        Err(SolveError::InvalidTolerance)
+    );
+    assert_eq!(algorithm.cache_stats(), before);
+
+    assert_eq!(
+        InteractionPictureAlgorithm::solve_interaction_picture(&algorithm, &problem, &invalid),
+        Err(SolveError::InvalidTolerance)
+    );
+    assert_eq!(algorithm.cache_stats(), before);
+}
+
+#[test]
 fn rkip_adaptive_estimator_refines_and_backward_is_inverse_for_linear_case() {
     fn nonlinear(output: &mut [f64], state: &[f64], _: &(), _: f64) {
         output[0] = state[0].sin();
@@ -156,6 +183,14 @@ fn irkc_estimates_eigenvalue_and_reports_configuration_failures() {
     let problem = SplitOdeProblem::new(explicit, implicit, vec![1.0], (0.0, 0.1), ());
     let solution = solve_irkc(&problem, IRKC::new(), &fixed(0.01)).unwrap();
     assert!(solution.stats().rhs_evaluations > 50);
+    let overridden = solve_irkc(
+        &problem,
+        IRKC::new().with_eigenvalue_estimate(20.0),
+        &fixed(0.01),
+    )
+    .unwrap();
+    assert!((solution.last_state()[0] - overridden.last_state()[0]).abs() < 1.0e-12);
+    assert!(overridden.stats().rhs_evaluations < solution.stats().rhs_evaluations);
     assert_eq!(
         solve_irkc(
             &problem,
@@ -165,6 +200,33 @@ fn irkc_estimates_eigenvalue_and_reports_configuration_failures() {
         .unwrap_err(),
         SolveError::InvalidTolerance
     );
+}
+
+#[test]
+fn irkc_preserves_typed_continuous_callbacks() {
+    let problem = SplitOdeProblem::new(
+        |output: &mut [f64], _: &[f64], _: &(), _: f64| output[0] = 1.0,
+        |output: &mut [f64], _: &[f64], _: &(), _: f64| output[0] = 0.0,
+        vec![0.0],
+        (0.0, 0.2),
+        (),
+    )
+    .with_continuous_callback(
+        |state, _, _| state[0] - 0.1,
+        |state, _, _| {
+            state[0] = 3.0;
+            CallbackAction::Terminate
+        },
+    );
+    let solution = solve_irkc(
+        &problem,
+        IRKC::new().with_eigenvalue_estimate(1.0),
+        &fixed(0.2).with_event_tolerance(1.0e-11),
+    )
+    .unwrap();
+    assert!((solution.times().last().unwrap() - 0.1).abs() < 1.0e-10);
+    assert_eq!(solution.last_state(), &[3.0]);
+    assert_eq!(solution.stats().callback_invocations, 1);
 }
 
 #[test]

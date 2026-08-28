@@ -147,6 +147,23 @@ where
 {
     fn capabilities(&self) -> KernelCapabilities;
 
+    /// Reports whether the effective problem representation has callbacks.
+    /// Typed adapters that drive through a callback-free placeholder problem
+    /// override this so the driver allocates its callback state buffer.
+    fn has_callbacks(&self, problem: &OdeProblem<F, P>) -> bool {
+        problem.has_callbacks()
+    }
+
+    /// Applies callbacks at the initial state for the effective problem.
+    fn apply_initial_callbacks(
+        &mut self,
+        problem: &OdeProblem<F, P>,
+        state: &mut [f64],
+        time: f64,
+    ) -> Result<CallbackOutcome, SolveError> {
+        problem.apply_initial_callbacks(state, time)
+    }
+
     /// Adjusts a controller proposal before it becomes the next attempted
     /// step. Most methods keep the proposal unchanged; interval-prediction
     /// methods can snap it to a precomputed exponential grid.
@@ -157,6 +174,15 @@ where
     /// Reports whether this kernel supplies a complete accepted-step dense
     /// lifecycle. The shared driver otherwise provides cubic Hermite output.
     fn has_custom_dense_output(&self) -> bool {
+        false
+    }
+
+    /// Reports whether callback dispatch is implemented by the kernel rather
+    /// than by the [`OdeProblem`] passed to the shared driver.
+    ///
+    /// Typed adapters use this when the driver receives a placeholder problem
+    /// but callbacks belong to another problem representation.
+    fn has_custom_callback_handling(&self) -> bool {
         false
     }
 
@@ -458,6 +484,8 @@ where
     F: Fn(&mut [f64], &[f64], &P, f64),
     K: StepKernel<F, P>,
 {
+    crate::solver::validate_ode_problem(problem, options)?;
+
     let capabilities = kernel.capabilities();
     if options.adaptive && !capabilities.adaptive {
         return Err(SolveError::AdaptiveStepUnsupported);
@@ -472,13 +500,14 @@ where
     let maximum_step = options.max_step.min((end - start).abs());
     let mut state = problem.initial_state().to_vec();
     let mut candidate = vec![0.0; dimension];
-    let mut state_before_effect = if problem.has_callbacks() {
+    let mut state_before_effect = if kernel.has_callbacks(problem) {
         vec![0.0; dimension]
     } else {
         Vec::new()
     };
     let mut stats = SolverStats::default();
     let custom_dense_output = kernel.has_custom_dense_output();
+    let custom_callback_handling = kernel.has_custom_callback_handling();
     let default_dense_enabled = !custom_dense_output
         && (problem.has_continuous_callbacks()
             || !options.save_at.is_empty()
@@ -486,7 +515,7 @@ where
     let default_callback_dense_enabled = !custom_dense_output && problem.has_continuous_callbacks();
     let mut default_dense = DefaultDenseState::new(dimension, default_dense_enabled);
 
-    let initial_callbacks = problem.apply_initial_callbacks(&mut state, start)?;
+    let initial_callbacks = kernel.apply_initial_callbacks(problem, &mut state, start)?;
     stats.callback_invocations += initial_callbacks.invocations;
     let mut recorder = TrajectoryRecorder::new(&state, start, options);
     if initial_callbacks.terminate {
@@ -561,7 +590,23 @@ where
                 next_time = end;
             }
             let attempted_time = next_time;
-            let callbacks = if custom_dense_output {
+            if custom_callback_handling && default_dense_enabled {
+                // Typed adapters dispatch callbacks against a problem other
+                // than the placeholder passed to this driver. Preserve the
+                // full attempted endpoint before an event truncates `candidate`
+                // so retained and save-at dense output remains the accepted
+                // step's left-limit interpolant.
+                default_dense.prepare(
+                    &mut kernel,
+                    problem,
+                    &state,
+                    previous_time,
+                    &candidate,
+                    attempted_time,
+                    &mut stats,
+                )?;
+            }
+            let callbacks = if custom_dense_output || custom_callback_handling {
                 kernel.apply_step_callbacks(
                     problem,
                     &state,

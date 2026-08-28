@@ -1,4 +1,4 @@
-use differential_equations::algorithms::exponential::*;
+use differential_equations::solvers::exponential::*;
 use differential_equations::{OdeAlgorithm, OdeProblem, SaveMode, SolveOptions, solve};
 
 fn endpoint<A: OdeAlgorithm>(algorithm: A) -> f64 {

@@ -13,15 +13,17 @@ used by this repository.
   allowlist is MIT, Apache-2.0, and Unicode-3.0.
 - Known RustSec advisories, yanked packages, duplicate crate versions, unknown
   registries, and unknown Git sources fail the supply-chain CI job.
-- Direct dependencies should be minimal, actively maintained, and used through
-  the narrowest practical feature set.
+- Direct dependencies must be actively maintained, license-compatible, MSRV
+  compatible, minimal, and used through the narrowest practical feature set.
+  New parser/evaluator dependencies also require tests for the exact grammar
+  and numeric semantics used by coefficient resources.
 
 ## Review and updates
 
 Dependabot opens weekly grouped updates for Cargo dependencies and GitHub
 Actions. Every update must pass the normal tests and `cargo deny check` before
 merge. Major updates require review of release notes, MSRV impact, enabled
-features, transitive dependency changes, and license changes.
+features, transitive dependency changes, maintenance activity, and licenses.
 
 GitHub Actions must be pinned to a full commit SHA. The adjacent version
 comment records the reviewed release or moving ref. Dependabot is responsible
@@ -36,17 +38,17 @@ exists. Exception changes require the same review as source-code changes.
 
 ## Local verification
 
-Install the cargo-deny release used by CI and run:
+Install the `cargo-deny` release used by CI and run:
 
 ```console
 cargo deny check
-cargo check --locked --all-targets --no-default-features
-cargo test --locked --all-targets --all-features
+cargo +1.85 check --locked --all-targets --no-default-features
+cargo +1.85 test --locked --workspace --all-features
 pwsh ./scripts/check_package_policy.ps1
 ```
 
-The package-policy script verifies the workspace SPDX expressions, the copied
-proc-macro license texts, the license and notice files shipped in each crate,
-and the exclusion of development-only trees from the main package. This policy
+The package-policy script verifies workspace SPDX expressions, copied license
+texts, required notices and documentation, extracted-package builds, and the
+exclusion of development-only trees from published archives. This policy
 complements code review and testing; it does not make dependency or licensing
 decisions automatic.

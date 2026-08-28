@@ -1,4 +1,4 @@
-use differential_equations::algorithms::*;
+use differential_equations::solvers::explicit::*;
 use differential_equations::*;
 
 type ScalarRhs = fn(&mut [f64], &[f64], &(), f64);
@@ -28,17 +28,18 @@ fn public_names_implement_the_solver_contract() {
 
 #[test]
 fn tableaus_have_consistent_rows_and_moments() {
-    fn check<T: ButcherTableau>() {
-        assert_eq!(T::NODES.len(), T::WEIGHTS.len());
-        assert_eq!(T::COEFFICIENTS.len(), T::WEIGHTS.len());
-        for (index, (row, node)) in T::COEFFICIENTS.iter().zip(T::NODES).enumerate() {
-            assert_eq!(row.len(), index);
+    fn check(algorithm: ResourceExplicitRungeKutta) {
+        let tableau = algorithm.tableau().unwrap();
+        assert_eq!(tableau.c().len(), tableau.b().len());
+        assert_eq!(tableau.a().len(), tableau.b().len());
+        for (index, (row, node)) in tableau.a().iter().zip(tableau.c()).enumerate() {
+            assert_eq!(row[index..], vec![0.0; row.len() - index]);
             assert!((row.iter().sum::<f64>() - node).abs() < 2.0e-10);
         }
-        assert!((T::WEIGHTS.iter().sum::<f64>() - 1.0).abs() < 2.0e-10);
+        assert!((tableau.b().iter().sum::<f64>() - 1.0).abs() < 2.0e-10);
     }
-    check::<KuttaPrk2p5Tableau>();
-    check::<Qprk98Tableau>();
+    check(KuttaPRK2p5());
+    check(QPRK98());
 }
 
 #[test]

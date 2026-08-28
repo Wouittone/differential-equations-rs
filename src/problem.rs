@@ -39,6 +39,7 @@ pub struct SplitOdeProblem<FE, FI, P> {
 
 #[allow(dead_code)]
 impl<FE, FI, P> SplitOdeProblem<FE, FI, P> {
+    /// Constructs a split problem from explicit and implicit right-hand sides.
     pub fn new(
         explicit: FE,
         implicit: FI,
@@ -112,18 +113,22 @@ impl<FE, FI, P> SplitOdeProblem<FE, FI, P> {
         self
     }
 
+    /// Returns the initial state.
     pub fn initial_state(&self) -> &[f64] {
         &self.initial_state
     }
 
+    /// Returns the integration time span.
     pub fn time_span(&self) -> (f64, f64) {
         self.time_span
     }
 
+    /// Returns the shared user parameters.
     pub fn parameters(&self) -> &P {
         &self.parameters
     }
 
+    /// Returns the state dimension.
     pub fn dimension(&self) -> usize {
         self.initial_state.len()
     }
@@ -133,6 +138,7 @@ impl<FE, FI, P> SplitOdeProblem<FE, FI, P> {
         !self.callbacks.is_empty()
     }
 
+    /// Evaluates the explicit right-hand side.
     pub fn evaluate_explicit(&self, derivative: &mut [f64], state: &[f64], time: f64)
     where
         FE: Fn(&mut [f64], &[f64], &P, f64),
@@ -140,6 +146,7 @@ impl<FE, FI, P> SplitOdeProblem<FE, FI, P> {
         (self.explicit)(derivative, state, &self.parameters, time);
     }
 
+    /// Evaluates the implicit right-hand side.
     pub fn evaluate_implicit(&self, derivative: &mut [f64], state: &[f64], time: f64)
     where
         FI: Fn(&mut [f64], &[f64], &P, f64),

@@ -1,6 +1,15 @@
 use crate::integrator::{KernelCapabilities, StepEstimate, StepKernel, integrate};
 use crate::linear::{factorize, solve_factorized};
+use crate::tableau::{RungeKuttaTableau, load_tableau};
 use crate::{OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions, SolverStats};
+use differential_equations_tableau_macros::define_implicit_rk_tableau_from_file;
+
+define_implicit_rk_tableau_from_file!(
+    pub(super) PDIRK44_TABLEAU,
+    "Pdirk44",
+    "tableaux/implicit/pdirk44.json",
+    crate = crate
+);
 
 const MAX_NEWTON_ITERATIONS: usize = 12;
 const NEWTON_TOLERANCE: f64 = 1.0e-12;
@@ -21,8 +30,15 @@ pub type PDIRK44 = Pdirk44;
 #[allow(non_upper_case_globals)]
 pub const PDIRK44: Pdirk44 = Pdirk44;
 
+impl Pdirk44 {
+    /// Returns this method's lazily materialized, validated tableau.
+    pub fn tableau(self) -> Result<&'static RungeKuttaTableau, crate::tableau::TableauError> {
+        load_tableau(&PDIRK44_TABLEAU)
+    }
+}
+
 impl OdeAlgorithm for Pdirk44 {
-    fn solve<F, P>(
+    fn solve_validated<F, P>(
         &self,
         problem: &OdeProblem<F, P>,
         options: &SolveOptions,
@@ -30,10 +46,11 @@ impl OdeAlgorithm for Pdirk44 {
     where
         F: Fn(&mut [f64], &[f64], &P, f64),
     {
+        let tableau = self.tableau().map_err(|_| SolveError::InvalidTableau)?;
         integrate(
             problem,
             options,
-            Pdirk44Kernel::new(problem.initial_state().len()),
+            Pdirk44Kernel::new(problem.initial_state().len(), tableau)?,
         )
     }
 }
@@ -72,13 +89,18 @@ impl Pdirk44Workspace {
 
 struct Pdirk44Kernel {
     workspace: Pdirk44Workspace,
+    tableau: &'static RungeKuttaTableau,
 }
 
 impl Pdirk44Kernel {
-    fn new(dimension: usize) -> Self {
-        Self {
-            workspace: Pdirk44Workspace::new(dimension),
+    fn new(dimension: usize, tableau: &'static RungeKuttaTableau) -> Result<Self, SolveError> {
+        if tableau.a().len() != 4 {
+            return Err(SolveError::InvalidTableau);
         }
+        Ok(Self {
+            workspace: Pdirk44Workspace::new(dimension),
+            tableau,
+        })
     }
 }
 
@@ -129,9 +151,9 @@ where
             problem,
             &mut self.workspace,
             0,
-            time + step / 2.0,
+            time + self.tableau.c()[0] * step,
             step,
-            1.0 / 2.0,
+            self.tableau.a()[0][0],
             stats,
         )?;
 
@@ -140,46 +162,48 @@ where
             problem,
             &mut self.workspace,
             1,
-            time + 2.0 * step / 3.0,
+            time + self.tableau.c()[1] * step,
             step,
-            2.0 / 3.0,
+            self.tableau.a()[1][1],
             stats,
         )?;
 
         for (index, base) in self.workspace.stage_base.iter_mut().enumerate() {
-            *base = state[index] - 2.5 * self.workspace.increments[0][index]
-                + 2.5 * self.workspace.increments[1][index];
+            *base = state[index]
+                + self.tableau.a()[2][0] * self.workspace.increments[0][index]
+                + self.tableau.a()[2][1] * self.workspace.increments[1][index];
         }
         solve_stage(
             problem,
             &mut self.workspace,
             2,
-            time + step / 2.0,
+            time + self.tableau.c()[2] * step,
             step,
-            1.0 / 2.0,
+            self.tableau.a()[2][2],
             stats,
         )?;
 
         for (index, base) in self.workspace.stage_base.iter_mut().enumerate() {
-            *base = state[index] - (5.0 / 3.0) * self.workspace.increments[0][index]
-                + (4.0 / 3.0) * self.workspace.increments[1][index];
+            *base = state[index]
+                + self.tableau.a()[3][0] * self.workspace.increments[0][index]
+                + self.tableau.a()[3][1] * self.workspace.increments[1][index]
+                + self.tableau.a()[3][2] * self.workspace.increments[2][index];
         }
         solve_stage(
             problem,
             &mut self.workspace,
             3,
-            time + step / 3.0,
+            time + self.tableau.c()[3] * step,
             step,
-            2.0 / 3.0,
+            self.tableau.a()[3][3],
             stats,
         )?;
 
         for (index, value) in candidate.iter_mut().enumerate() {
-            *value = state[index]
-                - self.workspace.increments[0][index]
-                - self.workspace.increments[2][index]
-                + 1.5 * self.workspace.increments[1][index]
-                + 1.5 * self.workspace.increments[3][index];
+            *value = state[index];
+            for (weight, increment) in self.tableau.b().iter().zip(&self.workspace.increments) {
+                *value += weight * increment[index];
+            }
         }
         Ok(StepEstimate::new(0.0))
     }

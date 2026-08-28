@@ -1,4 +1,5 @@
-use differential_equations::algorithms::*;
+use differential_equations::solvers::explicit::Rk4;
+use differential_equations::solvers::stabilized::*;
 use differential_equations::*;
 
 type TestRhs = fn(&mut [f64], &[f64], &(), f64);

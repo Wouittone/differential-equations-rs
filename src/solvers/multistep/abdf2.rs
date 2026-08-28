@@ -10,10 +10,21 @@ use crate::integrator::{
     ControllerConfig, KernelCapabilities, StepEstimate, StepKernel, integrate as drive_integration,
 };
 use crate::linear::{DenseLu, LinearError, StateLayout, factorize, solve_factorized};
-use crate::solvers::explicit::coefficient_data::{
+use crate::{OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions, SolverStats};
+
+mod coefficient_data {
+    use differential_equations_tableau_macros::define_coefficients_from_file;
+
+    define_coefficients_from_file!(
+        pub(super),
+        "coefficients/multistep/abdf2.toml",
+        crate = crate
+    );
+}
+
+use coefficient_data::{
     ABDF2_ALPHA_HISTORY_SCALE, ABDF2_ALPHA_ONE_BASE, ABDF2_BETA_ONE_SCALE, ABDF2_BETA_ZERO,
 };
-use crate::{OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions, SolverStats};
 
 const MAX_NEWTON_ITERATIONS: usize = 12;
 const NEWTON_TOLERANCE: f64 = 1.0e-12;
@@ -28,7 +39,7 @@ const CONTROLLER: ControllerConfig = ControllerConfig::proportional(2, 0.9, 0.2,
 pub struct Abdf2;
 
 impl OdeAlgorithm for Abdf2 {
-    fn solve<F, P>(
+    fn solve_validated<F, P>(
         &self,
         problem: &OdeProblem<F, P>,
         options: &SolveOptions,

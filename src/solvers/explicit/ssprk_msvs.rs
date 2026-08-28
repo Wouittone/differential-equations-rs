@@ -708,7 +708,7 @@ where
 }
 
 impl OdeAlgorithm for SspRkMsvs32 {
-    fn solve<F, P>(
+    fn solve_validated<F, P>(
         &self,
         problem: &OdeProblem<F, P>,
         options: &SolveOptions,
@@ -725,7 +725,7 @@ impl OdeAlgorithm for SspRkMsvs32 {
 }
 
 impl OdeAlgorithm for SspRkMsvs43 {
-    fn solve<F, P>(
+    fn solve_validated<F, P>(
         &self,
         problem: &OdeProblem<F, P>,
         options: &SolveOptions,

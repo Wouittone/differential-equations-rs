@@ -1,6 +1,8 @@
 //! Rosenbrock, Rosenbrock--W, and approximate-factorization algorithms.
 
+/// Approximate-matrix-factorization Rosenbrock support.
 pub mod amf;
+/// Core Rosenbrock23 method and kernel.
 pub mod general;
 mod rosenbrock_dense;
 pub mod rosenbrock_extended;
@@ -10,9 +12,3 @@ pub use amf::{
 };
 pub use general::Rosenbrock23;
 pub use rosenbrock_extended::*;
-
-pub mod prelude {
-    pub use super::amf::AMF;
-    pub use super::general::Rosenbrock23;
-    pub use super::rosenbrock_extended::*;
-}

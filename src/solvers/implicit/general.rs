@@ -2,7 +2,13 @@ use crate::integrator::{
     KernelCapabilities, StepEstimate, StepKernel, integrate as drive_integration,
 };
 use crate::linear::{DenseLu, LinearError, StateLayout, factorize, solve_factorized};
+use crate::tableau::{RungeKuttaTableau, load_tableau};
 use crate::{OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions, SolverStats};
+use differential_equations_tableau_macros::define_implicit_rk_tableau_from_file;
+
+define_implicit_rk_tableau_from_file!(pub(super) IMPLICIT_EULER_TABLEAU, "ImplicitEuler", "tableaux/implicit/implicit_euler.json", crate = crate);
+define_implicit_rk_tableau_from_file!(pub(super) IMPLICIT_MIDPOINT_TABLEAU, "ImplicitMidpoint", "tableaux/implicit/implicit_midpoint.json", crate = crate);
+define_implicit_rk_tableau_from_file!(pub(super) TRAPEZOID_TABLEAU, "Trapezoid", "tableaux/implicit/trapezoid.json", crate = crate);
 
 const MAX_NEWTON_ITERATIONS: usize = 12;
 const NEWTON_TOLERANCE: f64 = 1.0e-12;
@@ -14,14 +20,29 @@ enum ImplicitMethod {
     Trapezoid,
 }
 
+#[derive(Clone, Copy)]
+struct ImplicitFormula<'a> {
+    method: ImplicitMethod,
+    tableau: &'a RungeKuttaTableau,
+}
+
 macro_rules! algorithm {
-    ($name:ident, $documentation:literal, $method:ident) => {
+    ($name:ident, $documentation:literal, $method:ident, $tableau:ident) => {
         #[doc = $documentation]
         #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
         pub struct $name;
 
+        impl $name {
+            /// Returns this method's lazily materialized, validated tableau.
+            pub fn tableau(
+                self,
+            ) -> Result<&'static RungeKuttaTableau, crate::tableau::TableauError> {
+                load_tableau(&$tableau)
+            }
+        }
+
         impl OdeAlgorithm for $name {
-            fn solve<F, P>(
+            fn solve_validated<F, P>(
                 &self,
                 problem: &OdeProblem<F, P>,
                 options: &SolveOptions,
@@ -29,10 +50,15 @@ macro_rules! algorithm {
             where
                 F: Fn(&mut [f64], &[f64], &P, f64),
             {
+                let tableau = self.tableau().map_err(|_| SolveError::InvalidTableau)?;
                 drive_integration(
                     problem,
                     options,
-                    ImplicitKernel::new(ImplicitMethod::$method, problem.initial_state().len()),
+                    ImplicitKernel::new(
+                        ImplicitMethod::$method,
+                        tableau,
+                        problem.initial_state().len(),
+                    ),
                 )
             }
         }
@@ -42,17 +68,20 @@ macro_rules! algorithm {
 algorithm!(
     ImplicitEuler,
     "The fixed-step first-order implicit Euler method for stiff ODEs.",
-    Euler
+    Euler,
+    IMPLICIT_EULER_TABLEAU
 );
 algorithm!(
     ImplicitMidpoint,
     "The fixed-step symmetric second-order implicit midpoint method.",
-    Midpoint
+    Midpoint,
+    IMPLICIT_MIDPOINT_TABLEAU
 );
 algorithm!(
     Trapezoid,
     "The fixed-step second-order implicit trapezoid method.",
-    Trapezoid
+    Trapezoid,
+    TRAPEZOID_TABLEAU
 );
 
 struct Workspace {
@@ -94,13 +123,15 @@ impl Workspace {
 
 struct ImplicitKernel {
     method: ImplicitMethod,
+    tableau: &'static RungeKuttaTableau,
     workspace: Workspace,
 }
 
 impl ImplicitKernel {
-    fn new(method: ImplicitMethod, dimension: usize) -> Self {
+    fn new(method: ImplicitMethod, tableau: &'static RungeKuttaTableau, dimension: usize) -> Self {
         Self {
             method,
+            tableau,
             workspace: Workspace::new(dimension),
         }
     }
@@ -111,7 +142,7 @@ where
     F: Fn(&mut [f64], &[f64], &P, f64),
 {
     fn capabilities(&self) -> KernelCapabilities {
-        KernelCapabilities::new(false, 1)
+        KernelCapabilities::new(false, self.tableau.order())
     }
 
     fn initialize(
@@ -166,7 +197,10 @@ where
             state,
             candidate,
             (time, step),
-            self.method,
+            ImplicitFormula {
+                method: self.method,
+                tableau: self.tableau,
+            },
             &mut self.workspace,
             stats,
         )?;
@@ -205,7 +239,7 @@ fn newton_step<F, P>(
     previous: &[f64],
     candidate: &mut [f64],
     time_and_step: (f64, f64),
-    method: ImplicitMethod,
+    formula: ImplicitFormula<'_>,
     workspace: &mut Workspace,
     stats: &mut SolverStats,
 ) -> Result<(), SolveError>
@@ -213,18 +247,20 @@ where
     F: Fn(&mut [f64], &[f64], &P, f64),
 {
     let (time, step) = time_and_step;
-    let derivative_scale = match method {
-        ImplicitMethod::Euler => step,
-        ImplicitMethod::Midpoint | ImplicitMethod::Trapezoid => 0.5 * step,
-    };
+    let ImplicitFormula { method, tableau } = formula;
+    let implicit_stage = tableau.a().len() - 1;
+    let derivative_scale = step * tableau.a()[implicit_stage][implicit_stage];
     let mut refresh_factorization = workspace.factorization_scale != Some(derivative_scale);
     for _ in 0..MAX_NEWTON_ITERATIONS {
         stats.nonlinear_iterations += 1;
-        set_evaluation_state(&mut workspace.evaluation_state, previous, candidate, method);
-        let evaluation_time = match method {
-            ImplicitMethod::Midpoint => time + 0.5 * step,
-            ImplicitMethod::Euler | ImplicitMethod::Trapezoid => time + step,
-        };
+        set_evaluation_state(
+            &mut workspace.evaluation_state,
+            previous,
+            candidate,
+            method,
+            tableau,
+        );
+        let evaluation_time = time + tableau.c()[implicit_stage] * step;
         evaluate_unchecked(
             problem,
             &mut workspace.base_derivative,
@@ -239,7 +275,7 @@ where
             &workspace.current_derivative,
             &workspace.base_derivative,
             step,
-            method,
+            formula,
         )?;
         let residual_norm = infinity_norm(&workspace.residual);
         let state_scale = 1.0 + infinity_norm(candidate);
@@ -287,11 +323,13 @@ fn set_evaluation_state(
     previous: &[f64],
     candidate: &[f64],
     method: ImplicitMethod,
+    tableau: &RungeKuttaTableau,
 ) {
     match method {
         ImplicitMethod::Midpoint => {
             for ((output, previous), candidate) in output.iter_mut().zip(previous).zip(candidate) {
-                *output = 0.5 * (previous + candidate);
+                let coefficient = tableau.a()[0][0];
+                *output = previous + coefficient * (candidate - previous);
             }
         }
         ImplicitMethod::Euler | ImplicitMethod::Trapezoid => {
@@ -307,16 +345,20 @@ fn set_residual_checked(
     previous_derivative: &[f64],
     implicit_derivative: &[f64],
     step: f64,
-    method: ImplicitMethod,
+    formula: ImplicitFormula<'_>,
 ) -> Result<(), SolveError> {
+    let ImplicitFormula { method, tableau } = formula;
     for index in 0..residual.len() {
         if !implicit_derivative[index].is_finite() {
             return Err(SolveError::NonFiniteDerivative);
         }
         let increment = match method {
-            ImplicitMethod::Euler | ImplicitMethod::Midpoint => step * implicit_derivative[index],
+            ImplicitMethod::Euler | ImplicitMethod::Midpoint => {
+                step * tableau.b()[0] * implicit_derivative[index]
+            }
             ImplicitMethod::Trapezoid => {
-                0.5 * step * (previous_derivative[index] + implicit_derivative[index])
+                step * (tableau.b()[0] * previous_derivative[index]
+                    + tableau.b()[1] * implicit_derivative[index])
             }
         };
         residual[index] = candidate[index] - previous[index] - increment;

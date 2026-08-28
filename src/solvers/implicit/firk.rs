@@ -63,10 +63,12 @@ impl AdaptiveRadau {
         }
     }
 
+    /// Returns the minimum odd Radau order used by the adaptive controller.
     pub fn min_order(self) -> usize {
         self.min_order
     }
 
+    /// Returns the maximum odd Radau order used by the adaptive controller.
     pub fn max_order(self) -> usize {
         self.max_order
     }
@@ -89,12 +91,16 @@ impl Default for GaussLegendre {
 }
 
 impl GaussLegendre {
+    /// Creates a Gauss--Legendre collocation method with two to eight stages.
+    ///
+    /// Values outside the supported range are clamped to its nearest bound.
     pub fn new(num_stages: usize) -> Self {
         Self {
             num_stages: num_stages.clamp(2, 8),
         }
     }
 
+    /// Returns the configured collocation stage count.
     pub fn num_stages(self) -> usize {
         self.num_stages
     }
@@ -109,7 +115,7 @@ enum Family {
 macro_rules! impl_fixed_radau {
     ($name:ty, $stages:expr) => {
         impl OdeAlgorithm for $name {
-            fn solve<F, P>(
+            fn solve_validated<F, P>(
                 &self,
                 problem: &OdeProblem<F, P>,
                 options: &SolveOptions,
@@ -137,7 +143,7 @@ impl_fixed_radau!(RadauIIA5, 3);
 impl_fixed_radau!(RadauIIA9, 5);
 
 impl OdeAlgorithm for AdaptiveRadau {
-    fn solve<F, P>(
+    fn solve_validated<F, P>(
         &self,
         problem: &OdeProblem<F, P>,
         options: &SolveOptions,
@@ -159,7 +165,7 @@ impl OdeAlgorithm for AdaptiveRadau {
 }
 
 impl OdeAlgorithm for GaussLegendre {
-    fn solve<F, P>(
+    fn solve_validated<F, P>(
         &self,
         problem: &OdeProblem<F, P>,
         options: &SolveOptions,

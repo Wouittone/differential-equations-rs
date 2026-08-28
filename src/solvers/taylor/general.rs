@@ -35,6 +35,7 @@ impl Default for ExplicitTaylor {
 }
 
 impl ExplicitTaylor {
+    /// Constructs a Taylor method, clamping `order` to the supported range.
     pub const fn new(order: usize) -> Self {
         Self {
             order: if order < 1 {
@@ -47,6 +48,7 @@ impl ExplicitTaylor {
         }
     }
 
+    /// Returns the configured Taylor order.
     pub const fn order(self) -> usize {
         self.order
     }
@@ -69,6 +71,7 @@ impl Default for ExplicitTaylorAdaptiveOrder {
 }
 
 impl ExplicitTaylorAdaptiveOrder {
+    /// Constructs an adaptive-order Taylor method with a clamped order window.
     pub const fn new(min_order: usize, max_order: usize) -> Self {
         let min_order = if min_order < 1 {
             1
@@ -90,17 +93,19 @@ impl ExplicitTaylorAdaptiveOrder {
         }
     }
 
+    /// Returns the minimum candidate order.
     pub const fn min_order(self) -> usize {
         self.min_order
     }
 
+    /// Returns the maximum candidate order.
     pub const fn max_order(self) -> usize {
         self.max_order
     }
 }
 
 impl OdeAlgorithm for ExplicitTaylor2 {
-    fn solve<F, P>(
+    fn solve_validated<F, P>(
         &self,
         problem: &OdeProblem<F, P>,
         options: &SolveOptions,
@@ -117,7 +122,7 @@ impl OdeAlgorithm for ExplicitTaylor2 {
 }
 
 impl OdeAlgorithm for ExplicitTaylor {
-    fn solve<F, P>(
+    fn solve_validated<F, P>(
         &self,
         problem: &OdeProblem<F, P>,
         options: &SolveOptions,
@@ -134,7 +139,7 @@ impl OdeAlgorithm for ExplicitTaylor {
 }
 
 impl OdeAlgorithm for ExplicitTaylorAdaptiveOrder {
-    fn solve<F, P>(
+    fn solve_validated<F, P>(
         &self,
         problem: &OdeProblem<F, P>,
         options: &SolveOptions,

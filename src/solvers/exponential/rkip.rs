@@ -4,6 +4,7 @@ use super::general::{mat_vec, matrix_exp};
 use crate::integrator::{
     ControllerConfig, KernelCapabilities, StepEstimate, StepKernel, integrate as drive_integration,
 };
+use crate::solver::validate_state_time_options;
 use crate::{
     ConfigurationError, OdeProblem, SemilinearOdeProblem, Solution, SolveError, SolveOptions,
     SolverStats,
@@ -98,8 +99,11 @@ const A: [[f64; 8]; 8] = [
 /// Observable interaction-picture exponential-cache counters.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct RkipCacheStats {
+    /// Matrix exponentials constructed since the algorithm was created.
     pub exponentials_built: usize,
+    /// Cached matrix exponentials reused by subsequent stages or solves.
     pub cache_hits: usize,
+    /// Distinct step magnitudes currently represented in the cache.
     pub cached_step_sizes: usize,
 }
 
@@ -152,8 +156,27 @@ pub trait InteractionPictureAlgorithm {
     /// Embedded estimator order used by adaptive control.
     fn adaptive_order(&self) -> usize;
 
-    #[doc(hidden)]
+    /// Solves a semilinear problem after validating its common public inputs.
     fn solve_interaction_picture<G, P>(
+        &self,
+        problem: &SemilinearOdeProblem<G, P>,
+        options: &SolveOptions,
+    ) -> Result<Solution, SolveError>
+    where
+        G: Fn(&mut [f64], &[f64], &P, f64),
+    {
+        validate_state_time_options(problem.initial_state(), problem.time_span(), options)?;
+        self.solve_validated(problem, options)
+    }
+
+    /// Executes the numerical method after common inputs have been checked.
+    ///
+    /// Implementors may rely on [`InteractionPictureAlgorithm::solve_interaction_picture`]
+    /// having validated the state, time span, tolerances, step bounds, callback
+    /// tolerance, and requested output times. User code should normally call
+    /// that checked method or [`solve_rkip`]; direct callers of this lower-level
+    /// hook are responsible for preserving those invariants.
+    fn solve_validated<G, P>(
         &self,
         problem: &SemilinearOdeProblem<G, P>,
         options: &SolveOptions,
@@ -182,6 +205,7 @@ impl Default for RKIP {
 }
 
 impl RKIP {
+    /// Constructs an RKIP solver with a logarithmically spaced exponential cache.
     pub fn new(
         dt_min: f64,
         dt_max: f64,
@@ -207,6 +231,7 @@ impl RKIP {
         })
     }
 
+    /// Configures whether steps outside the cached range are clamped to it.
     #[must_use]
     pub fn with_clamping(mut self, lower: bool, higher: bool) -> Self {
         self.clamp_lower_dt = lower;
@@ -214,12 +239,15 @@ impl RKIP {
         self
     }
 
+    /// Returns the classical solution order.
     pub fn order(&self) -> usize {
         6
     }
+    /// Returns the embedded estimator order.
     pub fn adaptive_order(&self) -> usize {
         5
     }
+    /// Returns observable exponential-cache usage statistics.
     pub fn cache_stats(&self) -> RkipCacheStats {
         self.cache.borrow().stats
     }
@@ -254,7 +282,7 @@ impl InteractionPictureAlgorithm for RKIP {
         self.adaptive_order()
     }
 
-    fn solve_interaction_picture<G, P>(
+    fn solve_validated<G, P>(
         &self,
         problem: &SemilinearOdeProblem<G, P>,
         options: &SolveOptions,

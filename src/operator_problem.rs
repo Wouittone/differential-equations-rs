@@ -12,6 +12,7 @@ pub struct LinearOperatorProblem<O, P> {
 }
 
 impl<O, P> LinearOperatorProblem<O, P> {
+    /// Constructs a checked linear-operator problem.
     pub fn new(
         operator: O,
         initial_state: impl Into<Vec<f64>>,
@@ -32,22 +33,27 @@ impl<O, P> LinearOperatorProblem<O, P> {
         })
     }
 
+    /// Returns the initial state.
     pub fn initial_state(&self) -> &[f64] {
         &self.initial_state
     }
 
+    /// Returns the integration time span.
     pub fn time_span(&self) -> (f64, f64) {
         self.time_span
     }
 
+    /// Returns the user parameters.
     pub fn parameters(&self) -> &P {
         &self.parameters
     }
 
+    /// Returns the state dimension.
     pub fn dimension(&self) -> usize {
         self.initial_state.len()
     }
 
+    /// Evaluates the row-major operator matrix at `state` and `time`.
     pub fn evaluate_operator(&self, output: &mut [f64], state: &[f64], time: f64)
     where
         O: Fn(&mut [f64], &[f64], &P, f64),
@@ -77,6 +83,7 @@ pub struct LieGroupProblem<O, P> {
 }
 
 impl<O, P> LieGroupProblem<O, P> {
+    /// Constructs a problem whose state is a vector acted on by the group.
     pub fn vector(
         operator: O,
         initial_state: impl Into<Vec<f64>>,
@@ -100,6 +107,7 @@ impl<O, P> LieGroupProblem<O, P> {
         })
     }
 
+    /// Constructs a problem whose state is a square group matrix.
     pub fn matrix(
         operator: O,
         initial_matrix: impl Into<Vec<f64>>,
@@ -129,26 +137,32 @@ impl<O, P> LieGroupProblem<O, P> {
         })
     }
 
+    /// Returns the flattened initial state.
     pub fn initial_state(&self) -> &[f64] {
         &self.initial_state
     }
 
+    /// Returns the integration time span.
     pub fn time_span(&self) -> (f64, f64) {
         self.time_span
     }
 
+    /// Returns the user parameters.
     pub fn parameters(&self) -> &P {
         &self.parameters
     }
 
+    /// Returns the underlying group dimension.
     pub fn group_dimension(&self) -> usize {
         self.group_dimension
     }
 
+    /// Reports whether the state uses the square-matrix representation.
     pub fn is_matrix_state(&self) -> bool {
         self.representation == LieRepresentation::Matrix
     }
 
+    /// Evaluates the Lie-algebra generator at `state` and `time`.
     pub fn evaluate_operator(&self, output: &mut [f64], state: &[f64], time: f64)
     where
         O: Fn(&mut [f64], &[f64], &P, f64),

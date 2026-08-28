@@ -1,4 +1,4 @@
-use differential_equations::algorithms::*;
+use differential_equations::solvers::second_order::*;
 use differential_equations::*;
 use std::error::Error as _;
 
@@ -158,6 +158,18 @@ fn invalid_partition_and_fixed_step_options_are_reported() {
         Err(SecondOrderSolveError::Solve(
             SolveError::AdaptiveStepUnsupported
         ))
+    );
+
+    let empty = SecondOrderOdeProblem::new(
+        |_: &mut [f64], _: &[f64], _: &[f64], _: &(), _| {},
+        Vec::new(),
+        Vec::new(),
+        (0.0, 1.0),
+        (),
+    );
+    assert_eq!(
+        VelocityVerlet.solve(&empty, &fixed_options(0.1)),
+        Err(SecondOrderSolveError::Solve(SolveError::EmptyState))
     );
 }
 

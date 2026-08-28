@@ -1,5 +1,5 @@
 #[cfg(feature = "parallel")]
-use differential_equations::algorithms::explicit::{Euler, Tsit5};
+use differential_equations::solvers::explicit::{Euler, Tsit5};
 #[cfg(feature = "parallel")]
 use differential_equations::{
     CaseOutcome, OdeProblem, SolveError, SolveOptions, solve_batch, solve_ensemble,

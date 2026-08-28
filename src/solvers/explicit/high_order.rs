@@ -5,165 +5,19 @@
 //! RK kernel; method-specific dense interpolation stages are not required for
 //! the endpoint solver surface implemented here.
 
-// These literals are the canonical binary64 values from the pinned upstream
-// tableaus; shortening them would change the recovered methods.
-#![allow(clippy::excessive_precision)]
-
-use super::general::{ButcherTableau, ExplicitRungeKutta};
-use crate::{OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions};
-
-mod coefficient_data {
-    use differential_equations_tableau_macros::define_coefficients_from_file;
-
-    define_coefficients_from_file!(
-        pub(super),
-        "coefficients/explicit/high_order.toml",
-        crate = crate
-    );
-}
-
-use coefficient_data::*;
-
-// Compatibility reexports for the historical `explicit::high_order` façade.
-pub use super::anas5::Anas5;
-pub use super::frk65::Frk65;
-pub use super::verner::{Vern6, Vern7, Vern8, Vern9};
-
-// OrdinaryDiffEq stores this method's lower-order weights rather than the
-// `b - b_hat` coefficients expected by the shared explicit RK kernel.
-const PFRK87_E: &[f64] = &[
-    PFRK87_B[0] - PFRK87_EMBEDDED_WEIGHTS[0],
-    PFRK87_B[1] - PFRK87_EMBEDDED_WEIGHTS[1],
-    PFRK87_B[2] - PFRK87_EMBEDDED_WEIGHTS[2],
-    PFRK87_B[3] - PFRK87_EMBEDDED_WEIGHTS[3],
-    PFRK87_B[4] - PFRK87_EMBEDDED_WEIGHTS[4],
-    PFRK87_B[5] - PFRK87_EMBEDDED_WEIGHTS[5],
-    PFRK87_B[6] - PFRK87_EMBEDDED_WEIGHTS[6],
-    PFRK87_B[7] - PFRK87_EMBEDDED_WEIGHTS[7],
-    PFRK87_B[8] - PFRK87_EMBEDDED_WEIGHTS[8],
-    PFRK87_B[9] - PFRK87_EMBEDDED_WEIGHTS[9],
-    PFRK87_B[10] - PFRK87_EMBEDDED_WEIGHTS[10],
-    PFRK87_B[11] - PFRK87_EMBEDDED_WEIGHTS[11],
-    PFRK87_B[12] - PFRK87_EMBEDDED_WEIGHTS[12],
-];
-
-macro_rules! high_order_algorithm {
-    ($name:ident, $doc:literal, $nodes:ident, $a:ident, $b:ident, $e:ident, $e2:expr, $order:literal, $fsal:literal) => {
-        #[doc = $doc]
-        #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-        pub struct $name;
-        impl ButcherTableau for $name {
-            const NODES: &'static [f64] = $nodes;
-            const COEFFICIENTS: &'static [&'static [f64]] = $a;
-            const WEIGHTS: &'static [f64] = $b;
-            const ERROR_WEIGHTS: Option<&'static [f64]> = Some($e);
-            const SECOND_ERROR_WEIGHTS: Option<&'static [f64]> = $e2;
-            const ORDER: usize = $order;
-            const FSAL: bool = $fsal;
-        }
-        impl OdeAlgorithm for $name {
-            fn solve<F, P>(&self, problem: &OdeProblem<F, P>, options: &SolveOptions) -> Result<Solution, SolveError>
-            where F: Fn(&mut [f64], &[f64], &P, f64),
-            {
-                ExplicitRungeKutta::<$name>::new().solve(problem, options)
-            }
-        }
-    };
-}
-
-high_order_algorithm!(
-    TanYam7,
-    "Tanaka--Yamashita seventh-order explicit Runge--Kutta method.",
-    TANYAM7_NODES,
-    TANYAM7_A,
-    TANYAM7_B,
-    TANYAM7_E,
-    None,
-    7,
-    false
-);
-high_order_algorithm!(
-    TsitPap8,
-    "Tsitouras--Papakostas eighth-order explicit Runge--Kutta method.",
-    TSITPAP8_NODES,
-    TSITPAP8_A,
-    TSITPAP8_B,
-    TSITPAP8_E,
-    None,
-    8,
-    false
-);
-high_order_algorithm!(
-    DP8,
-    "Hairer--Norsett--Wanner Dormand--Prince eighth-order explicit Runge--Kutta method.",
-    DP8_NODES,
-    DP8_A,
-    DP8_B,
-    DP8_E,
-    Some(DP8_E2),
-    8,
-    true
-);
-high_order_algorithm!(
-    PFRK87,
-    "Phase-fitted eighth-order (7) explicit Runge--Kutta pair (default phase estimate omega = 0).",
-    PFRK87_NODES,
-    PFRK87_A,
-    PFRK87_B,
-    PFRK87_E,
-    None,
-    8,
-    false
-);
-high_order_algorithm!(
-    Feagin10,
-    "Feagin 10th-order explicit Runge--Kutta method.",
-    FEAGIN10_NODES,
-    FEAGIN10_A,
-    FEAGIN10_B,
-    FEAGIN10_E,
-    None,
-    10,
-    false
-);
-high_order_algorithm!(
-    Feagin12,
-    "Feagin 12th-order explicit Runge--Kutta method.",
-    FEAGIN12_NODES,
-    FEAGIN12_A,
-    FEAGIN12_B,
-    FEAGIN12_E,
-    None,
-    12,
-    false
-);
-high_order_algorithm!(
-    Feagin14,
-    "Feagin 14th-order explicit Runge--Kutta method.",
-    FEAGIN14_NODES,
-    FEAGIN14_A,
-    FEAGIN14_B,
-    FEAGIN14_E,
-    None,
-    14,
-    false
-);
-high_order_algorithm!(
-    RKV76IIa,
-    "Verner RKV76.IIa seventh-order (sixth-order embedded) explicit Runge--Kutta pair.",
-    RKV76IIA_NODES,
-    RKV76IIA_A,
-    RKV76IIA_B,
-    RKV76IIA_E,
-    None,
-    7,
-    false
-);
+crate::define_explicit_rk_from_file!(pub TanYam7, "tableaux/explicit/tan_yam7.json", crate = crate);
+crate::define_explicit_rk_from_file!(pub TsitPap8, "tableaux/explicit/tsit_pap8.json", crate = crate);
+crate::define_explicit_rk_from_file!(pub DP8, "tableaux/explicit/dp8.json", crate = crate);
+crate::define_explicit_rk_from_file!(pub PFRK87, "tableaux/explicit/pfrk87.json", crate = crate);
+crate::define_explicit_rk_from_file!(pub Feagin10, "tableaux/explicit/feagin10.json", crate = crate);
+crate::define_explicit_rk_from_file!(pub Feagin12, "tableaux/explicit/feagin12.json", crate = crate);
+crate::define_explicit_rk_from_file!(pub Feagin14, "tableaux/explicit/feagin14.json", crate = crate);
+crate::define_explicit_rk_from_file!(pub RKV76IIa, "tableaux/explicit/rkv76_iia.json", crate = crate);
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{OdeProblem, SaveMode, SolveOptions, solve};
+    use crate::{OdeAlgorithm, OdeProblem, SaveMode, SolveOptions, solve};
     type ScalarRhs = fn(&mut [f64], &[f64], &(), f64);
 
     fn exponential() -> OdeProblem<ScalarRhs, ()> {
@@ -175,35 +29,26 @@ mod tests {
     #[test]
     fn pinned_tableaus_are_consistent() {
         macro_rules! check {
-            ($t:ty) => {{
-                for (row, &c) in <$t as ButcherTableau>::COEFFICIENTS
-                    .iter()
-                    .zip(<$t as ButcherTableau>::NODES)
-                {
+            ($algorithm:expr) => {{
+                let tableau = $algorithm.tableau().unwrap();
+                for (row, &c) in tableau.a().iter().zip(tableau.c()) {
                     assert!(
                         (row.iter().sum::<f64>() - c).abs() < 5.0e-12,
                         "{} row sum mismatch: sum={:.17e} c={:.17e}",
-                        std::any::type_name::<$t>(),
+                        tableau.name(),
                         row.iter().sum::<f64>(),
                         c
                     );
                 }
-                let weight_sum = <$t as ButcherTableau>::WEIGHTS.iter().sum::<f64>();
+                let weight_sum = tableau.b().iter().sum::<f64>();
                 if (weight_sum - 1.0).abs() >= 5.0e-12 {
-                    panic!(
-                        "{} weights sum={:.17e}",
-                        std::any::type_name::<$t>(),
-                        weight_sum
-                    );
+                    panic!("{} weights sum={:.17e}", tableau.name(), weight_sum);
                 }
-                let error_sum = <$t as ButcherTableau>::ERROR_WEIGHTS
-                    .unwrap()
-                    .iter()
-                    .sum::<f64>();
+                let error_sum = tableau.error().unwrap().iter().sum::<f64>();
                 assert!(
                     error_sum.abs() < 5.0e-12,
                     "{} error weights sum={:.17e}",
-                    std::any::type_name::<$t>(),
+                    tableau.name(),
                     error_sum
                 );
             }};
@@ -252,48 +97,15 @@ mod tests {
     }
 
     #[test]
-    fn algorithm_facades_dispatch_to_their_own_tableaus() {
-        fn nonautonomous(du: &mut [f64], u: &[f64], _: &(), time: f64) {
-            du[0] = (1.0 + time) * u[0] + time.sin();
-        }
-
-        let problem = OdeProblem::new(
-            nonautonomous as fn(&mut [f64], &[f64], &(), f64),
-            vec![0.75],
-            (0.0, 1.0),
-            (),
-        );
-        let options = SolveOptions {
-            adaptive: false,
-            initial_step: Some(0.25),
-            save: SaveMode::Endpoints,
-            ..SolveOptions::default()
-        };
-
-        macro_rules! check {
-            ($algorithm:ident) => {{
-                let facade = solve(&problem, $algorithm, &options).unwrap();
-                let direct = ExplicitRungeKutta::<$algorithm>::new()
-                    .solve(&problem, &options)
-                    .unwrap();
-                assert_eq!(
-                    facade.last_state(),
-                    direct.last_state(),
-                    "{} substituted another tableau",
-                    stringify!($algorithm)
-                );
-                assert_eq!(facade.stats(), direct.stats());
-            }};
-        }
-
-        check!(TanYam7);
-        check!(TsitPap8);
-        check!(DP8);
-        check!(PFRK87);
-        check!(Feagin10);
-        check!(Feagin12);
-        check!(Feagin14);
-        check!(RKV76IIa);
+    fn algorithm_facades_reference_their_named_resources() {
+        assert_eq!(TanYam7.tableau().unwrap().name(), "TanYam7");
+        assert_eq!(TsitPap8.tableau().unwrap().name(), "TsitPap8");
+        assert_eq!(DP8.tableau().unwrap().name(), "DP8");
+        assert_eq!(PFRK87.tableau().unwrap().name(), "PFRK87");
+        assert_eq!(Feagin10.tableau().unwrap().name(), "Feagin10");
+        assert_eq!(Feagin12.tableau().unwrap().name(), "Feagin12");
+        assert_eq!(Feagin14.tableau().unwrap().name(), "Feagin14");
+        assert_eq!(RKV76IIa.tableau().unwrap().name(), "RKV76IIa");
     }
 
     fn fixed_exponential_endpoint<A: OdeAlgorithm>(algorithm: A, step: f64) -> f64 {

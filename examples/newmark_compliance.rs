@@ -1,7 +1,11 @@
-use differential_equations::algorithms::second_order::structural::{GeneralizedAlpha, NewmarkBeta};
-use differential_equations::{SaveMode, SecondOrderOdeProblem, SolveOptions, solve_second_order};
+use differential_equations::solvers::second_order::{
+    GeneralizedAlpha, NewmarkBeta, SecondOrderOdeProblem, solve_second_order,
+};
+use differential_equations::{SaveMode, SolveOptions};
 
-fn endpoint<A: differential_equations::SecondOrderOdeAlgorithm>(algorithm: A) -> (f64, f64) {
+fn endpoint<A: differential_equations::solvers::second_order::SecondOrderOdeAlgorithm>(
+    algorithm: A,
+) -> (f64, f64) {
     let problem = SecondOrderOdeProblem::new(
         |acceleration: &mut [f64], _: &[f64], position: &[f64], _: &(), _: f64| {
             acceleration[0] = -position[0];

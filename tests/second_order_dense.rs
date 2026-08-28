@@ -1,8 +1,8 @@
-use differential_equations::algorithms::second_order::structural::NewmarkBeta;
-use differential_equations::algorithms::{Dprkn6, VelocityVerlet};
-use differential_equations::{
-    CallbackAction, SaveMode, SecondOrderOdeProblem, SolveOptions, solve_second_order,
+use differential_equations::solvers::second_order::{
+    Dprkn6, NewmarkBeta, SecondOrderOdeProblem, SecondOrderSolution, VelocityVerlet,
+    solve_second_order,
 };
+use differential_equations::{CallbackAction, SaveMode, SolveOptions};
 
 type Acceleration = fn(&mut [f64], &[f64], &[f64], &(), f64);
 
@@ -29,11 +29,7 @@ fn dense_options(step: f64) -> SolveOptions {
     }
 }
 
-fn assert_oscillator_sample(
-    solution: &differential_equations::SecondOrderSolution,
-    time: f64,
-    tolerance: f64,
-) {
+fn assert_oscillator_sample(solution: &SecondOrderSolution, time: f64, tolerance: f64) {
     let (velocity, position) = solution.interpolate(time).unwrap();
     assert!((position[0] - time.cos()).abs() < tolerance, "{position:?}");
     assert!((velocity[0] + time.sin()).abs() < tolerance, "{velocity:?}");

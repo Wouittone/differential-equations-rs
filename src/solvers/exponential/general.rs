@@ -61,7 +61,7 @@ macro_rules! exponential_algorithm {
         pub struct $name;
 
         impl OdeAlgorithm for $name {
-            fn solve<F, P>(
+            fn solve_validated<F, P>(
                 &self,
                 problem: &OdeProblem<F, P>,
                 options: &SolveOptions,

@@ -7,7 +7,6 @@ use crate::integrator::{
 };
 use crate::linear::{factorize, solve_factorized};
 use crate::solution::{BorrowedHermiteSegment, DenseSegment, HermiteSegment, TrajectoryRecorder};
-use crate::solvers::explicit::general::ButcherTableau;
 use crate::solvers::explicit::tsit5::Tsit5;
 use crate::{OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions, SolverStats};
 
@@ -42,6 +41,7 @@ pub struct JVODE {
 }
 
 impl JVODE {
+    /// Constructs JVODE for the selected equation family.
     pub const fn new(method: JvodeMethod) -> Self {
         Self {
             method,
@@ -55,18 +55,22 @@ impl JVODE {
         }
     }
 
+    /// Constructs the variable-order Adams configuration.
     pub const fn adams() -> Self {
         Self::new(JvodeMethod::Adams)
     }
 
+    /// Constructs the variable-order BDF configuration.
     pub const fn bdf() -> Self {
         Self::new(JvodeMethod::Bdf)
     }
 
+    /// Returns the configured equation family.
     pub const fn method(&self) -> JvodeMethod {
         self.method
     }
 
+    /// Sets the lower-order, current-order, and higher-order selection biases.
     #[must_use]
     pub const fn with_biases(mut self, lower: f64, current: f64, higher: f64) -> Self {
         self.bias1 = lower;
@@ -75,6 +79,7 @@ impl JVODE {
         self
     }
 
+    /// Sets the minimum and maximum adaptive step factors.
     #[must_use]
     pub const fn with_step_factors(mut self, minimum: f64, maximum: f64) -> Self {
         self.minimum_factor = minimum;
@@ -98,12 +103,14 @@ pub struct JvodeAdams;
 pub struct JvodeBdf;
 
 #[allow(non_camel_case_types)]
+/// Exact OrdinaryDiffEq-compatible spelling alias for [`JvodeAdams`].
 pub type JVODE_Adams = JvodeAdams;
 #[allow(non_camel_case_types)]
+/// Exact OrdinaryDiffEq-compatible spelling alias for [`JvodeBdf`].
 pub type JVODE_BDF = JvodeBdf;
 
 impl OdeAlgorithm for AN5 {
-    fn solve<F, P>(
+    fn solve_validated<F, P>(
         &self,
         problem: &OdeProblem<F, P>,
         options: &SolveOptions,
@@ -120,7 +127,7 @@ impl OdeAlgorithm for AN5 {
 }
 
 impl OdeAlgorithm for JVODE {
-    fn solve<F, P>(
+    fn solve_validated<F, P>(
         &self,
         problem: &OdeProblem<F, P>,
         options: &SolveOptions,
@@ -150,7 +157,7 @@ impl OdeAlgorithm for JVODE {
 }
 
 impl OdeAlgorithm for JvodeAdams {
-    fn solve<F, P>(
+    fn solve_validated<F, P>(
         &self,
         problem: &OdeProblem<F, P>,
         options: &SolveOptions,
@@ -163,7 +170,7 @@ impl OdeAlgorithm for JvodeAdams {
 }
 
 impl OdeAlgorithm for JvodeBdf {
-    fn solve<F, P>(
+    fn solve_validated<F, P>(
         &self,
         problem: &OdeProblem<F, P>,
         options: &SolveOptions,
@@ -652,14 +659,15 @@ impl<F, P> NordsieckKernel<F, P> {
     where
         FN: Fn(&mut [f64], &[f64], &PP, f64),
     {
-        let stages_count = <Tsit5 as ButcherTableau>::NODES.len();
+        let tableau = Tsit5.tableau().map_err(|_| SolveError::InvalidTableau)?;
+        let stages_count = tableau.c().len();
         let mut stages = vec![vec![0.0; self.dimension]; stages_count];
         stages[0].copy_from_slice(&self.start_derivative);
         let mut temporary = vec![0.0; self.dimension];
         for stage in 1..stages_count {
             temporary.copy_from_slice(state);
             for previous in 0..stage {
-                let coefficient = <Tsit5 as ButcherTableau>::COEFFICIENTS[stage][previous];
+                let coefficient = tableau.a()[stage][previous];
                 for component in 0..self.dimension {
                     temporary[component] += step * coefficient * stages[previous][component];
                 }
@@ -668,23 +676,20 @@ impl<F, P> NordsieckKernel<F, P> {
                 problem,
                 &mut stages[stage],
                 &temporary,
-                time + <Tsit5 as ButcherTableau>::NODES[stage] * step,
+                time + tableau.c()[stage] * step,
                 stats,
             )?;
         }
         candidate.copy_from_slice(state);
         let mut error = vec![0.0; self.dimension];
-        let error_weights =
-            <Tsit5 as ButcherTableau>::ERROR_WEIGHTS.ok_or(SolveError::InvalidTableau)?;
+        let error_weights = tableau.error().ok_or(SolveError::InvalidTableau)?;
         for stage in 0..stages_count {
             for component in 0..self.dimension {
-                candidate[component] +=
-                    step * <Tsit5 as ButcherTableau>::WEIGHTS[stage] * stages[stage][component];
+                candidate[component] += step * tableau.b()[stage] * stages[stage][component];
                 error[component] += step * error_weights[stage] * stages[stage][component];
             }
         }
-        let dense =
-            <Tsit5 as ButcherTableau>::DENSE_COEFFICIENTS.ok_or(SolveError::InvalidTableau)?;
+        let dense = tableau.dense().ok_or(SolveError::InvalidTableau)?;
         self.z[0].copy_from_slice(state);
         for derivative in 1..=4 {
             self.z[derivative].fill(0.0);

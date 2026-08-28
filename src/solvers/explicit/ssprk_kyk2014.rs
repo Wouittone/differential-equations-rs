@@ -7,66 +7,11 @@
 //! intentionally exposes the regular ODE state/update only; Julia's stage and
 //! step limiter callbacks are outside the current `OdeProblem` interface.
 
-#![allow(clippy::excessive_precision)]
-
-use super::general::{ButcherTableau, ExplicitRungeKutta};
-use crate::{OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions};
-
-const EMPTY: &[f64] = &[];
-
-// Pinned upstream Shu--Osher constants.  Expanding the recurrence gives
-//
-//   u₁ = u₀ + dt β₁₀ f₀,
-//   u₂ = u₀ + dt (α₂₁β₁₀ f₀ + β₂₁ f₁),
-//   u₃ = u₀ + dt ((α₃₂α₂₁β₁₀ + β₃₀) f₀
-//                    + α₃₂β₂₁ f₁ + β₃₂ f₂).
-//
-// Keeping the products as expressions makes the correspondence to the
-// source recurrence explicit while retaining all supplied decimal digits.
-const ALPHA_21: f64 = 0.912_646_880_140_844;
-const ALPHA_32: f64 = 0.655_043_082_833_159;
-const BETA_10: f64 = 0.528_005_024_856_522;
-const BETA_21: f64 = 0.481_882_138_633_993;
-const BETA_30: f64 = 0.022_826_837_460_491;
-const BETA_32: f64 = 0.345_866_039_233_415;
-
-const KYK2014_A2: &[f64] = &[BETA_10];
-const KYK2014_A3: &[f64] = &[ALPHA_21 * BETA_10, BETA_21];
-const KYK2014_A: &[&[f64]] = &[EMPTY, KYK2014_A2, KYK2014_A3];
-const KYK2014_B: &[f64] = &[
-    ALPHA_32 * ALPHA_21 * BETA_10 + BETA_30,
-    ALPHA_32 * BETA_21,
-    BETA_32,
-];
-const KYK2014_C: &[f64] = &[0.0, BETA_10, ALPHA_21 * BETA_10 + BETA_21];
-
-/// Fixed-step KYK2014 discontinuous-Galerkin SSPRK(3,2).
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct Kyk2014DgSsprk3S2;
-
-struct Kyk2014DgSsprk3S2Tableau;
-
-impl ButcherTableau for Kyk2014DgSsprk3S2Tableau {
-    const NODES: &'static [f64] = KYK2014_C;
-    const COEFFICIENTS: &'static [&'static [f64]] = KYK2014_A;
-    const WEIGHTS: &'static [f64] = KYK2014_B;
-    const ERROR_WEIGHTS: Option<&'static [f64]> = None;
-    const ORDER: usize = 2;
-    const FSAL: bool = false;
-}
-
-impl OdeAlgorithm for Kyk2014DgSsprk3S2 {
-    fn solve<F, P>(
-        &self,
-        problem: &OdeProblem<F, P>,
-        options: &SolveOptions,
-    ) -> Result<Solution, SolveError>
-    where
-        F: Fn(&mut [f64], &[f64], &P, f64),
-    {
-        ExplicitRungeKutta::<Kyk2014DgSsprk3S2Tableau>::new().solve(problem, options)
-    }
-}
+crate::define_explicit_rk_from_file!(
+    pub Kyk2014DgSsprk3S2,
+    "tableaux/explicit/kyk2014_dg_ssprk3_s2.json",
+    crate = crate
+);
 
 #[cfg(test)]
 mod tests {

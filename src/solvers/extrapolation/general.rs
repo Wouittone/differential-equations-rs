@@ -18,9 +18,12 @@ use crate::{OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions, Solver
 /// Subdividing sequences supported by OrdinaryDiffEq's extrapolation methods.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum ExtrapolationSequence {
+    /// Uses the harmonic subdivision sequence `1, 2, 3, ...`.
     #[default]
     Harmonic,
+    /// Uses powers of two, as in Romberg extrapolation.
     Romberg,
+    /// Uses the interleaved Bulirsch subdivision sequence.
     Bulirsch,
 }
 
@@ -44,6 +47,13 @@ impl ExtrapolationSequence {
 
 macro_rules! extrapolation_algorithm {
     ($name:ident, $min:expr, $init:expr, $max:expr, $kind:expr, $policy:expr, $factor:expr) => {
+        #[doc = concat!(
+                                                    "Configurable `",
+                                                    stringify!($name),
+                                                    "` extrapolation algorithm built from `",
+                                                    stringify!($kind),
+                                                    "` base steps."
+                                                )]
         #[derive(Clone, Copy, Debug, Eq, PartialEq)]
         pub struct $name {
             min_order: usize,
@@ -64,6 +74,10 @@ macro_rules! extrapolation_algorithm {
         }
 
         impl $name {
+            /// Creates an extrapolation algorithm with a bounded order window.
+            ///
+            /// Unsupported order values are clamped to the range accepted by
+            /// the selected base method and order controller.
             pub fn new(
                 min_order: usize,
                 init_order: usize,
@@ -87,22 +101,26 @@ macro_rules! extrapolation_algorithm {
                 }
             }
 
+            /// Returns the lowest order considered by the controller.
             pub fn min_order(self) -> usize {
                 self.min_order
             }
+            /// Returns the initial order selected for a new integration.
             pub fn init_order(self) -> usize {
                 self.init_order
             }
+            /// Returns the highest order considered by the controller.
             pub fn max_order(self) -> usize {
                 self.max_order
             }
+            /// Returns the subdivision sequence used for extrapolation nodes.
             pub fn sequence(self) -> ExtrapolationSequence {
                 self.sequence
             }
         }
 
         impl OdeAlgorithm for $name {
-            fn solve<F, P>(
+            fn solve_validated<F, P>(
                 &self,
                 problem: &OdeProblem<F, P>,
                 options: &SolveOptions,

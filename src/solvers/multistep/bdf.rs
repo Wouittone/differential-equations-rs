@@ -56,14 +56,17 @@ pub type QBDF = Qbdf;
 pub type FBDF = Fbdf;
 
 #[allow(non_upper_case_globals)]
+/// Exact OrdinaryDiffEq-compatible value spelling for [`Qndf`].
 pub const QNDF: Qndf = Qndf;
 #[allow(non_upper_case_globals)]
+/// Exact OrdinaryDiffEq-compatible value spelling for [`Qbdf`].
 pub const QBDF: Qbdf = Qbdf;
 #[allow(non_upper_case_globals)]
+/// Exact OrdinaryDiffEq-compatible value spelling for [`Fbdf`].
 pub const FBDF: Fbdf = Fbdf;
 
 impl OdeAlgorithm for Qndf {
-    fn solve<F, P>(
+    fn solve_validated<F, P>(
         &self,
         problem: &OdeProblem<F, P>,
         options: &SolveOptions,
@@ -80,7 +83,7 @@ impl OdeAlgorithm for Qndf {
 }
 
 impl OdeAlgorithm for Qbdf {
-    fn solve<F, P>(
+    fn solve_validated<F, P>(
         &self,
         problem: &OdeProblem<F, P>,
         options: &SolveOptions,
@@ -97,7 +100,7 @@ impl OdeAlgorithm for Qbdf {
 }
 
 impl OdeAlgorithm for Fbdf {
-    fn solve<F, P>(
+    fn solve_validated<F, P>(
         &self,
         problem: &OdeProblem<F, P>,
         options: &SolveOptions,

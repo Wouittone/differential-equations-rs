@@ -1,7 +1,8 @@
 use std::alloc::System;
 use std::hint::black_box;
 
-use differential_equations::algorithms::*;
+use differential_equations::solvers::multistep::Trbdf2;
+use differential_equations::solvers::{explicit::*, implicit::*};
 use differential_equations::*;
 use stats_alloc::{INSTRUMENTED_SYSTEM, Region, StatsAlloc};
 
@@ -15,6 +16,7 @@ fn rhs(derivative: &mut [f64], state: &[f64], _: &(), _: f64) {
 }
 
 fn allocations_for(step: f64) -> usize {
+    Rk4.tableau().unwrap();
     let problem = OdeProblem::new(rhs as TestRhs, vec![1.0], (0.0, 1.0), ());
     let options = SolveOptions {
         adaptive: false,
@@ -29,6 +31,7 @@ fn allocations_for(step: f64) -> usize {
 }
 
 fn fixed_implicit_allocations_for(step: f64) -> usize {
+    ImplicitEuler.tableau().unwrap();
     let problem = OdeProblem::new(
         |derivative: &mut [f64], state: &[f64], _: &(), _: f64| {
             derivative[0] = -state[0];

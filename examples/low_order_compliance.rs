@@ -1,4 +1,5 @@
-use differential_equations::algorithms::*;
+use differential_equations::solvers::explicit::*;
+use differential_equations::solvers::{automatic::AutoDp5, rosenbrock::Rodas5P};
 use differential_equations::*;
 
 type TestRhs = fn(&mut [f64], &[f64], &(), f64);

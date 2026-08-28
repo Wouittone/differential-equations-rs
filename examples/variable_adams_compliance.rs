@@ -1,4 +1,4 @@
-use differential_equations::algorithms::*;
+use differential_equations::solvers::multistep::*;
 use differential_equations::*;
 
 fn main() {

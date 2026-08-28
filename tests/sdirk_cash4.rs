@@ -1,4 +1,4 @@
-use differential_equations::algorithms::*;
+use differential_equations::solvers::implicit::*;
 use differential_equations::*;
 
 #[test]

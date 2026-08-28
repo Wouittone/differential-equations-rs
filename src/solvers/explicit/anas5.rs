@@ -9,10 +9,12 @@ use crate::{OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions, Solver
 /// `Anas5::default()` uses the pinned default `w = 1`.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Anas5 {
+    /// Periodicity estimate used to fit the method coefficients.
     pub w: f64,
 }
 
 impl Anas5 {
+    /// Creates the method with the supplied periodicity estimate.
     pub const fn new(w: f64) -> Self {
         Self { w }
     }
@@ -25,7 +27,7 @@ impl Default for Anas5 {
 }
 
 impl OdeAlgorithm for Anas5 {
-    fn solve<F, P>(
+    fn solve_validated<F, P>(
         &self,
         problem: &OdeProblem<F, P>,
         options: &SolveOptions,

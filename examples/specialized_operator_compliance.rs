@@ -1,5 +1,5 @@
-use differential_equations::algorithms::rosenbrock::Rosenbrock23;
 use differential_equations::solvers::exponential::rkip::{RKIP, solve_rkip};
+use differential_equations::solvers::rosenbrock::Rosenbrock23;
 use differential_equations::solvers::rosenbrock::amf::{
     AMF, AmfProblem, build_amf_function, solve_amf,
 };

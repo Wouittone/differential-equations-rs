@@ -143,57 +143,101 @@ impl SolveOptions {
 #[derive(Clone, Copy, Debug, Eq, Error, PartialEq)]
 #[non_exhaustive]
 pub enum SolveError {
+    /// The initial state contains no components.
     #[error("the initial state is empty")]
     EmptyState,
+    /// At least one initial-state component is NaN or infinite.
     #[error("the initial state contains a non-finite value")]
     NonFiniteInitialState,
+    /// The time span is degenerate or contains a non-finite endpoint.
     #[error("the time span must contain distinct finite values")]
     InvalidTimeSpan,
+    /// An absolute or relative tolerance is non-positive or non-finite.
     #[error("absolute and relative tolerances must be finite and positive")]
     InvalidTolerance,
+    /// The configured initial step is non-positive or non-finite.
     #[error("the initial step must be finite and positive")]
     InvalidInitialStep,
+    /// A fixed-step algorithm was used without an initial step.
     #[error("fixed-step integration requires an initial step")]
     InitialStepRequired,
+    /// Adaptive stepping was requested from a fixed-step algorithm.
     #[error("the selected algorithm does not support adaptive stepping")]
     AdaptiveStepUnsupported,
+    /// The requested multistep order is not supported.
     #[error("the configured multistep order is unsupported")]
     InvalidMultistepOrder,
+    /// The supplied multistep history is incomplete or inconsistent.
     #[error("the multistep solver history is incomplete or inconsistent")]
     InvalidMultistepHistory,
+    /// The maximum step is non-positive or NaN.
     #[error("the maximum step must be positive and not NaN")]
     InvalidMaxStep,
+    /// The maximum attempted-step count is zero.
     #[error("the maximum step count must be positive")]
     InvalidMaxSteps,
+    /// The callback root-localization tolerance is invalid.
     #[error("the event-localization tolerance must be finite and positive")]
     InvalidEventTolerance,
+    /// An explicit Runge–Kutta tableau violates its structural invariants.
     #[error("the explicit Runge–Kutta tableau is malformed")]
     InvalidTableau,
+    /// An accepted-step dense interpolant could not be evaluated.
     #[error("dense-output interpolation failed for an accepted step")]
     DenseOutputFailed,
+    /// A right-hand side returned a NaN or infinite derivative.
     #[error("the right-hand side produced a non-finite derivative")]
     NonFiniteDerivative,
+    /// Requested output times are invalid for the integration direction.
     #[error("save-at times must be finite, ordered, and inside the time span")]
     InvalidSaveAt,
+    /// A continuous callback condition returned a non-finite value.
     #[error("a continuous callback condition produced a non-finite value")]
     NonFiniteCallbackCondition,
+    /// A callback effect produced a non-finite state.
     #[error("a callback produced a non-finite state")]
     NonFiniteCallbackState,
+    /// Callback state changed inconsistently during event localization.
     #[error("the callback selected during event localization is no longer available")]
     InvalidCallbackState,
+    /// An implicit nonlinear iteration failed to converge.
     #[error("the implicit nonlinear solve did not converge")]
     NonlinearSolveFailed,
+    /// An implicit linear system could not be factorized.
     #[error("the implicit linear system is singular")]
     SingularLinearSystem,
+    /// Adaptive control requested an unrepresentably small step.
     #[error("the adaptive step size underflowed")]
     StepSizeUnderflow,
+    /// Integration exhausted the configured attempted-step budget.
     #[error("the solver exceeded its maximum attempted step count")]
     MaxStepsExceeded,
 }
 
 /// An ODE integration algorithm.
 pub trait OdeAlgorithm {
+    /// Solves a problem after validating its state, time span, and options.
     fn solve<F, P>(
+        &self,
+        problem: &OdeProblem<F, P>,
+        options: &SolveOptions,
+    ) -> Result<Solution, SolveError>
+    where
+        F: Fn(&mut [f64], &[f64], &P, f64),
+    {
+        validate_ode_problem(problem, options)?;
+        self.solve_validated(problem, options)
+    }
+
+    /// Executes the numerical method after common inputs have been checked.
+    ///
+    /// Implementors must provide the algorithm-specific integration here and
+    /// may rely on [`OdeAlgorithm::solve`] having validated the initial state,
+    /// time span, tolerances, step bounds, callback tolerance, and requested
+    /// output times. User code should normally call [`OdeAlgorithm::solve`] or
+    /// the crate-level [`solve`] function; calling this lower-level hook
+    /// directly makes the caller responsible for those common invariants.
+    fn solve_validated<F, P>(
         &self,
         problem: &OdeProblem<F, P>,
         options: &SolveOptions,
@@ -212,23 +256,29 @@ where
     F: Fn(&mut [f64], &[f64], &P, f64),
     A: OdeAlgorithm,
 {
-    validate(problem, options)?;
     algorithm.solve(problem, options)
 }
 
-fn validate<F, P>(problem: &OdeProblem<F, P>, options: &SolveOptions) -> Result<(), SolveError> {
-    if problem.initial_state().is_empty() {
+pub(crate) fn validate_ode_problem<F, P>(
+    problem: &OdeProblem<F, P>,
+    options: &SolveOptions,
+) -> Result<(), SolveError> {
+    validate_state_time_options(problem.initial_state(), problem.time_span(), options)
+}
+
+pub(crate) fn validate_state_time_options(
+    initial_state: &[f64],
+    time_span: (f64, f64),
+    options: &SolveOptions,
+) -> Result<(), SolveError> {
+    if initial_state.is_empty() {
         return Err(SolveError::EmptyState);
     }
-    if !problem
-        .initial_state()
-        .iter()
-        .all(|value| value.is_finite())
-    {
+    if !initial_state.iter().all(|value| value.is_finite()) {
         return Err(SolveError::NonFiniteInitialState);
     }
 
-    let (start, end) = problem.time_span();
+    let (start, end) = time_span;
     if !start.is_finite() || !end.is_finite() || start == end {
         return Err(SolveError::InvalidTimeSpan);
     }
@@ -279,7 +329,7 @@ mod tests {
     type TestRhs = fn(&mut [f64], &[f64], &(), f64);
 
     impl OdeAlgorithm for Noop {
-        fn solve<F, P>(
+        fn solve_validated<F, P>(
             &self,
             problem: &OdeProblem<F, P>,
             _: &SolveOptions,
@@ -364,6 +414,11 @@ mod tests {
                 &SolveOptions::default()
             ),
             Err(SolveError::InvalidTimeSpan)
+        );
+
+        assert_eq!(
+            Noop.solve(&problem(Vec::new(), (0.0, 1.0)), &SolveOptions::default()),
+            Err(SolveError::EmptyState)
         );
     }
 

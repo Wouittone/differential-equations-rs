@@ -1270,13 +1270,6 @@ path = "../../reference/OrdinaryDiffEq.jl/lib/OrdinaryDiffEqSDIRK"
 uuid = "2d112036-d095-4a1e-ab9a-08536f3ecdbf"
 version = "2.8.2"
 
-[[deps.OrdinaryDiffEqSIMDRK]]
-deps = ["FastBroadcast", "MuladdMacro", "OrdinaryDiffEqCore", "Reexport", "SLEEFPirates", "VectorizationBase"]
-git-tree-sha1 = "ea5618c937d975c768a5d353ceee9a05ad362834"
-path = "../../reference/OrdinaryDiffEq.jl/lib/OrdinaryDiffEqSIMDRK"
-uuid = "dc97f408-7a72-40e4-9b0d-228a53b292f8"
-version = "2.1.0"
-
 [[deps.OrdinaryDiffEqSSPRK]]
 deps = ["DiffEqBase", "FastBroadcast", "MuladdMacro", "OrdinaryDiffEqCore", "PrecompileTools", "Preferences", "RecursiveArrayTools", "Reexport", "SciMLBase"]
 git-tree-sha1 = "e39f76a98fa2b36817efa170b7b6177c3f0efefe"

@@ -6,7 +6,9 @@
 
 use crate::linear::{factorize, solve_factorized};
 use crate::solution::{BorrowedHermiteSegment, DenseSegment, HermiteSegment, TrajectoryRecorder};
-use crate::{Solution, SolveError, SolveOptions, SolverStats, SplitOdeAlgorithm, SplitOdeProblem};
+use crate::solver::validate_state_time_options;
+use crate::solvers::explicit::split_euler::SplitOdeAlgorithm;
+use crate::{Solution, SolveError, SolveOptions, SolverStats, SplitOdeProblem};
 
 const MAX_NEWTON_ITERATIONS: usize = 12;
 const NEWTON_TOLERANCE: f64 = 1.0e-11;
@@ -30,14 +32,17 @@ pub struct Mreef {
 }
 
 impl Mreef {
+    /// Configures the microstep count, extrapolation order, and sequence.
     pub const fn new(m: usize, order: usize, sequence: MultirateSequence) -> Self {
         Self { m, order, sequence }
     }
 
+    /// Returns the number of fast microsteps per macro step.
     pub const fn microsteps(&self) -> usize {
         self.m
     }
 
+    /// Returns the configured extrapolation order.
     pub const fn order(&self) -> usize {
         self.order
     }
@@ -60,14 +65,17 @@ pub struct Mrab {
 }
 
 impl Mrab {
+    /// Configures the Adams--Bashforth order and fast microstep count.
     pub const fn new(order: usize, m: usize) -> Self {
         Self { order, m }
     }
 
+    /// Returns the configured Adams--Bashforth order.
     pub const fn order(&self) -> usize {
         self.order
     }
 
+    /// Returns the number of fast microsteps per macro step.
     pub const fn microsteps(&self) -> usize {
         self.m
     }
@@ -89,10 +97,12 @@ pub struct Mis {
 }
 
 impl Mis {
+    /// Configures the number of fast microsteps per macro step.
     pub const fn new(m: usize) -> Self {
         Self { m }
     }
 
+    /// Returns the number of fast microsteps per macro step.
     pub const fn microsteps(&self) -> usize {
         self.m
     }
@@ -116,10 +126,12 @@ macro_rules! mri_algorithm {
         }
 
         impl $rust {
+            /// Configures the number of fast microsteps per macro step.
             pub const fn new(m: usize) -> Self {
                 Self { m }
             }
 
+            /// Returns the number of fast microsteps per macro step.
             pub const fn microsteps(&self) -> usize {
                 self.m
             }
@@ -132,10 +144,11 @@ macro_rules! mri_algorithm {
         }
 
         #[allow(non_camel_case_types)]
+        #[doc = concat!("Exact OrdinaryDiffEq-compatible spelling alias for [`", stringify!($rust), "`].")]
         pub type $exact = $rust;
 
         impl SplitOdeAlgorithm for $rust {
-            fn solve<FE, FI, P>(
+            fn solve_validated<FE, FI, P>(
                 &self,
                 problem: &SplitOdeProblem<FE, FI, P>,
                 options: &SolveOptions,
@@ -198,7 +211,7 @@ mri_algorithm!(
 );
 
 impl SplitOdeAlgorithm for Mreef {
-    fn solve<FE, FI, P>(
+    fn solve_validated<FE, FI, P>(
         &self,
         problem: &SplitOdeProblem<FE, FI, P>,
         options: &SolveOptions,
@@ -223,7 +236,7 @@ impl SplitOdeAlgorithm for Mreef {
 }
 
 impl SplitOdeAlgorithm for Mrab {
-    fn solve<FE, FI, P>(
+    fn solve_validated<FE, FI, P>(
         &self,
         problem: &SplitOdeProblem<FE, FI, P>,
         options: &SolveOptions,
@@ -250,7 +263,7 @@ impl SplitOdeAlgorithm for Mrab {
 }
 
 impl SplitOdeAlgorithm for Mis {
-    fn solve<FE, FI, P>(
+    fn solve_validated<FE, FI, P>(
         &self,
         problem: &SplitOdeProblem<FE, FI, P>,
         options: &SolveOptions,
@@ -484,55 +497,7 @@ fn validate<FE, FI, P>(
     problem: &SplitOdeProblem<FE, FI, P>,
     options: &SolveOptions,
 ) -> Result<(), SolveError> {
-    if problem.initial_state().is_empty() {
-        return Err(SolveError::EmptyState);
-    }
-    if !problem
-        .initial_state()
-        .iter()
-        .all(|value| value.is_finite())
-    {
-        return Err(SolveError::NonFiniteInitialState);
-    }
-    let (start, end) = problem.time_span();
-    if !start.is_finite() || !end.is_finite() || start == end {
-        return Err(SolveError::InvalidTimeSpan);
-    }
-    if !options.absolute_tolerance.is_finite()
-        || options.absolute_tolerance <= 0.0
-        || !options.relative_tolerance.is_finite()
-        || options.relative_tolerance <= 0.0
-    {
-        return Err(SolveError::InvalidTolerance);
-    }
-    if options
-        .initial_step
-        .is_some_and(|value| !value.is_finite() || value <= 0.0)
-    {
-        return Err(SolveError::InvalidInitialStep);
-    }
-    if options.max_step.is_nan() || options.max_step <= 0.0 {
-        return Err(SolveError::InvalidMaxStep);
-    }
-    if options.max_steps == 0 {
-        return Err(SolveError::InvalidMaxSteps);
-    }
-    if !options.event_tolerance.is_finite() || options.event_tolerance <= 0.0 {
-        return Err(SolveError::InvalidEventTolerance);
-    }
-    let direction = (end - start).signum();
-    let mut previous = start;
-    for &target in &options.save_at {
-        if !target.is_finite()
-            || direction * (target - start) < 0.0
-            || direction * (end - target) < 0.0
-            || direction * (target - previous) < 0.0
-        {
-            return Err(SolveError::InvalidSaveAt);
-        }
-        previous = target;
-    }
-    Ok(())
+    validate_state_time_options(problem.initial_state(), problem.time_span(), options)
 }
 
 fn estimate_initial_step(state: &[f64], derivative: &[f64], maximum: f64) -> f64 {

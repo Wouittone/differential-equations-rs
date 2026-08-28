@@ -1,0 +1,15 @@
+[package]
+name = "differential-equations-tableau-core"
+version = "0.1.0-beta.1"
+edition = "2024"
+rust-version = "1.85"
+description = "Shared parser and validator for differential-equations tableau resources"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/Wouittone/differential-equations-rs"
+readme = "README.md"
+include = ["/src/**/*.rs", "/README.md", "/LICENSE-APACHE", "/LICENSE-MIT"]
+
+[dependencies]
+exmex = "0.21.0"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.145"

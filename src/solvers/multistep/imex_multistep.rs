@@ -4,12 +4,14 @@
 //! OrdinaryDiffEqIMEXMultistep at SciML/OrdinaryDiffEq.jl revision
 //! `211142263781255a9aa2f910f6760b9f18ec29c8`. The first split component in
 //! this crate is explicit and the second is implicit, matching
-//! [`SplitOdeProblem`]. Residual DAEs, mass matrices,
+//! [`crate::SplitOdeProblem`]. Residual DAEs, mass matrices,
 //! custom nonlinear solvers, and custom linear solvers are not represented.
 
 use crate::linear::{factorize, solve_factorized};
-use crate::solution::{BorrowedHermiteSegment, HermiteSegment, TrajectoryRecorder};
-use crate::{Solution, SolveError, SolveOptions, SolverStats, SplitOdeAlgorithm, SplitOdeProblem};
+use crate::solution::{BorrowedHermiteSegment, DenseSegment, HermiteSegment, TrajectoryRecorder};
+use crate::solver::validate_state_time_options;
+use crate::solvers::explicit::split_euler::SplitOdeAlgorithm;
+use crate::{Solution, SolveError, SolveOptions, SolverStats, SplitOdeProblem};
 
 const MAX_NEWTON_ITERATIONS: usize = 12;
 const NEWTON_TOLERANCE: f64 = 1.0e-12;
@@ -55,11 +57,12 @@ macro_rules! fixed_algorithm {
         #[doc = concat!("Exact Julia-compatible spelling alias for [`", stringify!($rust), "`].")]
         pub type $julia = $rust;
 
+        #[doc = concat!("Value-form SciML-compatible constructor spelling for [`", stringify!($rust), "`].")]
         #[allow(non_upper_case_globals)]
         pub const $julia: $rust = $rust;
 
         impl SplitOdeAlgorithm for $rust {
-            fn solve<FE, FI, P>(
+            fn solve_validated<FE, FI, P>(
                 &self,
                 problem: &SplitOdeProblem<FE, FI, P>,
                 options: &SolveOptions,
@@ -118,7 +121,7 @@ fixed_algorithm!(
 );
 
 impl SplitOdeAlgorithm for Sbdf {
-    fn solve<FE, FI, P>(
+    fn solve_validated<FE, FI, P>(
         &self,
         problem: &SplitOdeProblem<FE, FI, P>,
         options: &SolveOptions,
@@ -183,6 +186,15 @@ impl Workspace {
 
     fn clear_history(&mut self) {
         self.history_len = 0;
+        for state in &mut self.state_history {
+            state.fill(0.0);
+        }
+        for derivative in &mut self.explicit_history {
+            derivative.fill(0.0);
+        }
+        for derivative in &mut self.implicit_history {
+            derivative.fill(0.0);
+        }
     }
 
     fn accept(&mut self, previous_state: &[f64]) {
@@ -238,9 +250,21 @@ where
     let mut state = problem.initial_state().to_vec();
     let mut workspace = Workspace::new(dimension);
     let mut stats = SolverStats::default();
+    let initial_callbacks = problem.apply_initial_callbacks(&mut state, start)?;
+    stats.callback_invocations += initial_callbacks.invocations;
+    let mut recorder = TrajectoryRecorder::new(&state, start, options);
+    if initial_callbacks.terminate {
+        recorder.force_state(start, &state);
+        return Ok(recorder.finish(stats));
+    }
     evaluate_explicit(problem, &mut workspace.explicit, &state, start, &mut stats)?;
     evaluate_implicit(problem, &mut workspace.implicit, &state, start, &mut stats)?;
-    let mut recorder = TrajectoryRecorder::new(&state, start, options);
+    let mut state_before_effect = if problem.has_callbacks() {
+        vec![0.0; dimension]
+    } else {
+        Vec::new()
+    };
+    let mut dense_endpoint = vec![0.0; dimension];
     let mut start_derivative = vec![0.0; dimension];
     let mut end_derivative = vec![0.0; dimension];
     let mut time = start;
@@ -261,7 +285,7 @@ where
             workspace.clear_history();
         }
 
-        let next_time = time + step;
+        let attempted_time = time + step;
         prepare_forcing(
             method,
             &state,
@@ -278,40 +302,62 @@ where
         }
         solve_implicit(
             problem,
-            next_time,
+            attempted_time,
             implicit_scale * step,
             &mut workspace,
             &mut stats,
         )?;
 
         let previous_state = state;
-        let next_state = std::mem::take(&mut workspace.candidate);
+        let mut next_state = std::mem::take(&mut workspace.candidate);
         evaluate_explicit(
             problem,
             &mut workspace.next_explicit,
             &next_state,
-            next_time,
+            attempted_time,
             &mut stats,
         )?;
         for index in 0..dimension {
             start_derivative[index] = workspace.explicit[index] + workspace.implicit[index];
             end_derivative[index] = workspace.next_explicit[index] + workspace.next_implicit[index];
         }
+        dense_endpoint.copy_from_slice(&next_state);
         let segment = BorrowedHermiteSegment::new(
             time,
-            next_time,
+            attempted_time,
             &previous_state,
-            &next_state,
+            &dense_endpoint,
             &start_derivative,
             &end_derivative,
         )
         .map_err(|_| SolveError::NonFiniteDerivative)?;
+        let mut next_time = attempted_time;
+        let mut interpolate = |target: f64, output: &mut [f64]| {
+            segment
+                .interpolate(target, output)
+                .map_err(|_| SolveError::NonFiniteDerivative)
+        };
+        let callbacks = problem.apply_step_callbacks(
+            &previous_state,
+            time,
+            &mut next_state,
+            &mut next_time,
+            &mut state_before_effect,
+            options.event_tolerance,
+            Some(&mut interpolate),
+        )?;
+        stats.callback_invocations += callbacks.invocations;
         stats.accepted_steps += 1;
+        let dense_state = if callbacks.invocations == 0 {
+            &next_state
+        } else {
+            &state_before_effect
+        };
         recorder
             .record_step_dense(
                 &previous_state,
                 time,
-                &next_state,
+                dense_state,
                 next_time,
                 next_time == end,
                 &segment,
@@ -319,18 +365,46 @@ where
             .map_err(|_| SolveError::NonFiniteDerivative)?;
         if recorder.retains_dense_output() {
             recorder.retain_hermite_segment(
-                HermiteSegment::new(
+                HermiteSegment::new_bounded(
                     time,
+                    attempted_time,
                     next_time,
                     previous_state.clone(),
-                    next_state.clone(),
+                    dense_endpoint.clone(),
                     start_derivative.clone(),
                     end_derivative.clone(),
                 )
                 .map_err(|_| SolveError::NonFiniteDerivative)?,
             );
         }
+        if callbacks.invocations > 0 {
+            recorder.force_state(next_time, &next_state);
+        }
+        if callbacks.terminate {
+            return Ok(recorder.finish(stats));
+        }
+        if callbacks.invocations > 0 {
+            evaluate_explicit(
+                problem,
+                &mut workspace.next_explicit,
+                &next_state,
+                next_time,
+                &mut stats,
+            )?;
+            evaluate_implicit(
+                problem,
+                &mut workspace.next_implicit,
+                &next_state,
+                next_time,
+                &mut stats,
+            )?;
+        }
         workspace.accept(&previous_state);
+        if callbacks.invocations > 0 {
+            // A discontinuity or truncated event invalidates every multistep
+            // history entry, even when the effect leaves the state unchanged.
+            workspace.clear_history();
+        }
         workspace.candidate = previous_state;
         state = next_state;
         time = next_time;
@@ -628,57 +702,12 @@ fn validate<FE, FI, P>(
     problem: &SplitOdeProblem<FE, FI, P>,
     options: &SolveOptions,
 ) -> Result<(), SolveError> {
-    if problem.initial_state().is_empty() {
-        return Err(SolveError::EmptyState);
-    }
-    if !problem
-        .initial_state()
-        .iter()
-        .all(|value| value.is_finite())
-    {
-        return Err(SolveError::NonFiniteInitialState);
-    }
-    let (start, end) = problem.time_span();
-    if !start.is_finite() || !end.is_finite() || start == end {
-        return Err(SolveError::InvalidTimeSpan);
-    }
-    if !options.absolute_tolerance.is_finite()
-        || options.absolute_tolerance <= 0.0
-        || !options.relative_tolerance.is_finite()
-        || options.relative_tolerance <= 0.0
-    {
-        return Err(SolveError::InvalidTolerance);
-    }
+    validate_state_time_options(problem.initial_state(), problem.time_span(), options)?;
     if options.adaptive {
         return Err(SolveError::AdaptiveStepUnsupported);
     }
-    if options
-        .initial_step
-        .is_some_and(|step| !step.is_finite() || step <= 0.0)
-    {
-        return Err(SolveError::InvalidInitialStep);
-    }
     if options.initial_step.is_none() {
         return Err(SolveError::InitialStepRequired);
-    }
-    if options.max_step.is_nan() || options.max_step <= 0.0 {
-        return Err(SolveError::InvalidMaxStep);
-    }
-    if options.max_steps == 0 {
-        return Err(SolveError::InvalidMaxSteps);
-    }
-    if !options.event_tolerance.is_finite() || options.event_tolerance <= 0.0 {
-        return Err(SolveError::InvalidEventTolerance);
-    }
-    let direction = (end - start).signum();
-    if !options.save_at.iter().all(|time| {
-        time.is_finite() && direction * (*time - start) >= 0.0 && direction * (end - *time) >= 0.0
-    }) || options
-        .save_at
-        .windows(2)
-        .any(|pair| direction * (pair[1] - pair[0]) <= 0.0)
-    {
-        return Err(SolveError::InvalidSaveAt);
     }
     Ok(())
 }

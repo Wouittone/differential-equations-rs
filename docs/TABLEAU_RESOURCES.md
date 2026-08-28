@@ -1,39 +1,49 @@
-# Compile-time tableau resources
+# Tableau resources
 
-Explicit Runge--Kutta methods can be defined in TOML and compiled into the
-same static kernel used by built-in methods. The TOML file is read and
-validated by a procedural macro while the crate is compiled. A solve performs
-no parsing, allocation, file I/O, or dynamic dispatch because the macro
-expands directly to static `ButcherTableau` arrays and a zero-sized algorithm
-type. No generated Rust source is checked into the repository.
+Runge--Kutta methods are stored as JSON resources containing the canonical
+Butcher matrix `A`, weights `b`, and nodes `c`. JSON is used because its array
+and object model maps directly to vectors, matrices, sparse dense-output
+stages, and future typed extensions. Exact coefficients remain readable as
+strings such as `"-2197/4104"` or `"(3 - sqrt(3)) / 6"`.
+
+The machine-readable contract is [`tableau.schema.json`](tableau.schema.json).
+Resource files use a FracturedJson-style layout: stable object ordering,
+single-line vectors, and one compact line per matrix row. Long rows intentionally
+remain wide because these are machine-oriented resource files.
+
+The shared parser uses Serde/`serde_json` for the document model and maintained
+`exmex` for exact-style arithmetic expressions. Plain decimal and scientific
+notation literals are parsed directly as `f64`; expression strings are limited
+to numeric literals, parentheses, `+`, `-`, `*`, `/`, and `sqrt(...)`. Variables,
+constants such as `pi`, and other functions are rejected.
 
 ## Defining a method
 
-Place a resource anywhere under the consuming package. Paths passed to the
-macro are relative to that package's `CARGO_MANIFEST_DIR`:
-
-```toml
-schema_version = 1
-name = "FileHeun"
-description = "An adaptive Heun method defined by a TOML resource."
-order = 2
-embedded_order = 1
-fsal = false
-
-nodes = ["0", "1"]
-coefficients = [[], ["1"]]
-weights = ["1/2", "1/2"]
-error_weights = ["-1/2", "1/2"]
+```json
+{
+  "name": "FileHeun",
+  "description": "An adaptive Heun method defined by a resource.",
+  "kind": "explicit-runge-kutta",
+  "order": 2,
+  "embedded_order": 1,
+  "A": [[0, 0], [1, 0]],
+  "b": ["1/2", "1/2"],
+  "c": [0, 1],
+  "error": ["-1/2", "1/2"]
+}
 ```
 
-Then define and use the algorithm:
+The resource has no schema-version field. The crate is pre-1.0, so format
+changes are handled directly instead of preserving artificial version layers.
+
+Define the solver with a package-relative path:
 
 ```rust
 use differential_equations::{
     OdeProblem, SolveOptions, define_explicit_rk_from_file, solve,
 };
 
-define_explicit_rk_from_file!(pub FileHeun, "tableaux/file_heun.toml");
+define_explicit_rk_from_file!(pub FileHeun, "tableaux/file_heun.json");
 
 # fn main() -> Result<(), Box<dyn std::error::Error>> {
 let problem = OdeProblem::new(
@@ -47,70 +57,60 @@ let solution = solve(&problem, FileHeun, &SolveOptions::default())?;
 # }
 ```
 
-The generated type is a normal `OdeAlgorithm`, so it works with callbacks,
-save-at, retained dense output, and Rayon-backed ensemble APIs supported by the
-shared explicit driver.
+The procedural macro reads and validates the JSON during compilation using
+the same parser as the runtime loader. Invalid JSON, unknown fields, name or
+dimension mismatches, non-finite expressions, non-triangular explicit
+matrices, invalid primary weights, malformed estimators or dense extensions,
+and inconsistent FSAL metadata therefore fail the build with a resource-path
+diagnostic.
 
-## Schema
+The expansion does not generate coefficient arrays. It embeds the original
+text with `include_str!` and defines a `LazyLock<Result<...>>`; only a method
+that is actually used is parsed and allocated at runtime. Runtime parsing
+errors remain typed values rather than panics. `FileHeun.tableau()` exposes the
+validated materialized tableau for inspection.
 
-Required fields are `schema_version`, `name`, `description`, `order`, `fsal`,
-`nodes`, `coefficients`, and `weights`. Optional fields are `embedded_order`,
-`error_estimator`, `error_weights`, `second_error_weights`, and
-`dense_coefficients`.
+`A` must be a full square matrix. An explicit method must be strictly lower
+triangular. `error`, `second_error`, and every dense row use the same stage
+ordering as `b`. `lazy_dense_stages` may append sparse stages used only by a
+continuous extension. The parser accepts JSON numbers and string expressions
+using parentheses, `+`, `-`, `*`, `/`, and `sqrt(...)`.
 
-Coefficient values may be finite TOML integers/floats or strings containing a
-decimal or exact integer ratio such as `"-2197/4104"`. String ratios preserve
-the human-auditable source representation; the macro materializes the final
-round-trip-safe `f64` literals in generated code.
+Parametric methods whose primary weights are rational polynomials can add
+`fitted_weights`. Each entry names a stage and gives numerator and denominator
+coefficient vectors in ascending powers of the solver-defined fit variable.
+Validation requires unique in-range stages, finite coefficients, a non-zero
+denominator at zero, and agreement with the corresponding zero-fit `b` value.
+FRK65 uses this extension so its fixed tableau and runtime-fitted weights remain
+one resource rather than separate coefficient primitives.
 
-Compilation fails with a targeted diagnostic when:
+See [`TABLEAU_MIGRATION_COVERAGE.md`](TABLEAU_MIGRATION_COVERAGE.md) for the
+exact boundary between canonical resource-backed tableaus, runtime-generated or
+parametric methods, and non-Butcher solver families.
 
-- the schema contains unknown fields or an unsupported version;
-- a name, order, embedded estimator, or dimension is inconsistent;
-- an explicit row is not strictly lower triangular or does not sum to its node;
-- primary weights do not sum to one or error weights do not sum to zero;
-- coefficients are invalid or non-finite;
-- FSAL metadata does not match the final node, row, and weight;
-- dense coefficient rows are missing or malformed.
-
-`error_weights` defaults to an embedded-difference estimator and must sum to
-zero. Specialized methods whose local error is a direct weighted stage
-combination declare `error_estimator = "stage-combination"` explicitly.
-
-Because the expansion contains `include_str!` for the resource, Cargo tracks
-the file and recompiles the method when it changes.
-
-## Built-in coefficient banks
-
-Large built-in coefficient banks follow the same resource-first design. Their
-typed TOML files live under `coefficients/` and are loaded with
-`define_coefficients_from_file!` inside the owning solver family. The schema
-supports finite `f64`, `usize`, `i32`, and Boolean scalars; slices; fixed
-arrays and matrices; ragged row sets; and lazy dense-output stages. Numeric
-strings may use Rust-style `+`, `-`, `*`, and `/` expressions, which keeps
-exact ratios auditable.
-
-These resources are the source of truth. There are no generated coefficient
-modules to regenerate or synchronize, and compile-time validation rejects
-unknown fields, duplicate constant names, invalid types, malformed matrices,
-non-finite values, and unsupported expressions.
-
-The generated code uses the normal `differential_equations` crate name by
-default. If the dependency is renamed, pass its local path explicitly:
+If the dependency is renamed, pass its local path:
 
 ```rust,ignore
 define_explicit_rk_from_file!(
     pub FileHeun,
-    "tableaux/file_heun.toml",
+    "tableaux/file_heun.json",
     crate = diffeq,
 );
 ```
 
-## Repository-owned methods
+## Packaging
 
-The canonical low-order built-ins—Euler, midpoint, Heun, Ralston, Alshina2,
-and RK4—are resource-backed under `tableaux/explicit`. Family-specific banks
-for explicit Runge--Kutta, low-storage, SSPRK, SDIRK, Rosenbrock,
-second-order, and stabilized methods live under `coefficients/`. Changing
-either kind of resource automatically invalidates Cargo's build because each
-macro expansion tracks its source with `include_str!`.
+Resource files are compile inputs and must be included in published packages:
+
+```toml
+[package]
+include = [
+    "/src/**/*.rs",
+    "/tableaux/**/*.json",
+    "/README.md",
+]
+```
+
+Run `cargo package --list` and `cargo publish --dry-run` before release. Cargo
+tracks each macro's `include_str!`, so editing a resource invalidates the
+corresponding build automatically.

@@ -36,7 +36,7 @@ impl<A> AutoDp5<A> {
 }
 
 impl<A: OdeAlgorithm> OdeAlgorithm for AutoDp5<A> {
-    fn solve<F, P>(
+    fn solve_validated<F, P>(
         &self,
         problem: &OdeProblem<F, P>,
         options: &SolveOptions,

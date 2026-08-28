@@ -62,7 +62,7 @@ impl Workspace {
 }
 
 impl OdeAlgorithm for Rosenbrock23 {
-    fn solve<F, P>(
+    fn solve_validated<F, P>(
         &self,
         problem: &OdeProblem<F, P>,
         options: &SolveOptions,

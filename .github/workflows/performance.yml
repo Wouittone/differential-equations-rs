@@ -1,0 +1,48 @@
+name: Performance
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: performance-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTUP_TOOLCHAIN: "1.85"
+
+jobs:
+  codspeed:
+    name: CodSpeed regression benchmarks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@85c23e28f7ccc75a9a153d45d385d94a85464876
+        with:
+          toolchain: "1.85"
+      - uses: Swatinem/rust-cache@49a0bdc70d2e1b713ca9e2869b211fcce03d3c1c # v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - name: Install cargo-codspeed
+        uses: taiki-e/install-action@cb33e69fad06166ca28a42b2575e4dadabf62ee8 # v2.85.8
+        with:
+          tool: cargo-codspeed
+      - name: Build benchmarks
+        run: cargo codspeed build --locked --bench solver_performance
+      - name: Run benchmarks
+        uses: CodSpeedHQ/action@d4c3ecc6c52771046d80d8575a8d9e6487fda279 # v5.0.3
+        with:
+          mode: simulation
+          run: cargo codspeed run --bench solver_performance

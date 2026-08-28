@@ -5,81 +5,15 @@
 //! equivalent four-stage Butcher tableau.  Stage and step limiter callbacks
 //! are intentionally not exposed because they are not part of `OdeProblem`.
 
-#![allow(clippy::excessive_precision)]
-
-use super::general::{ButcherTableau, ExplicitRungeKutta};
-use crate::{OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions};
-
-const EMPTY: &[f64] = &[];
-
-// Pinned upstream Shu--Osher constants from
-// OrdinaryDiffEqSSPRK/src/ssprk_caches.jl.  Expanding the recurrence keeps
-// the coefficients in the same order as the source while allowing the shared
-// explicit driver to provide save_at, callbacks, and backward integration.
-const ALPHA_21: f64 = 0.605_193_558_660_171;
-const ALPHA_32: f64 = 0.997_202_692_912_61;
-const ALPHA_43: f64 = 0.747_139_090_645_627;
-const BETA_10: f64 = 0.406_584_463_657_504;
-const BETA_21: f64 = 0.246_062_298_456_822;
-const BETA_30: f64 = 0.013_637_216_641_451;
-const BETA_32: f64 = 0.405_447_122_055_692;
-const BETA_40: f64 = 0.016_453_567_333_598;
-const BETA_43: f64 = 0.303_775_146_447_707;
-
-const KYKSSPRK42_A2: &[f64] = &[BETA_10];
-const KYKSSPRK42_A3: &[f64] = &[ALPHA_21 * BETA_10, BETA_21];
-const KYKSSPRK42_A4: &[f64] = &[
-    ALPHA_32 * ALPHA_21 * BETA_10 + BETA_30,
-    ALPHA_32 * BETA_21,
-    BETA_32,
-];
-const KYKSSPRK42_A: &[&[f64]] = &[EMPTY, KYKSSPRK42_A2, KYKSSPRK42_A3, KYKSSPRK42_A4];
-const KYKSSPRK42_B: &[f64] = &[
-    ALPHA_43 * (ALPHA_32 * ALPHA_21 * BETA_10 + BETA_30) + BETA_40,
-    ALPHA_43 * ALPHA_32 * BETA_21,
-    ALPHA_43 * BETA_32,
-    BETA_43,
-];
-const KYKSSPRK42_C: &[f64] = &[
-    0.0,
-    BETA_10,
-    0.492_124_596_913_643_8,
-    0.909_832_311_987_961_3,
-];
-
-struct KykSsprk42Tableau;
-
-impl ButcherTableau for KykSsprk42Tableau {
-    const NODES: &'static [f64] = KYKSSPRK42_C;
-    const COEFFICIENTS: &'static [&'static [f64]] = KYKSSPRK42_A;
-    const WEIGHTS: &'static [f64] = KYKSSPRK42_B;
-    const ERROR_WEIGHTS: Option<&'static [f64]> = None;
-    const ORDER: usize = 2;
-    const FSAL: bool = false;
-}
-
-/// Fixed-step KYK optimal SSPRK(4,2).
-///
-/// As in the pinned Julia algorithm, no embedded error estimator is supplied;
-/// requesting adaptive stepping therefore returns `AdaptiveStepUnsupported`.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct KykSsprk42;
+crate::define_explicit_rk_from_file!(
+    pub KykSsprk42,
+    "tableaux/explicit/kyk_ssprk42.json",
+    crate = crate
+);
 
 #[allow(non_camel_case_types)]
+/// Exact OrdinaryDiffEq-compatible spelling alias for [`KykSsprk42`].
 pub type KYKSSPRK42 = KykSsprk42;
-
-impl OdeAlgorithm for KykSsprk42 {
-    fn solve<F, P>(
-        &self,
-        problem: &OdeProblem<F, P>,
-        options: &SolveOptions,
-    ) -> Result<Solution, SolveError>
-    where
-        F: Fn(&mut [f64], &[f64], &P, f64),
-    {
-        ExplicitRungeKutta::<KykSsprk42Tableau>::new().solve(problem, options)
-    }
-}
 
 #[cfg(test)]
 mod tests {

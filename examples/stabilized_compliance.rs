@@ -1,4 +1,4 @@
-use differential_equations::algorithms::*;
+use differential_equations::solvers::stabilized::*;
 use differential_equations::*;
 
 type ScalarRhs = fn(&mut [f64], &[f64], &(), f64);

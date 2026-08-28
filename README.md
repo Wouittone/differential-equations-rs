@@ -97,7 +97,6 @@ follows:
 | `algorithms::implicit::diagonally_implicit::*` | `solvers::implicit::sdirk::*` |
 | `algorithms::implicit::fully_implicit::*` | `solvers::implicit::firk::*` |
 | `algorithms::second_order::structural::*` | `solvers::second_order::general::*` |
-| `algorithms::simd::*` | `solvers::explicit::simd_rk::*` |
 | `algorithms::interaction_picture::*` | `solvers::exponential::rkip::*` |
 | `algorithms::amf::*` | `solvers::rosenbrock::amf::*` |
 | Root split-ODE traits and drivers | `solvers::explicit::split_euler::*` |

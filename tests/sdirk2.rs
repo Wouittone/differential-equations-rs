@@ -1,7 +1,7 @@
 use std::cell::Cell;
 use std::rc::Rc;
 
-use differential_equations::algorithms::*;
+use differential_equations::solvers::implicit::*;
 use differential_equations::*;
 
 #[test]

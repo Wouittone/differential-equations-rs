@@ -1,0 +1,15 @@
+{
+  "$schema": "../../docs/tableau.schema.json",
+  "name": "ImexSsp222",
+  "description": "Pinned implicit Runge--Kutta tableau for ImexSsp222.",
+  "kind": "implicit-runge-kutta",
+  "order": 2,
+  "embedded_order": 1,
+  "A": [
+    ["0.29289321881345254", "0.0"],
+    ["0.41421356237309515", "0.29289321881345254"]
+  ],
+  "b": ["0.5", "0.5"],
+  "c": ["0.29289321881345254", "0.7071067811865475"],
+  "error": ["0.0", "0.0"]
+}

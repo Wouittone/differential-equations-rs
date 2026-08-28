@@ -5,14 +5,27 @@ edition = "2024"
 rust-version = "1.85"
 description = "Beta Rust implementations of Julia SciML ODE solvers"
 license = "MIT OR Apache-2.0"
+readme = "README.md"
 repository = "https://github.com/Wouittone/differential-equations-rs"
 homepage = "https://github.com/Wouittone/differential-equations-rs"
 documentation = "https://docs.rs/differential-equations"
+keywords = ["ode", "differential-equations", "numerical", "simulation", "sciml"]
+categories = ["science", "mathematics", "algorithms", "simulation"]
 include = [
     "/src/**/*.rs",
     "/coefficients/**/*.toml",
-    "/tableaux/**/*.toml",
+    "/tableaux/**/*.json",
     "/README.md",
+    "/CHANGELOG.md",
+    "/CONTRIBUTING.md",
+    "/SECURITY.md",
+    "/SUPPLY_CHAIN.md",
+    "/docs/*.md",
+    "/docs/tableau.schema.json",
+    "/benches/solver_performance.rs",
+    "/examples/quickstart.rs",
+    "/examples/tableau_from_file.rs",
+    "/examples/resources/file_heun.json",
     "/LICENSE-APACHE",
     "/LICENSE-MIT",
     "/THIRD_PARTY_NOTICES.md",
@@ -20,8 +33,8 @@ include = [
 publish = false
 
 [workspace]
-members = ["tableau-macros"]
-resolver = "2"
+members = ["tableau-core", "tableau-macros"]
+resolver = "3"
 
 [features]
 default = ["parallel"]
@@ -30,8 +43,19 @@ parallel = ["dep:rayon"]
 
 [dependencies]
 differential-equations-tableau-macros = { version = "=0.1.0-beta.1", path = "tableau-macros" }
+differential-equations-tableau-core = { version = "=0.1.0-beta.1", path = "tableau-core" }
 rayon = { version = "1.11.0", optional = true }
 thiserror = "2.0.20"
 
 [dev-dependencies]
+criterion = { package = "codspeed-criterion-compat", version = "5.0.0", default-features = false, features = ["cargo_bench_support"] }
 stats_alloc = "0.1.10"
+
+[[bench]]
+name = "solver_performance"
+harness = false
+required-features = ["parallel"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["-D", "warnings", "-D", "missing-docs"]

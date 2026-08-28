@@ -1,6 +1,7 @@
 //! Explicit stabilized and implicit RKC algorithms.
 
 pub mod general;
+/// Implicit Runge--Kutta--Chebyshev solver for split problems.
 pub mod irkc;
 
 mod coefficient_data {
@@ -17,8 +18,3 @@ mod coefficient_data {
 
 pub use general::*;
 pub use irkc::{IRKC, solve_irkc};
-
-pub mod prelude {
-    pub use super::general::*;
-    pub use super::irkc::IRKC;
-}

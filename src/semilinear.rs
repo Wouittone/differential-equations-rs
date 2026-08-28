@@ -54,26 +54,32 @@ impl<G, P> SemilinearOdeProblem<G, P> {
         })
     }
 
+    /// Returns the constant row-major linear operator.
     pub fn linear_operator(&self) -> &[f64] {
         &self.linear_operator
     }
 
+    /// Returns the initial state.
     pub fn initial_state(&self) -> &[f64] {
         &self.initial_state
     }
 
+    /// Returns the integration time span.
     pub fn time_span(&self) -> (f64, f64) {
         self.time_span
     }
 
+    /// Returns the user parameters.
     pub fn parameters(&self) -> &P {
         &self.parameters
     }
 
+    /// Returns the state dimension.
     pub fn dimension(&self) -> usize {
         self.initial_state.len()
     }
 
+    /// Evaluates only the nonlinear term `g(u, p, t)`.
     pub fn evaluate_nonlinear(&self, output: &mut [f64], state: &[f64], time: f64)
     where
         G: Fn(&mut [f64], &[f64], &P, f64),
@@ -81,6 +87,7 @@ impl<G, P> SemilinearOdeProblem<G, P> {
         (self.nonlinear)(output, state, &self.parameters, time);
     }
 
+    /// Evaluates the full right-hand side `A u + g(u, p, t)`.
     pub fn evaluate(&self, output: &mut [f64], state: &[f64], time: f64)
     where
         G: Fn(&mut [f64], &[f64], &P, f64),

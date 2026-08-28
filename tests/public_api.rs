@@ -1,30 +1,31 @@
-use differential_equations::{
-    OdeAlgorithm, OdeProblem, SaveMode, SolveOptions, algorithms, solve, solvers,
-};
+use differential_equations::{OdeAlgorithm, OdeProblem, SaveMode, SolveOptions, solve, solvers};
 
 fn assert_algorithm<T: OdeAlgorithm>() {}
 
 fn assert_same_type<T>(_: T, _: T) {}
 
 #[test]
-fn family_namespaces_reexport_the_flat_algorithm_types() {
-    assert_same_type(algorithms::Tsit5, algorithms::explicit::general::Tsit5);
+fn family_facades_reexport_the_implementation_types() {
+    assert_same_type(solvers::explicit::Tsit5, solvers::explicit::tsit5::Tsit5);
     assert_same_type(
-        algorithms::RDPK3Sp35,
-        algorithms::explicit::low_storage::RDPK3Sp35,
+        solvers::explicit::RDPK3Sp35,
+        solvers::explicit::low_storage_rk::RDPK3Sp35,
     );
     assert_same_type(
-        algorithms::Kvaerno5,
-        algorithms::implicit::diagonally_implicit::Kvaerno5,
-    );
-    assert_same_type(algorithms::Rodas3P, algorithms::rosenbrock::Rodas3P);
-    assert_same_type(
-        algorithms::VelocityVerlet,
-        algorithms::second_order::VelocityVerlet,
+        solvers::implicit::Kvaerno5,
+        solvers::implicit::sdirk::Kvaerno5,
     );
     assert_same_type(
-        algorithms::SspRkMsvs43,
-        algorithms::explicit::ssp::SspRkMsvs43,
+        solvers::rosenbrock::Rodas3P,
+        solvers::rosenbrock::rosenbrock_extended::Rodas3P,
+    );
+    assert_same_type(
+        solvers::second_order::VelocityVerlet,
+        solvers::second_order::general::VelocityVerlet,
+    );
+    assert_same_type(
+        solvers::explicit::SspRkMsvs43,
+        solvers::explicit::ssprk_msvs::SspRkMsvs43,
     );
 }
 
@@ -41,18 +42,18 @@ fn canonical_solver_paths_include_the_implementation_module() {
 
 #[test]
 fn namespaced_exports_are_real_ode_algorithms() {
-    assert_algorithm::<algorithms::CKLLSRK54_3C>();
-    assert_algorithm::<algorithms::RDPK3SpFSAL510>();
-    assert_algorithm::<algorithms::Esdirk436L2Sa2>();
-    assert_algorithm::<algorithms::KenCarp4>();
-    assert_algorithm::<algorithms::Kvaerno5>();
-    assert_algorithm::<algorithms::Rodas3P>();
-    assert_algorithm::<algorithms::Ros4LStab>();
-    assert_algorithm::<algorithms::Tsit5DA>();
-    assert_algorithm::<algorithms::SSPRKMSVS43>();
-    assert_algorithm::<algorithms::QNDF>();
-    assert_algorithm::<algorithms::QBDF>();
-    assert_algorithm::<algorithms::FBDF>();
+    assert_algorithm::<solvers::explicit::CKLLSRK54_3C>();
+    assert_algorithm::<solvers::explicit::RDPK3SpFSAL510>();
+    assert_algorithm::<solvers::implicit::Esdirk436L2Sa2>();
+    assert_algorithm::<solvers::implicit::KenCarp4>();
+    assert_algorithm::<solvers::implicit::Kvaerno5>();
+    assert_algorithm::<solvers::rosenbrock::Rodas3P>();
+    assert_algorithm::<solvers::rosenbrock::Ros4LStab>();
+    assert_algorithm::<solvers::rosenbrock::Tsit5DA>();
+    assert_algorithm::<solvers::explicit::SSPRKMSVS43>();
+    assert_algorithm::<solvers::multistep::QNDF>();
+    assert_algorithm::<solvers::multistep::QBDF>();
+    assert_algorithm::<solvers::multistep::FBDF>();
 }
 
 #[test]
@@ -72,7 +73,7 @@ fn namespaced_algorithm_runs_through_the_public_driver() {
 
     let solution = solve(
         &problem,
-        algorithms::explicit::low_storage::RDPK3Sp35,
+        solvers::explicit::low_storage_rk::RDPK3Sp35,
         &options,
     )
     .expect("the concrete low-storage method should solve through its namespace");

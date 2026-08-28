@@ -1,4 +1,4 @@
-use differential_equations::algorithms::explicit::{Dp5, OwrenZen3, OwrenZen4, OwrenZen5};
+use differential_equations::solvers::explicit::{Dp5, OwrenZen3, OwrenZen4, OwrenZen5};
 use differential_equations::{
     CallbackAction, OdeAlgorithm, OdeProblem, SaveMode, SolveOptions, solve,
 };

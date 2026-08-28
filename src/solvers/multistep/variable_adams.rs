@@ -46,7 +46,7 @@ macro_rules! algorithm {
         pub struct $name;
 
         impl OdeAlgorithm for $name {
-            fn solve<F, P>(
+            fn solve_validated<F, P>(
                 &self,
                 problem: &OdeProblem<F, P>,
                 options: &SolveOptions,
@@ -102,10 +102,11 @@ pub struct Vcabm;
 pub type VCABM = Vcabm;
 
 #[allow(non_upper_case_globals)]
+/// Exact OrdinaryDiffEq-compatible value spelling for [`Vcabm`].
 pub const VCABM: Vcabm = Vcabm;
 
 impl OdeAlgorithm for Vcabm {
-    fn solve<F, P>(
+    fn solve_validated<F, P>(
         &self,
         problem: &OdeProblem<F, P>,
         options: &SolveOptions,

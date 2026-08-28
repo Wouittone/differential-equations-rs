@@ -1,4 +1,4 @@
-use differential_equations::algorithms::multistep::{AN5, JVODE, JVODE_Adams, JVODE_BDF};
+use differential_equations::solvers::multistep::{AN5, JVODE, JVODE_Adams, JVODE_BDF};
 use differential_equations::{
     CallbackAction, OdeAlgorithm, OdeProblem, SaveMode, SolveOptions, solve,
 };

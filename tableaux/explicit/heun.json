@@ -1,0 +1,15 @@
+{
+  "$schema": "../../docs/tableau.schema.json",
+  "name": "Heun",
+  "description": "The adaptive second-order explicit trapezoid (Heun) method.",
+  "kind": "explicit-runge-kutta",
+  "order": 2,
+  "embedded_order": 1,
+  "A": [
+    ["0", "0"],
+    ["1", "0"]
+  ],
+  "b": ["1/2", "1/2"],
+  "c": ["0", "1"],
+  "error": ["-1/2", "1/2"]
+}

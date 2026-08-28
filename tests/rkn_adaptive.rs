@@ -1,4 +1,4 @@
-use differential_equations::algorithms::*;
+use differential_equations::solvers::second_order::*;
 use differential_equations::*;
 
 type Acceleration = fn(&mut [f64], &[f64], &[f64], &(), f64);
@@ -260,6 +260,6 @@ fn sciml_spellings_and_second_order_namespace_are_public() {
     let _: FineRkn5 = FineRKN5;
     let _: Irkn3 = IRKN3;
     let _: Irkn4 = IRKN4;
-    let _: differential_equations::algorithms::second_order::Dprkn12 =
-        differential_equations::algorithms::second_order::DPRKN12;
+    let _: differential_equations::solvers::second_order::Dprkn12 =
+        differential_equations::solvers::second_order::DPRKN12;
 }

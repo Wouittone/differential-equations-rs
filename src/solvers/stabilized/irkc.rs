@@ -1,10 +1,11 @@
+use crate::callback::CallbackOutcome;
 use crate::integrator::{
     ControllerConfig, KernelCapabilities, StepEstimate, StepKernel, integrate as drive_integration,
 };
 use crate::linear::{factorize, solve_factorized};
-use crate::{
-    OdeProblem, Solution, SolveError, SolveOptions, SolverStats, SplitOdeAlgorithm, SplitOdeProblem,
-};
+use crate::solver::validate_state_time_options;
+use crate::solvers::explicit::split_euler::SplitOdeAlgorithm;
+use crate::{OdeProblem, Solution, SolveError, SolveOptions, SolverStats, SplitOdeProblem};
 
 const MINIMUM_DEGREE: usize = 50;
 const MAXIMUM_DEGREE: usize = 50;
@@ -15,27 +16,37 @@ const NEWTON_TOLERANCE: f64 = 1.0e-11;
 ///
 /// The first (Rust `implicit`) split is solved by Newton iteration. The second
 /// (Rust `explicit`) split determines the Chebyshev stability degree.
+/// The pinned upstream policy fixes that degree at 50; supplying an eigenvalue
+/// estimate skips the power-iteration setup work but does not change the stage
+/// count.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct IRKC {
     eigenvalue_override: Option<f64>,
 }
 
 impl IRKC {
+    /// Constructs IRKC with an internally estimated explicit spectral radius.
     pub fn new() -> Self {
         Self::default()
     }
+    /// Supplies an explicit spectral-radius upper bound and skips estimation.
+    ///
+    /// For parity with the pinned upstream revision, IRKC still uses exactly 50
+    /// Chebyshev stages. The override reduces setup evaluations rather than
+    /// selecting a different stage count.
     #[must_use]
     pub fn with_eigenvalue_estimate(mut self, upper_bound: f64) -> Self {
         self.eigenvalue_override = Some(upper_bound);
         self
     }
+    /// Returns the classical order of the method.
     pub fn order(&self) -> usize {
         2
     }
 }
 
 impl SplitOdeAlgorithm for IRKC {
-    fn solve<FE, FI, P>(
+    fn solve_validated<FE, FI, P>(
         &self,
         problem: &SplitOdeProblem<FE, FI, P>,
         options: &SolveOptions,
@@ -58,6 +69,7 @@ where
     FE: Fn(&mut [f64], &[f64], &P, f64),
     FI: Fn(&mut [f64], &[f64], &P, f64),
 {
+    validate_state_time_options(problem.initial_state(), problem.time_span(), options)?;
     if algorithm
         .eigenvalue_override
         .is_some_and(|value| !value.is_finite() || value <= 0.0)
@@ -109,6 +121,45 @@ where
             ControllerConfig::proportional(2, 0.8, 0.2, 5.0, 0.2),
         )
         .recover_nonlinear_and_singular_failures()
+    }
+
+    fn has_callbacks(&self, _: &OdeProblem<fn(&mut [f64], &[f64], &(), f64), ()>) -> bool {
+        self.problem.has_callbacks()
+    }
+
+    fn apply_initial_callbacks(
+        &mut self,
+        _: &OdeProblem<fn(&mut [f64], &[f64], &(), f64), ()>,
+        state: &mut [f64],
+        time: f64,
+    ) -> Result<CallbackOutcome, SolveError> {
+        self.problem.apply_initial_callbacks(state, time)
+    }
+
+    fn has_custom_callback_handling(&self) -> bool {
+        true
+    }
+
+    fn apply_step_callbacks(
+        &mut self,
+        _: &OdeProblem<fn(&mut [f64], &[f64], &(), f64), ()>,
+        previous_state: &[f64],
+        previous_time: f64,
+        state: &mut [f64],
+        time: &mut f64,
+        state_before_effect: &mut [f64],
+        event_tolerance: f64,
+        _: &mut SolverStats,
+    ) -> Result<CallbackOutcome, SolveError> {
+        self.problem.apply_step_callbacks(
+            previous_state,
+            previous_time,
+            state,
+            time,
+            state_before_effect,
+            event_tolerance,
+            None,
+        )
     }
     fn evaluate_dense_derivative(
         &mut self,

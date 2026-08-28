@@ -27,7 +27,7 @@ const CONTROLLER: ControllerConfig = ControllerConfig::proportional(3, 0.9, 0.2,
 pub struct Trbdf2;
 
 impl OdeAlgorithm for Trbdf2 {
-    fn solve<F, P>(
+    fn solve_validated<F, P>(
         &self,
         problem: &OdeProblem<F, P>,
         options: &SolveOptions,
