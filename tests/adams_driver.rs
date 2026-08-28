@@ -5,6 +5,9 @@ use differential_equations::solvers::multistep::*;
 use differential_equations::*;
 use stats_alloc::{INSTRUMENTED_SYSTEM, Region, StatsAlloc};
 
+#[path = "support/allocation.rs"]
+mod allocation_support;
+
 #[global_allocator]
 static GLOBAL: &StatsAlloc<System> = &INSTRUMENTED_SYSTEM;
 
@@ -24,10 +27,12 @@ fn fixed_adams_allocations(step: f64) -> usize {
         save: SaveMode::Endpoints,
         ..SolveOptions::default()
     };
-    let region = Region::new(GLOBAL);
-    let solution = solve(&exponential(), Ab5, &options).unwrap();
-    black_box(solution.last_state());
-    region.change().allocations
+    allocation_support::minimum_measurement(|| {
+        let region = Region::new(GLOBAL);
+        let solution = solve(&exponential(), Ab5, &options).unwrap();
+        black_box(solution.last_state());
+        region.change().allocations
+    })
 }
 
 fn variable_adams_allocations(maximum_step: f64) -> usize {
@@ -39,10 +44,12 @@ fn variable_adams_allocations(maximum_step: f64) -> usize {
         save: SaveMode::Endpoints,
         ..SolveOptions::default()
     };
-    let region = Region::new(GLOBAL);
-    let solution = solve(&exponential(), Vcab5, &options).unwrap();
-    black_box(solution.last_state());
-    region.change().allocations
+    allocation_support::minimum_measurement(|| {
+        let region = Region::new(GLOBAL);
+        let solution = solve(&exponential(), Vcab5, &options).unwrap();
+        black_box(solution.last_state());
+        region.change().allocations
+    })
 }
 
 #[test]

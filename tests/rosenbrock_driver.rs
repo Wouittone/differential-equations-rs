@@ -5,6 +5,9 @@ use differential_equations::solvers::rosenbrock::*;
 use differential_equations::*;
 use stats_alloc::{INSTRUMENTED_SYSTEM, Region, StatsAlloc};
 
+#[path = "support/allocation.rs"]
+mod allocation_support;
+
 #[global_allocator]
 static GLOBAL: &StatsAlloc<System> = &INSTRUMENTED_SYSTEM;
 
@@ -27,18 +30,13 @@ fn fixed_allocations_for<A: OdeAlgorithm>(algorithm: A, step: f64) -> usize {
     region.change().allocations
 }
 
-fn minimum_fixed_allocations_for<A: OdeAlgorithm + Copy>(algorithm: A, step: f64) -> usize {
-    (0..3)
-        .map(|_| fixed_allocations_for(algorithm, step))
-        .min()
-        .expect("the allocation sample count is non-zero")
-}
-
 fn assert_allocation_invariant<A: OdeAlgorithm + Copy>(algorithm: A) {
     // `StatsAlloc` is process-wide, so take the minimum of repeated samples to
     // exclude bounded test-harness noise while retaining per-step regressions.
-    let one_step = minimum_fixed_allocations_for(algorithm, 1.0);
-    let thousand_steps = minimum_fixed_allocations_for(algorithm, 0.001);
+    let one_step =
+        allocation_support::minimum_measurement(|| fixed_allocations_for(algorithm, 1.0));
+    let thousand_steps =
+        allocation_support::minimum_measurement(|| fixed_allocations_for(algorithm, 0.001));
 
     assert_eq!(
         thousand_steps, one_step,
