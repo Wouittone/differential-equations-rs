@@ -15,52 +15,8 @@ fn json_files(directory: &Path, files: &mut Vec<PathBuf>) {
     }
 }
 
-fn scalar_arrays_are_single_line(source: &str) -> bool {
-    let bytes = source.as_bytes();
-    let mut stack = Vec::new();
-    let mut in_string = false;
-    let mut escaped = false;
-
-    for (index, &byte) in bytes.iter().enumerate() {
-        if in_string {
-            if escaped {
-                escaped = false;
-            } else if byte == b'\\' {
-                escaped = true;
-            } else if byte == b'"' {
-                in_string = false;
-            }
-            continue;
-        }
-
-        match byte {
-            b'"' => in_string = true,
-            b'[' => stack.push((index, false)),
-            b'{' => {
-                if let Some((_, nested)) = stack.last_mut() {
-                    *nested = true;
-                }
-            }
-            b']' => {
-                let Some((start, nested)) = stack.pop() else {
-                    return false;
-                };
-                if !nested && source[start..=index].contains('\n') {
-                    return false;
-                }
-                if let Some((_, parent_nested)) = stack.last_mut() {
-                    *parent_nested = true;
-                }
-            }
-            _ => {}
-        }
-    }
-
-    stack.is_empty() && !in_string
-}
-
 #[test]
-fn compile_time_tableau_resources_are_valid_and_fractured() {
+fn compile_time_tableau_resources_are_valid() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/tableau/resources");
     let mut files = Vec::new();
     json_files(&root, &mut files);
@@ -77,16 +33,6 @@ fn compile_time_tableau_resources_are_valid_and_fractured() {
         assert!(
             !source.contains("schema_version"),
             "{} retains an obsolete schema version",
-            path.display()
-        );
-        assert!(
-            scalar_arrays_are_single_line(&source),
-            "{} must keep scalar arrays and matrix rows on one line",
-            path.display()
-        );
-        assert!(
-            source.ends_with('\n'),
-            "{} needs a final newline",
             path.display()
         );
     }

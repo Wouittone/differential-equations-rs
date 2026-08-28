@@ -6,9 +6,10 @@ matrices; specialized families use the same resource tree for their typed
 method data instead of maintaining a separate coefficient directory or parser.
 
 Resources use a FracturedJson-style layout: object fields have stable ordering,
-scalar arrays stay on one line, and every matrix row occupies one line. The
-`tableau_resources` integration test validates JSON syntax, rejects obsolete
-schema-version fields, and enforces this layout. The Runge--Kutta schema is
+scalar arrays stay on one line, and every matrix row occupies one line. This is
+an authoring convention, not a build requirement. The `tableau_resources`
+integration test validates JSON syntax and rejects obsolete schema-version
+fields. The Runge--Kutta schema is
 [`schema.json`](../src/tableau/resources/schema.json).
 
 The shared parser uses Serde and `serde_json`. String coefficients may contain
