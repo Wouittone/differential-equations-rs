@@ -10,7 +10,7 @@
 use crate::integrator::TimeStopSchedule;
 use crate::linear::{factorize, solve_factorized};
 use crate::solution::{BorrowedHermiteSegment, DenseSegment, HermiteSegment, TrajectoryRecorder};
-use crate::solver::validate_state_time_options;
+use crate::solver::{validate_preset_time_sequences, validate_state_time_options};
 use crate::solvers::explicit::split_euler::SplitOdeAlgorithm;
 use crate::{Solution, SolveError, SolveOptions, SolverStats, SplitOdeProblem};
 
@@ -277,7 +277,7 @@ where
             return Err(SolveError::MaxStepsExceeded);
         }
         attempted_steps += 1;
-        step = time_stops.clip_step(time, step);
+        step = time_stops.clip_step_with(time, step, problem.next_preset_time(time, direction));
         if time + step == time {
             return Err(SolveError::StepSizeUnderflow);
         }
@@ -704,6 +704,7 @@ fn validate<FE, FI, P>(
     options: &SolveOptions,
 ) -> Result<(), SolveError> {
     validate_state_time_options(problem.initial_state(), problem.time_span(), options)?;
+    validate_preset_time_sequences(problem.preset_time_sequences(), problem.time_span())?;
     if options.adaptive {
         return Err(SolveError::AdaptiveStepUnsupported);
     }

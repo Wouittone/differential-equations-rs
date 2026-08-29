@@ -31,8 +31,15 @@ impl<'a> TimeStopSchedule<'a> {
         schedule
     }
 
-    pub(crate) fn clip_step(&self, time: f64, step: f64) -> f64 {
-        let target = self.stops.get(self.next).copied().unwrap_or(self.end);
+    pub(crate) fn clip_step_with(&self, time: f64, step: f64, additional_stop: Option<f64>) -> f64 {
+        let scheduled = self.stops.get(self.next).copied().unwrap_or(self.end);
+        let target = additional_stop.map_or(scheduled, |additional| {
+            if self.direction * (additional - scheduled) < 0.0 {
+                additional
+            } else {
+                scheduled
+            }
+        });
         if self.direction * (time + step - target) > 0.0 {
             target - time
         } else {
@@ -197,6 +204,16 @@ where
     /// override this so the driver allocates its callback state buffer.
     fn has_callbacks(&self, problem: &OdeProblem<F, P>) -> bool {
         problem.has_callbacks()
+    }
+
+    /// Returns the next callback-owned time that the driver must hit exactly.
+    fn next_callback_time_stop(
+        &self,
+        problem: &OdeProblem<F, P>,
+        time: f64,
+        direction: f64,
+    ) -> Option<f64> {
+        problem.next_preset_time(time, direction)
     }
 
     /// Applies callbacks at the initial state for the effective problem.
@@ -595,7 +612,8 @@ where
         }
         attempted_steps += 1;
 
-        let attempted_step = time_stops.clip_step(time, step);
+        let callback_stop = kernel.next_callback_time_stop(problem, time, direction);
+        let attempted_step = time_stops.clip_step_with(time, step, callback_stop);
         if time + attempted_step == time {
             return Err(SolveError::StepSizeUnderflow);
         }

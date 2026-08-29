@@ -1,6 +1,7 @@
 use crate::SolveError;
 use crate::callback::{
-    Callback, CallbackAction, CallbackOutcome, ContinuousCallback, DiscreteCallback, EventDirection,
+    Callback, CallbackAction, CallbackOutcome, ContinuousCallback, DiscreteCallback,
+    DiscreteTrigger, EventDirection, PresetTimes,
 };
 use crate::event::{MAX_EVENT_ROOT_ITERATIONS, event_interval_converged};
 use ndarray::{
@@ -129,7 +130,27 @@ impl<FE, FI, P> SplitOdeProblem<FE, FI, P> {
         A: Fn(&mut [f64], &P, f64) -> CallbackAction + 'static,
     {
         self.callbacks.push(Callback::Discrete(DiscreteCallback {
-            condition: Box::new(condition),
+            trigger: DiscreteTrigger::Condition(Box::new(condition)),
+            affect: Box::new(affect),
+        }));
+        self
+    }
+
+    /// Adds a callback that runs at each listed integration time.
+    ///
+    /// The times are also treated as mandatory integration stops, so callers
+    /// do not need to duplicate them in [`crate::SolveOptions::time_stops`].
+    /// They are validated when the problem is solved.
+    pub fn with_preset_time_callback<A>(
+        mut self,
+        times: impl IntoIterator<Item = f64>,
+        affect: A,
+    ) -> Self
+    where
+        A: Fn(&mut [f64], &P, f64) -> CallbackAction + 'static,
+    {
+        self.callbacks.push(Callback::Discrete(DiscreteCallback {
+            trigger: DiscreteTrigger::PresetTimes(PresetTimes::new(times)),
             affect: Box::new(affect),
         }));
         self
@@ -252,7 +273,7 @@ impl<FE, FI, P> SplitOdeProblem<FE, FI, P> {
             let Callback::Discrete(callback) = callback else {
                 continue;
             };
-            if (callback.condition)(state, &self.parameters, time) {
+            if callback.trigger.is_triggered(state, &self.parameters, time) {
                 outcome.invocations += 1;
                 outcome.terminate =
                     (callback.affect)(state, &self.parameters, time) == CallbackAction::Terminate;
@@ -333,7 +354,10 @@ impl<FE, FI, P> SplitOdeProblem<FE, FI, P> {
                 let Callback::Discrete(callback) = callback else {
                     continue;
                 };
-                if (callback.condition)(state, &self.parameters, *time) {
+                if callback
+                    .trigger
+                    .is_triggered(state, &self.parameters, *time)
+                {
                     if outcome.invocations == 0 {
                         state_before_effect.copy_from_slice(state);
                     }
@@ -348,6 +372,33 @@ impl<FE, FI, P> SplitOdeProblem<FE, FI, P> {
             }
         }
         Ok(outcome)
+    }
+
+    pub(crate) fn preset_time_sequences(&self) -> impl Iterator<Item = &[f64]> {
+        self.callbacks.iter().filter_map(|callback| {
+            let Callback::Discrete(callback) = callback else {
+                return None;
+            };
+            callback.trigger.preset_times()
+        })
+    }
+
+    pub(crate) fn next_preset_time(&self, time: f64, direction: f64) -> Option<f64> {
+        self.callbacks
+            .iter()
+            .filter_map(|callback| {
+                let Callback::Discrete(callback) = callback else {
+                    return None;
+                };
+                callback.trigger.next_preset_time(time, direction)
+            })
+            .reduce(|earliest, candidate| {
+                if direction * (earliest - candidate) <= 0.0 {
+                    earliest
+                } else {
+                    candidate
+                }
+            })
     }
 }
 
@@ -475,7 +526,26 @@ impl<F, P> OdeProblem<F, P> {
         A: Fn(&mut [f64], &P, f64) -> CallbackAction + 'static,
     {
         self.callbacks.push(Callback::Discrete(DiscreteCallback {
-            condition: Box::new(condition),
+            trigger: DiscreteTrigger::Condition(Box::new(condition)),
+            affect: Box::new(affect),
+        }));
+        self
+    }
+
+    /// Adds a callback that runs at each listed integration time.
+    ///
+    /// Preset times become mandatory integration stops automatically and are
+    /// validated against this problem's time span when solving begins.
+    pub fn with_preset_time_callback<A>(
+        mut self,
+        times: impl IntoIterator<Item = f64>,
+        affect: A,
+    ) -> Self
+    where
+        A: Fn(&mut [f64], &P, f64) -> CallbackAction + 'static,
+    {
+        self.callbacks.push(Callback::Discrete(DiscreteCallback {
+            trigger: DiscreteTrigger::PresetTimes(PresetTimes::new(times)),
             affect: Box::new(affect),
         }));
         self
@@ -490,11 +560,32 @@ impl<F, P> OdeProblem<F, P> {
         let condition_shape = self.state_shape.clone();
         let affect_shape = self.state_shape.clone();
         self.callbacks.push(Callback::Discrete(DiscreteCallback {
-            condition: Box::new(move |state, parameters, time| {
+            trigger: DiscreteTrigger::Condition(Box::new(move |state, parameters, time| {
                 let state = ArrayViewD::from_shape(condition_shape.clone(), state)
                     .expect("callback state shape must match its contiguous storage");
                 condition(state, parameters, time)
+            })),
+            affect: Box::new(move |state, parameters, time| {
+                let state = ArrayViewMutD::from_shape(affect_shape.clone(), state)
+                    .expect("callback state shape must match its contiguous storage");
+                affect(state, parameters, time)
             }),
+        }));
+        self
+    }
+
+    /// Adds a preset-time callback using a shape-aware ndarray state view.
+    pub fn with_array_preset_time_callback<A>(
+        mut self,
+        times: impl IntoIterator<Item = f64>,
+        affect: A,
+    ) -> Self
+    where
+        A: for<'a> Fn(ArrayViewMutD<'a, f64>, &P, f64) -> CallbackAction + 'static,
+    {
+        let affect_shape = self.state_shape.clone();
+        self.callbacks.push(Callback::Discrete(DiscreteCallback {
+            trigger: DiscreteTrigger::PresetTimes(PresetTimes::new(times)),
             affect: Box::new(move |state, parameters, time| {
                 let state = ArrayViewMutD::from_shape(affect_shape.clone(), state)
                     .expect("callback state shape must match its contiguous storage");
@@ -635,7 +726,7 @@ impl<F, P> OdeProblem<F, P> {
             let Callback::Discrete(callback) = callback else {
                 continue;
             };
-            if (callback.condition)(state, &self.parameters, time) {
+            if callback.trigger.is_triggered(state, &self.parameters, time) {
                 outcome.invocations += 1;
                 outcome.terminate =
                     (callback.affect)(state, &self.parameters, time) == CallbackAction::Terminate;
@@ -719,7 +810,10 @@ impl<F, P> OdeProblem<F, P> {
                 let Callback::Discrete(callback) = callback else {
                     continue;
                 };
-                if (callback.condition)(state, &self.parameters, *time) {
+                if callback
+                    .trigger
+                    .is_triggered(state, &self.parameters, *time)
+                {
                     if outcome.invocations == 0 {
                         state_before_effect.copy_from_slice(state);
                     }
@@ -734,6 +828,33 @@ impl<F, P> OdeProblem<F, P> {
             }
         }
         Ok(outcome)
+    }
+
+    pub(crate) fn preset_time_sequences(&self) -> impl Iterator<Item = &[f64]> {
+        self.callbacks.iter().filter_map(|callback| {
+            let Callback::Discrete(callback) = callback else {
+                return None;
+            };
+            callback.trigger.preset_times()
+        })
+    }
+
+    pub(crate) fn next_preset_time(&self, time: f64, direction: f64) -> Option<f64> {
+        self.callbacks
+            .iter()
+            .filter_map(|callback| {
+                let Callback::Discrete(callback) = callback else {
+                    return None;
+                };
+                callback.trigger.next_preset_time(time, direction)
+            })
+            .reduce(|earliest, candidate| {
+                if direction * (earliest - candidate) <= 0.0 {
+                    earliest
+                } else {
+                    candidate
+                }
+            })
     }
 }
 

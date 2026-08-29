@@ -3,7 +3,7 @@ use crate::integrator::{
     ControllerConfig, KernelCapabilities, StepEstimate, StepKernel, integrate as drive_integration,
 };
 use crate::linear::{factorize, solve_factorized};
-use crate::solver::validate_state_time_options;
+use crate::solver::{validate_preset_time_sequences, validate_state_time_options};
 use crate::solvers::explicit::split_euler::SplitOdeAlgorithm;
 use crate::{OdeProblem, Solution, SolveError, SolveOptions, SolverStats, SplitOdeProblem};
 
@@ -70,6 +70,7 @@ where
     FI: Fn(&mut [f64], &[f64], &P, f64),
 {
     validate_state_time_options(problem.initial_state(), problem.time_span(), options)?;
+    validate_preset_time_sequences(problem.preset_time_sequences(), problem.time_span())?;
     if algorithm
         .eigenvalue_override
         .is_some_and(|value| !value.is_finite() || value <= 0.0)
@@ -125,6 +126,15 @@ where
 
     fn has_callbacks(&self, _: &OdeProblem<fn(&mut [f64], &[f64], &(), f64), ()>) -> bool {
         self.problem.has_callbacks()
+    }
+
+    fn next_callback_time_stop(
+        &self,
+        _: &OdeProblem<fn(&mut [f64], &[f64], &(), f64), ()>,
+        time: f64,
+        direction: f64,
+    ) -> Option<f64> {
+        self.problem.next_preset_time(time, direction)
     }
 
     fn apply_initial_callbacks(

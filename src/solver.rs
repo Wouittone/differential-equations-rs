@@ -210,6 +210,9 @@ pub enum SolveError {
     /// Requested integration time stops are invalid for the integration direction.
     #[error("time stops must be finite, strictly ordered, and inside the time span")]
     InvalidTimeStops,
+    /// A preset-time callback contains invalid trigger times.
+    #[error("preset callback times must be finite, strictly ordered, and inside the time span")]
+    InvalidPresetTimes,
     /// A continuous callback condition returned a non-finite value.
     #[error("a continuous callback condition produced a non-finite value")]
     NonFiniteCallbackCondition,
@@ -284,7 +287,29 @@ pub(crate) fn validate_ode_problem<F, P>(
     problem: &OdeProblem<F, P>,
     options: &SolveOptions,
 ) -> Result<(), SolveError> {
-    validate_state_time_options(problem.initial_state(), problem.time_span(), options)
+    validate_state_time_options(problem.initial_state(), problem.time_span(), options)?;
+    validate_preset_time_sequences(problem.preset_time_sequences(), problem.time_span())
+}
+
+pub(crate) fn time_sequence_is_valid(times: &[f64], time_span: (f64, f64)) -> bool {
+    let (start, end) = time_span;
+    let direction = (end - start).signum();
+    times.iter().all(|time| {
+        time.is_finite() && direction * (*time - start) >= 0.0 && direction * (end - *time) >= 0.0
+    }) && !times
+        .windows(2)
+        .any(|pair| direction * (pair[1] - pair[0]) <= 0.0)
+}
+
+pub(crate) fn validate_preset_time_sequences<'a>(
+    sequences: impl IntoIterator<Item = &'a [f64]>,
+    time_span: (f64, f64),
+) -> Result<(), SolveError> {
+    sequences
+        .into_iter()
+        .all(|times| time_sequence_is_valid(times, time_span))
+        .then_some(())
+        .ok_or(SolveError::InvalidPresetTimes)
 }
 
 pub(crate) fn validate_state_time_options(
@@ -326,23 +351,10 @@ pub(crate) fn validate_state_time_options(
     if !options.event_tolerance.is_finite() || options.event_tolerance <= 0.0 {
         return Err(SolveError::InvalidEventTolerance);
     }
-    let direction = (end - start).signum();
-    if !options.save_at.iter().all(|time| {
-        time.is_finite() && direction * (*time - start) >= 0.0 && direction * (end - *time) >= 0.0
-    }) || options
-        .save_at
-        .windows(2)
-        .any(|pair| direction * (pair[1] - pair[0]) <= 0.0)
-    {
+    if !time_sequence_is_valid(&options.save_at, time_span) {
         return Err(SolveError::InvalidSaveAt);
     }
-    if !options.time_stops.iter().all(|time| {
-        time.is_finite() && direction * (*time - start) >= 0.0 && direction * (end - *time) >= 0.0
-    }) || options
-        .time_stops
-        .windows(2)
-        .any(|pair| direction * (pair[1] - pair[0]) <= 0.0)
-    {
+    if !time_sequence_is_valid(&options.time_stops, time_span) {
         return Err(SolveError::InvalidTimeStops);
     }
 
@@ -499,6 +511,10 @@ mod tests {
         assert_eq!(
             SolveError::MaxStepsExceeded.to_string(),
             "the solver exceeded its maximum attempted step count"
+        );
+        assert_eq!(
+            SolveError::InvalidPresetTimes.to_string(),
+            "preset callback times must be finite, strictly ordered, and inside the time span"
         );
     }
 }

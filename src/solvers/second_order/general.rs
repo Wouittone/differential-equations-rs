@@ -1,10 +1,11 @@
 use super::coefficient_data::*;
+use crate::callback::PresetTimes;
 use crate::event::{
     MAX_EVENT_ROOT_ITERATIONS, event_interval_converged, times_are_numerically_equal,
 };
 use crate::integrator::{ControllerConfig, ControllerState, TimeStopSchedule};
 use crate::linear::{factorize, solve_factorized};
-use crate::solver::validate_state_time_options;
+use crate::solver::{validate_preset_time_sequences, validate_state_time_options};
 use crate::{
     CallbackAction, ConfigurationError, EventDirection, InterpolationError, SaveMode, SolveError,
     SolveOptions, SolverStats,
@@ -17,9 +18,37 @@ type Affect<P> = dyn Fn(&mut [f64], &mut [f64], &P, f64) -> CallbackAction;
 type PartitionedInterpolator<'a> =
     dyn FnMut(f64, &mut [f64], &mut [f64]) -> Result<(), SolveError> + 'a;
 
+enum DiscreteTrigger<P> {
+    Condition(Box<DiscreteCondition<P>>),
+    PresetTimes(PresetTimes),
+}
+
 struct DiscreteCallback<P> {
-    condition: Box<DiscreteCondition<P>>,
+    trigger: DiscreteTrigger<P>,
     affect: Box<Affect<P>>,
+}
+
+impl<P> DiscreteTrigger<P> {
+    fn is_triggered(&self, velocity: &[f64], position: &[f64], parameters: &P, time: f64) -> bool {
+        match self {
+            Self::Condition(condition) => condition(velocity, position, parameters, time),
+            Self::PresetTimes(times) => times.contains(time),
+        }
+    }
+
+    fn preset_times(&self) -> Option<&[f64]> {
+        match self {
+            Self::Condition(_) => None,
+            Self::PresetTimes(times) => Some(times.as_slice()),
+        }
+    }
+
+    fn next_preset_time(&self, time: f64, direction: f64) -> Option<f64> {
+        match self {
+            Self::Condition(_) => None,
+            Self::PresetTimes(times) => times.next(time, direction),
+        }
+    }
 }
 
 struct ContinuousCallback<P> {
@@ -81,7 +110,27 @@ impl<F, P> SecondOrderOdeProblem<F, P> {
     {
         self.callbacks
             .push(PartitionedCallback::Discrete(DiscreteCallback {
-                condition: Box::new(condition),
+                trigger: DiscreteTrigger::Condition(Box::new(condition)),
+                affect: Box::new(affect),
+            }));
+        self
+    }
+
+    /// Adds a callback that runs at each listed integration time.
+    ///
+    /// Preset times become mandatory integration stops automatically and are
+    /// validated against this problem's time span when solving begins.
+    pub fn with_preset_time_callback<A>(
+        mut self,
+        times: impl IntoIterator<Item = f64>,
+        affect: A,
+    ) -> Self
+    where
+        A: Fn(&mut [f64], &mut [f64], &P, f64) -> CallbackAction + 'static,
+    {
+        self.callbacks
+            .push(PartitionedCallback::Discrete(DiscreteCallback {
+                trigger: DiscreteTrigger::PresetTimes(PresetTimes::new(times)),
                 affect: Box::new(affect),
             }));
         self
@@ -152,6 +201,37 @@ impl<F, P> SecondOrderOdeProblem<F, P> {
         F: Fn(&mut [f64], &[f64], &[f64], &P, f64),
     {
         (self.acceleration)(output, velocity, position, &self.parameters, time);
+    }
+
+    pub(crate) fn has_callbacks(&self) -> bool {
+        !self.callbacks.is_empty()
+    }
+
+    pub(crate) fn preset_time_sequences(&self) -> impl Iterator<Item = &[f64]> {
+        self.callbacks.iter().filter_map(|callback| {
+            let PartitionedCallback::Discrete(callback) = callback else {
+                return None;
+            };
+            callback.trigger.preset_times()
+        })
+    }
+
+    pub(crate) fn next_preset_time(&self, time: f64, direction: f64) -> Option<f64> {
+        self.callbacks
+            .iter()
+            .filter_map(|callback| {
+                let PartitionedCallback::Discrete(callback) = callback else {
+                    return None;
+                };
+                callback.trigger.next_preset_time(time, direction)
+            })
+            .reduce(|earliest, candidate| {
+                if direction * (earliest - candidate) <= 0.0 {
+                    earliest
+                } else {
+                    candidate
+                }
+            })
     }
 }
 
@@ -1131,6 +1211,7 @@ fn validate<F, P>(
         return Err(SecondOrderSolveError::StateDimensionMismatch);
     }
     validate_state_time_options(&problem.initial_position, problem.time_span, options)?;
+    validate_preset_time_sequences(problem.preset_time_sequences(), problem.time_span)?;
     if !problem
         .initial_velocity
         .iter()
@@ -1329,7 +1410,11 @@ where
             return Err(SolveError::MaxStepsExceeded.into());
         }
         attempts += 1;
-        let step = time_stops.clip_step(time, direction * step_magnitude);
+        let step = time_stops.clip_step_with(
+            time,
+            direction * step_magnitude,
+            problem.next_preset_time(time, direction),
+        );
         if time + step == time {
             return Err(SolveError::StepSizeUnderflow.into());
         }
@@ -1795,7 +1880,11 @@ where
             return Err(SolveError::MaxStepsExceeded.into());
         }
         steps += 1;
-        let step = time_stops.clip_step(time, direction * maximum_step);
+        let step = time_stops.clip_step_with(
+            time,
+            direction * maximum_step,
+            problem.next_preset_time(time, direction),
+        );
         if time + step == time {
             return Err(SolveError::StepSizeUnderflow.into());
         }
@@ -1977,7 +2066,11 @@ where
             return Err(SolveError::MaxStepsExceeded.into());
         }
         attempts += 1;
-        let step = time_stops.clip_step(time, direction * step_magnitude);
+        let step = time_stops.clip_step_with(
+            time,
+            direction * step_magnitude,
+            problem.next_preset_time(time, direction),
+        );
         if time + step == time {
             return Err(SolveError::StepSizeUnderflow.into());
         }
@@ -2409,7 +2502,11 @@ where
             return Err(SolveError::MaxStepsExceeded.into());
         }
         attempts += 1;
-        let step = time_stops.clip_step(time, direction * maximum_step);
+        let step = time_stops.clip_step_with(
+            time,
+            direction * maximum_step,
+            problem.next_preset_time(time, direction),
+        );
         if time + step == time {
             return Err(SolveError::StepSizeUnderflow.into());
         }
@@ -2742,7 +2839,11 @@ where
             return Err(SolveError::MaxStepsExceeded.into());
         }
         steps += 1;
-        let step = time_stops.clip_step(time, direction * maximum_step);
+        let step = time_stops.clip_step_with(
+            time,
+            direction * maximum_step,
+            problem.next_preset_time(time, direction),
+        );
         if time + step == time {
             return Err(SolveError::StepSizeUnderflow.into());
         }
@@ -3006,12 +3107,12 @@ where
 }
 
 #[derive(Default)]
-struct CallbackOutcome {
-    invocations: usize,
-    terminate: bool,
+pub(super) struct CallbackOutcome {
+    pub(super) invocations: usize,
+    pub(super) terminate: bool,
 }
 
-fn apply_initial_callbacks<F, P>(
+pub(super) fn apply_initial_callbacks<F, P>(
     problem: &SecondOrderOdeProblem<F, P>,
     velocity: &mut [f64],
     position: &mut [f64],
@@ -3022,7 +3123,10 @@ fn apply_initial_callbacks<F, P>(
         let PartitionedCallback::Discrete(callback) = callback else {
             continue;
         };
-        if (callback.condition)(velocity, position, &problem.parameters, time) {
+        if callback
+            .trigger
+            .is_triggered(velocity, position, &problem.parameters, time)
+        {
             outcome.invocations += 1;
             outcome.terminate = (callback.affect)(velocity, position, &problem.parameters, time)
                 == CallbackAction::Terminate;
@@ -3036,7 +3140,7 @@ fn apply_initial_callbacks<F, P>(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn apply_step_callbacks<F, P>(
+pub(super) fn apply_step_callbacks<F, P>(
     problem: &SecondOrderOdeProblem<F, P>,
     previous_velocity: &[f64],
     previous_position: &[f64],
@@ -3121,7 +3225,10 @@ fn apply_step_callbacks<F, P>(
             let PartitionedCallback::Discrete(callback) = callback else {
                 continue;
             };
-            if (callback.condition)(velocity, position, &problem.parameters, *time) {
+            if callback
+                .trigger
+                .is_triggered(velocity, position, &problem.parameters, *time)
+            {
                 if outcome.invocations == 0 {
                     state_before_velocity.copy_from_slice(velocity);
                     state_before_position.copy_from_slice(position);

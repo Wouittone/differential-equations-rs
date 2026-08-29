@@ -1,7 +1,8 @@
 //! Numerical ordinary differential equation solvers with a compact Rust API.
 //!
 //! The crate provides in-place first-order ODE problems, solver options,
-//! callbacks, retained dense output, and ordered ensemble execution. Concrete
+//! callbacks (including exact preset-time effects), retained dense output, and
+//! ordered ensemble execution. Concrete
 //! algorithms are grouped by family below [`solvers`]; core problem, solution,
 //! and driver types remain at the crate root.
 //!
@@ -31,7 +32,9 @@
 //! # API organization
 //!
 //! - [`OdeProblem`] describes a first-order initial-value problem and optional
-//!   Jacobian or callback behavior.
+//!   Jacobian or callback behavior. [`OdeProblem::with_preset_time_callback`]
+//!   schedules effects at exact integration times without duplicating them in
+//!   [`SolveOptions::time_stops`].
 //! - [`SolveOptions`] controls tolerances, step sizes, exact time stops, saved
 //!   output, and dense output retention; [`solve`] runs an [`OdeAlgorithm`].
 //! - [`solvers::explicit`] is a good starting point for non-stiff problems,

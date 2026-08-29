@@ -56,10 +56,11 @@ provided.
   retains the original flat-vector API, while `OdeProblem::from_array` accepts
   ndarray scalars, vectors, and matrices and returns shape-aware solution
   views without changing the numerical kernels.
-- The crate supports callbacks, exact integration time stops, saved-time
-  sampling, retained dense output, second-order problem types, and the
-  documented solver families. SDEs, DDEs, boundary-value problems, and
-  external solver wrappers are out of scope.
+- The crate supports discrete, continuous, and preset-time callbacks. Preset
+  callback times automatically become exact integration stops, including for
+  split and second-order problems. Saved-time sampling, retained dense output,
+  and the documented solver families are also supported. SDEs, DDEs,
+  boundary-value problems, and external solver wrappers are out of scope.
 
 The main package remains protected by `publish = false` while its prerelease
 API is finalized. Use it as a path or Git dependency until a release is

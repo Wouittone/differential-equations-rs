@@ -8,11 +8,11 @@
 
 use crate::event::times_are_numerically_equal;
 use crate::integrator::TimeStopSchedule;
-use crate::solver::validate_state_time_options;
+use crate::solver::{validate_preset_time_sequences, validate_state_time_options};
 use crate::{InterpolationError, SaveMode, SolveError, SolveOptions};
 use thiserror::Error;
 
-use super::general::SecondOrderOdeProblem;
+use super::general::{SecondOrderOdeProblem, apply_initial_callbacks, apply_step_callbacks};
 
 /// A pinned alternating drift/kick composition.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -636,10 +636,25 @@ where
     let dimension = problem.initial_position().len();
     let mut position = problem.initial_position().to_vec();
     let mut velocity = problem.initial_velocity().to_vec();
+    let initial_callbacks = apply_initial_callbacks(problem, &mut velocity, &mut position, start)?;
     let mut candidate_position = position.clone();
     let mut candidate_velocity = velocity.clone();
     let mut acceleration = vec![0.0; dimension];
+    let mut state_before_position = if problem.has_callbacks() {
+        vec![0.0; dimension]
+    } else {
+        Vec::new()
+    };
+    let mut state_before_velocity = if problem.has_callbacks() {
+        vec![0.0; dimension]
+    } else {
+        Vec::new()
+    };
     let mut recorder = SymplecticRecorder::new(&position, &velocity, start, options);
+    if initial_callbacks.terminate {
+        recorder.force_state(start, &position, &velocity);
+        return Ok(recorder.finish(0));
+    }
     let mut time = start;
     let mut steps = 0usize;
     let mut rhs_evaluations = 0usize;
@@ -649,7 +664,11 @@ where
         if steps >= options.max_steps {
             return Err(SolveError::MaxStepsExceeded.into());
         }
-        let step = time_stops.clip_step(time, direction * step_size);
+        let step = time_stops.clip_step_with(
+            time,
+            direction * step_size,
+            problem.next_preset_time(time, direction),
+        );
         if time + step == time {
             return Err(SolveError::StepSizeUnderflow.into());
         }
@@ -665,23 +684,51 @@ where
             time,
             step,
         )?;
-        time += step;
-        if direction * (end - time) <= 0.0 {
-            time = end;
+        let mut next_time = time + step;
+        if direction * (end - next_time) <= 0.0 {
+            next_time = end;
         }
-        time_stops.accepted(time);
+        let callback = apply_step_callbacks(
+            problem,
+            &velocity,
+            &position,
+            previous_time,
+            &mut candidate_velocity,
+            &mut candidate_position,
+            &mut next_time,
+            &mut state_before_velocity,
+            &mut state_before_position,
+            options.event_tolerance,
+            None,
+        )?;
         steps += 1;
         recorder.record_step(
             &position,
             &velocity,
             previous_time,
-            &candidate_position,
-            &candidate_velocity,
-            time,
-            time == end,
+            if callback.invocations == 0 {
+                &candidate_position
+            } else {
+                &state_before_position
+            },
+            if callback.invocations == 0 {
+                &candidate_velocity
+            } else {
+                &state_before_velocity
+            },
+            next_time,
+            next_time == end,
         )?;
+        if callback.invocations > 0 {
+            recorder.force_state(next_time, &candidate_position, &candidate_velocity);
+        }
+        time = next_time;
+        time_stops.accepted(time);
         std::mem::swap(&mut position, &mut candidate_position);
         std::mem::swap(&mut velocity, &mut candidate_velocity);
+        if callback.terminate {
+            return Ok(recorder.finish(rhs_evaluations));
+        }
     }
 
     Ok(recorder.finish(rhs_evaluations))
@@ -700,6 +747,7 @@ fn validate<F, P>(
         return Err(SymplecticSolveError::StateDimensionMismatch);
     }
     validate_state_time_options(position, problem.time_span(), options)?;
+    validate_preset_time_sequences(problem.preset_time_sequences(), problem.time_span())?;
     if !velocity.iter().all(|value| value.is_finite()) {
         return Err(SolveError::NonFiniteInitialState.into());
     }
@@ -852,6 +900,10 @@ impl<'a> SymplecticRecorder<'a> {
             self.positions.extend_from_slice(position);
             self.velocities.extend_from_slice(velocity);
         }
+    }
+
+    fn force_state(&mut self, time: f64, position: &[f64], velocity: &[f64]) {
+        self.push_unique(time, position, velocity);
     }
 
     fn finish(self, rhs_evaluations: usize) -> SymplecticSolution {

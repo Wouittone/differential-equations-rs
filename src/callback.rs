@@ -26,8 +26,36 @@ pub(crate) type Condition<P> = dyn Fn(&[f64], &P, f64) -> bool;
 pub(crate) type EventCondition<P> = dyn Fn(&[f64], &P, f64) -> f64;
 pub(crate) type Affect<P> = dyn Fn(&mut [f64], &P, f64) -> CallbackAction;
 
+pub(crate) struct PresetTimes(Vec<f64>);
+
+impl PresetTimes {
+    pub(crate) fn new(times: impl IntoIterator<Item = f64>) -> Self {
+        Self(times.into_iter().collect())
+    }
+
+    pub(crate) fn as_slice(&self) -> &[f64] {
+        &self.0
+    }
+
+    pub(crate) fn contains(&self, time: f64) -> bool {
+        self.0.contains(&time)
+    }
+
+    pub(crate) fn next(&self, time: f64, direction: f64) -> Option<f64> {
+        self.0
+            .iter()
+            .copied()
+            .find(|candidate| direction * (*candidate - time) > 0.0)
+    }
+}
+
+pub(crate) enum DiscreteTrigger<P> {
+    Condition(Box<Condition<P>>),
+    PresetTimes(PresetTimes),
+}
+
 pub(crate) struct DiscreteCallback<P> {
-    pub condition: Box<Condition<P>>,
+    pub trigger: DiscreteTrigger<P>,
     pub affect: Box<Affect<P>>,
 }
 
@@ -54,6 +82,29 @@ impl EventDirection {
             Self::Any => (before < 0.0 && after >= 0.0) || (before > 0.0 && after <= 0.0),
             Self::Rising => before < 0.0 && after >= 0.0,
             Self::Falling => before > 0.0 && after <= 0.0,
+        }
+    }
+}
+
+impl<P> DiscreteTrigger<P> {
+    pub(crate) fn is_triggered(&self, state: &[f64], parameters: &P, time: f64) -> bool {
+        match self {
+            Self::Condition(condition) => condition(state, parameters, time),
+            Self::PresetTimes(times) => times.contains(time),
+        }
+    }
+
+    pub(crate) fn preset_times(&self) -> Option<&[f64]> {
+        match self {
+            Self::Condition(_) => None,
+            Self::PresetTimes(times) => Some(times.as_slice()),
+        }
+    }
+
+    pub(crate) fn next_preset_time(&self, time: f64, direction: f64) -> Option<f64> {
+        match self {
+            Self::Condition(_) => None,
+            Self::PresetTimes(times) => times.next(time, direction),
         }
     }
 }
