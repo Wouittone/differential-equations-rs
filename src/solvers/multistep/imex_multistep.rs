@@ -7,6 +7,7 @@
 //! [`crate::SplitOdeProblem`]. Residual DAEs, mass matrices,
 //! custom nonlinear solvers, and custom linear solvers are not represented.
 
+use crate::integrator::TimeStopSchedule;
 use crate::linear::{factorize, solve_factorized};
 use crate::solution::{BorrowedHermiteSegment, DenseSegment, HermiteSegment, TrajectoryRecorder};
 use crate::solver::validate_state_time_options;
@@ -269,15 +270,14 @@ where
     let mut end_derivative = vec![0.0; dimension];
     let mut time = start;
     let mut attempted_steps = 0;
+    let mut time_stops = TimeStopSchedule::new(&options.time_stops, start, end);
 
     while direction * (end - time) > 0.0 {
         if attempted_steps == options.max_steps {
             return Err(SolveError::MaxStepsExceeded);
         }
         attempted_steps += 1;
-        if direction * (time + step - end) > 0.0 {
-            step = end - time;
-        }
+        step = time_stops.clip_step(time, step);
         if time + step == time {
             return Err(SolveError::StepSizeUnderflow);
         }
@@ -408,6 +408,7 @@ where
         workspace.candidate = previous_state;
         state = next_state;
         time = next_time;
+        time_stops.accepted(time);
         step = nominal_step;
     }
 

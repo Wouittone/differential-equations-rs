@@ -4,6 +4,7 @@
 //! component is its `explicit` half.  This matches `OrdinaryDiffEqMultirate`'s
 //! `SplitFunction(fast, slow)` convention.
 
+use crate::integrator::TimeStopSchedule;
 use crate::linear::{factorize, solve_factorized};
 use crate::solution::{BorrowedHermiteSegment, DenseSegment, HermiteSegment, TrajectoryRecorder};
 use crate::solver::validate_state_time_options;
@@ -350,14 +351,14 @@ where
     let mut attempted = 0usize;
     let mut previous_rejected = false;
     let order = method.controller_order() as f64;
+    let mut time_stops = TimeStopSchedule::new(&options.time_stops, start, end);
     while direction * (end - time) > 0.0 {
         if attempted == options.max_steps {
             return Err(SolveError::MaxStepsExceeded);
         }
         attempted += 1;
-        if direction * (time + step - end) > 0.0 {
-            step = end - time;
-        }
+        let proposed_step = step;
+        step = time_stops.clip_step(time, step);
         if time + step == time {
             return Err(SolveError::StepSizeUnderflow);
         }
@@ -457,6 +458,7 @@ where
                 return Ok(recorder.finish(stats));
             }
             time = next_time;
+            time_stops.accepted(time);
             std::mem::swap(&mut state, &mut candidate);
             if callbacks.invocations == 0 {
                 start_derivative.copy_from_slice(&end_derivative);
@@ -477,6 +479,8 @@ where
                     factor
                 };
                 step = direction * (step.abs() * factor).min(maximum_step);
+            } else {
+                step = proposed_step;
             }
             previous_rejected = false;
         } else {

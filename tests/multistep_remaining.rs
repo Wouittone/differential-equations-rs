@@ -263,6 +263,25 @@ fn imex_multistep_dense_output_uses_total_split_derivatives() {
 }
 
 #[test]
+fn imex_multistep_driver_hits_exact_time_stops_and_resumes_fixed_steps() {
+    let problem = SplitOdeProblem::new(
+        |du: &mut [f64], _: &[f64], _: &(), _: f64| du[0] = 1.0,
+        |du: &mut [f64], _: &[f64], _: &(), _: f64| du[0] = 0.0,
+        vec![0.0],
+        (0.0, 1.0),
+        (),
+    );
+    let options = fixed(0.4)
+        .with_save(SaveMode::EveryStep)
+        .with_time_stops([0.25, 0.5]);
+
+    let solution = solve_split(&problem, IMEXEuler, &options).unwrap();
+
+    assert_eq!(solution.times(), &[0.0, 0.25, 0.5, 0.9, 1.0]);
+    assert!((solution.last_state()[0] - 1.0).abs() < 1.0e-12);
+}
+
+#[test]
 fn every_imex_multistep_method_applies_initial_callbacks() {
     macro_rules! check {
         ($algorithm:expr) => {{

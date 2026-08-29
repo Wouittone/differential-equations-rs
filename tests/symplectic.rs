@@ -230,3 +230,23 @@ fn wrapped_errors_preserve_their_source() {
         SolveError::InvalidInitialStep.to_string()
     );
 }
+
+#[test]
+fn symplectic_composition_driver_honors_exact_time_stops() {
+    let problem = SecondOrderOdeProblem::new(
+        |output: &mut [f64], _: &[f64], _: &[f64], _: &(), _: f64| output[0] = 0.0,
+        vec![1.0],
+        vec![0.0],
+        (0.0, 1.0),
+        (),
+    );
+    let options = options(0.4)
+        .with_save(SaveMode::EveryStep)
+        .with_time_stops([0.25, 0.5]);
+
+    let solution = solve_symplectic(&problem, PseudoVerletLeapfrog, &options).unwrap();
+
+    assert_eq!(solution.times(), &[0.0, 0.25, 0.5, 0.9, 1.0]);
+    assert!((solution.last_position()[0] - 1.0).abs() < 1.0e-12);
+    assert!((solution.last_velocity()[0] - 1.0).abs() < 1.0e-12);
+}

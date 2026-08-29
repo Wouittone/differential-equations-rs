@@ -171,6 +171,12 @@ fn invalid_partition_and_fixed_step_options_are_reported() {
         VelocityVerlet.solve(&empty, &fixed_options(0.1)),
         Err(SecondOrderSolveError::Solve(SolveError::EmptyState))
     );
+
+    let invalid_stops = fixed_options(0.1).with_time_stops([0.75, 0.25]);
+    assert_eq!(
+        solve_second_order(&oscillator(), VelocityVerlet, &invalid_stops),
+        Err(SecondOrderSolveError::Solve(SolveError::InvalidTimeStops))
+    );
 }
 
 #[test]
@@ -185,4 +191,36 @@ fn wrapped_second_order_errors_preserve_their_source() {
         error.source().map(ToString::to_string),
         Some("the initial step must be finite and positive".to_owned())
     );
+}
+
+fn assert_second_order_time_stops<A: SecondOrderOdeAlgorithm>(algorithm: A, adaptive: bool) {
+    let problem = SecondOrderOdeProblem::new(
+        |output: &mut [f64], _: &[f64], _: &[f64], _: &(), _: f64| output[0] = 0.0,
+        vec![1.0],
+        vec![0.0],
+        (0.0, 1.0),
+        (),
+    );
+    let options = SolveOptions::new()
+        .with_adaptive(adaptive)
+        .with_initial_step(0.4)
+        .with_max_step(0.4)
+        .with_save(SaveMode::EveryStep)
+        .with_time_stops([0.25, 0.5]);
+
+    let solution = solve_second_order(&problem, algorithm, &options).unwrap();
+
+    assert!(solution.times().contains(&0.25));
+    assert!(solution.times().contains(&0.5));
+    assert!((solution.last_position()[0] - 1.0).abs() < 1.0e-12);
+    assert!((solution.last_velocity()[0] - 1.0).abs() < 1.0e-12);
+}
+
+#[test]
+fn every_second_order_driver_honors_exact_time_stops() {
+    assert_second_order_time_stops(NewmarkBeta::default(), false);
+    assert_second_order_time_stops(Nystrom4, false);
+    assert_second_order_time_stops(Dprkn4, true);
+    assert_second_order_time_stops(Irkn3, false);
+    assert_second_order_time_stops(VelocityVerlet, false);
 }

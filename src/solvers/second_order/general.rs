@@ -2,8 +2,9 @@ use super::coefficient_data::*;
 use crate::event::{
     MAX_EVENT_ROOT_ITERATIONS, event_interval_converged, times_are_numerically_equal,
 };
-use crate::integrator::{ControllerConfig, ControllerState};
+use crate::integrator::{ControllerConfig, ControllerState, TimeStopSchedule};
 use crate::linear::{factorize, solve_factorized};
+use crate::solver::validate_state_time_options;
 use crate::{
     CallbackAction, ConfigurationError, EventDirection, InterpolationError, SaveMode, SolveError,
     SolveOptions, SolverStats,
@@ -1129,49 +1130,13 @@ fn validate<F, P>(
     if problem.initial_position.len() != problem.initial_velocity.len() {
         return Err(SecondOrderSolveError::StateDimensionMismatch);
     }
+    validate_state_time_options(&problem.initial_position, problem.time_span, options)?;
     if !problem
-        .initial_position
+        .initial_velocity
         .iter()
-        .chain(&problem.initial_velocity)
         .all(|value| value.is_finite())
     {
         return Err(SolveError::NonFiniteInitialState.into());
-    }
-    let (start, end) = problem.time_span;
-    if !start.is_finite() || !end.is_finite() || start == end {
-        return Err(SolveError::InvalidTimeSpan.into());
-    }
-    if !options.absolute_tolerance.is_finite()
-        || options.absolute_tolerance <= 0.0
-        || !options.relative_tolerance.is_finite()
-        || options.relative_tolerance <= 0.0
-    {
-        return Err(SolveError::InvalidTolerance.into());
-    }
-    if options
-        .initial_step
-        .is_some_and(|step| !step.is_finite() || step <= 0.0)
-    {
-        return Err(SolveError::InvalidInitialStep.into());
-    }
-    if options.max_step.is_nan() || options.max_step <= 0.0 {
-        return Err(SolveError::InvalidMaxStep.into());
-    }
-    if options.max_steps == 0 {
-        return Err(SolveError::InvalidMaxSteps.into());
-    }
-    if !options.event_tolerance.is_finite() || options.event_tolerance <= 0.0 {
-        return Err(SolveError::InvalidEventTolerance.into());
-    }
-    let direction = (end - start).signum();
-    if !options.save_at.iter().all(|time| {
-        time.is_finite() && direction * (*time - start) >= 0.0 && direction * (end - *time) >= 0.0
-    }) || options
-        .save_at
-        .windows(2)
-        .any(|pair| direction * (pair[1] - pair[0]) <= 0.0)
-    {
-        return Err(SolveError::InvalidSaveAt.into());
     }
     Ok(())
 }
@@ -1358,12 +1323,13 @@ where
     let mut previous_attempt_rejected = false;
     let mut time = start;
     let mut attempts = 0;
+    let mut time_stops = TimeStopSchedule::new(&options.time_stops, start, end);
     while direction * (end - time) > 0.0 {
         if attempts == options.max_steps {
             return Err(SolveError::MaxStepsExceeded.into());
         }
         attempts += 1;
-        let step = direction * step_magnitude.min((end - time).abs());
+        let step = time_stops.clip_step(time, direction * step_magnitude);
         if time + step == time {
             return Err(SolveError::StepSizeUnderflow.into());
         }
@@ -1464,7 +1430,7 @@ where
         if error > 1.0 {
             stats.rejected_steps += 1;
             controller_state.rejected(error);
-            step_magnitude *= controller_state.factor(error, controller).min(1.0);
+            step_magnitude = step.abs() * controller_state.factor(error, controller).min(1.0);
             previous_attempt_rejected = true;
             continue;
         }
@@ -1521,6 +1487,7 @@ where
         }
 
         time = next_time;
+        time_stops.accepted(time);
         std::mem::swap(&mut velocity, &mut workspace.candidate_velocity);
         std::mem::swap(&mut position, &mut workspace.candidate_position);
         if callback.invocations > 0 || next_time != attempted_time {
@@ -1545,7 +1512,7 @@ where
             if previous_attempt_rejected {
                 factor = factor.min(1.0);
             }
-            step_magnitude = (step_magnitude * factor).min(maximum_step);
+            step_magnitude = (step.abs() * factor).min(maximum_step);
         }
         previous_attempt_rejected = false;
     }
@@ -1822,12 +1789,13 @@ where
 
     let mut time = start;
     let mut steps = 0;
+    let mut time_stops = TimeStopSchedule::new(&options.time_stops, start, end);
     while direction * (end - time) > 0.0 {
         if steps == options.max_steps {
             return Err(SolveError::MaxStepsExceeded.into());
         }
         steps += 1;
-        let step = direction * maximum_step.min((end - time).abs());
+        let step = time_stops.clip_step(time, direction * maximum_step);
         if time + step == time {
             return Err(SolveError::StepSizeUnderflow.into());
         }
@@ -1916,6 +1884,7 @@ where
         )?;
         stats.callback_invocations += callback.invocations;
         time = next_time;
+        time_stops.accepted(time);
         std::mem::swap(&mut velocity, &mut workspace.candidate_velocity);
         std::mem::swap(&mut position, &mut workspace.candidate_position);
         stats.accepted_steps += 1;
@@ -2002,12 +1971,13 @@ where
 
     let mut time = start;
     let mut attempts = 0;
+    let mut time_stops = TimeStopSchedule::new(&options.time_stops, start, end);
     while direction * (end - time) > 0.0 {
         if attempts == options.max_steps {
             return Err(SolveError::MaxStepsExceeded.into());
         }
         attempts += 1;
-        let step = direction * step_magnitude.min((end - time).abs());
+        let step = time_stops.clip_step(time, direction * step_magnitude);
         if time + step == time {
             return Err(SolveError::StepSizeUnderflow.into());
         }
@@ -2141,6 +2111,7 @@ where
             };
             stats.callback_invocations += callback.invocations;
             time = next_time;
+            time_stops.accepted(time);
             std::mem::swap(&mut velocity, &mut workspace.candidate_velocity);
             std::mem::swap(&mut position, &mut workspace.candidate_position);
             stats.accepted_steps += 1;
@@ -2211,14 +2182,14 @@ where
                 } else {
                     factor
                 };
-                step_magnitude = (step_magnitude * factor).min(maximum_step);
+                step_magnitude = (step.abs() * factor).min(maximum_step);
                 previous_attempt_rejected = false;
             }
         } else {
             stats.rejected_steps += 1;
             controller_state.rejected(error);
             let factor = controller_state.factor(error, controller).min(1.0);
-            step_magnitude = (step_magnitude * factor).min(maximum_step);
+            step_magnitude = (step.abs() * factor).min(maximum_step);
             previous_attempt_rejected = true;
             if time + direction * step_magnitude == time {
                 return Err(SolveError::StepSizeUnderflow.into());
@@ -2431,13 +2402,14 @@ where
 
     let mut time = start;
     let mut attempts = 0;
+    let mut time_stops = TimeStopSchedule::new(&options.time_stops, start, end);
     let mut history_valid = false;
     while direction * (end - time) > 0.0 {
         if attempts == options.max_steps {
             return Err(SolveError::MaxStepsExceeded.into());
         }
         attempts += 1;
-        let step = direction * maximum_step.min((end - time).abs());
+        let step = time_stops.clip_step(time, direction * maximum_step);
         if time + step == time {
             return Err(SolveError::StepSizeUnderflow.into());
         }
@@ -2658,6 +2630,7 @@ where
         )?;
         stats.callback_invocations += callback.invocations;
         time = next_time;
+        time_stops.accepted(time);
         std::mem::swap(&mut velocity, &mut workspace.candidate_velocity);
         std::mem::swap(&mut position, &mut workspace.candidate_position);
         stats.accepted_steps += 1;
@@ -2763,12 +2736,13 @@ where
 
     let mut time = start;
     let mut steps = 0;
+    let mut time_stops = TimeStopSchedule::new(&options.time_stops, start, end);
     while direction * (end - time) > 0.0 {
         if steps == options.max_steps {
             return Err(SolveError::MaxStepsExceeded.into());
         }
         steps += 1;
-        let step = direction * maximum_step.min((end - time).abs());
+        let step = time_stops.clip_step(time, direction * maximum_step);
         if time + step == time {
             return Err(SolveError::StepSizeUnderflow.into());
         }
@@ -2803,6 +2777,7 @@ where
         )?;
         stats.callback_invocations += callback.invocations;
         time = next_time;
+        time_stops.accepted(time);
         std::mem::swap(&mut velocity, &mut workspace.candidate_velocity);
         std::mem::swap(&mut position, &mut workspace.candidate_position);
         stats.accepted_steps += 1;

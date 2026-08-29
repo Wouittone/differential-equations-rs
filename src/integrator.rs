@@ -6,6 +6,51 @@ const DEFAULT_SAFETY: f64 = 0.9;
 const DEFAULT_MIN_FACTOR: f64 = 0.2;
 const DEFAULT_MAX_FACTOR: f64 = 10.0;
 
+/// Tracks directionally ordered integration times that a driver must hit.
+///
+/// Specialized drivers share this small scheduler with the common first-order
+/// driver so `SolveOptions::time_stops` has identical clipping semantics
+/// without copying stop-search logic into every integration loop.
+pub(crate) struct TimeStopSchedule<'a> {
+    stops: &'a [f64],
+    next: usize,
+    end: f64,
+    direction: f64,
+}
+
+impl<'a> TimeStopSchedule<'a> {
+    pub(crate) fn new(stops: &'a [f64], start: f64, end: f64) -> Self {
+        let direction = (end - start).signum();
+        let mut schedule = Self {
+            stops,
+            next: 0,
+            end,
+            direction,
+        };
+        schedule.accepted(start);
+        schedule
+    }
+
+    pub(crate) fn clip_step(&self, time: f64, step: f64) -> f64 {
+        let target = self.stops.get(self.next).copied().unwrap_or(self.end);
+        if self.direction * (time + step - target) > 0.0 {
+            target - time
+        } else {
+            step
+        }
+    }
+
+    pub(crate) fn accepted(&mut self, time: f64) {
+        while self
+            .stops
+            .get(self.next)
+            .is_some_and(|stop| self.direction * (*stop - time) <= 0.0)
+        {
+            self.next += 1;
+        }
+    }
+}
+
 /// Per-family metadata for the proportional step-size controller.
 ///
 /// Keeping the complete policy on the kernel capability lets solver families
@@ -540,7 +585,7 @@ where
     let mut step = kernel.modify_step(direction * step_magnitude);
     let mut time = start;
     let mut attempted_steps = 0;
-    let mut next_time_stop = usize::from(options.time_stops.first() == Some(&start));
+    let mut time_stops = TimeStopSchedule::new(&options.time_stops, start, end);
     let mut previous_step_rejected = false;
     let mut controller_state = ControllerState::default();
 
@@ -550,16 +595,7 @@ where
         }
         attempted_steps += 1;
 
-        let target_time = options
-            .time_stops
-            .get(next_time_stop)
-            .copied()
-            .unwrap_or(end);
-        let attempted_step = if direction * (time + step - target_time) > 0.0 {
-            target_time - time
-        } else {
-            step
-        };
+        let attempted_step = time_stops.clip_step(time, step);
         if time + attempted_step == time {
             return Err(SolveError::StepSizeUnderflow);
         }
@@ -708,13 +744,7 @@ where
             }
 
             time = next_time;
-            while options
-                .time_stops
-                .get(next_time_stop)
-                .is_some_and(|stop| direction * (*stop - time) <= 0.0)
-            {
-                next_time_stop += 1;
-            }
+            time_stops.accepted(time);
             std::mem::swap(&mut state, &mut candidate);
             kernel.accept_step(
                 problem,

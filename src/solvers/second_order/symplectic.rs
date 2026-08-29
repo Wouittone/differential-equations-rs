@@ -7,6 +7,8 @@
 #![allow(clippy::excessive_precision)]
 
 use crate::event::times_are_numerically_equal;
+use crate::integrator::TimeStopSchedule;
+use crate::solver::validate_state_time_options;
 use crate::{InterpolationError, SaveMode, SolveError, SolveOptions};
 use thiserror::Error;
 
@@ -641,12 +643,13 @@ where
     let mut time = start;
     let mut steps = 0usize;
     let mut rhs_evaluations = 0usize;
+    let mut time_stops = TimeStopSchedule::new(&options.time_stops, start, end);
 
     while direction * (end - time) > 0.0 {
         if steps >= options.max_steps {
             return Err(SolveError::MaxStepsExceeded.into());
         }
-        let step = direction * step_size.min((end - time).abs());
+        let step = time_stops.clip_step(time, direction * step_size);
         if time + step == time {
             return Err(SolveError::StepSizeUnderflow.into());
         }
@@ -666,6 +669,7 @@ where
         if direction * (end - time) <= 0.0 {
             time = end;
         }
+        time_stops.accepted(time);
         steps += 1;
         recorder.record_step(
             &position,
@@ -695,48 +699,9 @@ fn validate<F, P>(
     if position.len() != velocity.len() {
         return Err(SymplecticSolveError::StateDimensionMismatch);
     }
-    if !position
-        .iter()
-        .chain(velocity)
-        .all(|value| value.is_finite())
-    {
+    validate_state_time_options(position, problem.time_span(), options)?;
+    if !velocity.iter().all(|value| value.is_finite()) {
         return Err(SolveError::NonFiniteInitialState.into());
-    }
-    let (start, end) = problem.time_span();
-    if !start.is_finite() || !end.is_finite() || start == end {
-        return Err(SolveError::InvalidTimeSpan.into());
-    }
-    if !options.absolute_tolerance.is_finite()
-        || options.absolute_tolerance <= 0.0
-        || !options.relative_tolerance.is_finite()
-        || options.relative_tolerance <= 0.0
-    {
-        return Err(SolveError::InvalidTolerance.into());
-    }
-    if options
-        .initial_step
-        .is_some_and(|step| !step.is_finite() || step <= 0.0)
-    {
-        return Err(SolveError::InvalidInitialStep.into());
-    }
-    if options.max_step.is_nan() || options.max_step <= 0.0 {
-        return Err(SolveError::InvalidMaxStep.into());
-    }
-    if options.max_steps == 0 {
-        return Err(SolveError::InvalidMaxSteps.into());
-    }
-    if !options.event_tolerance.is_finite() || options.event_tolerance <= 0.0 {
-        return Err(SolveError::InvalidEventTolerance.into());
-    }
-    let direction = (end - start).signum();
-    if !options.save_at.iter().all(|time| {
-        time.is_finite() && direction * (*time - start) >= 0.0 && direction * (end - *time) >= 0.0
-    }) || options
-        .save_at
-        .windows(2)
-        .any(|pair| direction * (pair[1] - pair[0]) <= 0.0)
-    {
-        return Err(SolveError::InvalidSaveAt.into());
     }
     Ok(())
 }
