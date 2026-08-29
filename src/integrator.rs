@@ -540,6 +540,7 @@ where
     let mut step = kernel.modify_step(direction * step_magnitude);
     let mut time = start;
     let mut attempted_steps = 0;
+    let mut next_time_stop = usize::from(options.time_stops.first() == Some(&start));
     let mut previous_step_rejected = false;
     let mut controller_state = ControllerState::default();
 
@@ -549,10 +550,17 @@ where
         }
         attempted_steps += 1;
 
-        if direction * (time + step - end) > 0.0 {
-            step = end - time;
-        }
-        if time + step == time {
+        let target_time = options
+            .time_stops
+            .get(next_time_stop)
+            .copied()
+            .unwrap_or(end);
+        let attempted_step = if direction * (time + step - target_time) > 0.0 {
+            target_time - time
+        } else {
+            step
+        };
+        if time + attempted_step == time {
             return Err(SolveError::StepSizeUnderflow);
         }
 
@@ -560,7 +568,7 @@ where
             problem,
             &state,
             time,
-            step,
+            attempted_step,
             &mut candidate,
             options,
             &mut stats,
@@ -573,7 +581,8 @@ where
                 stats.rejected_steps += 1;
                 kernel.reject_step();
                 controller_state.rejected(1.0);
-                step = kernel.modify_step(step * capabilities.controller.failed_attempt_factor);
+                step = kernel
+                    .modify_step(attempted_step * capabilities.controller.failed_attempt_factor);
                 previous_step_rejected = true;
                 continue;
             }
@@ -585,7 +594,7 @@ where
 
         if estimate.error_norm <= 1.0 {
             let previous_time = time;
-            let mut next_time = time + step;
+            let mut next_time = time + attempted_step;
             if direction * (end - next_time) <= 0.0 {
                 next_time = end;
             }
@@ -699,6 +708,13 @@ where
             }
 
             time = next_time;
+            while options
+                .time_stops
+                .get(next_time_stop)
+                .is_some_and(|stop| direction * (*stop - time) <= 0.0)
+            {
+                next_time_stop += 1;
+            }
             std::mem::swap(&mut state, &mut candidate);
             kernel.accept_step(
                 problem,
@@ -727,7 +743,8 @@ where
                 if previous_step_rejected {
                     factor = factor.min(capabilities.controller.rejected_acceptance_maximum);
                 }
-                step = kernel.modify_step(direction * (step.abs() * factor).min(maximum_step));
+                step = kernel
+                    .modify_step(direction * (attempted_step.abs() * factor).min(maximum_step));
             }
             previous_step_rejected = false;
         } else {
@@ -740,7 +757,7 @@ where
                     controller_state.factor(estimate.error_norm, capabilities.controller)
                 })
                 .min(capabilities.controller.rejection_maximum);
-            step = kernel.modify_step(step * factor);
+            step = kernel.modify_step(attempted_step * factor);
             previous_step_rejected = true;
         }
     }
@@ -1012,6 +1029,66 @@ mod tests {
         assert_eq!(solution.times().last(), Some(&0.0));
         assert!((solution.last_state()[0]).abs() < 1.0e-15);
         assert_eq!(solution.stats().accepted_steps, 4);
+    }
+
+    #[test]
+    fn fixed_steps_hit_time_stops_then_resume_the_configured_step() {
+        let problem = unit_problem((0.0, 1.0), 0.0);
+        let options = fixed_options(0.4).with_time_stops([0.25, 0.5]);
+        let mut kernel = MockKernel::fixed();
+
+        let solution = integrate(&problem, &options, &mut kernel).unwrap();
+
+        assert_eq!(solution.times(), &[0.0, 0.25, 0.5, 0.9, 1.0]);
+        assert_eq!(solution.values(), solution.times());
+    }
+
+    #[test]
+    fn backward_time_stops_follow_the_integration_direction() {
+        let problem = unit_problem((1.0, 0.0), 1.0);
+        let options = fixed_options(0.4).with_time_stops([0.75, 0.2]);
+        let mut kernel = MockKernel::fixed();
+
+        let solution = integrate(&problem, &options, &mut kernel).unwrap();
+
+        assert_eq!(solution.times(), &[1.0, 0.75, 0.35, 0.2, 0.0]);
+        assert!(solution.last_state()[0].abs() < 1.0e-15);
+    }
+
+    #[test]
+    fn time_stops_do_not_force_solution_output() {
+        let problem = unit_problem((0.0, 1.0), 0.0);
+        let options = fixed_options(0.4)
+            .with_save(SaveMode::Endpoints)
+            .with_time_stops([0.25, 0.5]);
+        let mut kernel = MockKernel::fixed();
+
+        let solution = integrate(&problem, &options, &mut kernel).unwrap();
+
+        assert_eq!(solution.times(), &[0.0, 1.0]);
+        assert_eq!(solution.stats().accepted_steps, 4);
+    }
+
+    #[test]
+    fn discrete_callbacks_can_act_at_exact_time_stops() {
+        let effects = Rc::new(Cell::new(0));
+        let effect_count = Rc::clone(&effects);
+        let problem = unit_problem((0.0, 1.0), 0.0).with_discrete_callback(
+            |_, _, time| time == 0.3,
+            move |state, _, _| {
+                effect_count.set(effect_count.get() + 1);
+                state[0] += 1.0;
+                CallbackAction::Continue
+            },
+        );
+        let options = fixed_options(0.4).with_time_stops([0.3]);
+        let mut kernel = MockKernel::fixed();
+
+        let solution = integrate(&problem, &options, &mut kernel).unwrap();
+
+        assert_eq!(effects.get(), 1);
+        assert_eq!(solution.stats().callback_invocations, 1);
+        assert!((solution.last_state()[0] - 2.0).abs() < 1.0e-15);
     }
 
     #[test]

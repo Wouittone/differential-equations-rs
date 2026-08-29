@@ -32,8 +32,8 @@
 //!
 //! - [`OdeProblem`] describes a first-order initial-value problem and optional
 //!   Jacobian or callback behavior.
-//! - [`SolveOptions`] controls tolerances, step sizes, saved output, and dense
-//!   output retention; [`solve`] runs an [`OdeAlgorithm`].
+//! - [`SolveOptions`] controls tolerances, step sizes, exact time stops, saved
+//!   output, and dense output retention; [`solve`] runs an [`OdeAlgorithm`].
 //! - [`solvers::explicit`] is a good starting point for non-stiff problems,
 //!   [`solvers::rosenbrock`] contains linearly implicit stiff methods, and
 //!   [`solvers::automatic`] contains composite choices.

@@ -43,6 +43,14 @@ pub struct SolveOptions {
     /// integration direction. As in SciML, supplying values overrides the
     /// ordinary start/end/every-step saving controlled by [`save`](Self::save).
     pub save_at: Vec<f64>,
+    /// Extra times that the integrator must hit exactly.
+    ///
+    /// This is the Rust-facing equivalent of SciML's `tstops`. Values must be
+    /// finite, lie inside the time span, and be strictly ordered in the
+    /// integration direction. Reaching a time stop does not itself save the
+    /// state; combine this with [`save_at`](Self::save_at) when both behaviors
+    /// are wanted.
+    pub time_stops: Vec<f64>,
     /// Retain accepted-step method-specific dense segments for post-solve queries.
     ///
     /// This is opt-in because retaining stage data allocates per accepted step.
@@ -63,6 +71,7 @@ impl Default for SolveOptions {
             event_tolerance: DEFAULT_EVENT_TOLERANCE,
             save: SaveMode::EveryStep,
             save_at: Vec::new(),
+            time_stops: Vec::new(),
             retain_dense_output: false,
         }
     }
@@ -131,6 +140,13 @@ impl SolveOptions {
         self
     }
 
+    /// Replaces the extra times that the integrator must hit exactly.
+    #[must_use]
+    pub fn with_time_stops(mut self, times: impl IntoIterator<Item = f64>) -> Self {
+        self.time_stops = times.into_iter().collect();
+        self
+    }
+
     /// Enables or disables retention of method-specific accepted-step segments.
     #[must_use]
     pub fn with_dense_output(mut self, retain: bool) -> Self {
@@ -191,6 +207,9 @@ pub enum SolveError {
     /// Requested output times are invalid for the integration direction.
     #[error("save-at times must be finite, ordered, and inside the time span")]
     InvalidSaveAt,
+    /// Requested integration time stops are invalid for the integration direction.
+    #[error("time stops must be finite, strictly ordered, and inside the time span")]
+    InvalidTimeStops,
     /// A continuous callback condition returned a non-finite value.
     #[error("a continuous callback condition produced a non-finite value")]
     NonFiniteCallbackCondition,
@@ -317,6 +336,15 @@ pub(crate) fn validate_state_time_options(
     {
         return Err(SolveError::InvalidSaveAt);
     }
+    if !options.time_stops.iter().all(|time| {
+        time.is_finite() && direction * (*time - start) >= 0.0 && direction * (end - *time) >= 0.0
+    }) || options
+        .time_stops
+        .windows(2)
+        .any(|pair| direction * (pair[1] - pair[0]) <= 0.0)
+    {
+        return Err(SolveError::InvalidTimeStops);
+    }
 
     Ok(())
 }
@@ -378,7 +406,8 @@ mod tests {
             .with_max_steps(42)
             .with_event_tolerance(1.0e-8)
             .with_save(SaveMode::Endpoints)
-            .with_save_at([0.25, 0.5]);
+            .with_save_at([0.25, 0.5])
+            .with_time_stops([0.3, 0.7]);
 
         assert_eq!(options.absolute_tolerance, 1.0e-9);
         assert_eq!(options.relative_tolerance, 1.0e-7);
@@ -389,6 +418,7 @@ mod tests {
         assert_eq!(options.event_tolerance, 1.0e-8);
         assert_eq!(options.save, SaveMode::Endpoints);
         assert_eq!(options.save_at, [0.25, 0.5]);
+        assert_eq!(options.time_stops, [0.3, 0.7]);
     }
 
     #[test]
@@ -451,6 +481,12 @@ mod tests {
         assert_eq!(
             solve(&problem(vec![1.0], (0.0, 1.0)), Noop, &options),
             Err(SolveError::InvalidEventTolerance)
+        );
+
+        options = SolveOptions::default().with_time_stops([0.75, 0.25]);
+        assert_eq!(
+            solve(&problem(vec![1.0], (0.0, 1.0)), Noop, &options),
+            Err(SolveError::InvalidTimeStops)
         );
     }
 
