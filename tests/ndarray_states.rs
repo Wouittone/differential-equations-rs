@@ -6,13 +6,68 @@ use differential_equations::ndarray::{
 use differential_equations::solvers::explicit::Tsit5;
 use differential_equations::solvers::explicit::split_euler::{SplitEuler, solve_split};
 use differential_equations::solvers::rosenbrock::Rodas5P;
-use differential_equations::{CallbackAction, OdeProblem, SaveMode, SolveOptions, solve};
+use differential_equations::{
+    CallbackAction, OdeAlgorithm, OdeProblem, SaveMode, SolveOptions, solve,
+};
 
 fn options() -> SolveOptions {
     SolveOptions::new()
         .with_tolerances(1.0e-10, 1.0e-10)
         .with_save(SaveMode::Endpoints)
         .with_dense_output(true)
+}
+
+fn assert_decay_is_shape_invariant<A>(algorithm: impl Fn() -> A)
+where
+    A: OdeAlgorithm,
+{
+    let scalar = OdeProblem::from_array(
+        |mut derivative: ArrayViewMut0<'_, f64>, state: ArrayView0<'_, f64>, _: &(), _: f64| {
+            derivative[[]] = -state[[]];
+        },
+        arr0(1.0),
+        (0.0, 1.0),
+        (),
+    );
+    let vector = OdeProblem::from_array(
+        |mut derivative: ArrayViewMut1<'_, f64>, state: ArrayView1<'_, f64>, _: &(), _: f64| {
+            derivative.zip_mut_with(&state, |derivative, state| *derivative = -*state);
+        },
+        array![1.0, 1.0],
+        (0.0, 1.0),
+        (),
+    );
+    let matrix = OdeProblem::from_array(
+        |mut derivative: ArrayViewMut2<'_, f64>, state: ArrayView2<'_, f64>, _: &(), _: f64| {
+            derivative.zip_mut_with(&state, |derivative, state| *derivative = -*state);
+        },
+        array![[1.0, 1.0], [1.0, 1.0]],
+        (0.0, 1.0),
+        (),
+    );
+
+    let scalar_solution = solve(&scalar, algorithm(), &options()).unwrap();
+    let vector_solution = solve(&vector, algorithm(), &options()).unwrap();
+    let matrix_solution = solve(&matrix, algorithm(), &options()).unwrap();
+    let scalar_endpoint = scalar_solution.last_state()[0];
+
+    assert!(scalar_solution.state_shape().is_empty());
+    assert_eq!(vector_solution.state_shape(), &[2]);
+    assert_eq!(matrix_solution.state_shape(), &[2, 2]);
+    for endpoint in vector_solution
+        .last_state()
+        .iter()
+        .chain(matrix_solution.last_state())
+    {
+        assert!((*endpoint - scalar_endpoint).abs() < 1.0e-12);
+    }
+    assert!((scalar_endpoint - (-1.0_f64).exp()).abs() < 1.0e-9);
+}
+
+#[test]
+fn one_decay_ode_is_shape_invariant_for_explicit_and_stiff_solvers() {
+    assert_decay_is_shape_invariant(|| Tsit5);
+    assert_decay_is_shape_invariant(|| Rodas5P);
 }
 
 #[test]
