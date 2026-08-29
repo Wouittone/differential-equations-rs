@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use criterion::{Criterion, Throughput, black_box, criterion_group, criterion_main};
+use differential_equations::ndarray::{ArrayView2, ArrayViewMut2, array};
 use differential_equations::solve_ensemble_parallel;
 use differential_equations::solvers::explicit::Tsit5;
 use differential_equations::solvers::rosenbrock::Rodas5P;
@@ -59,6 +60,14 @@ fn fixed_options(step: f64) -> SolveOptions {
 fn solver_throughput(criterion: &mut Criterion) {
     let explicit = explicit_problem();
     let stiff = stiff_problem();
+    let matrix = OdeProblem::from_array(
+        |mut derivative: ArrayViewMut2<'_, f64>, state: ArrayView2<'_, f64>, _: &(), _: f64| {
+            derivative.zip_mut_with(&state, |derivative, state| *derivative = -*state);
+        },
+        array![[1.0, 2.0], [3.0, 4.0]],
+        (0.0, 10.0),
+        (),
+    );
     let options = adaptive_options();
     let mut group = criterion.benchmark_group("solver");
 
@@ -75,6 +84,14 @@ fn solver_throughput(criterion: &mut Criterion) {
             let solution = solve(black_box(&stiff), Rodas5P, black_box(&options))
                 .expect("benchmark problem must solve");
             black_box(solution.last_state()[0]);
+        });
+    });
+
+    group.bench_function("ndarray/tsit5_matrix", |bencher| {
+        bencher.iter(|| {
+            let solution = solve(black_box(&matrix), Tsit5, black_box(&options))
+                .expect("benchmark problem must solve");
+            black_box(solution.last_state_array()[[0, 0]]);
         });
     });
 

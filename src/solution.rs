@@ -1360,6 +1360,7 @@ pub struct Solution {
     times: Vec<f64>,
     values: Vec<f64>,
     dimension: usize,
+    state_shape: ndarray::IxDyn,
     stats: SolverStats,
     dense_segments: Vec<OwnedDenseSegment>,
 }
@@ -1376,6 +1377,7 @@ impl Solution {
             times,
             values,
             dimension,
+            state_shape: ndarray::IxDyn(&[dimension]),
             stats,
             dense_segments: Vec::new(),
         }
@@ -1393,6 +1395,7 @@ impl Solution {
             times,
             values,
             dimension,
+            state_shape: ndarray::IxDyn(&[dimension]),
             stats,
             dense_segments,
         }
@@ -1413,16 +1416,33 @@ impl Solution {
         self.dimension
     }
 
+    /// Returns the logical ndarray shape of each state.
+    pub fn state_shape(&self) -> &[usize] {
+        ndarray::Dimension::slice(&self.state_shape)
+    }
+
     /// Returns a saved state by its time index.
     pub fn state(&self, index: usize) -> Option<&[f64]> {
         let start = index.checked_mul(self.dimension)?;
         self.values.get(start..start + self.dimension)
     }
 
+    /// Returns a saved state as an ndarray view with its original shape.
+    pub fn state_array(&self, index: usize) -> Option<ndarray::ArrayViewD<'_, f64>> {
+        let state = self.state(index)?;
+        ndarray::ArrayViewD::from_shape(self.state_shape.clone(), state).ok()
+    }
+
     /// Returns the last saved state.
     pub fn last_state(&self) -> &[f64] {
         let start = self.values.len() - self.dimension;
         &self.values[start..]
+    }
+
+    /// Returns the last saved state as an ndarray view with its original shape.
+    pub fn last_state_array(&self) -> ndarray::ArrayViewD<'_, f64> {
+        ndarray::ArrayViewD::from_shape(self.state_shape.clone(), self.last_state())
+            .expect("solution state shape must match its contiguous storage")
     }
 
     /// Interpolates the saved trajectory at `time`.
@@ -1486,9 +1506,32 @@ impl Solution {
         Err(InterpolationError::OutsideTimeSpan)
     }
 
+    /// Interpolates the trajectory into an ndarray with the original state shape.
+    pub fn interpolate_array(&self, time: f64) -> Option<ndarray::ArrayD<f64>> {
+        self.try_interpolate_array(time).ok()
+    }
+
+    /// Interpolates into a shaped ndarray and retains interpolation errors.
+    pub fn try_interpolate_array(
+        &self,
+        time: f64,
+    ) -> Result<ndarray::ArrayD<f64>, InterpolationError> {
+        let values = self.try_interpolate(time)?;
+        ndarray::ArrayD::from_shape_vec(self.state_shape.clone(), values).map_err(|_| {
+            InterpolationError::InvalidSegmentData {
+                context: "solution state shape",
+            }
+        })
+    }
+
     /// Solver work counters.
     pub fn stats(&self) -> SolverStats {
         self.stats
+    }
+
+    pub(crate) fn set_state_shape(&mut self, state_shape: &[usize]) {
+        debug_assert_eq!(state_shape.iter().product::<usize>(), self.dimension);
+        self.state_shape = ndarray::IxDyn(state_shape);
     }
 }
 

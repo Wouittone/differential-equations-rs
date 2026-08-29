@@ -52,8 +52,10 @@ provided.
   solves. Disable default features for a sequential-only dependency.
 - `allocation-metrics` is development instrumentation used by the comparison
   benchmark; applications do not need it.
-- First-order states are currently contiguous `f64` vectors. Generic scalar,
-  vector, and matrix state containers are not yet part of the public API.
+- First-order solvers keep contiguous `f64` workspaces. `OdeProblem::new`
+  retains the original flat-vector API, while `OdeProblem::from_array` accepts
+  ndarray scalars, vectors, and matrices and returns shape-aware solution
+  views without changing the numerical kernels.
 - The crate supports callbacks, saved-time sampling, retained dense output,
   second-order problem types, and the documented solver families. SDEs, DDEs,
   boundary-value problems, and external solver wrappers are out of scope.
@@ -61,6 +63,37 @@ provided.
 The main package remains protected by `publish = false` while its prerelease
 API is finalized. Use it as a path or Git dependency until a release is
 published.
+
+## Scalar, vector, and matrix states
+
+The ndarray entry point uses one API for zero-, one-, and two-dimensional
+states. Its right-hand side receives views with the original shape; the adapter
+to the solver's flat workspace is monomorphized and allocation-free during
+integration.
+
+```rust
+use differential_equations::ndarray::{ArrayView2, ArrayViewMut2, array};
+use differential_equations::solvers::explicit::Tsit5;
+use differential_equations::{OdeProblem, SolveOptions, solve};
+
+let problem = OdeProblem::from_array(
+    |mut du: ArrayViewMut2<'_, f64>, u: ArrayView2<'_, f64>, _: &(), _: f64| {
+        du.zip_mut_with(&u, |du, u| *du = -*u);
+    },
+    array![[1.0, 2.0], [3.0, 4.0]],
+    (0.0, 1.0),
+    (),
+);
+let solution = solve(&problem, Tsit5, &SolveOptions::default())?;
+assert_eq!(solution.last_state_array().shape(), &[2, 2]);
+# Ok::<(), differential_equations::SolveError>(())
+```
+
+Use `arr0(value)` for a scalar, `array![...]` for a vector, and
+`array![[...], [...]]` for a matrix. `initial_state_array`, `state_array`,
+`last_state_array`, and `interpolate_array` retain ndarray dimensionality.
+Flat slice access remains available when callers want the contiguous fast
+path directly.
 
 ## Tableau extensions
 

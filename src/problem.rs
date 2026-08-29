@@ -3,6 +3,9 @@ use crate::callback::{
     Callback, CallbackAction, CallbackOutcome, ContinuousCallback, DiscreteCallback, EventDirection,
 };
 use crate::event::{MAX_EVENT_ROOT_ITERATIONS, event_interval_converged};
+use ndarray::{
+    Array, ArrayView, ArrayViewD, ArrayViewMut, ArrayViewMut2, ArrayViewMutD, Dimension, IxDyn,
+};
 
 /// An initial-value ordinary differential equation problem.
 ///
@@ -12,6 +15,7 @@ use crate::event::{MAX_EVENT_ROOT_ITERATIONS, event_interval_converged};
 pub struct OdeProblem<F, P> {
     pub(crate) rhs: F,
     initial_state: Vec<f64>,
+    state_shape: IxDyn,
     time_span: (f64, f64),
     parameters: P,
     jacobian: Option<Box<JacobianFunction<P>>>,
@@ -31,10 +35,67 @@ pub struct SplitOdeProblem<FE, FI, P> {
     explicit: FE,
     implicit: FI,
     initial_state: Vec<f64>,
+    state_shape: IxDyn,
     time_span: (f64, f64),
     parameters: P,
     implicit_jacobian: Option<Box<JacobianFunction<P>>>,
     callbacks: Vec<Callback<P>>,
+}
+
+#[allow(dead_code)]
+impl SplitOdeProblem<(), (), ()> {
+    /// Constructs a split problem from ndarray-shaped functions and state.
+    ///
+    /// Both functions receive mutable/read-only dynamic ndarray views with the
+    /// same dimensionality as `initial_state`. The generated adapters are
+    /// monomorphized and expose contiguous slices only to numerical kernels.
+    #[allow(clippy::type_complexity)] // Preserve monomorphized RHS adapters instead of boxing.
+    pub fn from_array<FE, FI, P, D>(
+        explicit: FE,
+        implicit: FI,
+        initial_state: Array<f64, D>,
+        time_span: (f64, f64),
+        parameters: P,
+    ) -> SplitOdeProblem<
+        impl Fn(&mut [f64], &[f64], &P, f64),
+        impl Fn(&mut [f64], &[f64], &P, f64),
+        P,
+    >
+    where
+        D: Dimension,
+        FE: for<'a, 'b> Fn(ArrayViewMut<'a, f64, D>, ArrayView<'b, f64, D>, &P, f64),
+        FI: for<'a, 'b> Fn(ArrayViewMut<'a, f64, D>, ArrayView<'b, f64, D>, &P, f64),
+    {
+        let rhs_shape = initial_state.raw_dim();
+        let state_shape = rhs_shape.clone().into_dyn();
+        let initial_state = initial_state.iter().copied().collect();
+        let explicit_shape = rhs_shape.clone();
+        let implicit_shape = rhs_shape;
+        let explicit = move |derivative: &mut [f64], state: &[f64], parameters: &P, time| {
+            let derivative = ArrayViewMut::from_shape(explicit_shape.clone(), derivative)
+                .expect("split derivative shape must match its contiguous storage");
+            let state = ArrayView::from_shape(explicit_shape.clone(), state)
+                .expect("split state shape must match its contiguous storage");
+            explicit(derivative, state, parameters, time);
+        };
+        let implicit = move |derivative: &mut [f64], state: &[f64], parameters: &P, time| {
+            let derivative = ArrayViewMut::from_shape(implicit_shape.clone(), derivative)
+                .expect("split derivative shape must match its contiguous storage");
+            let state = ArrayView::from_shape(implicit_shape.clone(), state)
+                .expect("split state shape must match its contiguous storage");
+            implicit(derivative, state, parameters, time);
+        };
+        SplitOdeProblem {
+            explicit,
+            implicit,
+            initial_state,
+            state_shape,
+            time_span,
+            parameters,
+            implicit_jacobian: None,
+            callbacks: Vec::new(),
+        }
+    }
 }
 
 #[allow(dead_code)]
@@ -47,10 +108,13 @@ impl<FE, FI, P> SplitOdeProblem<FE, FI, P> {
         time_span: (f64, f64),
         parameters: P,
     ) -> Self {
+        let initial_state = initial_state.into();
+        let state_shape = IxDyn(&[initial_state.len()]);
         Self {
             explicit,
             implicit,
-            initial_state: initial_state.into(),
+            initial_state,
+            state_shape,
             time_span,
             parameters,
             implicit_jacobian: None,
@@ -116,6 +180,17 @@ impl<FE, FI, P> SplitOdeProblem<FE, FI, P> {
     /// Returns the initial state.
     pub fn initial_state(&self) -> &[f64] {
         &self.initial_state
+    }
+
+    /// Returns the initial state with its ndarray dimensionality.
+    pub fn initial_state_array(&self) -> ArrayViewD<'_, f64> {
+        ArrayViewD::from_shape(self.state_shape.clone(), &self.initial_state)
+            .expect("problem state shape must match its contiguous storage")
+    }
+
+    /// Returns the logical ndarray shape of the state.
+    pub fn state_shape(&self) -> &[usize] {
+        self.state_shape.slice()
     }
 
     /// Returns the integration time span.
@@ -296,6 +371,45 @@ impl<'a, F, P> JacobianProvider<'a, F, P> {
     }
 }
 
+impl OdeProblem<(), ()> {
+    /// Creates an ODE problem from an ndarray-shaped function and state.
+    ///
+    /// The function receives mutable/read-only dynamic ndarray views with the
+    /// same dimensionality as `initial_state`. The generated adapter is
+    /// monomorphized and exposes contiguous slices only to numerical kernels.
+    #[allow(clippy::type_complexity)] // Preserve a monomorphized RHS adapter instead of boxing.
+    pub fn from_array<F, P, D>(
+        rhs: F,
+        initial_state: Array<f64, D>,
+        time_span: (f64, f64),
+        parameters: P,
+    ) -> OdeProblem<impl Fn(&mut [f64], &[f64], &P, f64), P>
+    where
+        D: Dimension,
+        F: for<'a, 'b> Fn(ArrayViewMut<'a, f64, D>, ArrayView<'b, f64, D>, &P, f64),
+    {
+        let rhs_shape = initial_state.raw_dim();
+        let state_shape = rhs_shape.clone().into_dyn();
+        let initial_state = initial_state.iter().copied().collect();
+        let rhs = move |derivative: &mut [f64], state: &[f64], parameters: &P, time| {
+            let derivative = ArrayViewMut::from_shape(rhs_shape.clone(), derivative)
+                .expect("derivative shape must match its contiguous storage");
+            let state = ArrayView::from_shape(rhs_shape.clone(), state)
+                .expect("state shape must match its contiguous storage");
+            rhs(derivative, state, parameters, time);
+        };
+        OdeProblem {
+            rhs,
+            initial_state,
+            state_shape,
+            time_span,
+            parameters,
+            jacobian: None,
+            callbacks: Vec::new(),
+        }
+    }
+}
+
 impl<F, P> OdeProblem<F, P> {
     /// Creates an ODE problem `du/dt = f(u, p, t)`.
     pub fn new(
@@ -304,9 +418,12 @@ impl<F, P> OdeProblem<F, P> {
         time_span: (f64, f64),
         parameters: P,
     ) -> Self {
+        let initial_state = initial_state.into();
+        let state_shape = IxDyn(&[initial_state.len()]);
         Self {
             rhs,
-            initial_state: initial_state.into(),
+            initial_state,
+            state_shape,
             time_span,
             parameters,
             jacobian: None,
@@ -327,6 +444,27 @@ impl<F, P> OdeProblem<F, P> {
         self
     }
 
+    /// Supplies an analytic Jacobian using ndarray views.
+    ///
+    /// The Jacobian output is a two-dimensional `dimension × dimension`
+    /// matrix. The state view retains the scalar, vector, or matrix shape used
+    /// to construct this problem with [`OdeProblem::from_array`].
+    pub fn with_array_jacobian<J>(mut self, jacobian: J) -> Self
+    where
+        J: for<'a, 'b> Fn(ArrayViewMut2<'a, f64>, ArrayViewD<'b, f64>, &P, f64) + 'static,
+    {
+        let state_shape = self.state_shape.clone();
+        let dimension = self.initial_state.len();
+        self.jacobian = Some(Box::new(move |output, state, parameters, time| {
+            let output = ArrayViewMut2::from_shape((dimension, dimension), output)
+                .expect("Jacobian shape must match its contiguous storage");
+            let state = ArrayViewD::from_shape(state_shape.clone(), state)
+                .expect("state shape must match its contiguous storage");
+            jacobian(output, state, parameters, time);
+        }));
+        self
+    }
+
     /// Adds a callback evaluated after every accepted step (and at the initial state).
     ///
     /// When `condition(state, parameters, time)` is true, `affect` may modify the
@@ -343,6 +481,29 @@ impl<F, P> OdeProblem<F, P> {
         self
     }
 
+    /// Adds a discrete callback using shape-aware ndarray state views.
+    pub fn with_array_discrete_callback<C, A>(mut self, condition: C, affect: A) -> Self
+    where
+        C: for<'a> Fn(ArrayViewD<'a, f64>, &P, f64) -> bool + 'static,
+        A: for<'a> Fn(ArrayViewMutD<'a, f64>, &P, f64) -> CallbackAction + 'static,
+    {
+        let condition_shape = self.state_shape.clone();
+        let affect_shape = self.state_shape.clone();
+        self.callbacks.push(Callback::Discrete(DiscreteCallback {
+            condition: Box::new(move |state, parameters, time| {
+                let state = ArrayViewD::from_shape(condition_shape.clone(), state)
+                    .expect("callback state shape must match its contiguous storage");
+                condition(state, parameters, time)
+            }),
+            affect: Box::new(move |state, parameters, time| {
+                let state = ArrayViewMutD::from_shape(affect_shape.clone(), state)
+                    .expect("callback state shape must match its contiguous storage");
+                affect(state, parameters, time)
+            }),
+        }));
+        self
+    }
+
     /// Adds a zero-crossing callback that triggers in either direction.
     pub fn with_continuous_callback<C, A>(self, condition: C, affect: A) -> Self
     where
@@ -350,6 +511,45 @@ impl<F, P> OdeProblem<F, P> {
         A: Fn(&mut [f64], &P, f64) -> CallbackAction + 'static,
     {
         self.with_continuous_callback_direction(EventDirection::Any, condition, affect)
+    }
+
+    /// Adds a zero-crossing callback using shape-aware ndarray state views.
+    pub fn with_array_continuous_callback<C, A>(self, condition: C, affect: A) -> Self
+    where
+        C: for<'a> Fn(ArrayViewD<'a, f64>, &P, f64) -> f64 + 'static,
+        A: for<'a> Fn(ArrayViewMutD<'a, f64>, &P, f64) -> CallbackAction + 'static,
+    {
+        self.with_array_continuous_callback_direction(EventDirection::Any, condition, affect)
+    }
+
+    /// Adds a direction-filtered continuous callback using ndarray views.
+    pub fn with_array_continuous_callback_direction<C, A>(
+        mut self,
+        direction: EventDirection,
+        condition: C,
+        affect: A,
+    ) -> Self
+    where
+        C: for<'a> Fn(ArrayViewD<'a, f64>, &P, f64) -> f64 + 'static,
+        A: for<'a> Fn(ArrayViewMutD<'a, f64>, &P, f64) -> CallbackAction + 'static,
+    {
+        let condition_shape = self.state_shape.clone();
+        let affect_shape = self.state_shape.clone();
+        self.callbacks
+            .push(Callback::Continuous(ContinuousCallback {
+                condition: Box::new(move |state, parameters, time| {
+                    let state = ArrayViewD::from_shape(condition_shape.clone(), state)
+                        .expect("callback state shape must match its contiguous storage");
+                    condition(state, parameters, time)
+                }),
+                affect: Box::new(move |state, parameters, time| {
+                    let state = ArrayViewMutD::from_shape(affect_shape.clone(), state)
+                        .expect("callback state shape must match its contiguous storage");
+                    affect(state, parameters, time)
+                }),
+                direction,
+            }));
+        self
     }
 
     /// Adds a direction-filtered zero-crossing callback.
@@ -378,6 +578,17 @@ impl<F, P> OdeProblem<F, P> {
     /// Returns the initial state.
     pub fn initial_state(&self) -> &[f64] {
         &self.initial_state
+    }
+
+    /// Returns the initial state with its ndarray dimensionality.
+    pub fn initial_state_array(&self) -> ArrayViewD<'_, f64> {
+        ArrayViewD::from_shape(self.state_shape.clone(), &self.initial_state)
+            .expect("problem state shape must match its contiguous storage")
+    }
+
+    /// Returns the logical ndarray shape of the state.
+    pub fn state_shape(&self) -> &[usize] {
+        self.state_shape.slice()
     }
 
     /// Returns `(start_time, end_time)`.

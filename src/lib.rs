@@ -39,6 +39,8 @@
 //!   [`solvers::automatic`] contains composite choices.
 //! - [`tableau`] exposes the stable extension surface for defining explicit
 //!   Runge--Kutta methods from compile-time-validated JSON resources.
+//! - [`OdeProblem::from_array`] accepts ndarray scalar, vector, and matrix
+//!   states while numerical kernels retain contiguous flat workspaces.
 //! - [`solve_ensemble`] and [`solve_batch`] preserve input order. The default
 //!   `parallel` feature also enables their Rayon-backed variants.
 //!
@@ -95,6 +97,8 @@ pub use ensemble::{
 pub use ensemble::{solve_batch_parallel, solve_ensemble_parallel};
 pub use error::ConfigurationError;
 pub use event::DEFAULT_EVENT_TOLERANCE;
+/// The ndarray version used by shape-aware ODE states.
+pub use ndarray;
 pub use operator_problem::{LieGroupProblem, LinearOperatorProblem};
 pub use problem::{OdeProblem, SplitOdeProblem};
 pub use semilinear::SemilinearOdeProblem;

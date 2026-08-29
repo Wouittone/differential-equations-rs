@@ -39,6 +39,7 @@ parallel = ["dep:rayon"]
 [dependencies]
 differential-equations-tableau-macros = { version = "=0.1.0-beta.1", path = "tableau-macros" }
 differential-equations-tableau-core = { version = "=0.1.0-beta.1", path = "tableau-core" }
+ndarray = "0.17.2"
 rayon = { version = "1.11.0", optional = true }
 thiserror = "2.0.20"
 

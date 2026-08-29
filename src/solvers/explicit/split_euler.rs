@@ -26,7 +26,9 @@ pub trait SplitOdeAlgorithm {
         FI: Fn(&mut [f64], &[f64], &P, f64),
     {
         validate_state_time_options(problem.initial_state(), problem.time_span(), options)?;
-        self.solve_validated(problem, options)
+        let mut solution = self.solve_validated(problem, options)?;
+        solution.set_state_shape(problem.state_shape());
+        Ok(solution)
     }
 
     /// Executes the numerical method after common inputs have been checked.

@@ -226,7 +226,9 @@ pub trait OdeAlgorithm {
         F: Fn(&mut [f64], &[f64], &P, f64),
     {
         validate_ode_problem(problem, options)?;
-        self.solve_validated(problem, options)
+        let mut solution = self.solve_validated(problem, options)?;
+        solution.set_state_shape(problem.state_shape());
+        Ok(solution)
     }
 
     /// Executes the numerical method after common inputs have been checked.
