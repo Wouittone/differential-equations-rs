@@ -1,5 +1,6 @@
 use thiserror::Error;
 
+use crate::callback::CallbackOutcome;
 use crate::event::times_are_numerically_equal;
 
 /// A dense-output query or retained interpolation segment is invalid.
@@ -1311,14 +1312,40 @@ impl<'a> TrajectoryRecorder<'a> {
         self.dense_segments.push(OwnedDenseSegment::Taylor(segment));
     }
 
-    pub(crate) fn force_state(&mut self, time: f64, state: &[f64]) {
+    pub(crate) fn record_callback(
+        &mut self,
+        time: f64,
+        before: &[f64],
+        after: &[f64],
+        outcome: CallbackOutcome,
+        boundary: bool,
+    ) {
         let canonical_time = self
             .save_at
             .iter()
             .copied()
             .find(|target| times_are_numerically_equal(*target, time))
             .unwrap_or(time);
-        self.push_unique(canonical_time, state);
+        let requested_at = self
+            .save_at
+            .iter()
+            .any(|target| times_are_numerically_equal(*target, time));
+        let globally_saved_after = (self.save_at.is_empty()
+            && (self.save_mode == SaveMode::EveryStep || boundary))
+            || outcome.terminate;
+        let save_before = outcome.save_before || requested_at;
+        let save_after = outcome.save_after || globally_saved_after;
+
+        if save_before {
+            self.push_unique(canonical_time, before);
+        }
+        if save_after {
+            if save_before {
+                self.push(canonical_time, after);
+            } else {
+                self.push_unique(canonical_time, after);
+            }
+        }
     }
 
     fn push_interpolation_target(&mut self, time: f64) {
@@ -1345,9 +1372,14 @@ impl<'a> TrajectoryRecorder<'a> {
             let start = self.values.len() - self.dimension;
             self.values[start..].copy_from_slice(state);
         } else {
-            self.times.push(time);
-            self.values.extend_from_slice(state);
+            self.push(time, state);
         }
+    }
+
+    fn push(&mut self, time: f64, state: &[f64]) {
+        debug_assert_eq!(state.len(), self.dimension);
+        self.times.push(time);
+        self.values.extend_from_slice(state);
     }
 }
 
@@ -1355,6 +1387,9 @@ impl<'a> TrajectoryRecorder<'a> {
 ///
 /// States are kept in one row-major allocation. The state at saved time `i`
 /// occupies `values[i * dimension..(i + 1) * dimension]`.
+/// Callbacks configured with [`crate::CallbackSave::Both`] produce adjacent
+/// states with the same time, ordered before-effect then after-effect. Exact
+/// interpolation at that time returns the latter state.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Solution {
     times: Vec<f64>,
@@ -1463,7 +1498,7 @@ impl Solution {
         if self.times.is_empty() {
             return Err(InterpolationError::EmptySolution);
         }
-        for (index, &saved_time) in self.times.iter().enumerate() {
+        for (index, &saved_time) in self.times.iter().enumerate().rev() {
             if time == saved_time {
                 return self.state(index).map(<[f64]>::to_vec).ok_or(
                     InterpolationError::InvalidSegmentData {

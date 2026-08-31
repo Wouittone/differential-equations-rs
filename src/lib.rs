@@ -34,7 +34,8 @@
 //! - [`OdeProblem`] describes a first-order initial-value problem and optional
 //!   Jacobian or callback behavior. [`OdeProblem::with_preset_time_callback`]
 //!   schedules effects at exact integration times without duplicating them in
-//!   [`SolveOptions::time_stops`].
+//!   [`SolveOptions::time_stops`], while [`CallbackSave`] selects whether the
+//!   callback's left limit, affected state, both, or neither are retained.
 //! - [`SolveOptions`] controls tolerances, step sizes, exact time stops, saved
 //!   output, and dense output retention; [`solve`] runs an [`OdeAlgorithm`].
 //! - [`solvers::explicit`] is a good starting point for non-stiff problems,
@@ -91,7 +92,7 @@ mod solver;
 pub mod solvers;
 pub mod tableau;
 
-pub use callback::{CallbackAction, EventDirection};
+pub use callback::{CallbackAction, CallbackSave, EventDirection};
 pub use ensemble::{
     CaseOutcome, ExecutionPolicy, solve_batch, solve_batch_sequential, solve_ensemble,
     solve_ensemble_sequential,

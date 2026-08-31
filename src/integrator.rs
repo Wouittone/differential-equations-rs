@@ -577,11 +577,19 @@ where
     let default_callback_dense_enabled = !custom_dense_output && problem.has_continuous_callbacks();
     let mut default_dense = DefaultDenseState::new(dimension, default_dense_enabled);
 
+    let mut recorder = TrajectoryRecorder::new(&state, start, options);
     let initial_callbacks = kernel.apply_initial_callbacks(problem, &mut state, start)?;
     stats.callback_invocations += initial_callbacks.invocations;
-    let mut recorder = TrajectoryRecorder::new(&state, start, options);
+    if initial_callbacks.invocations > 0 {
+        recorder.record_callback(
+            start,
+            problem.initial_state(),
+            &state,
+            initial_callbacks,
+            true,
+        );
+    }
     if initial_callbacks.terminate {
-        recorder.force_state(start, &state);
         return Ok(recorder.finish(stats));
     }
 
@@ -755,7 +763,13 @@ where
                 );
             }
             if callbacks.invocations > 0 {
-                recorder.force_state(next_time, &candidate);
+                recorder.record_callback(
+                    next_time,
+                    &state_before_effect,
+                    &candidate,
+                    callbacks,
+                    next_time == end,
+                );
             }
             if callbacks.terminate {
                 return Ok(recorder.finish(stats));

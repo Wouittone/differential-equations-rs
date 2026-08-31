@@ -1079,7 +1079,8 @@ mod tests {
         };
         let solution = solve(&problem, Vcab5, &options).unwrap();
 
-        assert_eq!(solution.times(), &[0.0, 0.25, 0.5, 0.75, 1.0]);
+        assert_eq!(solution.times(), &[0.0, 0.25, 0.5, 0.5, 0.75, 1.0]);
+        assert!(solution.state(3).unwrap()[0] < solution.state(2).unwrap()[0]);
         assert_eq!(solution.stats().callback_invocations, 1);
         assert!(
             (solution.last_state()[0] - 0.5 * E).abs() < 5.0e-6,

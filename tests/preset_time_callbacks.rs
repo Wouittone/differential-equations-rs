@@ -14,8 +14,8 @@ use differential_equations::solvers::second_order::{
 };
 use differential_equations::solvers::stabilized::IRKC;
 use differential_equations::{
-    CallbackAction, OdeAlgorithm, OdeProblem, SaveMode, SolveError, SolveOptions, SplitOdeProblem,
-    solve,
+    CallbackAction, CallbackSave, OdeAlgorithm, OdeProblem, SaveMode, SolveError, SolveOptions,
+    SplitOdeProblem, solve,
 };
 
 fn fixed(step: f64) -> SolveOptions {
@@ -250,4 +250,59 @@ fn second_order_and_symplectic_drivers_apply_preset_callbacks() {
     let solution =
         solve_symplectic(&partitioned_problem(), PseudoVerletLeapfrog, &fixed(0.4)).unwrap();
     assert_eq!(solution.last_position(), &[2.0]);
+}
+
+fn partitioned_save_problem() -> SecondOrderOdeProblem<Acceleration, ()> {
+    SecondOrderOdeProblem::new(
+        zero_acceleration as Acceleration,
+        vec![0.0],
+        vec![1.0],
+        (0.0, 1.0),
+        (),
+    )
+    .with_preset_time_callback_saving([0.25], CallbackSave::Both, |_, position, _, _| {
+        position[0] = 3.0;
+        CallbackAction::Continue
+    })
+}
+
+fn assert_partitioned_callback_limits<A: SecondOrderOdeAlgorithm>(algorithm: A, adaptive: bool) {
+    let solution = solve_second_order(
+        &partitioned_save_problem(),
+        algorithm,
+        &fixed(0.4).with_adaptive(adaptive),
+    )
+    .unwrap();
+    let event = solution
+        .times()
+        .windows(2)
+        .position(|times| times == [0.25, 0.25])
+        .expect("both callback limits must be adjacent");
+    assert_eq!(solution.position(event), Some([1.0].as_slice()));
+    assert_eq!(solution.position(event + 1), Some([3.0].as_slice()));
+    assert_eq!(solution.interpolate(0.25).unwrap().1, vec![3.0]);
+}
+
+#[test]
+fn every_partitioned_driver_saves_both_callback_limits() {
+    assert_partitioned_callback_limits(NewmarkBeta::default(), false);
+    assert_partitioned_callback_limits(Nystrom4, false);
+    assert_partitioned_callback_limits(Dprkn4, true);
+    assert_partitioned_callback_limits(Irkn3, false);
+    assert_partitioned_callback_limits(VelocityVerlet, false);
+
+    let solution = solve_symplectic(
+        &partitioned_save_problem(),
+        PseudoVerletLeapfrog,
+        &fixed(0.4),
+    )
+    .unwrap();
+    let event = solution
+        .times()
+        .windows(2)
+        .position(|times| times == [0.25, 0.25])
+        .expect("both callback limits must be adjacent");
+    assert_eq!(solution.position(event), Some([1.0].as_slice()));
+    assert_eq!(solution.position(event + 1), Some([3.0].as_slice()));
+    assert_eq!(solution.interpolate(0.25).unwrap().0, vec![3.0]);
 }

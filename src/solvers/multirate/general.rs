@@ -334,11 +334,13 @@ where
     let mut end_derivative = vec![0.0; dimension];
     let mut dense_endpoint = vec![0.0; dimension];
     let mut stats = SolverStats::default();
+    let mut recorder = TrajectoryRecorder::new(&state, start, options);
     let initial = problem.apply_initial_callbacks(&mut state, start)?;
     stats.callback_invocations += initial.invocations;
-    let mut recorder = TrajectoryRecorder::new(&state, start, options);
+    if initial.invocations > 0 {
+        recorder.record_callback(start, problem.initial_state(), &state, initial, true);
+    }
     if initial.terminate {
-        recorder.force_state(start, &state);
         return Ok(recorder.finish(stats));
     }
     evaluate_total(problem, &state, start, &mut start_derivative, &mut stats)?;
@@ -452,7 +454,13 @@ where
                 recorder.retain_hermite_segment(owned);
             }
             if callbacks.invocations > 0 {
-                recorder.force_state(next_time, &candidate);
+                recorder.record_callback(
+                    next_time,
+                    &state_before_effect,
+                    &candidate,
+                    callbacks,
+                    next_time == end,
+                );
             }
             if callbacks.terminate {
                 return Ok(recorder.finish(stats));

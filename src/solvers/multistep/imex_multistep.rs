@@ -251,11 +251,19 @@ where
     let mut state = problem.initial_state().to_vec();
     let mut workspace = Workspace::new(dimension);
     let mut stats = SolverStats::default();
+    let mut recorder = TrajectoryRecorder::new(&state, start, options);
     let initial_callbacks = problem.apply_initial_callbacks(&mut state, start)?;
     stats.callback_invocations += initial_callbacks.invocations;
-    let mut recorder = TrajectoryRecorder::new(&state, start, options);
+    if initial_callbacks.invocations > 0 {
+        recorder.record_callback(
+            start,
+            problem.initial_state(),
+            &state,
+            initial_callbacks,
+            true,
+        );
+    }
     if initial_callbacks.terminate {
-        recorder.force_state(start, &state);
         return Ok(recorder.finish(stats));
     }
     evaluate_explicit(problem, &mut workspace.explicit, &state, start, &mut stats)?;
@@ -378,7 +386,13 @@ where
             );
         }
         if callbacks.invocations > 0 {
-            recorder.force_state(next_time, &next_state);
+            recorder.record_callback(
+                next_time,
+                &state_before_effect,
+                &next_state,
+                callbacks,
+                next_time == end,
+            );
         }
         if callbacks.terminate {
             return Ok(recorder.finish(stats));

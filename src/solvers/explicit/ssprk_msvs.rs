@@ -841,7 +841,8 @@ mod tests {
         options.save_at = vec![0.25, 0.5, 0.75];
         let solution = solve(&problem, SspRkMsvs32, &options).unwrap();
         assert_eq!(solution.stats().callback_invocations, 1);
-        assert_eq!(solution.times(), &[0.25, 0.5, 0.75]);
+        assert_eq!(solution.times(), &[0.25, 0.5, 0.5, 0.75]);
+        assert!(solution.state(2).unwrap()[0] - solution.state(1).unwrap()[0] > 9.0);
         assert!(solution.last_state()[0] > 3.0);
     }
 }

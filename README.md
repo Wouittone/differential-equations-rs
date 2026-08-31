@@ -58,8 +58,11 @@ provided.
   views without changing the numerical kernels.
 - The crate supports discrete, continuous, and preset-time callbacks. Preset
   callback times automatically become exact integration stops, including for
-  split and second-order problems. Saved-time sampling, retained dense output,
-  and the documented solver families are also supported. SDEs, DDEs,
+  split and second-order problems. `CallbackSave` controls whether the state
+  before an effect, after it, both, or neither is added to the trajectory;
+  continuous callbacks save both by default and discrete callbacks save the
+  affected state. Saved-time sampling, retained dense output, and the
+  documented solver families are also supported. SDEs, DDEs,
   boundary-value problems, and external solver wrappers are out of scope.
 
 The main package remains protected by `publish = false` while its prerelease

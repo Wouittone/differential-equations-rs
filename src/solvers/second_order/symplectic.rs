@@ -6,6 +6,7 @@
 
 #![allow(clippy::excessive_precision)]
 
+use crate::callback::CallbackOutcome;
 use crate::event::times_are_numerically_equal;
 use crate::integrator::TimeStopSchedule;
 use crate::solver::{validate_preset_time_sequences, validate_state_time_options};
@@ -363,6 +364,10 @@ symplectic_algorithm!(KahanLi8, KAHAN_LI8_A, KAHAN_LI8_B);
 symplectic_algorithm!(SofSpa10, SOFSPA10_A, SOFSPA10_B);
 
 /// A trajectory returned by [`solve_symplectic`].
+///
+/// Callbacks configured with [`crate::CallbackSave::Both`] produce adjacent
+/// states at the same time, ordered before-effect then after-effect. Exact
+/// interpolation at that time returns the latter state.
 #[derive(Clone, Debug, PartialEq)]
 pub struct SymplecticSolution {
     times: Vec<f64>,
@@ -438,7 +443,7 @@ impl SymplecticSolution {
         if self.times.is_empty() {
             return Err(InterpolationError::EmptySolution);
         }
-        for (index, &saved_time) in self.times.iter().enumerate() {
+        for (index, &saved_time) in self.times.iter().enumerate().rev() {
             if time == saved_time {
                 return Ok((
                     self.position(index)
@@ -636,7 +641,19 @@ where
     let dimension = problem.initial_position().len();
     let mut position = problem.initial_position().to_vec();
     let mut velocity = problem.initial_velocity().to_vec();
+    let mut recorder = SymplecticRecorder::new(&position, &velocity, start, options);
     let initial_callbacks = apply_initial_callbacks(problem, &mut velocity, &mut position, start)?;
+    if initial_callbacks.invocations > 0 {
+        recorder.record_callback(
+            start,
+            problem.initial_position(),
+            problem.initial_velocity(),
+            &position,
+            &velocity,
+            initial_callbacks,
+            true,
+        );
+    }
     let mut candidate_position = position.clone();
     let mut candidate_velocity = velocity.clone();
     let mut acceleration = vec![0.0; dimension];
@@ -650,9 +667,7 @@ where
     } else {
         Vec::new()
     };
-    let mut recorder = SymplecticRecorder::new(&position, &velocity, start, options);
     if initial_callbacks.terminate {
-        recorder.force_state(start, &position, &velocity);
         return Ok(recorder.finish(0));
     }
     let mut time = start;
@@ -720,7 +735,15 @@ where
             next_time == end,
         )?;
         if callback.invocations > 0 {
-            recorder.force_state(next_time, &candidate_position, &candidate_velocity);
+            recorder.record_callback(
+                next_time,
+                &state_before_position,
+                &state_before_velocity,
+                &candidate_position,
+                &candidate_velocity,
+                callback,
+                next_time == end,
+            );
         }
         time = next_time;
         time_stops.accepted(time);
@@ -886,6 +909,45 @@ impl<'a> SymplecticRecorder<'a> {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
+    fn record_callback(
+        &mut self,
+        time: f64,
+        before_position: &[f64],
+        before_velocity: &[f64],
+        after_position: &[f64],
+        after_velocity: &[f64],
+        outcome: CallbackOutcome,
+        boundary: bool,
+    ) {
+        let canonical_time = self
+            .save_at
+            .iter()
+            .copied()
+            .find(|target| times_are_numerically_equal(*target, time))
+            .unwrap_or(time);
+        let requested_at = self
+            .save_at
+            .iter()
+            .any(|target| times_are_numerically_equal(*target, time));
+        let globally_saved_after = (self.save_at.is_empty()
+            && (self.save_mode == SaveMode::EveryStep || boundary))
+            || outcome.terminate;
+        let save_before = outcome.save_before || requested_at;
+        let save_after = outcome.save_after || globally_saved_after;
+
+        if save_before {
+            self.push_unique(canonical_time, before_position, before_velocity);
+        }
+        if save_after {
+            if save_before {
+                self.push(canonical_time, after_position, after_velocity);
+            } else {
+                self.push_unique(canonical_time, after_position, after_velocity);
+            }
+        }
+    }
+
     fn push_unique(&mut self, time: f64, position: &[f64], velocity: &[f64]) {
         if self
             .times
@@ -896,14 +958,16 @@ impl<'a> SymplecticRecorder<'a> {
             self.positions[start..].copy_from_slice(position);
             self.velocities[start..].copy_from_slice(velocity);
         } else {
-            self.times.push(time);
-            self.positions.extend_from_slice(position);
-            self.velocities.extend_from_slice(velocity);
+            self.push(time, position, velocity);
         }
     }
 
-    fn force_state(&mut self, time: f64, position: &[f64], velocity: &[f64]) {
-        self.push_unique(time, position, velocity);
+    fn push(&mut self, time: f64, position: &[f64], velocity: &[f64]) {
+        debug_assert_eq!(position.len(), self.dimension);
+        debug_assert_eq!(velocity.len(), self.dimension);
+        self.times.push(time);
+        self.positions.extend_from_slice(position);
+        self.velocities.extend_from_slice(velocity);
     }
 
     fn finish(self, rhs_evaluations: usize) -> SymplecticSolution {

@@ -9,6 +9,38 @@ pub enum CallbackAction {
     Terminate,
 }
 
+/// Selects which states a callback forces into the saved trajectory.
+///
+/// These saves are in addition to the accepted-step and requested-time output
+/// configured through [`crate::SolveOptions`]. When both positions are saved,
+/// the solution contains two adjacent entries at the callback time: the
+/// left-limit state followed by the affected state.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum CallbackSave {
+    /// Do not force an additional callback-time save.
+    None,
+    /// Save only the state immediately before the callback effect.
+    Before,
+    /// Save only the affected state.
+    #[default]
+    After,
+    /// Save the state before and after the callback effect.
+    Both,
+}
+
+impl CallbackSave {
+    /// Returns whether the left-limit state is retained.
+    pub const fn saves_before(self) -> bool {
+        matches!(self, Self::Before | Self::Both)
+    }
+
+    /// Returns whether the affected state is retained.
+    pub const fn saves_after(self) -> bool {
+        matches!(self, Self::After | Self::Both)
+    }
+}
+
 /// Selects which zero crossings trigger a continuous callback.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 #[non_exhaustive]
@@ -57,12 +89,14 @@ pub(crate) enum DiscreteTrigger<P> {
 pub(crate) struct DiscreteCallback<P> {
     pub trigger: DiscreteTrigger<P>,
     pub affect: Box<Affect<P>>,
+    pub save: CallbackSave,
 }
 
 pub(crate) struct ContinuousCallback<P> {
     pub condition: Box<EventCondition<P>>,
     pub affect: Box<Affect<P>>,
     pub direction: EventDirection,
+    pub save: CallbackSave,
 }
 
 pub(crate) enum Callback<P> {
@@ -74,6 +108,16 @@ pub(crate) enum Callback<P> {
 pub(crate) struct CallbackOutcome {
     pub invocations: usize,
     pub terminate: bool,
+    pub save_before: bool,
+    pub save_after: bool,
+}
+
+impl CallbackOutcome {
+    pub(crate) fn register(&mut self, save: CallbackSave) {
+        self.invocations += 1;
+        self.save_before |= save.saves_before();
+        self.save_after |= save.saves_after();
+    }
 }
 
 impl EventDirection {

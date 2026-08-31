@@ -6,6 +6,84 @@ fn unit_rate(du: &mut [f64], _: &[f64], _: &(), _: f64) {
     du[0] = 1.0;
 }
 
+fn zero_rate(du: &mut [f64], _: &[f64], _: &(), _: f64) {
+    du[0] = 0.0;
+}
+
+fn solve_with_callback_save(save: CallbackSave) -> Solution {
+    let problem = OdeProblem::new(zero_rate, vec![1.0], (0.0, 1.0), ())
+        .with_preset_time_callback_saving([0.5], save, |state, _: &(), _| {
+            state[0] = 10.0;
+            CallbackAction::Continue
+        });
+    let options = SolveOptions::new()
+        .with_adaptive(false)
+        .with_initial_step(0.25)
+        .with_save(SaveMode::Endpoints);
+    solve(&problem, Rk4, &options).unwrap()
+}
+
+#[test]
+fn callback_save_positions_control_the_saved_left_and_right_limits() {
+    let none = solve_with_callback_save(CallbackSave::None);
+    assert_eq!(none.times(), &[0.0, 1.0]);
+
+    let before = solve_with_callback_save(CallbackSave::Before);
+    assert_eq!(before.times(), &[0.0, 0.5, 1.0]);
+    assert_eq!(before.state(1), Some([1.0].as_slice()));
+
+    let after = solve_with_callback_save(CallbackSave::After);
+    assert_eq!(after.times(), &[0.0, 0.5, 1.0]);
+    assert_eq!(after.state(1), Some([10.0].as_slice()));
+
+    let both = solve_with_callback_save(CallbackSave::Both);
+    assert_eq!(both.times(), &[0.0, 0.5, 0.5, 1.0]);
+    assert_eq!(both.state(1), Some([1.0].as_slice()));
+    assert_eq!(both.state(2), Some([10.0].as_slice()));
+    assert_eq!(both.interpolate(0.5), Some(vec![10.0]));
+}
+
+#[test]
+fn callback_save_positions_preserve_scalar_vector_and_matrix_shapes() {
+    use differential_equations::ndarray::{ArrayD, ArrayViewD, ArrayViewMutD, arr0, array};
+
+    fn solve_array(initial: ArrayD<f64>) -> Solution {
+        let problem = OdeProblem::from_array(
+            |mut derivative: ArrayViewMutD<'_, f64>, _: ArrayViewD<'_, f64>, _: &(), _: f64| {
+                derivative.fill(0.0);
+            },
+            initial,
+            (0.0, 1.0),
+            (),
+        )
+        .with_array_preset_time_callback_saving(
+            [0.5],
+            CallbackSave::Both,
+            |mut state: ArrayViewMutD<'_, f64>, _: &(), _| {
+                state.fill(3.0);
+                CallbackAction::Continue
+            },
+        );
+        let options = SolveOptions::new()
+            .with_adaptive(false)
+            .with_initial_step(0.25)
+            .with_save(SaveMode::Endpoints);
+        solve(&problem, Rk4, &options).unwrap()
+    }
+
+    for (initial, expected_shape) in [
+        (arr0(1.0).into_dyn(), &[][..]),
+        (array![1.0, 1.0].into_dyn(), &[2][..]),
+        (array![[1.0, 1.0], [1.0, 1.0]].into_dyn(), &[2, 2][..]),
+    ] {
+        let solution = solve_array(initial);
+        assert_eq!(solution.state_shape(), expected_shape);
+        assert_eq!(solution.times(), &[0.0, 0.5, 0.5, 1.0]);
+        assert!(solution.state(1).unwrap().iter().all(|value| *value == 1.0));
+        assert!(solution.state(2).unwrap().iter().all(|value| *value == 3.0));
+    }
+}
+
 #[test]
 fn continuous_callback_localizes_and_terminates() {
     let problem = OdeProblem::new(unit_rate, vec![0.0], (0.0, 2.0), ()).with_continuous_callback(
@@ -191,11 +269,13 @@ fn continuing_callback_forces_the_affected_state_to_be_saved() {
 
     let solution = solve(&problem, Rk4, &options).unwrap();
 
-    assert_eq!(solution.times().len(), 3);
+    assert_eq!(solution.times().len(), 4);
     assert!((solution.times()[1] - 0.5).abs() < 2.0e-15);
+    assert!((solution.times()[2] - 0.5).abs() < 2.0e-15);
     assert_eq!(solution.times()[0], 0.0);
-    assert_eq!(solution.times()[2], 1.0);
-    assert_eq!(solution.state(1), Some([10.0].as_slice()));
+    assert_eq!(solution.times()[3], 1.0);
+    assert!((solution.state(1).unwrap()[0] - 0.5).abs() < 2.0e-14);
+    assert_eq!(solution.state(2), Some([10.0].as_slice()));
 }
 
 #[test]
@@ -245,12 +325,14 @@ fn callback_effects_do_not_change_earlier_save_at_samples() {
     };
     let solution = solve(&continuous, Rk4, &options).unwrap();
 
-    assert_eq!(solution.times().len(), 3);
+    assert_eq!(solution.times().len(), 4);
     assert_eq!(&solution.times()[..2], &[0.25, 0.5]);
     assert!((solution.times()[2] - 0.75).abs() < 2.0e-15);
+    assert!((solution.times()[3] - 0.75).abs() < 2.0e-15);
     assert!((solution.state(0).unwrap()[0] - 0.25).abs() < 2.0e-15);
     assert!((solution.state(1).unwrap()[0] - 0.5).abs() < 2.0e-15);
-    assert_eq!(solution.state(2), Some([42.0].as_slice()));
+    assert!((solution.state(2).unwrap()[0] - 0.75).abs() < 2.0e-14);
+    assert_eq!(solution.state(3), Some([42.0].as_slice()));
 
     let discrete = OdeProblem::new(unit_rate, vec![0.0], (0.0, 1.0), ()).with_discrete_callback(
         |_, _: &(), time| time >= 0.6,
