@@ -61,7 +61,9 @@ provided.
   split and second-order problems. `CallbackSave` controls whether the state
   before an effect, after it, both, or neither is added to the trajectory;
   continuous callbacks save both by default and discrete callbacks save the
-  affected state. Saved-time sampling, retained dense output, and the
+  affected state. `CallbackSet` and `SecondOrderCallbackSet` let applications
+  assemble ordered callback policies separately from their problems.
+  Saved-time sampling, retained dense output, and the
   documented solver families are also supported. SDEs, DDEs,
   boundary-value problems, and external solver wrappers are out of scope.
 

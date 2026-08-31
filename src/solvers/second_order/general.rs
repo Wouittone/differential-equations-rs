@@ -64,47 +64,34 @@ enum PartitionedCallback<P> {
     Continuous(ContinuousCallback<P>),
 }
 
-/// A second-order initial-value problem `q'' = f(q', q, p, t)`.
+/// An ordered collection of callbacks for a second-order ODE problem.
 ///
-/// The acceleration function follows SciML's in-place calling convention
-/// `f(dv, v, q, p, t)`. Positions and velocities remain separate throughout
-/// the public API; callers do not need to flatten the partitioned state.
-/// This represents SciML's `SecondOrderODEProblem` specialization `q' = v`,
-/// not a general `DynamicalODEProblem` with a separately supplied position
-/// rate.
-pub struct SecondOrderOdeProblem<F, P> {
-    pub(crate) acceleration: F,
-    initial_velocity: Vec<f64>,
-    initial_position: Vec<f64>,
-    time_span: (f64, f64),
-    parameters: P,
+/// Conditions receive velocity before position, and effects receive mutable
+/// velocity and position partitions in the same order.
+#[must_use]
+pub struct SecondOrderCallbackSet<P> {
     callbacks: Vec<PartitionedCallback<P>>,
 }
 
-impl<F, P> SecondOrderOdeProblem<F, P> {
-    /// Creates a second-order ODE problem.
-    pub fn new(
-        acceleration: F,
-        initial_velocity: impl Into<Vec<f64>>,
-        initial_position: impl Into<Vec<f64>>,
-        time_span: (f64, f64),
-        parameters: P,
-    ) -> Self {
+impl<P> SecondOrderCallbackSet<P> {
+    /// Creates an empty callback set.
+    pub const fn new() -> Self {
         Self {
-            acceleration,
-            initial_velocity: initial_velocity.into(),
-            initial_position: initial_position.into(),
-            time_span,
-            parameters,
             callbacks: Vec::new(),
         }
     }
 
-    /// Adds a callback evaluated at the initial state and after accepted steps.
-    ///
-    /// Conditions and effects receive velocity before position, matching the
-    /// `SecondOrderODEProblem` acceleration signature. Effects may modify both
-    /// partitions and may terminate integration.
+    /// Returns the number of callbacks in the set.
+    pub fn len(&self) -> usize {
+        self.callbacks.len()
+    }
+
+    /// Returns whether the set contains no callbacks.
+    pub fn is_empty(&self) -> bool {
+        self.callbacks.is_empty()
+    }
+
+    /// Adds a callback evaluated at initialization and after accepted steps.
     pub fn with_discrete_callback<C, A>(self, condition: C, affect: A) -> Self
     where
         C: Fn(&[f64], &[f64], &P, f64) -> bool + 'static,
@@ -134,9 +121,6 @@ impl<F, P> SecondOrderOdeProblem<F, P> {
     }
 
     /// Adds a callback that runs at each listed integration time.
-    ///
-    /// Preset times become mandatory integration stops automatically and are
-    /// validated against this problem's time span when solving begins.
     pub fn with_preset_time_callback<A>(
         self,
         times: impl IntoIterator<Item = f64>,
@@ -191,10 +175,6 @@ impl<F, P> SecondOrderOdeProblem<F, P> {
     }
 
     /// Adds a direction-filtered zero-crossing callback.
-    ///
-    /// Roots use the method's native extension when available; otherwise they
-    /// use a partition-aware segment with cubic-Hermite position and linear
-    /// velocity interpolation.
     pub fn with_continuous_callback_direction<C, A>(
         self,
         direction: EventDirection,
@@ -233,6 +213,184 @@ impl<F, P> SecondOrderOdeProblem<F, P> {
                 save,
             }));
         self
+    }
+
+    /// Appends another set, preserving callback order within each set.
+    pub fn append(mut self, mut other: Self) -> Self {
+        self.callbacks.append(&mut other.callbacks);
+        self
+    }
+}
+
+impl<P> Default for SecondOrderCallbackSet<P> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// A second-order initial-value problem `q'' = f(q', q, p, t)`.
+///
+/// The acceleration function follows SciML's in-place calling convention
+/// `f(dv, v, q, p, t)`. Positions and velocities remain separate throughout
+/// the public API; callers do not need to flatten the partitioned state.
+/// This represents SciML's `SecondOrderODEProblem` specialization `q' = v`,
+/// not a general `DynamicalODEProblem` with a separately supplied position
+/// rate.
+pub struct SecondOrderOdeProblem<F, P> {
+    pub(crate) acceleration: F,
+    initial_velocity: Vec<f64>,
+    initial_position: Vec<f64>,
+    time_span: (f64, f64),
+    parameters: P,
+    callbacks: Vec<PartitionedCallback<P>>,
+}
+
+impl<F, P> SecondOrderOdeProblem<F, P> {
+    /// Creates a second-order ODE problem.
+    pub fn new(
+        acceleration: F,
+        initial_velocity: impl Into<Vec<f64>>,
+        initial_position: impl Into<Vec<f64>>,
+        time_span: (f64, f64),
+        parameters: P,
+    ) -> Self {
+        Self {
+            acceleration,
+            initial_velocity: initial_velocity.into(),
+            initial_position: initial_position.into(),
+            time_span,
+            parameters,
+            callbacks: Vec::new(),
+        }
+    }
+
+    /// Appends an ordered callback set to this problem.
+    pub fn with_callback_set(mut self, mut callback_set: SecondOrderCallbackSet<P>) -> Self {
+        self.callbacks.append(&mut callback_set.callbacks);
+        self
+    }
+
+    /// Adds a callback evaluated at the initial state and after accepted steps.
+    ///
+    /// Conditions and effects receive velocity before position, matching the
+    /// `SecondOrderODEProblem` acceleration signature. Effects may modify both
+    /// partitions and may terminate integration.
+    pub fn with_discrete_callback<C, A>(self, condition: C, affect: A) -> Self
+    where
+        C: Fn(&[f64], &[f64], &P, f64) -> bool + 'static,
+        A: Fn(&mut [f64], &mut [f64], &P, f64) -> CallbackAction + 'static,
+    {
+        self.with_discrete_callback_saving(CallbackSave::After, condition, affect)
+    }
+
+    /// Adds a discrete callback with explicit callback-time saving behavior.
+    pub fn with_discrete_callback_saving<C, A>(
+        self,
+        save: CallbackSave,
+        condition: C,
+        affect: A,
+    ) -> Self
+    where
+        C: Fn(&[f64], &[f64], &P, f64) -> bool + 'static,
+        A: Fn(&mut [f64], &mut [f64], &P, f64) -> CallbackAction + 'static,
+    {
+        self.with_callback_set(
+            SecondOrderCallbackSet::new().with_discrete_callback_saving(save, condition, affect),
+        )
+    }
+
+    /// Adds a callback that runs at each listed integration time.
+    ///
+    /// Preset times become mandatory integration stops automatically and are
+    /// validated against this problem's time span when solving begins.
+    pub fn with_preset_time_callback<A>(
+        self,
+        times: impl IntoIterator<Item = f64>,
+        affect: A,
+    ) -> Self
+    where
+        A: Fn(&mut [f64], &mut [f64], &P, f64) -> CallbackAction + 'static,
+    {
+        self.with_preset_time_callback_saving(times, CallbackSave::After, affect)
+    }
+
+    /// Adds a preset-time callback with explicit callback-time saving behavior.
+    pub fn with_preset_time_callback_saving<A>(
+        self,
+        times: impl IntoIterator<Item = f64>,
+        save: CallbackSave,
+        affect: A,
+    ) -> Self
+    where
+        A: Fn(&mut [f64], &mut [f64], &P, f64) -> CallbackAction + 'static,
+    {
+        self.with_callback_set(
+            SecondOrderCallbackSet::new().with_preset_time_callback_saving(times, save, affect),
+        )
+    }
+
+    /// Adds a zero-crossing callback that triggers in either direction.
+    pub fn with_continuous_callback<C, A>(self, condition: C, affect: A) -> Self
+    where
+        C: Fn(&[f64], &[f64], &P, f64) -> f64 + 'static,
+        A: Fn(&mut [f64], &mut [f64], &P, f64) -> CallbackAction + 'static,
+    {
+        self.with_continuous_callback_saving(CallbackSave::Both, condition, affect)
+    }
+
+    /// Adds a zero-crossing callback with explicit callback-time saving behavior.
+    pub fn with_continuous_callback_saving<C, A>(
+        self,
+        save: CallbackSave,
+        condition: C,
+        affect: A,
+    ) -> Self
+    where
+        C: Fn(&[f64], &[f64], &P, f64) -> f64 + 'static,
+        A: Fn(&mut [f64], &mut [f64], &P, f64) -> CallbackAction + 'static,
+    {
+        self.with_continuous_callback_direction_saving(EventDirection::Any, save, condition, affect)
+    }
+
+    /// Adds a direction-filtered zero-crossing callback.
+    ///
+    /// Roots use the method's native extension when available; otherwise they
+    /// use a partition-aware segment with cubic-Hermite position and linear
+    /// velocity interpolation.
+    pub fn with_continuous_callback_direction<C, A>(
+        self,
+        direction: EventDirection,
+        condition: C,
+        affect: A,
+    ) -> Self
+    where
+        C: Fn(&[f64], &[f64], &P, f64) -> f64 + 'static,
+        A: Fn(&mut [f64], &mut [f64], &P, f64) -> CallbackAction + 'static,
+    {
+        self.with_continuous_callback_direction_saving(
+            direction,
+            CallbackSave::Both,
+            condition,
+            affect,
+        )
+    }
+
+    /// Adds a direction-filtered callback with explicit saving behavior.
+    pub fn with_continuous_callback_direction_saving<C, A>(
+        self,
+        direction: EventDirection,
+        save: CallbackSave,
+        condition: C,
+        affect: A,
+    ) -> Self
+    where
+        C: Fn(&[f64], &[f64], &P, f64) -> f64 + 'static,
+        A: Fn(&mut [f64], &mut [f64], &P, f64) -> CallbackAction + 'static,
+    {
+        self.with_callback_set(
+            SecondOrderCallbackSet::new()
+                .with_continuous_callback_direction_saving(direction, save, condition, affect),
+        )
     }
 
     /// Initial velocity.

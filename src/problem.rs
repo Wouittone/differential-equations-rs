@@ -1,7 +1,7 @@
 use crate::SolveError;
 use crate::callback::{
-    Callback, CallbackAction, CallbackOutcome, CallbackSave, ContinuousCallback, DiscreteCallback,
-    DiscreteTrigger, EventDirection, PresetTimes,
+    Callback, CallbackAction, CallbackOutcome, CallbackSave, CallbackSet, ContinuousCallback,
+    DiscreteCallback, DiscreteTrigger, EventDirection, PresetTimes,
 };
 use crate::event::{MAX_EVENT_ROOT_ITERATIONS, event_interval_converged};
 use ndarray::{
@@ -123,6 +123,12 @@ impl<FE, FI, P> SplitOdeProblem<FE, FI, P> {
         }
     }
 
+    /// Appends an ordered callback set to this problem.
+    pub fn with_callback_set(mut self, mut callback_set: CallbackSet<P>) -> Self {
+        self.callbacks.append(&mut callback_set.callbacks);
+        self
+    }
+
     /// Adds a callback evaluated after every accepted step and at the initial state.
     pub fn with_discrete_callback<C, A>(self, condition: C, affect: A) -> Self
     where
@@ -134,7 +140,7 @@ impl<FE, FI, P> SplitOdeProblem<FE, FI, P> {
 
     /// Adds a discrete callback with explicit callback-time saving behavior.
     pub fn with_discrete_callback_saving<C, A>(
-        mut self,
+        self,
         save: CallbackSave,
         condition: C,
         affect: A,
@@ -143,12 +149,9 @@ impl<FE, FI, P> SplitOdeProblem<FE, FI, P> {
         C: Fn(&[f64], &P, f64) -> bool + 'static,
         A: Fn(&mut [f64], &P, f64) -> CallbackAction + 'static,
     {
-        self.callbacks.push(Callback::Discrete(DiscreteCallback {
-            trigger: DiscreteTrigger::Condition(Box::new(condition)),
-            affect: Box::new(affect),
-            save,
-        }));
-        self
+        self.with_callback_set(
+            CallbackSet::new().with_discrete_callback_saving(save, condition, affect),
+        )
     }
 
     /// Adds a callback that runs at each listed integration time.
@@ -169,7 +172,7 @@ impl<FE, FI, P> SplitOdeProblem<FE, FI, P> {
 
     /// Adds a preset-time callback with explicit callback-time saving behavior.
     pub fn with_preset_time_callback_saving<A>(
-        mut self,
+        self,
         times: impl IntoIterator<Item = f64>,
         save: CallbackSave,
         affect: A,
@@ -177,12 +180,9 @@ impl<FE, FI, P> SplitOdeProblem<FE, FI, P> {
     where
         A: Fn(&mut [f64], &P, f64) -> CallbackAction + 'static,
     {
-        self.callbacks.push(Callback::Discrete(DiscreteCallback {
-            trigger: DiscreteTrigger::PresetTimes(PresetTimes::new(times)),
-            affect: Box::new(affect),
-            save,
-        }));
-        self
+        self.with_callback_set(
+            CallbackSet::new().with_preset_time_callback_saving(times, save, affect),
+        )
     }
 
     /// Adds a zero-crossing callback that triggers in either direction.
@@ -229,7 +229,7 @@ impl<FE, FI, P> SplitOdeProblem<FE, FI, P> {
 
     /// Adds a direction-filtered callback with explicit saving behavior.
     pub fn with_continuous_callback_direction_saving<C, A>(
-        mut self,
+        self,
         direction: EventDirection,
         save: CallbackSave,
         condition: C,
@@ -239,14 +239,10 @@ impl<FE, FI, P> SplitOdeProblem<FE, FI, P> {
         C: Fn(&[f64], &P, f64) -> f64 + 'static,
         A: Fn(&mut [f64], &P, f64) -> CallbackAction + 'static,
     {
-        self.callbacks
-            .push(Callback::Continuous(ContinuousCallback {
-                condition: Box::new(condition),
-                affect: Box::new(affect),
-                direction,
-                save,
-            }));
-        self
+        self.with_callback_set(
+            CallbackSet::new()
+                .with_continuous_callback_direction_saving(direction, save, condition, affect),
+        )
     }
 
     /// Supplies the analytic state Jacobian of the implicit component.
@@ -546,6 +542,12 @@ impl<F, P> OdeProblem<F, P> {
         }
     }
 
+    /// Appends an ordered callback set to this problem.
+    pub fn with_callback_set(mut self, mut callback_set: CallbackSet<P>) -> Self {
+        self.callbacks.append(&mut callback_set.callbacks);
+        self
+    }
+
     /// Supplies an analytic state Jacobian for implicit and Rosenbrock methods.
     ///
     /// The callback receives a row-major `dimension × dimension` output matrix
@@ -594,7 +596,7 @@ impl<F, P> OdeProblem<F, P> {
 
     /// Adds a discrete callback with explicit callback-time saving behavior.
     pub fn with_discrete_callback_saving<C, A>(
-        mut self,
+        self,
         save: CallbackSave,
         condition: C,
         affect: A,
@@ -603,12 +605,9 @@ impl<F, P> OdeProblem<F, P> {
         C: Fn(&[f64], &P, f64) -> bool + 'static,
         A: Fn(&mut [f64], &P, f64) -> CallbackAction + 'static,
     {
-        self.callbacks.push(Callback::Discrete(DiscreteCallback {
-            trigger: DiscreteTrigger::Condition(Box::new(condition)),
-            affect: Box::new(affect),
-            save,
-        }));
-        self
+        self.with_callback_set(
+            CallbackSet::new().with_discrete_callback_saving(save, condition, affect),
+        )
     }
 
     /// Adds a callback that runs at each listed integration time.
@@ -628,7 +627,7 @@ impl<F, P> OdeProblem<F, P> {
 
     /// Adds a preset-time callback with explicit callback-time saving behavior.
     pub fn with_preset_time_callback_saving<A>(
-        mut self,
+        self,
         times: impl IntoIterator<Item = f64>,
         save: CallbackSave,
         affect: A,
@@ -636,12 +635,9 @@ impl<F, P> OdeProblem<F, P> {
     where
         A: Fn(&mut [f64], &P, f64) -> CallbackAction + 'static,
     {
-        self.callbacks.push(Callback::Discrete(DiscreteCallback {
-            trigger: DiscreteTrigger::PresetTimes(PresetTimes::new(times)),
-            affect: Box::new(affect),
-            save,
-        }));
-        self
+        self.with_callback_set(
+            CallbackSet::new().with_preset_time_callback_saving(times, save, affect),
+        )
     }
 
     /// Adds a discrete callback using shape-aware ndarray state views.
@@ -843,7 +839,7 @@ impl<F, P> OdeProblem<F, P> {
 
     /// Adds a direction-filtered callback with explicit saving behavior.
     pub fn with_continuous_callback_direction_saving<C, A>(
-        mut self,
+        self,
         direction: EventDirection,
         save: CallbackSave,
         condition: C,
@@ -853,14 +849,10 @@ impl<F, P> OdeProblem<F, P> {
         C: Fn(&[f64], &P, f64) -> f64 + 'static,
         A: Fn(&mut [f64], &P, f64) -> CallbackAction + 'static,
     {
-        self.callbacks
-            .push(Callback::Continuous(ContinuousCallback {
-                condition: Box::new(condition),
-                affect: Box::new(affect),
-                direction,
-                save,
-            }));
-        self
+        self.with_callback_set(
+            CallbackSet::new()
+                .with_continuous_callback_direction_saving(direction, save, condition, affect),
+        )
     }
 
     /// Returns the initial state.
