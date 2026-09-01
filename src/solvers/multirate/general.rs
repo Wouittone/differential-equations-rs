@@ -367,6 +367,15 @@ where
         attempted += 1;
         let proposed_step = step;
         step = time_stops.clip_step_with(time, step, problem.next_preset_time(time, direction));
+        if problem.has_positive_domain() {
+            step = problem.positive_domain_adjusted_step(
+                &state,
+                &start_derivative,
+                step,
+                options.absolute_tolerance,
+                &mut candidate,
+            )?;
+        }
         if time + step == time {
             return Err(SolveError::StepSizeUnderflow);
         }

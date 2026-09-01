@@ -1,9 +1,10 @@
 //! Reusable callback policies built on [`crate::CallbackSet`].
 //!
-//! These policies cover common timing and observation tasks without requiring
-//! callers to reproduce scheduling conditions. They can be combined with
-//! custom callbacks using [`crate::CallbackSet::append`] before attaching the
-//! resulting set to a problem.
+//! These policies cover timing, observation, step control, and domain
+//! preservation without requiring callers to reproduce their callback
+//! machinery. They can be combined with custom callbacks using
+//! [`crate::CallbackSet::append`] before attaching the resulting set to a
+//! problem.
 
 use std::rc::Rc;
 
@@ -92,6 +93,7 @@ impl PeriodicCallback {
             initializers: Vec::new(),
             finalizers: Vec::new(),
             step_guards: Vec::new(),
+            positive_domains: Vec::new(),
         })
     }
 
@@ -192,6 +194,105 @@ impl<G> DomainGuard<G> {
         validate_reduction_factor(self.reduction_factor)?;
         Ok(SecondOrderCallbackSet::new()
             .with_step_guard(self.reduction_factor, self.is_out_of_domain))
+    }
+}
+
+/// Keeps every accepted state component non-negative.
+///
+/// Before an attempt, the solver forms a cheap forward extrapolation from the
+/// current state and derivative. If any predicted component is below the
+/// configured tolerance, the upcoming step is repeatedly reduced and then
+/// multiplied by a `0.9` safety factor. After an accepted step, negative
+/// components are clamped to zero. This follows the step-control and
+/// correction semantics of SciML's `PositiveDomain` policy while remaining
+/// independent of the chosen first-order solver family.
+///
+/// The policy is intended for systems whose positive cone is invariant. The
+/// right-hand side must remain defined just outside that cone, and derivatives
+/// of already-negative components should normally be clamped to non-negative
+/// values by the model.
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[must_use]
+pub struct PositiveDomain {
+    absolute_tolerance: Option<f64>,
+    reduction_factor: f64,
+    save: CallbackSave,
+}
+
+impl PositiveDomain {
+    /// Creates a policy using the solve's absolute tolerance and step halving.
+    pub const fn new() -> Self {
+        Self {
+            absolute_tolerance: None,
+            reduction_factor: 0.5,
+            save: CallbackSave::After,
+        }
+    }
+
+    /// Overrides the accepted negative extrapolation tolerance.
+    ///
+    /// The value is validated when the callback set is built and must be
+    /// finite and non-negative. Without an override, the policy uses
+    /// [`crate::SolveOptions::absolute_tolerance`].
+    pub const fn with_absolute_tolerance(mut self, absolute_tolerance: f64) -> Self {
+        self.absolute_tolerance = Some(absolute_tolerance);
+        self
+    }
+
+    /// Sets the factor used to reduce an unacceptable predicted step.
+    ///
+    /// The value is validated when the callback set is built and must lie
+    /// strictly between zero and one.
+    pub const fn with_reduction_factor(mut self, reduction_factor: f64) -> Self {
+        self.reduction_factor = reduction_factor;
+        self
+    }
+
+    /// Selects which states are saved when the policy checks an endpoint.
+    pub const fn with_save(mut self, save: CallbackSave) -> Self {
+        self.save = save;
+        self
+    }
+
+    /// Builds the policy for an ordinary or split ODE problem.
+    pub fn into_callback_set<P>(self) -> Result<CallbackSet<P>, ConfigurationError> {
+        if matches!(
+            self.absolute_tolerance,
+            Some(tolerance) if !tolerance.is_finite() || tolerance < 0.0
+        ) {
+            return Err(ConfigurationError::InvalidParameter {
+                parameter: "positive-domain absolute tolerance",
+                reason: "must be finite and non-negative",
+            });
+        }
+        validate_reduction_factor_named(self.reduction_factor, "positive-domain reduction factor")?;
+
+        Ok(CallbackSet::new()
+            .with_positive_domain(self.absolute_tolerance, self.reduction_factor)
+            .with_discrete_callback_saving(
+                self.save,
+                |_, _, _| true,
+                |state, _, _| {
+                    let mut modified = false;
+                    for value in state {
+                        if *value < 0.0 {
+                            *value = 0.0;
+                            modified = true;
+                        }
+                    }
+                    if modified {
+                        CallbackAction::Continue
+                    } else {
+                        CallbackAction::ContinueUnmodified
+                    }
+                },
+            ))
+    }
+}
+
+impl Default for PositiveDomain {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -502,9 +603,16 @@ fn validate_safety_factor(safety_factor: f64) -> Result<(), ConfigurationError> 
 }
 
 fn validate_reduction_factor(reduction_factor: f64) -> Result<(), ConfigurationError> {
+    validate_reduction_factor_named(reduction_factor, "domain-guard reduction factor")
+}
+
+fn validate_reduction_factor_named(
+    reduction_factor: f64,
+    parameter: &'static str,
+) -> Result<(), ConfigurationError> {
     if !reduction_factor.is_finite() || reduction_factor <= 0.0 || reduction_factor >= 1.0 {
         return Err(ConfigurationError::InvalidParameter {
-            parameter: "domain-guard reduction factor",
+            parameter,
             reason: "must be finite and lie in (0, 1)",
         });
     }

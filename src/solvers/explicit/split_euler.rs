@@ -178,6 +178,28 @@ where
         self.problem.domain_rejection_factor(state, time)
     }
 
+    fn has_positive_domain(&self, _: &OdeProblem<fn(&mut [f64], &[f64], &(), f64), ()>) -> bool {
+        self.problem.has_positive_domain()
+    }
+
+    fn positive_domain_adjusted_step(
+        &self,
+        _: &OdeProblem<fn(&mut [f64], &[f64], &(), f64), ()>,
+        state: &[f64],
+        derivative: &[f64],
+        proposed_step: f64,
+        default_tolerance: f64,
+        prediction: &mut [f64],
+    ) -> Result<f64, SolveError> {
+        self.problem.positive_domain_adjusted_step(
+            state,
+            derivative,
+            proposed_step,
+            default_tolerance,
+            prediction,
+        )
+    }
+
     fn has_custom_callback_handling(&self) -> bool {
         // Route callback dispatch through the typed split problem while still
         // allowing the shared Hermite lifecycle to serve save-at requests.

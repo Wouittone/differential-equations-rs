@@ -265,6 +265,30 @@ where
         problem.domain_rejection_factor(state, time)
     }
 
+    /// Reports whether the effective problem predicts upcoming positive-domain steps.
+    fn has_positive_domain(&self, problem: &OdeProblem<F, P>) -> bool {
+        problem.has_positive_domain()
+    }
+
+    /// Restricts an upcoming step using the effective problem's domain policy.
+    fn positive_domain_adjusted_step(
+        &self,
+        problem: &OdeProblem<F, P>,
+        state: &[f64],
+        derivative: &[f64],
+        proposed_step: f64,
+        default_tolerance: f64,
+        prediction: &mut [f64],
+    ) -> Result<f64, SolveError> {
+        problem.positive_domain_adjusted_step(
+            state,
+            derivative,
+            proposed_step,
+            default_tolerance,
+            prediction,
+        )
+    }
+
     /// Adjusts a controller proposal before it becomes the next attempted
     /// step. Most methods keep the proposal unchanged; interval-prediction
     /// methods can snap it to a precomputed exponential grid.
@@ -601,6 +625,12 @@ where
     let maximum_step = options.max_step.min((end - start).abs());
     let mut state = problem.initial_state().to_vec();
     let mut candidate = vec![0.0; dimension];
+    let positive_domain_enabled = kernel.has_positive_domain(problem);
+    let mut prediction_derivative = if positive_domain_enabled {
+        vec![0.0; dimension]
+    } else {
+        Vec::new()
+    };
     let mut state_before_effect = if kernel.has_callbacks(problem) {
         vec![0.0; dimension]
     } else {
@@ -674,7 +704,24 @@ where
         attempted_steps += 1;
 
         let callback_stop = kernel.next_callback_time_stop(problem, time, direction);
-        let attempted_step = time_stops.clip_step_with(time, step, callback_stop);
+        let mut attempted_step = time_stops.clip_step_with(time, step, callback_stop);
+        if positive_domain_enabled {
+            kernel.evaluate_dense_derivative(
+                problem,
+                &mut prediction_derivative,
+                &state,
+                time,
+                &mut stats,
+            )?;
+            attempted_step = kernel.positive_domain_adjusted_step(
+                problem,
+                &state,
+                &prediction_derivative,
+                attempted_step,
+                options.absolute_tolerance,
+                &mut candidate,
+            )?;
+        }
         if time + attempted_step == time {
             return Err(SolveError::StepSizeUnderflow);
         }

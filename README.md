@@ -129,6 +129,11 @@ limit, while leaving adaptive controllers free to choose a smaller step.
 `DomainGuard` rejects a finite candidate state before callbacks or saving and
 retries the attempt with a configurable reduction factor. It works with
 ordinary, split, and partitioned second-order problems.
+`PositiveDomain` instead checks a cheap forward extrapolation before an
+attempt, repeatedly reduces an unsafe upcoming step, applies a `0.9` safety
+factor, and clamps negative accepted components to zero. It defaults to the
+solve's absolute tolerance, supports an explicit override, and works for
+ordinary and split first-order problems with scalar, vector, or matrix state.
 
 ```rust
 use differential_equations::callbacks::PeriodicCallback;
@@ -151,11 +156,12 @@ let problem = OdeProblem::new(
 # Ok::<(), differential_equations::ConfigurationError>(())
 ```
 
-All four policies also construct partitioned callback sets for second-order
+`PeriodicCallback`, `FunctionCallingCallback`, `StepsizeLimiter`, and
+`DomainGuard` also construct partitioned callback sets for second-order
 problems through `into_second_order_callback_set`. `DomainGuard` checks actual
-candidate states; it does not extrapolate or project them. Projection-based
-policies such as SciML's `PositiveDomain`, `GeneralDomain`, and manifold
-projection remain separate future work.
+candidate states and may repeat their computation; `PositiveDomain` predicts
+the next state before the attempt. Generic `GeneralDomain` and nonlinear
+manifold projection remain future work.
 
 ## Tableau extensions
 

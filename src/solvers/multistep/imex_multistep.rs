@@ -296,6 +296,22 @@ where
         }
         attempted_steps += 1;
         step = time_stops.clip_step_with(time, step, problem.next_preset_time(time, direction));
+        if problem.has_positive_domain() {
+            for ((derivative, explicit), implicit) in start_derivative
+                .iter_mut()
+                .zip(&workspace.explicit)
+                .zip(&workspace.implicit)
+            {
+                *derivative = explicit + implicit;
+            }
+            step = problem.positive_domain_adjusted_step(
+                &state,
+                &start_derivative,
+                step,
+                options.absolute_tolerance,
+                &mut workspace.candidate,
+            )?;
+        }
         if time + step == time {
             return Err(SolveError::StepSizeUnderflow);
         }

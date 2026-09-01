@@ -2,7 +2,7 @@ use crate::SolveError;
 use crate::callback::{
     Callback, CallbackAction, CallbackOutcome, CallbackSave, CallbackSet, ContinuousCallback,
     DiscreteCallback, DiscreteTrigger, EventCrossing, EventDirection, InitializationHook,
-    LifecycleHook, PresetTimes, StepGuard, VectorContinuousCallback,
+    LifecycleHook, PositiveDomainPolicy, PresetTimes, StepGuard, VectorContinuousCallback,
 };
 use crate::event::{
     MAX_EVENT_ROOT_ITERATIONS, effective_event_tolerance, event_interval_converged,
@@ -28,6 +28,7 @@ pub struct OdeProblem<F, P> {
     initializers: Vec<InitializationHook<P>>,
     finalizers: Vec<Box<LifecycleHook<P>>>,
     step_guards: Vec<StepGuard<P>>,
+    positive_domains: Vec<PositiveDomainPolicy>,
 }
 
 type JacobianFunction<P> = dyn Fn(&mut [f64], &[f64], &P, f64);
@@ -51,6 +52,7 @@ pub struct SplitOdeProblem<FE, FI, P> {
     initializers: Vec<InitializationHook<P>>,
     finalizers: Vec<Box<LifecycleHook<P>>>,
     step_guards: Vec<StepGuard<P>>,
+    positive_domains: Vec<PositiveDomainPolicy>,
 }
 
 #[allow(dead_code)]
@@ -108,6 +110,7 @@ impl SplitOdeProblem<(), (), ()> {
             initializers: Vec::new(),
             finalizers: Vec::new(),
             step_guards: Vec::new(),
+            positive_domains: Vec::new(),
         }
     }
 }
@@ -136,6 +139,7 @@ impl<FE, FI, P> SplitOdeProblem<FE, FI, P> {
             initializers: Vec::new(),
             finalizers: Vec::new(),
             step_guards: Vec::new(),
+            positive_domains: Vec::new(),
         }
     }
 
@@ -145,6 +149,8 @@ impl<FE, FI, P> SplitOdeProblem<FE, FI, P> {
         self.initializers.append(&mut callback_set.initializers);
         self.finalizers.append(&mut callback_set.finalizers);
         self.step_guards.append(&mut callback_set.step_guards);
+        self.positive_domains
+            .append(&mut callback_set.positive_domains);
         self
     }
 
@@ -353,6 +359,7 @@ impl<FE, FI, P> SplitOdeProblem<FE, FI, P> {
             || !self.initializers.is_empty()
             || !self.finalizers.is_empty()
             || !self.step_guards.is_empty()
+            || !self.positive_domains.is_empty()
     }
 
     pub(crate) fn domain_rejection_factor(&self, state: &[f64], time: f64) -> Option<f64> {
@@ -361,6 +368,28 @@ impl<FE, FI, P> SplitOdeProblem<FE, FI, P> {
             .filter(|guard| (guard.is_out_of_domain)(state, &self.parameters, time))
             .map(|guard| guard.reduction_factor)
             .reduce(f64::min)
+    }
+
+    pub(crate) fn has_positive_domain(&self) -> bool {
+        !self.positive_domains.is_empty()
+    }
+
+    pub(crate) fn positive_domain_adjusted_step(
+        &self,
+        state: &[f64],
+        derivative: &[f64],
+        proposed_step: f64,
+        default_tolerance: f64,
+        prediction: &mut [f64],
+    ) -> Result<f64, SolveError> {
+        positive_domain_adjusted_step(
+            &self.positive_domains,
+            state,
+            derivative,
+            proposed_step,
+            default_tolerance,
+            prediction,
+        )
     }
 
     /// Evaluates the explicit right-hand side.
@@ -692,6 +721,7 @@ impl OdeProblem<(), ()> {
             initializers: Vec::new(),
             finalizers: Vec::new(),
             step_guards: Vec::new(),
+            positive_domains: Vec::new(),
         }
     }
 }
@@ -717,6 +747,7 @@ impl<F, P> OdeProblem<F, P> {
             initializers: Vec::new(),
             finalizers: Vec::new(),
             step_guards: Vec::new(),
+            positive_domains: Vec::new(),
         }
     }
 
@@ -726,6 +757,8 @@ impl<F, P> OdeProblem<F, P> {
         self.initializers.append(&mut callback_set.initializers);
         self.finalizers.append(&mut callback_set.finalizers);
         self.step_guards.append(&mut callback_set.step_guards);
+        self.positive_domains
+            .append(&mut callback_set.positive_domains);
         self
     }
 
@@ -1161,6 +1194,7 @@ impl<F, P> OdeProblem<F, P> {
             || !self.initializers.is_empty()
             || !self.finalizers.is_empty()
             || !self.step_guards.is_empty()
+            || !self.positive_domains.is_empty()
     }
 
     pub(crate) fn domain_rejection_factor(&self, state: &[f64], time: f64) -> Option<f64> {
@@ -1169,6 +1203,28 @@ impl<F, P> OdeProblem<F, P> {
             .filter(|guard| (guard.is_out_of_domain)(state, &self.parameters, time))
             .map(|guard| guard.reduction_factor)
             .reduce(f64::min)
+    }
+
+    pub(crate) fn has_positive_domain(&self) -> bool {
+        !self.positive_domains.is_empty()
+    }
+
+    pub(crate) fn positive_domain_adjusted_step(
+        &self,
+        state: &[f64],
+        derivative: &[f64],
+        proposed_step: f64,
+        default_tolerance: f64,
+        prediction: &mut [f64],
+    ) -> Result<f64, SolveError> {
+        positive_domain_adjusted_step(
+            &self.positive_domains,
+            state,
+            derivative,
+            proposed_step,
+            default_tolerance,
+            prediction,
+        )
     }
 
     pub(crate) fn has_continuous_callbacks(&self) -> bool {
@@ -1573,6 +1629,52 @@ fn interpolate(state: &[f64], previous_state: &[f64], fraction: f64, output: &mu
     for ((output, previous), current) in output.iter_mut().zip(previous_state).zip(state) {
         *output = previous + fraction * (current - previous);
     }
+}
+
+fn positive_domain_adjusted_step(
+    policies: &[PositiveDomainPolicy],
+    state: &[f64],
+    derivative: &[f64],
+    proposed_step: f64,
+    default_tolerance: f64,
+    prediction: &mut [f64],
+) -> Result<f64, SolveError> {
+    debug_assert_eq!(state.len(), derivative.len());
+    debug_assert_eq!(state.len(), prediction.len());
+    let mut step = proposed_step;
+    let mut modified = false;
+    loop {
+        for ((predicted, state), derivative) in prediction.iter_mut().zip(state).zip(derivative) {
+            *predicted = state + step * derivative;
+        }
+        let reduction = policies
+            .iter()
+            .filter(|policy| {
+                let tolerance = policy.absolute_tolerance.unwrap_or(default_tolerance);
+                prediction.iter().any(|value| {
+                    value.partial_cmp(&-tolerance) != Some(std::cmp::Ordering::Greater)
+                })
+            })
+            .map(|policy| policy.reduction_factor)
+            .reduce(f64::min);
+        let Some(reduction) = reduction else {
+            break;
+        };
+        let reduced = step * reduction;
+        if reduced == step || reduced == 0.0 {
+            return Err(SolveError::StepSizeUnderflow);
+        }
+        step = reduced;
+        modified = true;
+    }
+
+    if modified {
+        step *= 0.9;
+        if step == 0.0 {
+            return Err(SolveError::StepSizeUnderflow);
+        }
+    }
+    Ok(step)
 }
 
 fn ensure_finite_callback_state(state: &[f64]) -> Result<(), SolveError> {

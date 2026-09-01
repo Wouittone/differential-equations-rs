@@ -312,6 +312,12 @@ pub(crate) struct StepGuard<P> {
     pub(crate) reduction_factor: f64,
 }
 
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct PositiveDomainPolicy {
+    pub(crate) absolute_tolerance: Option<f64>,
+    pub(crate) reduction_factor: f64,
+}
+
 /// An ordered collection of callbacks that can be attached to an ODE problem.
 ///
 /// A set is useful when callback configuration is built separately from a
@@ -324,6 +330,7 @@ pub struct CallbackSet<P> {
     pub(crate) initializers: Vec<InitializationHook<P>>,
     pub(crate) finalizers: Vec<Box<LifecycleHook<P>>>,
     pub(crate) step_guards: Vec<StepGuard<P>>,
+    pub(crate) positive_domains: Vec<PositiveDomainPolicy>,
 }
 
 impl<P> CallbackSet<P> {
@@ -334,6 +341,7 @@ impl<P> CallbackSet<P> {
             initializers: Vec::new(),
             finalizers: Vec::new(),
             step_guards: Vec::new(),
+            positive_domains: Vec::new(),
         }
     }
 
@@ -350,6 +358,7 @@ impl<P> CallbackSet<P> {
             && self.initializers.is_empty()
             && self.finalizers.is_empty()
             && self.step_guards.is_empty()
+            && self.positive_domains.is_empty()
     }
 
     /// Adds a state initialization hook that saves the initialized state.
@@ -395,6 +404,18 @@ impl<P> CallbackSet<P> {
     {
         self.step_guards.push(StepGuard {
             is_out_of_domain: Box::new(guard),
+            reduction_factor,
+        });
+        self
+    }
+
+    pub(crate) fn with_positive_domain(
+        mut self,
+        absolute_tolerance: Option<f64>,
+        reduction_factor: f64,
+    ) -> Self {
+        self.positive_domains.push(PositiveDomainPolicy {
+            absolute_tolerance,
             reduction_factor,
         });
         self
@@ -573,6 +594,7 @@ impl<P> CallbackSet<P> {
         self.initializers.append(&mut other.initializers);
         self.finalizers.append(&mut other.finalizers);
         self.step_guards.append(&mut other.step_guards);
+        self.positive_domains.append(&mut other.positive_domains);
         self
     }
 }
