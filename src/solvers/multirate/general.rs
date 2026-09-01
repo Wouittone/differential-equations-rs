@@ -337,11 +337,11 @@ where
     let mut recorder = TrajectoryRecorder::new(&state, start, options);
     let initial = problem.apply_initial_callbacks(&mut state, start)?;
     stats.callback_invocations += initial.invocations;
-    if initial.invocations > 0 {
+    if initial.state_modified {
         recorder.record_callback(start, problem.initial_state(), &state, initial, true);
     }
     if initial.terminate {
-        return Ok(recorder.finish(stats));
+        return finish_successful(problem, &mut state, start, recorder, stats);
     }
     evaluate_total(problem, &state, start, &mut start_derivative, &mut stats)?;
     let mut step = direction
@@ -463,7 +463,7 @@ where
                 );
             }
             if callbacks.terminate {
-                return Ok(recorder.finish(stats));
+                return finish_successful(problem, &mut candidate, next_time, recorder, stats);
             }
             time = next_time;
             time_stops.accepted(time);
@@ -501,6 +501,23 @@ where
             step *= factor;
             previous_rejected = true;
         }
+    }
+    finish_successful(problem, &mut state, time, recorder, stats)
+}
+
+fn finish_successful<FE, FI, P>(
+    problem: &SplitOdeProblem<FE, FI, P>,
+    state: &mut [f64],
+    time: f64,
+    mut recorder: TrajectoryRecorder<'_>,
+    stats: SolverStats,
+) -> Result<Solution, SolveError>
+where
+    FE: Fn(&mut [f64], &[f64], &P, f64),
+    FI: Fn(&mut [f64], &[f64], &P, f64),
+{
+    if problem.apply_finalize_callbacks(state, time)? {
+        recorder.synchronize_endpoint(time, state);
     }
     Ok(recorder.finish(stats))
 }

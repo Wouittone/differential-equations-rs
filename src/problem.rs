@@ -1,7 +1,8 @@
 use crate::SolveError;
 use crate::callback::{
     Callback, CallbackAction, CallbackOutcome, CallbackSave, CallbackSet, ContinuousCallback,
-    DiscreteCallback, DiscreteTrigger, EventDirection, PresetTimes,
+    DiscreteCallback, DiscreteTrigger, EventDirection, InitializationHook, LifecycleHook,
+    PresetTimes,
 };
 use crate::event::{MAX_EVENT_ROOT_ITERATIONS, event_interval_converged};
 use ndarray::{
@@ -21,6 +22,8 @@ pub struct OdeProblem<F, P> {
     parameters: P,
     jacobian: Option<Box<JacobianFunction<P>>>,
     callbacks: Vec<Callback<P>>,
+    initializers: Vec<InitializationHook<P>>,
+    finalizers: Vec<Box<LifecycleHook<P>>>,
 }
 
 type JacobianFunction<P> = dyn Fn(&mut [f64], &[f64], &P, f64);
@@ -41,6 +44,8 @@ pub struct SplitOdeProblem<FE, FI, P> {
     parameters: P,
     implicit_jacobian: Option<Box<JacobianFunction<P>>>,
     callbacks: Vec<Callback<P>>,
+    initializers: Vec<InitializationHook<P>>,
+    finalizers: Vec<Box<LifecycleHook<P>>>,
 }
 
 #[allow(dead_code)]
@@ -95,6 +100,8 @@ impl SplitOdeProblem<(), (), ()> {
             parameters,
             implicit_jacobian: None,
             callbacks: Vec::new(),
+            initializers: Vec::new(),
+            finalizers: Vec::new(),
         }
     }
 }
@@ -120,12 +127,16 @@ impl<FE, FI, P> SplitOdeProblem<FE, FI, P> {
             parameters,
             implicit_jacobian: None,
             callbacks: Vec::new(),
+            initializers: Vec::new(),
+            finalizers: Vec::new(),
         }
     }
 
     /// Appends an ordered callback set to this problem.
     pub fn with_callback_set(mut self, mut callback_set: CallbackSet<P>) -> Self {
         self.callbacks.append(&mut callback_set.callbacks);
+        self.initializers.append(&mut callback_set.initializers);
+        self.finalizers.append(&mut callback_set.finalizers);
         self
     }
 
@@ -291,7 +302,7 @@ impl<FE, FI, P> SplitOdeProblem<FE, FI, P> {
 
     /// Returns whether event callbacks were supplied.
     pub fn has_callbacks(&self) -> bool {
-        !self.callbacks.is_empty()
+        !self.callbacks.is_empty() || !self.initializers.is_empty() || !self.finalizers.is_empty()
     }
 
     /// Evaluates the explicit right-hand side.
@@ -329,6 +340,11 @@ impl<FE, FI, P> SplitOdeProblem<FE, FI, P> {
         time: f64,
     ) -> Result<CallbackOutcome, SolveError> {
         let mut outcome = CallbackOutcome::default();
+        for initialization in &self.initializers {
+            (initialization.hook)(state, &self.parameters, time);
+            ensure_finite_callback_state(state)?;
+            outcome.register_initialization(initialization.save);
+        }
         for callback in &self.callbacks {
             let Callback::Discrete(callback) = callback else {
                 continue;
@@ -344,6 +360,18 @@ impl<FE, FI, P> SplitOdeProblem<FE, FI, P> {
             }
         }
         Ok(outcome)
+    }
+
+    pub(crate) fn apply_finalize_callbacks(
+        &self,
+        state: &mut [f64],
+        time: f64,
+    ) -> Result<bool, SolveError> {
+        for finalize in &self.finalizers {
+            finalize(state, &self.parameters, time);
+            ensure_finite_callback_state(state)?;
+        }
+        Ok(!self.finalizers.is_empty())
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -517,6 +545,8 @@ impl OdeProblem<(), ()> {
             parameters,
             jacobian: None,
             callbacks: Vec::new(),
+            initializers: Vec::new(),
+            finalizers: Vec::new(),
         }
     }
 }
@@ -539,12 +569,16 @@ impl<F, P> OdeProblem<F, P> {
             parameters,
             jacobian: None,
             callbacks: Vec::new(),
+            initializers: Vec::new(),
+            finalizers: Vec::new(),
         }
     }
 
     /// Appends an ordered callback set to this problem.
     pub fn with_callback_set(mut self, mut callback_set: CallbackSet<P>) -> Self {
         self.callbacks.append(&mut callback_set.callbacks);
+        self.initializers.append(&mut callback_set.initializers);
+        self.finalizers.append(&mut callback_set.finalizers);
         self
     }
 
@@ -883,7 +917,7 @@ impl<F, P> OdeProblem<F, P> {
 
     /// Returns whether event callbacks were supplied.
     pub fn has_callbacks(&self) -> bool {
-        !self.callbacks.is_empty()
+        !self.callbacks.is_empty() || !self.initializers.is_empty() || !self.finalizers.is_empty()
     }
 
     pub(crate) fn has_continuous_callbacks(&self) -> bool {
@@ -911,6 +945,11 @@ impl<F, P> OdeProblem<F, P> {
         time: f64,
     ) -> Result<CallbackOutcome, SolveError> {
         let mut outcome = CallbackOutcome::default();
+        for initialization in &self.initializers {
+            (initialization.hook)(state, &self.parameters, time);
+            ensure_finite_callback_state(state)?;
+            outcome.register_initialization(initialization.save);
+        }
         for callback in &self.callbacks {
             let Callback::Discrete(callback) = callback else {
                 continue;
@@ -926,6 +965,18 @@ impl<F, P> OdeProblem<F, P> {
             }
         }
         Ok(outcome)
+    }
+
+    pub(crate) fn apply_finalize_callbacks(
+        &self,
+        state: &mut [f64],
+        time: f64,
+    ) -> Result<bool, SolveError> {
+        for finalize in &self.finalizers {
+            finalize(state, &self.parameters, time);
+            ensure_finite_callback_state(state)?;
+        }
+        Ok(!self.finalizers.is_empty())
     }
 
     #[allow(clippy::too_many_arguments)]

@@ -62,7 +62,9 @@ provided.
   before an effect, after it, both, or neither is added to the trajectory;
   continuous callbacks save both by default and discrete callbacks save the
   affected state. `CallbackSet` and `SecondOrderCallbackSet` let applications
-  assemble ordered callback policies separately from their problems.
+  assemble ordered callback policies separately from their problems, run
+  initialization hooks before initial conditions are tested, and synchronize
+  finalized endpoint states after successful solves.
   Saved-time sampling, retained dense output, and the
   documented solver families are also supported. SDEs, DDEs,
   boundary-value problems, and external solver wrappers are out of scope.

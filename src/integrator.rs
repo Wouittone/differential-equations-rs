@@ -226,6 +226,16 @@ where
         problem.apply_initial_callbacks(state, time)
     }
 
+    /// Applies end-of-solve hooks for the effective problem representation.
+    fn apply_finalize_callbacks(
+        &mut self,
+        problem: &OdeProblem<F, P>,
+        state: &mut [f64],
+        time: f64,
+    ) -> Result<bool, SolveError> {
+        problem.apply_finalize_callbacks(state, time)
+    }
+
     /// Adjusts a controller proposal before it becomes the next attempted
     /// step. Most methods keep the proposal unchanged; interval-prediction
     /// methods can snap it to a precomputed exponential grid.
@@ -580,7 +590,7 @@ where
     let mut recorder = TrajectoryRecorder::new(&state, start, options);
     let initial_callbacks = kernel.apply_initial_callbacks(problem, &mut state, start)?;
     stats.callback_invocations += initial_callbacks.invocations;
-    if initial_callbacks.invocations > 0 {
+    if initial_callbacks.state_modified {
         recorder.record_callback(
             start,
             problem.initial_state(),
@@ -590,7 +600,7 @@ where
         );
     }
     if initial_callbacks.terminate {
-        return Ok(recorder.finish(stats));
+        return finish_successful(&mut kernel, problem, &mut state, start, recorder, stats);
     }
 
     kernel.initialize(problem, &state, start, &mut stats)?;
@@ -772,7 +782,14 @@ where
                 );
             }
             if callbacks.terminate {
-                return Ok(recorder.finish(stats));
+                return finish_successful(
+                    &mut kernel,
+                    problem,
+                    &mut candidate,
+                    next_time,
+                    recorder,
+                    stats,
+                );
             }
 
             time = next_time;
@@ -824,6 +841,24 @@ where
         }
     }
 
+    finish_successful(&mut kernel, problem, &mut state, time, recorder, stats)
+}
+
+fn finish_successful<F, P, K>(
+    kernel: &mut K,
+    problem: &OdeProblem<F, P>,
+    state: &mut [f64],
+    time: f64,
+    mut recorder: TrajectoryRecorder<'_>,
+    stats: SolverStats,
+) -> Result<Solution, SolveError>
+where
+    F: Fn(&mut [f64], &[f64], &P, f64),
+    K: StepKernel<F, P>,
+{
+    if kernel.apply_finalize_callbacks(problem, state, time)? {
+        recorder.synchronize_endpoint(time, state);
+    }
     Ok(recorder.finish(stats))
 }
 

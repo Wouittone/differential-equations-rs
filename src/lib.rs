@@ -37,7 +37,8 @@
 //!   [`SolveOptions::time_stops`], while [`CallbackSave`] selects whether the
 //!   callback's left limit, affected state, both, or neither are retained.
 //!   [`CallbackSet`] composes callback policies before attaching them to a
-//!   first-order or split problem.
+//!   first-order or split problem and provides initialization/finalization
+//!   hooks around successful integration.
 //! - [`SolveOptions`] controls tolerances, step sizes, exact time stops, saved
 //!   output, and dense output retention; [`solve`] runs an [`OdeAlgorithm`].
 //! - [`solvers::explicit`] is a good starting point for non-stiff problems,

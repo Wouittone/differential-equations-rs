@@ -146,6 +146,15 @@ where
         self.problem.apply_initial_callbacks(state, time)
     }
 
+    fn apply_finalize_callbacks(
+        &mut self,
+        _: &OdeProblem<fn(&mut [f64], &[f64], &(), f64), ()>,
+        state: &mut [f64],
+        time: f64,
+    ) -> Result<bool, SolveError> {
+        self.problem.apply_finalize_callbacks(state, time)
+    }
+
     fn has_custom_callback_handling(&self) -> bool {
         true
     }

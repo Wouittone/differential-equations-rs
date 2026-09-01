@@ -15,6 +15,7 @@ use thiserror::Error;
 type DiscreteCondition<P> = dyn Fn(&[f64], &[f64], &P, f64) -> bool;
 type ContinuousCondition<P> = dyn Fn(&[f64], &[f64], &P, f64) -> f64;
 type Affect<P> = dyn Fn(&mut [f64], &mut [f64], &P, f64) -> CallbackAction;
+type LifecycleHook<P> = dyn Fn(&mut [f64], &mut [f64], &P, f64);
 type PartitionedInterpolator<'a> =
     dyn FnMut(f64, &mut [f64], &mut [f64]) -> Result<(), SolveError> + 'a;
 
@@ -64,6 +65,11 @@ enum PartitionedCallback<P> {
     Continuous(ContinuousCallback<P>),
 }
 
+struct InitializationHook<P> {
+    hook: Box<LifecycleHook<P>>,
+    save: CallbackSave,
+}
+
 /// An ordered collection of callbacks for a second-order ODE problem.
 ///
 /// Conditions receive velocity before position, and effects receive mutable
@@ -71,6 +77,8 @@ enum PartitionedCallback<P> {
 #[must_use]
 pub struct SecondOrderCallbackSet<P> {
     callbacks: Vec<PartitionedCallback<P>>,
+    initializers: Vec<InitializationHook<P>>,
+    finalizers: Vec<Box<LifecycleHook<P>>>,
 }
 
 impl<P> SecondOrderCallbackSet<P> {
@@ -78,6 +86,8 @@ impl<P> SecondOrderCallbackSet<P> {
     pub const fn new() -> Self {
         Self {
             callbacks: Vec::new(),
+            initializers: Vec::new(),
+            finalizers: Vec::new(),
         }
     }
 
@@ -88,7 +98,36 @@ impl<P> SecondOrderCallbackSet<P> {
 
     /// Returns whether the set contains no callbacks.
     pub fn is_empty(&self) -> bool {
-        self.callbacks.is_empty()
+        self.callbacks.is_empty() && self.initializers.is_empty() && self.finalizers.is_empty()
+    }
+
+    /// Adds a partitioned initialization hook that saves the initialized state.
+    pub fn with_initialize<I>(self, initialize: I) -> Self
+    where
+        I: Fn(&mut [f64], &mut [f64], &P, f64) + 'static,
+    {
+        self.with_initialize_saving(CallbackSave::After, initialize)
+    }
+
+    /// Adds an initialization hook with explicit initial-state saving behavior.
+    pub fn with_initialize_saving<I>(mut self, save: CallbackSave, initialize: I) -> Self
+    where
+        I: Fn(&mut [f64], &mut [f64], &P, f64) + 'static,
+    {
+        self.initializers.push(InitializationHook {
+            hook: Box::new(initialize),
+            save,
+        });
+        self
+    }
+
+    /// Adds an end-of-solve partitioned state finalization hook.
+    pub fn with_finalize<F>(mut self, finalize: F) -> Self
+    where
+        F: Fn(&mut [f64], &mut [f64], &P, f64) + 'static,
+    {
+        self.finalizers.push(Box::new(finalize));
+        self
     }
 
     /// Adds a callback evaluated at initialization and after accepted steps.
@@ -218,6 +257,8 @@ impl<P> SecondOrderCallbackSet<P> {
     /// Appends another set, preserving callback order within each set.
     pub fn append(mut self, mut other: Self) -> Self {
         self.callbacks.append(&mut other.callbacks);
+        self.initializers.append(&mut other.initializers);
+        self.finalizers.append(&mut other.finalizers);
         self
     }
 }
@@ -243,6 +284,8 @@ pub struct SecondOrderOdeProblem<F, P> {
     time_span: (f64, f64),
     parameters: P,
     callbacks: Vec<PartitionedCallback<P>>,
+    initializers: Vec<InitializationHook<P>>,
+    finalizers: Vec<Box<LifecycleHook<P>>>,
 }
 
 impl<F, P> SecondOrderOdeProblem<F, P> {
@@ -261,12 +304,16 @@ impl<F, P> SecondOrderOdeProblem<F, P> {
             time_span,
             parameters,
             callbacks: Vec::new(),
+            initializers: Vec::new(),
+            finalizers: Vec::new(),
         }
     }
 
     /// Appends an ordered callback set to this problem.
     pub fn with_callback_set(mut self, mut callback_set: SecondOrderCallbackSet<P>) -> Self {
         self.callbacks.append(&mut callback_set.callbacks);
+        self.initializers.append(&mut callback_set.initializers);
+        self.finalizers.append(&mut callback_set.finalizers);
         self
     }
 
@@ -428,7 +475,7 @@ impl<F, P> SecondOrderOdeProblem<F, P> {
     }
 
     pub(crate) fn has_callbacks(&self) -> bool {
-        !self.callbacks.is_empty()
+        !self.callbacks.is_empty() || !self.initializers.is_empty() || !self.finalizers.is_empty()
     }
 
     pub(crate) fn preset_time_sequences(&self) -> impl Iterator<Item = &[f64]> {
@@ -1582,6 +1629,23 @@ impl StructuralWorkspace {
     }
 }
 
+fn finish_successful<F, P>(
+    problem: &SecondOrderOdeProblem<F, P>,
+    velocity: &mut [f64],
+    position: &mut [f64],
+    time: f64,
+    mut recorder: PartitionedRecorder<'_>,
+    stats: SolverStats,
+) -> Result<SecondOrderSolution, SecondOrderSolveError>
+where
+    F: Fn(&mut [f64], &[f64], &[f64], &P, f64),
+{
+    if apply_finalize_callbacks(problem, velocity, position, time)? {
+        recorder.synchronize_endpoint(time, velocity, position);
+    }
+    Ok(recorder.finish(stats))
+}
+
 fn solve_newmark<F, P>(
     problem: &SecondOrderOdeProblem<F, P>,
     options: &SolveOptions,
@@ -1614,7 +1678,7 @@ where
     let mut recorder = PartitionedRecorder::new(&velocity, &position, start, options);
     let initial = apply_initial_callbacks(problem, &mut velocity, &mut position, start)?;
     stats.callback_invocations += initial.invocations;
-    if initial.invocations > 0 {
+    if initial.state_modified {
         recorder.record_callback(
             start,
             &problem.initial_velocity,
@@ -1626,7 +1690,14 @@ where
         );
     }
     if initial.terminate {
-        return Ok(recorder.finish(stats));
+        return finish_successful(
+            problem,
+            &mut velocity,
+            &mut position,
+            start,
+            recorder,
+            stats,
+        );
     }
     evaluate_acceleration(
         problem,
@@ -1810,7 +1881,14 @@ where
             );
         }
         if callback.terminate {
-            return Ok(recorder.finish(stats));
+            return finish_successful(
+                problem,
+                &mut workspace.candidate_velocity,
+                &mut workspace.candidate_position,
+                next_time,
+                recorder,
+                stats,
+            );
         }
 
         time = next_time;
@@ -1843,7 +1921,7 @@ where
         }
         previous_attempt_rejected = false;
     }
-    Ok(recorder.finish(stats))
+    finish_successful(problem, &mut velocity, &mut position, time, recorder, stats)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -2109,7 +2187,7 @@ where
     let mut recorder = PartitionedRecorder::new(&velocity, &position, start, options);
     let initial = apply_initial_callbacks(problem, &mut velocity, &mut position, start)?;
     stats.callback_invocations += initial.invocations;
-    if initial.invocations > 0 {
+    if initial.state_modified {
         recorder.record_callback(
             start,
             &problem.initial_velocity,
@@ -2121,7 +2199,14 @@ where
         );
     }
     if initial.terminate {
-        return Ok(recorder.finish(stats));
+        return finish_successful(
+            problem,
+            &mut velocity,
+            &mut position,
+            start,
+            recorder,
+            stats,
+        );
     }
 
     let mut time = start;
@@ -2260,10 +2345,10 @@ where
             );
         }
         if callback.terminate {
-            return Ok(recorder.finish(stats));
+            return finish_successful(problem, &mut velocity, &mut position, time, recorder, stats);
         }
     }
-    Ok(recorder.finish(stats))
+    finish_successful(problem, &mut velocity, &mut position, time, recorder, stats)
 }
 
 fn solve_rkn_adaptive<F, P>(
@@ -2313,7 +2398,7 @@ where
     let mut recorder = PartitionedRecorder::new(&velocity, &position, start, options);
     let initial = apply_initial_callbacks(problem, &mut velocity, &mut position, start)?;
     stats.callback_invocations += initial.invocations;
-    if initial.invocations > 0 {
+    if initial.state_modified {
         recorder.record_callback(
             start,
             &problem.initial_velocity,
@@ -2325,7 +2410,14 @@ where
         );
     }
     if initial.terminate {
-        return Ok(recorder.finish(stats));
+        return finish_successful(
+            problem,
+            &mut velocity,
+            &mut position,
+            start,
+            recorder,
+            stats,
+        );
     }
 
     let mut time = start;
@@ -2542,7 +2634,14 @@ where
                 controller_state.reset();
             }
             if callback.terminate {
-                return Ok(recorder.finish(stats));
+                return finish_successful(
+                    problem,
+                    &mut velocity,
+                    &mut position,
+                    time,
+                    recorder,
+                    stats,
+                );
             }
 
             if options.adaptive {
@@ -2567,7 +2666,7 @@ where
             }
         }
     }
-    Ok(recorder.finish(stats))
+    finish_successful(problem, &mut velocity, &mut position, time, recorder, stats)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -2758,7 +2857,7 @@ where
     let mut recorder = PartitionedRecorder::new(&velocity, &position, start, options);
     let initial = apply_initial_callbacks(problem, &mut velocity, &mut position, start)?;
     stats.callback_invocations += initial.invocations;
-    if initial.invocations > 0 {
+    if initial.state_modified {
         recorder.record_callback(
             start,
             &problem.initial_velocity,
@@ -2770,7 +2869,14 @@ where
         );
     }
     if initial.terminate {
-        return Ok(recorder.finish(stats));
+        return finish_successful(
+            problem,
+            &mut velocity,
+            &mut position,
+            start,
+            recorder,
+            stats,
+        );
     }
     evaluate_acceleration(
         problem,
@@ -3049,7 +3155,7 @@ where
             );
         }
         if callback.terminate {
-            return Ok(recorder.finish(stats));
+            return finish_successful(problem, &mut velocity, &mut position, time, recorder, stats);
         }
 
         if callback.invocations > 0 {
@@ -3081,7 +3187,7 @@ where
             history_valid = constant_step;
         }
     }
-    Ok(recorder.finish(stats))
+    finish_successful(problem, &mut velocity, &mut position, time, recorder, stats)
 }
 
 fn solve_fixed<F, P>(
@@ -3110,7 +3216,7 @@ where
     let mut recorder = PartitionedRecorder::new(&velocity, &position, start, options);
     let initial = apply_initial_callbacks(problem, &mut velocity, &mut position, start)?;
     stats.callback_invocations += initial.invocations;
-    if initial.invocations > 0 {
+    if initial.state_modified {
         recorder.record_callback(
             start,
             &problem.initial_velocity,
@@ -3122,7 +3228,14 @@ where
         );
     }
     if initial.terminate {
-        return Ok(recorder.finish(stats));
+        return finish_successful(
+            problem,
+            &mut velocity,
+            &mut position,
+            start,
+            recorder,
+            stats,
+        );
     }
 
     let caches_acceleration = matches!(method, Method::VelocityVerlet | Method::VerletLeapfrog);
@@ -3219,7 +3332,7 @@ where
             );
         }
         if callback.terminate {
-            return Ok(recorder.finish(stats));
+            return finish_successful(problem, &mut velocity, &mut position, time, recorder, stats);
         }
         if callback.invocations > 0 && caches_acceleration {
             evaluate_acceleration(
@@ -3232,7 +3345,7 @@ where
             )?;
         }
     }
-    Ok(recorder.finish(stats))
+    finish_successful(problem, &mut velocity, &mut position, time, recorder, stats)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -3427,6 +3540,11 @@ pub(super) fn apply_initial_callbacks<F, P>(
     time: f64,
 ) -> Result<CallbackOutcome, SolveError> {
     let mut outcome = CallbackOutcome::default();
+    for initialization in &problem.initializers {
+        (initialization.hook)(velocity, position, &problem.parameters, time);
+        ensure_finite_state(velocity, position)?;
+        outcome.register_initialization(initialization.save);
+    }
     for callback in &problem.callbacks {
         let PartitionedCallback::Discrete(callback) = callback else {
             continue;
@@ -3445,6 +3563,19 @@ pub(super) fn apply_initial_callbacks<F, P>(
         }
     }
     Ok(outcome)
+}
+
+pub(super) fn apply_finalize_callbacks<F, P>(
+    problem: &SecondOrderOdeProblem<F, P>,
+    velocity: &mut [f64],
+    position: &mut [f64],
+    time: f64,
+) -> Result<bool, SolveError> {
+    for finalize in &problem.finalizers {
+        finalize(velocity, position, &problem.parameters, time);
+        ensure_finite_state(velocity, position)?;
+    }
+    Ok(!problem.finalizers.is_empty())
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -3812,6 +3943,18 @@ impl<'a> PartitionedRecorder<'a> {
             } else {
                 self.push_unique(canonical_time, after_velocity, after_position);
             }
+        }
+    }
+
+    fn synchronize_endpoint(&mut self, time: f64, velocity: &[f64], position: &[f64]) {
+        if self
+            .times
+            .last()
+            .is_some_and(|saved| times_are_numerically_equal(*saved, time))
+        {
+            let start = self.velocities.len() - self.dimension;
+            self.velocities[start..].copy_from_slice(velocity);
+            self.positions[start..].copy_from_slice(position);
         }
     }
 

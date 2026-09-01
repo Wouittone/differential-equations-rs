@@ -13,7 +13,9 @@ use crate::solver::{validate_preset_time_sequences, validate_state_time_options}
 use crate::{InterpolationError, SaveMode, SolveError, SolveOptions};
 use thiserror::Error;
 
-use super::general::{SecondOrderOdeProblem, apply_initial_callbacks, apply_step_callbacks};
+use super::general::{
+    SecondOrderOdeProblem, apply_finalize_callbacks, apply_initial_callbacks, apply_step_callbacks,
+};
 
 /// A pinned alternating drift/kick composition.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -643,7 +645,7 @@ where
     let mut velocity = problem.initial_velocity().to_vec();
     let mut recorder = SymplecticRecorder::new(&position, &velocity, start, options);
     let initial_callbacks = apply_initial_callbacks(problem, &mut velocity, &mut position, start)?;
-    if initial_callbacks.invocations > 0 {
+    if initial_callbacks.state_modified {
         recorder.record_callback(
             start,
             problem.initial_position(),
@@ -668,7 +670,7 @@ where
         Vec::new()
     };
     if initial_callbacks.terminate {
-        return Ok(recorder.finish(0));
+        return finish_successful(problem, &mut velocity, &mut position, start, recorder, 0);
     }
     let mut time = start;
     let mut steps = 0usize;
@@ -750,10 +752,41 @@ where
         std::mem::swap(&mut position, &mut candidate_position);
         std::mem::swap(&mut velocity, &mut candidate_velocity);
         if callback.terminate {
-            return Ok(recorder.finish(rhs_evaluations));
+            return finish_successful(
+                problem,
+                &mut velocity,
+                &mut position,
+                time,
+                recorder,
+                rhs_evaluations,
+            );
         }
     }
 
+    finish_successful(
+        problem,
+        &mut velocity,
+        &mut position,
+        time,
+        recorder,
+        rhs_evaluations,
+    )
+}
+
+fn finish_successful<F, P>(
+    problem: &SecondOrderOdeProblem<F, P>,
+    velocity: &mut [f64],
+    position: &mut [f64],
+    time: f64,
+    mut recorder: SymplecticRecorder<'_>,
+    rhs_evaluations: usize,
+) -> Result<SymplecticSolution, SymplecticSolveError>
+where
+    F: Fn(&mut [f64], &[f64], &[f64], &P, f64),
+{
+    if apply_finalize_callbacks(problem, velocity, position, time)? {
+        recorder.synchronize_endpoint(time, position, velocity);
+    }
     Ok(recorder.finish(rhs_evaluations))
 }
 
@@ -945,6 +978,18 @@ impl<'a> SymplecticRecorder<'a> {
             } else {
                 self.push_unique(canonical_time, after_position, after_velocity);
             }
+        }
+    }
+
+    fn synchronize_endpoint(&mut self, time: f64, position: &[f64], velocity: &[f64]) {
+        if self
+            .times
+            .last()
+            .is_some_and(|saved| times_are_numerically_equal(*saved, time))
+        {
+            let start = self.positions.len() - self.dimension;
+            self.positions[start..].copy_from_slice(position);
+            self.velocities[start..].copy_from_slice(velocity);
         }
     }
 

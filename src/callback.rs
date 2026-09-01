@@ -57,6 +57,12 @@ pub enum EventDirection {
 pub(crate) type Condition<P> = dyn Fn(&[f64], &P, f64) -> bool;
 pub(crate) type EventCondition<P> = dyn Fn(&[f64], &P, f64) -> f64;
 pub(crate) type Affect<P> = dyn Fn(&mut [f64], &P, f64) -> CallbackAction;
+pub(crate) type LifecycleHook<P> = dyn Fn(&mut [f64], &P, f64);
+
+pub(crate) struct InitializationHook<P> {
+    pub hook: Box<LifecycleHook<P>>,
+    pub save: CallbackSave,
+}
 
 pub(crate) struct PresetTimes(Vec<f64>);
 
@@ -113,6 +119,8 @@ pub(crate) enum Callback<P> {
 #[must_use]
 pub struct CallbackSet<P> {
     pub(crate) callbacks: Vec<Callback<P>>,
+    pub(crate) initializers: Vec<InitializationHook<P>>,
+    pub(crate) finalizers: Vec<Box<LifecycleHook<P>>>,
 }
 
 impl<P> CallbackSet<P> {
@@ -120,6 +128,8 @@ impl<P> CallbackSet<P> {
     pub const fn new() -> Self {
         Self {
             callbacks: Vec::new(),
+            initializers: Vec::new(),
+            finalizers: Vec::new(),
         }
     }
 
@@ -130,7 +140,44 @@ impl<P> CallbackSet<P> {
 
     /// Returns whether the set contains no callbacks.
     pub fn is_empty(&self) -> bool {
-        self.callbacks.is_empty()
+        self.callbacks.is_empty() && self.initializers.is_empty() && self.finalizers.is_empty()
+    }
+
+    /// Adds a state initialization hook that saves the initialized state.
+    ///
+    /// Initialization hooks run in insertion order before initial discrete
+    /// callback conditions are evaluated. A hook is treated as a state
+    /// mutation so solver caches are initialized from its resulting state.
+    pub fn with_initialize<I>(self, initialize: I) -> Self
+    where
+        I: Fn(&mut [f64], &P, f64) + 'static,
+    {
+        self.with_initialize_saving(CallbackSave::After, initialize)
+    }
+
+    /// Adds an initialization hook with explicit initial-state saving behavior.
+    pub fn with_initialize_saving<I>(mut self, save: CallbackSave, initialize: I) -> Self
+    where
+        I: Fn(&mut [f64], &P, f64) + 'static,
+    {
+        self.initializers.push(InitializationHook {
+            hook: Box::new(initialize),
+            save,
+        });
+        self
+    }
+
+    /// Adds an end-of-solve state finalization hook.
+    ///
+    /// Finalizers run in insertion order after normal completion or callback
+    /// termination, but not after a solve error. If the endpoint is part of
+    /// the saved trajectory, it is synchronized with the finalized state.
+    pub fn with_finalize<F>(mut self, finalize: F) -> Self
+    where
+        F: Fn(&mut [f64], &P, f64) + 'static,
+    {
+        self.finalizers.push(Box::new(finalize));
+        self
     }
 
     /// Adds a callback evaluated at initialization and after accepted steps.
@@ -258,6 +305,8 @@ impl<P> CallbackSet<P> {
     /// Appends another set, preserving callback order within each set.
     pub fn append(mut self, mut other: Self) -> Self {
         self.callbacks.append(&mut other.callbacks);
+        self.initializers.append(&mut other.initializers);
+        self.finalizers.append(&mut other.finalizers);
         self
     }
 }
@@ -272,6 +321,7 @@ impl<P> Default for CallbackSet<P> {
 pub(crate) struct CallbackOutcome {
     pub invocations: usize,
     pub terminate: bool,
+    pub state_modified: bool,
     pub save_before: bool,
     pub save_after: bool,
 }
@@ -279,6 +329,16 @@ pub(crate) struct CallbackOutcome {
 impl CallbackOutcome {
     pub(crate) fn register(&mut self, save: CallbackSave) {
         self.invocations += 1;
+        self.state_modified = true;
+        self.register_save(save);
+    }
+
+    pub(crate) fn register_initialization(&mut self, save: CallbackSave) {
+        self.state_modified = true;
+        self.register_save(save);
+    }
+
+    fn register_save(&mut self, save: CallbackSave) {
         self.save_before |= save.saves_before();
         self.save_after |= save.saves_after();
     }

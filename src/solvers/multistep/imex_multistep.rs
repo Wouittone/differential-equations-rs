@@ -254,7 +254,7 @@ where
     let mut recorder = TrajectoryRecorder::new(&state, start, options);
     let initial_callbacks = problem.apply_initial_callbacks(&mut state, start)?;
     stats.callback_invocations += initial_callbacks.invocations;
-    if initial_callbacks.invocations > 0 {
+    if initial_callbacks.state_modified {
         recorder.record_callback(
             start,
             problem.initial_state(),
@@ -264,7 +264,7 @@ where
         );
     }
     if initial_callbacks.terminate {
-        return Ok(recorder.finish(stats));
+        return finish_successful(problem, &mut state, start, recorder, stats);
     }
     evaluate_explicit(problem, &mut workspace.explicit, &state, start, &mut stats)?;
     evaluate_implicit(problem, &mut workspace.implicit, &state, start, &mut stats)?;
@@ -395,7 +395,7 @@ where
             );
         }
         if callbacks.terminate {
-            return Ok(recorder.finish(stats));
+            return finish_successful(problem, &mut next_state, next_time, recorder, stats);
         }
         if callbacks.invocations > 0 {
             evaluate_explicit(
@@ -426,6 +426,23 @@ where
         step = nominal_step;
     }
 
+    finish_successful(problem, &mut state, time, recorder, stats)
+}
+
+fn finish_successful<FE, FI, P>(
+    problem: &SplitOdeProblem<FE, FI, P>,
+    state: &mut [f64],
+    time: f64,
+    mut recorder: TrajectoryRecorder<'_>,
+    stats: SolverStats,
+) -> Result<Solution, SolveError>
+where
+    FE: Fn(&mut [f64], &[f64], &P, f64),
+    FI: Fn(&mut [f64], &[f64], &P, f64),
+{
+    if problem.apply_finalize_callbacks(state, time)? {
+        recorder.synchronize_endpoint(time, state);
+    }
     Ok(recorder.finish(stats))
 }
 

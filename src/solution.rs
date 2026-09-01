@@ -1348,6 +1348,17 @@ impl<'a> TrajectoryRecorder<'a> {
         }
     }
 
+    pub(crate) fn synchronize_endpoint(&mut self, time: f64, state: &[f64]) {
+        if self
+            .times
+            .last()
+            .is_some_and(|saved| times_are_numerically_equal(*saved, time))
+        {
+            let start = self.values.len() - self.dimension;
+            self.values[start..].copy_from_slice(state);
+        }
+    }
+
     fn push_interpolation_target(&mut self, time: f64) {
         if let Some(saved) = self
             .times
