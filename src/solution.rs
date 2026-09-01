@@ -1,7 +1,7 @@
 use thiserror::Error;
 
 use crate::callback::CallbackOutcome;
-use crate::event::times_are_numerically_equal;
+use crate::event::{times_are_numerically_equal, times_are_representably_equal};
 
 /// A dense-output query or retained interpolation segment is invalid.
 #[derive(Clone, Copy, Debug, Eq, Error, PartialEq)]
@@ -1352,7 +1352,7 @@ impl<'a> TrajectoryRecorder<'a> {
         if self
             .times
             .last()
-            .is_some_and(|saved| times_are_numerically_equal(*saved, time))
+            .is_some_and(|saved| times_are_representably_equal(*saved, time))
         {
             let start = self.values.len() - self.dimension;
             self.values[start..].copy_from_slice(state);
@@ -1363,7 +1363,7 @@ impl<'a> TrajectoryRecorder<'a> {
         if let Some(saved) = self
             .times
             .last_mut()
-            .filter(|saved| times_are_numerically_equal(**saved, time))
+            .filter(|saved| times_are_representably_equal(**saved, time))
         {
             *saved = time;
             let start = self.values.len() - self.dimension;
@@ -1378,7 +1378,7 @@ impl<'a> TrajectoryRecorder<'a> {
         if self
             .times
             .last()
-            .is_some_and(|saved| times_are_numerically_equal(*saved, time))
+            .is_some_and(|saved| times_are_representably_equal(*saved, time))
         {
             let start = self.values.len() - self.dimension;
             self.values[start..].copy_from_slice(state);

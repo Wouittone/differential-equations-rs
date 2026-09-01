@@ -404,7 +404,7 @@ where
         if callbacks.terminate {
             return finish_successful(problem, &mut next_state, next_time, recorder, stats);
         }
-        if callbacks.invocations > 0 {
+        if callbacks.state_modified {
             evaluate_explicit(
                 problem,
                 &mut workspace.next_explicit,
@@ -421,7 +421,7 @@ where
             )?;
         }
         workspace.accept(&previous_state);
-        if callbacks.invocations > 0 {
+        if callbacks.state_modified {
             // A discontinuity or truncated event invalidates every multistep
             // history entry, even when the effect leaves the state unchanged.
             workspace.clear_history();

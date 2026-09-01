@@ -816,14 +816,14 @@ where
                 &state,
                 time,
                 time - previous_time,
-                callbacks.invocations > 0,
+                callbacks.state_modified,
                 &mut stats,
             )?;
             if !custom_dense_output {
-                default_dense.accepted(callbacks.invocations > 0);
+                default_dense.accepted(callbacks.state_modified);
             }
 
-            if callbacks.invocations > 0 {
+            if callbacks.state_modified {
                 // A callback may change the state or parameters discontinuously.
                 // Do not let an error measured before that mutation bias the
                 // next PI proposal.

@@ -7,7 +7,7 @@
 #![allow(clippy::excessive_precision)]
 
 use crate::callback::CallbackOutcome;
-use crate::event::times_are_numerically_equal;
+use crate::event::{times_are_numerically_equal, times_are_representably_equal};
 use crate::integrator::{TimeStopSchedule, callback_requested_step};
 use crate::solver::{
     validate_preset_time_sequences, validate_state_time_options, validate_vector_callback_lengths,
@@ -995,7 +995,7 @@ impl<'a> SymplecticRecorder<'a> {
         if self
             .times
             .last()
-            .is_some_and(|saved| times_are_numerically_equal(*saved, time))
+            .is_some_and(|saved| times_are_representably_equal(*saved, time))
         {
             let start = self.positions.len() - self.dimension;
             self.positions[start..].copy_from_slice(position);
@@ -1007,7 +1007,7 @@ impl<'a> SymplecticRecorder<'a> {
         if self
             .times
             .last()
-            .is_some_and(|saved| times_are_numerically_equal(*saved, time))
+            .is_some_and(|saved| times_are_representably_equal(*saved, time))
         {
             let start = self.positions.len() - self.dimension;
             self.positions[start..].copy_from_slice(position);

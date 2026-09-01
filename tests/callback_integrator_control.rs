@@ -74,6 +74,25 @@ fn callback_step_requests_override_the_adaptive_controller() {
 }
 
 #[test]
+fn unmodified_continuous_events_still_invalidate_truncated_endpoint_caches() {
+    let problem = OdeProblem::new(
+        |derivative: &mut [f64], _: &[f64], _: &(), time| derivative[0] = time,
+        [0.0],
+        (0.0, 1.0),
+        (),
+    )
+    .with_continuous_callback(
+        |_, _, time| time - 0.5,
+        |_, _, _| CallbackAction::ContinueUnmodified,
+    );
+
+    let solution = solve(&problem, Tsit5, &options(0.75, false)).unwrap();
+
+    assert!((solution.last_state()[0] - 0.5).abs() < 1.0e-12);
+    assert_eq!(solution.stats().callback_invocations, 1);
+}
+
+#[test]
 fn callback_step_requests_follow_direction_and_maximum_bounds() {
     let backward = OdeProblem::new(
         |derivative: &mut [f64], _: &[f64], _: &(), _: f64| derivative[0] = 0.0,

@@ -551,6 +551,10 @@ impl<FE, FI, P> SplitOdeProblem<FE, FI, P> {
                 }
                 Callback::Discrete(_) => return Err(SolveError::InvalidCallbackState),
             }
+            // The localized root truncates the attempted step even when its
+            // effect is observation-only, so endpoint-dependent caches cannot
+            // be reused for the next step.
+            outcome.state_modified = true;
             ensure_finite_callback_state(state)?;
         }
         if !outcome.terminate {
@@ -1336,6 +1340,10 @@ impl<F, P> OdeProblem<F, P> {
                 }
                 Callback::Discrete(_) => return Err(SolveError::InvalidCallbackState),
             }
+            // The localized root truncates the attempted step even when its
+            // effect is observation-only, so endpoint-dependent caches cannot
+            // be reused for the next step.
+            outcome.state_modified = true;
             ensure_finite_callback_state(state)?;
         }
 

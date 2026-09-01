@@ -472,7 +472,7 @@ where
             time = next_time;
             time_stops.accepted(time);
             std::mem::swap(&mut state, &mut candidate);
-            if callbacks.invocations == 0 {
+            if !callbacks.state_modified {
                 start_derivative.copy_from_slice(&end_derivative);
             } else {
                 evaluate_total(problem, &state, time, &mut start_derivative, &mut stats)?;

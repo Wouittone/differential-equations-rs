@@ -1,12 +1,22 @@
 use std::cell::RefCell;
 
-/// The action requested after an ODE callback changes the state.
+use crate::event::times_are_representably_equal;
+
+/// The action requested after an ODE callback runs.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 #[non_exhaustive]
 pub enum CallbackAction {
     /// Resume integration from the callback time and state.
     #[default]
     Continue,
+    /// Resume integration without invalidating state-dependent solver caches.
+    ///
+    /// Use this only when the callback has not changed the state or parameters
+    /// observed by the right-hand side. It is intended for observation-only
+    /// callbacks such as logging and progress reporting. Continuous callbacks
+    /// still invalidate caches when they localize a root because the accepted
+    /// step is truncated at the event time.
+    ContinueUnmodified,
     /// Resume integration and use this positive step-size magnitude next.
     ///
     /// The request overrides the adaptive controller or fixed-step size for
@@ -115,9 +125,105 @@ impl PresetTimes {
     }
 }
 
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct PeriodicTimes {
+    start: f64,
+    end: f64,
+    direction: f64,
+    period: f64,
+    phase: f64,
+    initial_affect: bool,
+    final_affect: bool,
+}
+
+impl PeriodicTimes {
+    pub(crate) const fn new(
+        time_span: (f64, f64),
+        period: f64,
+        phase: f64,
+        initial_affect: bool,
+        final_affect: bool,
+    ) -> Self {
+        Self {
+            start: time_span.0,
+            end: time_span.1,
+            direction: (time_span.1 - time_span.0).signum(),
+            period,
+            phase,
+            initial_affect,
+            final_affect,
+        }
+    }
+
+    pub(crate) fn contains(self, time: f64) -> bool {
+        if times_are_representably_equal(time, self.start) {
+            return self.initial_affect;
+        }
+        if self.final_affect && times_are_representably_equal(time, self.end) {
+            return true;
+        }
+        let distance = self.direction * (time - self.start);
+        let first_time = self.start + self.direction * self.phase;
+        if distance < self.phase && !times_are_representably_equal(time, first_time) {
+            return false;
+        }
+        let cycle = ((distance - self.phase) / self.period).round().max(0.0);
+        times_are_representably_equal(
+            self.start + self.direction * (self.phase + cycle * self.period),
+            time,
+        )
+    }
+
+    pub(crate) fn next(self, time: f64, direction: f64) -> Option<f64> {
+        debug_assert_eq!(direction, self.direction);
+        let distance = self.direction * (time - self.start);
+        let mut cycle = if distance < self.phase {
+            0.0
+        } else {
+            ((distance - self.phase) / self.period).floor() + 1.0
+        };
+        cycle = cycle.max(0.0);
+        let mut offset = self.phase + cycle * self.period;
+        let mut candidate = self.start + self.direction * offset;
+        if self.direction * (candidate - time) <= 0.0
+            || times_are_representably_equal(candidate, time)
+        {
+            cycle += 1.0;
+            offset = self.phase + cycle * self.period;
+            candidate = self.start + self.direction * offset;
+        }
+        let span = self.direction * (self.end - self.start);
+        let periodic = if offset <= span || times_are_representably_equal(candidate, self.end) {
+            Some(if times_are_representably_equal(candidate, self.end) {
+                self.end
+            } else {
+                candidate
+            })
+        } else {
+            None
+        }
+        .filter(|candidate| self.direction * (*candidate - time) > 0.0);
+        let final_time =
+            (self.final_affect && self.direction * (self.end - time) > 0.0).then_some(self.end);
+        match (periodic, final_time) {
+            (Some(periodic), Some(final_time)) => {
+                Some(if self.direction * (periodic - final_time) <= 0.0 {
+                    periodic
+                } else {
+                    final_time
+                })
+            }
+            (Some(periodic), None) => Some(periodic),
+            (None, Some(final_time)) => Some(final_time),
+            (None, None) => None,
+        }
+    }
+}
+
 pub(crate) enum DiscreteTrigger<P> {
     Condition(Box<Condition<P>>),
     PresetTimes(PresetTimes),
+    Periodic(PeriodicTimes),
 }
 
 pub(crate) struct DiscreteCallback<P> {
@@ -450,7 +556,6 @@ pub(crate) struct CallbackOutcome {
 impl CallbackOutcome {
     pub(crate) fn register(&mut self, save: CallbackSave) {
         self.invocations += 1;
-        self.state_modified = true;
         self.register_save(save);
     }
 
@@ -461,14 +566,19 @@ impl CallbackOutcome {
 
     pub(crate) fn apply_action(&mut self, action: CallbackAction) -> Result<(), crate::SolveError> {
         match action {
-            CallbackAction::Continue => {}
+            CallbackAction::Continue => self.state_modified = true,
+            CallbackAction::ContinueUnmodified => {}
             CallbackAction::ContinueWithStepSize(step) if step.is_finite() && step > 0.0 => {
+                self.state_modified = true;
                 self.requested_step = Some(step);
             }
             CallbackAction::ContinueWithStepSize(_) => {
                 return Err(crate::SolveError::InvalidCallbackStepSize);
             }
-            CallbackAction::Terminate => self.terminate = true,
+            CallbackAction::Terminate => {
+                self.state_modified = true;
+                self.terminate = true;
+            }
         }
         Ok(())
     }
@@ -500,6 +610,7 @@ impl<P> DiscreteTrigger<P> {
         match self {
             Self::Condition(condition) => condition(state, parameters, time),
             Self::PresetTimes(times) => times.contains(time),
+            Self::Periodic(times) => times.contains(time),
         }
     }
 
@@ -507,6 +618,7 @@ impl<P> DiscreteTrigger<P> {
         match self {
             Self::Condition(_) => None,
             Self::PresetTimes(times) => Some(times.as_slice()),
+            Self::Periodic(_) => None,
         }
     }
 
@@ -514,6 +626,7 @@ impl<P> DiscreteTrigger<P> {
         match self {
             Self::Condition(_) => None,
             Self::PresetTimes(times) => times.next(time, direction),
+            Self::Periodic(times) => times.next(time, direction),
         }
     }
 }

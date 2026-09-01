@@ -1,10 +1,12 @@
 use std::cell::RefCell;
 
 use super::coefficient_data::*;
-use crate::callback::{CallbackOutcome, CallbackSave, PresetTimes, VectorCallbackScratch};
+use crate::callback::{
+    CallbackOutcome, CallbackSave, PeriodicTimes, PresetTimes, VectorCallbackScratch,
+};
 use crate::event::{
     MAX_EVENT_ROOT_ITERATIONS, effective_event_tolerance, event_interval_converged,
-    times_are_numerically_equal,
+    times_are_numerically_equal, times_are_representably_equal,
 };
 use crate::integrator::{
     ControllerConfig, ControllerState, TimeStopSchedule, callback_requested_step,
@@ -31,6 +33,7 @@ type PartitionedInterpolator<'a> =
 enum DiscreteTrigger<P> {
     Condition(Box<DiscreteCondition<P>>),
     PresetTimes(PresetTimes),
+    Periodic(PeriodicTimes),
 }
 
 struct DiscreteCallback<P> {
@@ -44,6 +47,7 @@ impl<P> DiscreteTrigger<P> {
         match self {
             Self::Condition(condition) => condition(velocity, position, parameters, time),
             Self::PresetTimes(times) => times.contains(time),
+            Self::Periodic(times) => times.contains(time),
         }
     }
 
@@ -51,6 +55,7 @@ impl<P> DiscreteTrigger<P> {
         match self {
             Self::Condition(_) => None,
             Self::PresetTimes(times) => Some(times.as_slice()),
+            Self::Periodic(_) => None,
         }
     }
 
@@ -58,6 +63,7 @@ impl<P> DiscreteTrigger<P> {
         match self {
             Self::Condition(_) => None,
             Self::PresetTimes(times) => times.next(time, direction),
+            Self::Periodic(times) => times.next(time, direction),
         }
     }
 }
@@ -218,6 +224,24 @@ impl<P> SecondOrderCallbackSet<P> {
         self.callbacks
             .push(PartitionedCallback::Discrete(DiscreteCallback {
                 trigger: DiscreteTrigger::PresetTimes(PresetTimes::new(times)),
+                affect: Box::new(affect),
+                save,
+            }));
+        self
+    }
+
+    pub(crate) fn with_periodic_callback_saving<A>(
+        mut self,
+        times: PeriodicTimes,
+        save: CallbackSave,
+        affect: A,
+    ) -> Self
+    where
+        A: Fn(&mut [f64], &mut [f64], &P, f64) -> CallbackAction + 'static,
+    {
+        self.callbacks
+            .push(PartitionedCallback::Discrete(DiscreteCallback {
+                trigger: DiscreteTrigger::Periodic(times),
                 affect: Box::new(affect),
                 save,
             }));
@@ -2023,7 +2047,7 @@ where
         time_stops.accepted(time);
         std::mem::swap(&mut velocity, &mut workspace.candidate_velocity);
         std::mem::swap(&mut position, &mut workspace.candidate_position);
-        if callback.invocations > 0 || next_time != attempted_time {
+        if callback.state_modified || next_time != attempted_time {
             evaluate_acceleration(
                 problem,
                 &mut acceleration,
@@ -2036,7 +2060,7 @@ where
             std::mem::swap(&mut acceleration, &mut workspace.candidate_acceleration);
         }
 
-        if callback.invocations > 0 {
+        if callback.state_modified {
             controller_state.reset();
         }
         if let Some(requested) = callback_requested_step(callback, direction, maximum_step) {
@@ -2771,6 +2795,8 @@ where
                     callback,
                     time == end,
                 );
+            }
+            if callback.state_modified {
                 controller_state.reset();
             }
             if callback.terminate {
@@ -3305,7 +3331,7 @@ where
             return finish_successful(problem, &mut velocity, &mut position, time, recorder, stats);
         }
 
-        if callback.invocations > 0 {
+        if callback.state_modified {
             evaluate_acceleration(
                 problem,
                 &mut acceleration,
@@ -3492,7 +3518,7 @@ where
         if let Some(requested) = callback_requested_step(callback, direction, maximum_step) {
             step_magnitude = requested.abs();
         }
-        if callback.invocations > 0 && caches_acceleration {
+        if callback.state_modified && caches_acceleration {
             evaluate_acceleration(
                 problem,
                 &mut workspace.acceleration,
@@ -3902,6 +3928,10 @@ pub(super) fn apply_step_callbacks<F, P>(
             }
             PartitionedCallback::Discrete(_) => return Err(SolveError::InvalidCallbackState),
         }
+        // The localized root truncates the attempted step even when its
+        // effect is observation-only, so endpoint-dependent caches cannot be
+        // reused for the next step.
+        outcome.state_modified = true;
         ensure_finite_state(velocity, position)?;
     }
     if !outcome.terminate {
@@ -4281,7 +4311,7 @@ impl<'a> PartitionedRecorder<'a> {
         if self
             .times
             .last()
-            .is_some_and(|saved| times_are_numerically_equal(*saved, time))
+            .is_some_and(|saved| times_are_representably_equal(*saved, time))
         {
             let start = self.velocities.len() - self.dimension;
             self.velocities[start..].copy_from_slice(velocity);
@@ -4293,7 +4323,7 @@ impl<'a> PartitionedRecorder<'a> {
         if self
             .times
             .last()
-            .is_some_and(|saved| times_are_numerically_equal(*saved, time))
+            .is_some_and(|saved| times_are_representably_equal(*saved, time))
         {
             let start = self.velocities.len() - self.dimension;
             self.velocities[start..].copy_from_slice(velocity);

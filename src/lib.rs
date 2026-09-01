@@ -45,6 +45,10 @@
 //!   Rust interior-mutability types such as [`std::cell::Cell`] let sequential
 //!   callback effects update parameters without imposing mutable problem
 //!   ownership on every solve.
+//! - [`callbacks`] contains reusable integration-time policies. Its periodic
+//!   scheduler uses constant memory, while its function-calling policy marks
+//!   read-only observations explicitly so state-dependent solver caches remain
+//!   reusable.
 //! - [`SolveOptions`] controls tolerances, step sizes, exact time stops, saved
 //!   output, and dense output retention; [`solve`] runs an [`OdeAlgorithm`].
 //! - [`solvers::explicit`] is a good starting point for non-stiff problems,
@@ -88,6 +92,7 @@
 #![warn(missing_docs, rustdoc::broken_intra_doc_links)]
 
 mod callback;
+pub mod callbacks;
 mod ensemble;
 mod error;
 mod event;

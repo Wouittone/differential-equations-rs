@@ -72,10 +72,12 @@ provided.
   `CallbackAction::ContinueWithStepSize` to override the next adaptive or
   fixed-step proposal. Parameters remain ordinary Rust values: use `Cell` or
   `RefCell` when a sequential callback must mutate them, or a synchronized
-  type when intentionally sharing them across threads. Every callback effect
-  invalidates solver caches, so subsequent right-hand-side and Jacobian calls
-  observe the updated parameter value.
-  Saved-time sampling, retained dense output, and the
+  type when intentionally sharing them across threads. Mutating effects
+  invalidate solver caches so subsequent right-hand-side and Jacobian calls
+  observe the updated parameter value. Observation-only effects can return
+  `CallbackAction::ContinueUnmodified` to retain those caches; that action must
+  not be used after changing state or right-hand-side parameters through
+  interior mutability. Saved-time sampling, retained dense output, and the
   documented solver families are also supported. SDEs, DDEs,
   boundary-value problems, and external solver wrappers are out of scope.
 
@@ -113,6 +115,42 @@ Use `arr0(value)` for a scalar, `array![...]` for a vector, and
 `last_state_array`, and `interpolate_array` retain ndarray dimensionality.
 Flat slice access remains available when callers want the contiguous fast
 path directly.
+
+## Reusable callback policies
+
+The `callbacks` module provides common policies as independently composable
+callback sets. `PeriodicCallback` schedules effects at exact integration times
+without materializing every time in memory, supports phase offsets and forward
+or backward solves, and can optionally affect the initial and final states.
+`FunctionCallingCallback` observes the initial state, every accepted step, or
+an explicit set of exact times without invalidating solver caches.
+
+```rust
+use differential_equations::callbacks::PeriodicCallback;
+use differential_equations::{CallbackAction, OdeProblem};
+
+let callbacks = PeriodicCallback::new(0.1)
+    .with_final_affect(true)
+    .into_callback_set((0.0, 1.0), |state, _: &(), _| {
+        state[0] += 1.0;
+        CallbackAction::Continue
+    })?;
+let problem = OdeProblem::new(
+    |derivative: &mut [f64], _: &[f64], _: &(), _| derivative.fill(0.0),
+    [0.0],
+    (0.0, 1.0),
+    (),
+)
+.with_callback_set(callbacks);
+# let _ = problem;
+# Ok::<(), differential_equations::ConfigurationError>(())
+```
+
+Both policies also construct partitioned callback sets for second-order
+problems through `into_second_order_callback_set`. More invasive SciML callback
+policies—such as manifold projection, domain rejection, and dynamic stability
+limits—require a richer public integrator-control interface and are not yet
+presented as prebuilt policies.
 
 ## Tableau extensions
 

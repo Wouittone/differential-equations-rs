@@ -15,6 +15,11 @@ pub(crate) fn times_are_numerically_equal(left_time: f64, right_time: f64) -> bo
     (right_time - left_time).abs() <= effective_event_tolerance(0.0, left_time, right_time)
 }
 
+pub(crate) fn times_are_representably_equal(left_time: f64, right_time: f64) -> bool {
+    let time_scale = left_time.abs().max(right_time.abs()).max(1.0);
+    (right_time - left_time).abs() <= f64::EPSILON * time_scale
+}
+
 pub(crate) fn event_interval_converged(
     requested: f64,
     step_start: f64,
@@ -29,7 +34,10 @@ pub(crate) fn event_interval_converged(
 
 #[cfg(test)]
 mod tests {
-    use super::{DEFAULT_EVENT_TOLERANCE, effective_event_tolerance, event_interval_converged};
+    use super::{
+        DEFAULT_EVENT_TOLERANCE, effective_event_tolerance, event_interval_converged,
+        times_are_numerically_equal, times_are_representably_equal,
+    };
 
     #[test]
     fn tolerance_has_a_scale_aware_representability_floor() {
@@ -38,6 +46,13 @@ mod tests {
             DEFAULT_EVENT_TOLERANCE
         );
         assert!(effective_event_tolerance(f64::EPSILON, 1.0e16, 1.0e16 + 2.0) >= 2.0);
+    }
+
+    #[test]
+    fn output_time_equality_does_not_collapse_distinct_representable_times() {
+        assert!(times_are_numerically_equal(0.5, 0.5000000000000003));
+        assert!(times_are_representably_equal(0.3, 0.1 + 0.2));
+        assert!(!times_are_representably_equal(1.0e16, 1.0e16 + 4.0));
     }
 
     #[test]
