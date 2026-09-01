@@ -1,7 +1,8 @@
 //! Numerical ordinary differential equation solvers with a compact Rust API.
 //!
 //! The crate provides in-place first-order ODE problems, solver options,
-//! callbacks (including exact preset-time effects), retained dense output, and
+//! callbacks (including vector event conditions and exact preset-time effects),
+//! retained dense output, and
 //! ordered ensemble execution. Concrete
 //! algorithms are grouped by family below [`solvers`]; core problem, solution,
 //! and driver types remain at the crate root.
@@ -38,7 +39,8 @@
 //!   callback's left limit, affected state, both, or neither are retained.
 //!   [`CallbackSet`] composes callback policies before attaching them to a
 //!   first-order or split problem and provides initialization/finalization
-//!   hooks around successful integration.
+//!   hooks around successful integration. Vector continuous callbacks group
+//!   several root functions; they are separate from ndarray state shape.
 //! - [`SolveOptions`] controls tolerances, step sizes, exact time stops, saved
 //!   output, and dense output retention; [`solve`] runs an [`OdeAlgorithm`].
 //! - [`solvers::explicit`] is a good starting point for non-stiff problems,
@@ -95,7 +97,7 @@ mod solver;
 pub mod solvers;
 pub mod tableau;
 
-pub use callback::{CallbackAction, CallbackSave, CallbackSet, EventDirection};
+pub use callback::{CallbackAction, CallbackSave, CallbackSet, EventCrossing, EventDirection};
 pub use ensemble::{
     CaseOutcome, ExecutionPolicy, solve_batch, solve_batch_sequential, solve_ensemble,
     solve_ensemble_sequential,

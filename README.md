@@ -56,7 +56,11 @@ provided.
   retains the original flat-vector API, while `OdeProblem::from_array` accepts
   ndarray scalars, vectors, and matrices and returns shape-aware solution
   views without changing the numerical kernels.
-- The crate supports discrete, continuous, and preset-time callbacks. Preset
+- The crate supports discrete, scalar continuous, vector continuous, and
+  preset-time callbacks. Vector continuous callbacks group several event
+  functions into one evaluation and report a signed crossing mask when one or
+  more roots occur simultaneously; this is independent of whether the ODE
+  state itself is a scalar, vector, or matrix. Preset
   callback times automatically become exact integration stops, including for
   split and second-order problems. `CallbackSave` controls whether the state
   before an effect, after it, both, or neither is added to the trajectory;

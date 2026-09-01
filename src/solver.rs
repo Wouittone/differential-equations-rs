@@ -213,6 +213,9 @@ pub enum SolveError {
     /// A preset-time callback contains invalid trigger times.
     #[error("preset callback times must be finite, strictly ordered, and inside the time span")]
     InvalidPresetTimes,
+    /// A vector continuous callback contains no event conditions.
+    #[error("a vector continuous callback must contain at least one condition")]
+    InvalidVectorCallbackLength,
     /// A continuous callback condition returned a non-finite value.
     #[error("a continuous callback condition produced a non-finite value")]
     NonFiniteCallbackCondition,
@@ -288,7 +291,18 @@ pub(crate) fn validate_ode_problem<F, P>(
     options: &SolveOptions,
 ) -> Result<(), SolveError> {
     validate_state_time_options(problem.initial_state(), problem.time_span(), options)?;
-    validate_preset_time_sequences(problem.preset_time_sequences(), problem.time_span())
+    validate_preset_time_sequences(problem.preset_time_sequences(), problem.time_span())?;
+    validate_vector_callback_lengths(problem.vector_callback_lengths())
+}
+
+pub(crate) fn validate_vector_callback_lengths(
+    lengths: impl IntoIterator<Item = usize>,
+) -> Result<(), SolveError> {
+    lengths
+        .into_iter()
+        .all(|length| length > 0)
+        .then_some(())
+        .ok_or(SolveError::InvalidVectorCallbackLength)
 }
 
 pub(crate) fn time_sequence_is_valid(times: &[f64], time_span: (f64, f64)) -> bool {

@@ -2,7 +2,9 @@
 
 use crate::callback::CallbackOutcome;
 use crate::integrator::{KernelCapabilities, StepEstimate, StepKernel, integrate};
-use crate::solver::{validate_preset_time_sequences, validate_state_time_options};
+use crate::solver::{
+    validate_preset_time_sequences, validate_state_time_options, validate_vector_callback_lengths,
+};
 use crate::{OdeProblem, Solution, SolveError, SolveOptions, SolverStats, SplitOdeProblem};
 
 /// Explicit Euler applied to the sum of a split problem's two right-hand sides.
@@ -27,6 +29,7 @@ pub trait SplitOdeAlgorithm {
     {
         validate_state_time_options(problem.initial_state(), problem.time_span(), options)?;
         validate_preset_time_sequences(problem.preset_time_sequences(), problem.time_span())?;
+        validate_vector_callback_lengths(problem.vector_callback_lengths())?;
         let mut solution = self.solve_validated(problem, options)?;
         solution.set_state_shape(problem.state_shape());
         Ok(solution)

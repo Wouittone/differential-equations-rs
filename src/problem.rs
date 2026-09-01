@@ -1,12 +1,15 @@
 use crate::SolveError;
 use crate::callback::{
     Callback, CallbackAction, CallbackOutcome, CallbackSave, CallbackSet, ContinuousCallback,
-    DiscreteCallback, DiscreteTrigger, EventDirection, InitializationHook, LifecycleHook,
-    PresetTimes,
+    DiscreteCallback, DiscreteTrigger, EventCrossing, EventDirection, InitializationHook,
+    LifecycleHook, PresetTimes, VectorContinuousCallback,
 };
-use crate::event::{MAX_EVENT_ROOT_ITERATIONS, event_interval_converged};
+use crate::event::{
+    MAX_EVENT_ROOT_ITERATIONS, effective_event_tolerance, event_interval_converged,
+};
 use ndarray::{
-    Array, ArrayView, ArrayViewD, ArrayViewMut, ArrayViewMut2, ArrayViewMutD, Dimension, IxDyn,
+    Array, ArrayView, ArrayViewD, ArrayViewMut, ArrayViewMut1, ArrayViewMut2, ArrayViewMutD,
+    Dimension, IxDyn,
 };
 
 /// An initial-value ordinary differential equation problem.
@@ -256,6 +259,45 @@ impl<FE, FI, P> SplitOdeProblem<FE, FI, P> {
         )
     }
 
+    /// Adds a vector-valued zero-crossing callback.
+    pub fn with_vector_continuous_callback<C, A>(
+        self,
+        event_count: usize,
+        condition: C,
+        affect: A,
+    ) -> Self
+    where
+        C: Fn(&mut [f64], &[f64], &P, f64) + 'static,
+        A: Fn(&mut [f64], &P, f64, &[EventCrossing]) -> CallbackAction + 'static,
+    {
+        self.with_vector_continuous_callback_saving(
+            event_count,
+            CallbackSave::Both,
+            condition,
+            affect,
+        )
+    }
+
+    /// Adds a vector continuous callback with explicit saving behavior.
+    pub fn with_vector_continuous_callback_saving<C, A>(
+        self,
+        event_count: usize,
+        save: CallbackSave,
+        condition: C,
+        affect: A,
+    ) -> Self
+    where
+        C: Fn(&mut [f64], &[f64], &P, f64) + 'static,
+        A: Fn(&mut [f64], &P, f64, &[EventCrossing]) -> CallbackAction + 'static,
+    {
+        self.with_callback_set(CallbackSet::new().with_vector_continuous_callback_saving(
+            event_count,
+            save,
+            condition,
+            affect,
+        ))
+    }
+
     /// Supplies the analytic state Jacobian of the implicit component.
     ///
     /// The callback receives a row-major `dimension x dimension` output matrix
@@ -391,32 +433,83 @@ impl<FE, FI, P> SplitOdeProblem<FE, FI, P> {
         let mut outcome = CallbackOutcome::default();
         let mut root = None;
         for (index, callback) in self.callbacks.iter().enumerate() {
-            let Callback::Continuous(callback) = callback else {
-                continue;
-            };
-            let before = (callback.condition)(previous_state, &self.parameters, previous_time);
-            let after = (callback.condition)(state, &self.parameters, *time);
-            if !before.is_finite() || !after.is_finite() {
-                return Err(SolveError::NonFiniteCallbackCondition);
-            }
-            if callback.direction.accepts(before, after) {
-                let fraction = locate_root(
-                    callback,
-                    RootSegment {
-                        previous_state,
-                        previous_time,
-                        state,
-                        time: *time,
-                    },
-                    before,
-                    state_before_effect,
-                    &self.parameters,
-                    event_tolerance,
-                    &mut interpolator,
-                )?;
-                if root.is_none_or(|(_, earliest)| fraction < earliest) {
-                    root = Some((index, fraction));
+            match callback {
+                Callback::Continuous(callback) => {
+                    let before =
+                        (callback.condition)(previous_state, &self.parameters, previous_time);
+                    let after = (callback.condition)(state, &self.parameters, *time);
+                    if !before.is_finite() || !after.is_finite() {
+                        return Err(SolveError::NonFiniteCallbackCondition);
+                    }
+                    if callback.direction.accepts(before, after) {
+                        let fraction = locate_root(
+                            callback,
+                            RootSegment {
+                                previous_state,
+                                previous_time,
+                                state,
+                                time: *time,
+                            },
+                            before,
+                            state_before_effect,
+                            &self.parameters,
+                            event_tolerance,
+                            &mut interpolator,
+                        )?;
+                        if root.is_none_or(|(_, earliest)| fraction < earliest) {
+                            root = Some((index, fraction));
+                        }
+                    }
                 }
+                Callback::VectorContinuous(callback) => {
+                    let mut scratch = callback.scratch.borrow_mut();
+                    evaluate_vector_condition(
+                        callback,
+                        &mut scratch.before,
+                        previous_state,
+                        &self.parameters,
+                        previous_time,
+                    )?;
+                    evaluate_vector_condition(
+                        callback,
+                        &mut scratch.after,
+                        state,
+                        &self.parameters,
+                        *time,
+                    )?;
+                    scratch.root_fractions.fill(f64::INFINITY);
+                    scratch.crossings.fill(EventCrossing::None);
+                    for event_index in 0..callback.event_count {
+                        let before = scratch.before[event_index];
+                        let crossing =
+                            EventDirection::Any.crossing(before, scratch.after[event_index]);
+                        if crossing == EventCrossing::None {
+                            continue;
+                        }
+                        let fraction = locate_vector_root(
+                            callback,
+                            event_index,
+                            RootSegment {
+                                previous_state,
+                                previous_time,
+                                state,
+                                time: *time,
+                            },
+                            before,
+                            state_before_effect,
+                            &self.parameters,
+                            event_tolerance,
+                            &mut interpolator,
+                            &mut scratch.middle,
+                        )?;
+                        scratch.root_fractions[event_index] = fraction;
+                        scratch.crossings[event_index] = crossing;
+                        if root.is_none_or(|(_, earliest)| fraction < earliest) {
+                            root = Some((index, fraction));
+                        }
+                    }
+                }
+                Callback::Discrete(_) => {}
             }
         }
         if let Some((index, fraction)) = root {
@@ -429,12 +522,37 @@ impl<FE, FI, P> SplitOdeProblem<FE, FI, P> {
             }
             state.copy_from_slice(state_before_effect);
             *time = root_time;
-            let Callback::Continuous(callback) = &self.callbacks[index] else {
-                return Err(SolveError::InvalidCallbackState);
-            };
-            outcome.register(callback.save);
-            outcome.terminate =
-                (callback.affect)(state, &self.parameters, *time) == CallbackAction::Terminate;
+            match &self.callbacks[index] {
+                Callback::Continuous(callback) => {
+                    outcome.register(callback.save);
+                    outcome.terminate = (callback.affect)(state, &self.parameters, *time)
+                        == CallbackAction::Terminate;
+                }
+                Callback::VectorContinuous(callback) => {
+                    let mut scratch = callback.scratch.borrow_mut();
+                    for event_index in 0..callback.event_count {
+                        let event_time = previous_time
+                            + scratch.root_fractions[event_index] * (end_time - previous_time);
+                        let tolerance =
+                            effective_event_tolerance(event_tolerance, root_time, event_time);
+                        let crossing = scratch.crossings[event_index];
+                        scratch.simultaneous_events[event_index] =
+                            if (event_time - root_time).abs() <= tolerance {
+                                crossing
+                            } else {
+                                EventCrossing::None
+                            };
+                    }
+                    outcome.register(callback.save);
+                    outcome.terminate = (callback.affect)(
+                        state,
+                        &self.parameters,
+                        *time,
+                        &scratch.simultaneous_events,
+                    ) == CallbackAction::Terminate;
+                }
+                Callback::Discrete(_) => return Err(SolveError::InvalidCallbackState),
+            }
             ensure_finite_callback_state(state)?;
         }
         if !outcome.terminate {
@@ -468,6 +586,15 @@ impl<FE, FI, P> SplitOdeProblem<FE, FI, P> {
                 return None;
             };
             callback.trigger.preset_times()
+        })
+    }
+
+    pub(crate) fn vector_callback_lengths(&self) -> impl Iterator<Item = usize> + '_ {
+        self.callbacks.iter().filter_map(|callback| {
+            let Callback::VectorContinuous(callback) = callback else {
+                return None;
+            };
+            Some(callback.event_count)
         })
     }
 
@@ -849,6 +976,60 @@ impl<F, P> OdeProblem<F, P> {
         self
     }
 
+    /// Adds a vector continuous callback using shape-aware ndarray views.
+    pub fn with_array_vector_continuous_callback<C, A>(
+        self,
+        event_count: usize,
+        condition: C,
+        affect: A,
+    ) -> Self
+    where
+        C: for<'a, 'b> Fn(ArrayViewMut1<'a, f64>, ArrayViewD<'b, f64>, &P, f64) + 'static,
+        A: for<'a> Fn(ArrayViewMutD<'a, f64>, &P, f64, &[EventCrossing]) -> CallbackAction
+            + 'static,
+    {
+        self.with_array_vector_continuous_callback_saving(
+            event_count,
+            CallbackSave::Both,
+            condition,
+            affect,
+        )
+    }
+
+    /// Adds an ndarray vector callback with explicit saving behavior.
+    pub fn with_array_vector_continuous_callback_saving<C, A>(
+        mut self,
+        event_count: usize,
+        save: CallbackSave,
+        condition: C,
+        affect: A,
+    ) -> Self
+    where
+        C: for<'a, 'b> Fn(ArrayViewMut1<'a, f64>, ArrayViewD<'b, f64>, &P, f64) + 'static,
+        A: for<'a> Fn(ArrayViewMutD<'a, f64>, &P, f64, &[EventCrossing]) -> CallbackAction
+            + 'static,
+    {
+        let condition_shape = self.state_shape.clone();
+        let affect_shape = self.state_shape.clone();
+        self.callbacks
+            .push(Callback::VectorContinuous(VectorContinuousCallback::new(
+                event_count,
+                save,
+                move |output, state, parameters, time| {
+                    let output = ArrayViewMut1::from(output);
+                    let state = ArrayViewD::from_shape(condition_shape.clone(), state)
+                        .expect("callback state shape must match its contiguous storage");
+                    condition(output, state, parameters, time);
+                },
+                move |state, parameters, time, events| {
+                    let state = ArrayViewMutD::from_shape(affect_shape.clone(), state)
+                        .expect("callback state shape must match its contiguous storage");
+                    affect(state, parameters, time, events)
+                },
+            )));
+        self
+    }
+
     /// Adds a direction-filtered zero-crossing callback.
     ///
     /// A root is localized by bisection over the accepted step's state segment.
@@ -889,6 +1070,45 @@ impl<F, P> OdeProblem<F, P> {
         )
     }
 
+    /// Adds a vector-valued zero-crossing callback.
+    pub fn with_vector_continuous_callback<C, A>(
+        self,
+        event_count: usize,
+        condition: C,
+        affect: A,
+    ) -> Self
+    where
+        C: Fn(&mut [f64], &[f64], &P, f64) + 'static,
+        A: Fn(&mut [f64], &P, f64, &[EventCrossing]) -> CallbackAction + 'static,
+    {
+        self.with_vector_continuous_callback_saving(
+            event_count,
+            CallbackSave::Both,
+            condition,
+            affect,
+        )
+    }
+
+    /// Adds a vector continuous callback with explicit saving behavior.
+    pub fn with_vector_continuous_callback_saving<C, A>(
+        self,
+        event_count: usize,
+        save: CallbackSave,
+        condition: C,
+        affect: A,
+    ) -> Self
+    where
+        C: Fn(&mut [f64], &[f64], &P, f64) + 'static,
+        A: Fn(&mut [f64], &P, f64, &[EventCrossing]) -> CallbackAction + 'static,
+    {
+        self.with_callback_set(CallbackSet::new().with_vector_continuous_callback_saving(
+            event_count,
+            save,
+            condition,
+            affect,
+        ))
+    }
+
     /// Returns the initial state.
     pub fn initial_state(&self) -> &[f64] {
         &self.initial_state
@@ -921,9 +1141,12 @@ impl<F, P> OdeProblem<F, P> {
     }
 
     pub(crate) fn has_continuous_callbacks(&self) -> bool {
-        self.callbacks
-            .iter()
-            .any(|callback| matches!(callback, Callback::Continuous(_)))
+        self.callbacks.iter().any(|callback| {
+            matches!(
+                callback,
+                Callback::Continuous(_) | Callback::VectorContinuous(_)
+            )
+        })
     }
 
     /// Returns the problem parameters.
@@ -997,32 +1220,83 @@ impl<F, P> OdeProblem<F, P> {
         let mut root = None;
 
         for (index, callback) in self.callbacks.iter().enumerate() {
-            let Callback::Continuous(callback) = callback else {
-                continue;
-            };
-            let before = (callback.condition)(previous_state, &self.parameters, previous_time);
-            let after = (callback.condition)(state, &self.parameters, *time);
-            if !before.is_finite() || !after.is_finite() {
-                return Err(SolveError::NonFiniteCallbackCondition);
-            }
-            if callback.direction.accepts(before, after) {
-                let fraction = locate_root(
-                    callback,
-                    RootSegment {
-                        previous_state,
-                        previous_time,
-                        state,
-                        time: *time,
-                    },
-                    before,
-                    state_before_effect,
-                    &self.parameters,
-                    event_tolerance,
-                    &mut interpolator,
-                )?;
-                if root.is_none_or(|(_, earliest)| fraction < earliest) {
-                    root = Some((index, fraction));
+            match callback {
+                Callback::Continuous(callback) => {
+                    let before =
+                        (callback.condition)(previous_state, &self.parameters, previous_time);
+                    let after = (callback.condition)(state, &self.parameters, *time);
+                    if !before.is_finite() || !after.is_finite() {
+                        return Err(SolveError::NonFiniteCallbackCondition);
+                    }
+                    if callback.direction.accepts(before, after) {
+                        let fraction = locate_root(
+                            callback,
+                            RootSegment {
+                                previous_state,
+                                previous_time,
+                                state,
+                                time: *time,
+                            },
+                            before,
+                            state_before_effect,
+                            &self.parameters,
+                            event_tolerance,
+                            &mut interpolator,
+                        )?;
+                        if root.is_none_or(|(_, earliest)| fraction < earliest) {
+                            root = Some((index, fraction));
+                        }
+                    }
                 }
+                Callback::VectorContinuous(callback) => {
+                    let mut scratch = callback.scratch.borrow_mut();
+                    evaluate_vector_condition(
+                        callback,
+                        &mut scratch.before,
+                        previous_state,
+                        &self.parameters,
+                        previous_time,
+                    )?;
+                    evaluate_vector_condition(
+                        callback,
+                        &mut scratch.after,
+                        state,
+                        &self.parameters,
+                        *time,
+                    )?;
+                    scratch.root_fractions.fill(f64::INFINITY);
+                    scratch.crossings.fill(EventCrossing::None);
+                    for event_index in 0..callback.event_count {
+                        let before = scratch.before[event_index];
+                        let crossing =
+                            EventDirection::Any.crossing(before, scratch.after[event_index]);
+                        if crossing == EventCrossing::None {
+                            continue;
+                        }
+                        let fraction = locate_vector_root(
+                            callback,
+                            event_index,
+                            RootSegment {
+                                previous_state,
+                                previous_time,
+                                state,
+                                time: *time,
+                            },
+                            before,
+                            state_before_effect,
+                            &self.parameters,
+                            event_tolerance,
+                            &mut interpolator,
+                            &mut scratch.middle,
+                        )?;
+                        scratch.root_fractions[event_index] = fraction;
+                        scratch.crossings[event_index] = crossing;
+                        if root.is_none_or(|(_, earliest)| fraction < earliest) {
+                            root = Some((index, fraction));
+                        }
+                    }
+                }
+                Callback::Discrete(_) => {}
             }
         }
 
@@ -1036,12 +1310,37 @@ impl<F, P> OdeProblem<F, P> {
             }
             state.copy_from_slice(state_before_effect);
             *time = root_time;
-            let Callback::Continuous(callback) = &self.callbacks[index] else {
-                return Err(SolveError::InvalidCallbackState);
-            };
-            outcome.register(callback.save);
-            outcome.terminate =
-                (callback.affect)(state, &self.parameters, *time) == CallbackAction::Terminate;
+            match &self.callbacks[index] {
+                Callback::Continuous(callback) => {
+                    outcome.register(callback.save);
+                    outcome.terminate = (callback.affect)(state, &self.parameters, *time)
+                        == CallbackAction::Terminate;
+                }
+                Callback::VectorContinuous(callback) => {
+                    let mut scratch = callback.scratch.borrow_mut();
+                    for event_index in 0..callback.event_count {
+                        let event_time = previous_time
+                            + scratch.root_fractions[event_index] * (end_time - previous_time);
+                        let tolerance =
+                            effective_event_tolerance(event_tolerance, root_time, event_time);
+                        let crossing = scratch.crossings[event_index];
+                        scratch.simultaneous_events[event_index] =
+                            if (event_time - root_time).abs() <= tolerance {
+                                crossing
+                            } else {
+                                EventCrossing::None
+                            };
+                    }
+                    outcome.register(callback.save);
+                    outcome.terminate = (callback.affect)(
+                        state,
+                        &self.parameters,
+                        *time,
+                        &scratch.simultaneous_events,
+                    ) == CallbackAction::Terminate;
+                }
+                Callback::Discrete(_) => return Err(SolveError::InvalidCallbackState),
+            }
             ensure_finite_callback_state(state)?;
         }
 
@@ -1095,6 +1394,15 @@ impl<F, P> OdeProblem<F, P> {
                     candidate
                 }
             })
+    }
+
+    pub(crate) fn vector_callback_lengths(&self) -> impl Iterator<Item = usize> + '_ {
+        self.callbacks.iter().filter_map(|callback| {
+            let Callback::VectorContinuous(callback) = callback else {
+                return None;
+            };
+            Some(callback.event_count)
+        })
     }
 }
 
@@ -1154,6 +1462,78 @@ fn locate_root<P>(
     // Return the post-crossing side of the final bracket. This prevents a
     // continuing callback from immediately detecting the same root again on
     // the next step when the midpoint lies microscopically before the root.
+    Ok(right)
+}
+
+fn evaluate_vector_condition<P>(
+    callback: &VectorContinuousCallback<P>,
+    output: &mut [f64],
+    state: &[f64],
+    parameters: &P,
+    time: f64,
+) -> Result<(), SolveError> {
+    output.fill(f64::NAN);
+    (callback.condition)(output, state, parameters, time);
+    output
+        .iter()
+        .all(|value| value.is_finite())
+        .then_some(())
+        .ok_or(SolveError::NonFiniteCallbackCondition)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn locate_vector_root<P>(
+    callback: &VectorContinuousCallback<P>,
+    event_index: usize,
+    segment: RootSegment<'_>,
+    before: f64,
+    interpolation: &mut [f64],
+    parameters: &P,
+    event_tolerance: f64,
+    interpolator: &mut Option<&mut StepInterpolator<'_>>,
+    condition_values: &mut [f64],
+) -> Result<f64, SolveError> {
+    let mut left = 0.0;
+    let mut right = 1.0;
+    let mut left_value = before;
+    for _ in 0..MAX_EVENT_ROOT_ITERATIONS {
+        let middle = 0.5 * (left + right);
+        if middle == left || middle == right {
+            break;
+        }
+        let middle_time = segment.previous_time + middle * (segment.time - segment.previous_time);
+        if let Some(interpolator) = interpolator.as_mut() {
+            interpolator(middle_time, interpolation)?;
+        } else {
+            interpolate(segment.state, segment.previous_state, middle, interpolation);
+        }
+        evaluate_vector_condition(
+            callback,
+            condition_values,
+            interpolation,
+            parameters,
+            middle_time,
+        )?;
+        let value = condition_values[event_index];
+        if value == 0.0 {
+            return Ok(middle);
+        }
+        if left_value.signum() == value.signum() {
+            left = middle;
+            left_value = value;
+        } else {
+            right = middle;
+        }
+        if event_interval_converged(
+            event_tolerance,
+            segment.previous_time,
+            segment.time,
+            left,
+            right,
+        ) {
+            break;
+        }
+    }
     Ok(right)
 }
 

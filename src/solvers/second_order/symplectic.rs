@@ -9,7 +9,9 @@
 use crate::callback::CallbackOutcome;
 use crate::event::times_are_numerically_equal;
 use crate::integrator::TimeStopSchedule;
-use crate::solver::{validate_preset_time_sequences, validate_state_time_options};
+use crate::solver::{
+    validate_preset_time_sequences, validate_state_time_options, validate_vector_callback_lengths,
+};
 use crate::{InterpolationError, SaveMode, SolveError, SolveOptions};
 use thiserror::Error;
 
@@ -804,6 +806,7 @@ fn validate<F, P>(
     }
     validate_state_time_options(position, problem.time_span(), options)?;
     validate_preset_time_sequences(problem.preset_time_sequences(), problem.time_span())?;
+    validate_vector_callback_lengths(problem.vector_callback_lengths())?;
     if !velocity.iter().all(|value| value.is_finite()) {
         return Err(SolveError::NonFiniteInitialState.into());
     }

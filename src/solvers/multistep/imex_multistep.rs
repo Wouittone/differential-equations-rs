@@ -10,7 +10,9 @@
 use crate::integrator::TimeStopSchedule;
 use crate::linear::{factorize, solve_factorized};
 use crate::solution::{BorrowedHermiteSegment, DenseSegment, HermiteSegment, TrajectoryRecorder};
-use crate::solver::{validate_preset_time_sequences, validate_state_time_options};
+use crate::solver::{
+    validate_preset_time_sequences, validate_state_time_options, validate_vector_callback_lengths,
+};
 use crate::solvers::explicit::split_euler::SplitOdeAlgorithm;
 use crate::{Solution, SolveError, SolveOptions, SolverStats, SplitOdeProblem};
 
@@ -736,6 +738,7 @@ fn validate<FE, FI, P>(
 ) -> Result<(), SolveError> {
     validate_state_time_options(problem.initial_state(), problem.time_span(), options)?;
     validate_preset_time_sequences(problem.preset_time_sequences(), problem.time_span())?;
+    validate_vector_callback_lengths(problem.vector_callback_lengths())?;
     if options.adaptive {
         return Err(SolveError::AdaptiveStepUnsupported);
     }

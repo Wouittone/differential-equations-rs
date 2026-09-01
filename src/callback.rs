@@ -1,3 +1,5 @@
+use std::cell::RefCell;
+
 /// The action requested after an ODE callback changes the state.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 #[non_exhaustive]
@@ -54,9 +56,28 @@ pub enum EventDirection {
     Falling,
 }
 
+/// Describes whether and how one vector callback condition crossed zero.
+///
+/// A vector continuous callback receives one entry per condition. Several
+/// entries may be non-[`None`](Self::None) when roots are simultaneous.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[repr(i8)]
+#[non_exhaustive]
+pub enum EventCrossing {
+    /// This condition did not trigger at the localized event time.
+    #[default]
+    None = 0,
+    /// The condition crossed from negative to non-negative.
+    Rising = 1,
+    /// The condition crossed from positive to non-positive.
+    Falling = -1,
+}
+
 pub(crate) type Condition<P> = dyn Fn(&[f64], &P, f64) -> bool;
 pub(crate) type EventCondition<P> = dyn Fn(&[f64], &P, f64) -> f64;
 pub(crate) type Affect<P> = dyn Fn(&mut [f64], &P, f64) -> CallbackAction;
+pub(crate) type VectorEventCondition<P> = dyn Fn(&mut [f64], &[f64], &P, f64);
+pub(crate) type VectorAffect<P> = dyn Fn(&mut [f64], &P, f64, &[EventCrossing]) -> CallbackAction;
 pub(crate) type LifecycleHook<P> = dyn Fn(&mut [f64], &P, f64);
 
 pub(crate) struct InitializationHook<P> {
@@ -105,9 +126,56 @@ pub(crate) struct ContinuousCallback<P> {
     pub save: CallbackSave,
 }
 
+pub(crate) struct VectorCallbackScratch {
+    pub before: Vec<f64>,
+    pub after: Vec<f64>,
+    pub middle: Vec<f64>,
+    pub root_fractions: Vec<f64>,
+    pub crossings: Vec<EventCrossing>,
+    pub simultaneous_events: Vec<EventCrossing>,
+}
+
+impl VectorCallbackScratch {
+    pub(crate) fn new(event_count: usize) -> Self {
+        Self {
+            before: vec![f64::NAN; event_count],
+            after: vec![f64::NAN; event_count],
+            middle: vec![f64::NAN; event_count],
+            root_fractions: vec![f64::INFINITY; event_count],
+            crossings: vec![EventCrossing::None; event_count],
+            simultaneous_events: vec![EventCrossing::None; event_count],
+        }
+    }
+}
+
+pub(crate) struct VectorContinuousCallback<P> {
+    pub condition: Box<VectorEventCondition<P>>,
+    pub affect: Box<VectorAffect<P>>,
+    pub event_count: usize,
+    pub save: CallbackSave,
+    pub scratch: RefCell<VectorCallbackScratch>,
+}
+
+impl<P> VectorContinuousCallback<P> {
+    pub(crate) fn new<C, A>(event_count: usize, save: CallbackSave, condition: C, affect: A) -> Self
+    where
+        C: Fn(&mut [f64], &[f64], &P, f64) + 'static,
+        A: Fn(&mut [f64], &P, f64, &[EventCrossing]) -> CallbackAction + 'static,
+    {
+        Self {
+            condition: Box::new(condition),
+            affect: Box::new(affect),
+            event_count,
+            save,
+            scratch: RefCell::new(VectorCallbackScratch::new(event_count)),
+        }
+    }
+}
+
 pub(crate) enum Callback<P> {
     Discrete(DiscreteCallback<P>),
     Continuous(ContinuousCallback<P>),
+    VectorContinuous(VectorContinuousCallback<P>),
 }
 
 /// An ordered collection of callbacks that can be attached to an ODE problem.
@@ -302,6 +370,51 @@ impl<P> CallbackSet<P> {
         self
     }
 
+    /// Adds a vector-valued zero-crossing callback.
+    ///
+    /// `condition` must overwrite all `event_count` output entries. The effect
+    /// runs once at the earliest localized root and receives a crossing mask;
+    /// simultaneous conditions are reported together in index order.
+    pub fn with_vector_continuous_callback<C, A>(
+        self,
+        event_count: usize,
+        condition: C,
+        affect: A,
+    ) -> Self
+    where
+        C: Fn(&mut [f64], &[f64], &P, f64) + 'static,
+        A: Fn(&mut [f64], &P, f64, &[EventCrossing]) -> CallbackAction + 'static,
+    {
+        self.with_vector_continuous_callback_saving(
+            event_count,
+            CallbackSave::Both,
+            condition,
+            affect,
+        )
+    }
+
+    /// Adds a vector continuous callback with explicit saving behavior.
+    pub fn with_vector_continuous_callback_saving<C, A>(
+        mut self,
+        event_count: usize,
+        save: CallbackSave,
+        condition: C,
+        affect: A,
+    ) -> Self
+    where
+        C: Fn(&mut [f64], &[f64], &P, f64) + 'static,
+        A: Fn(&mut [f64], &P, f64, &[EventCrossing]) -> CallbackAction + 'static,
+    {
+        self.callbacks
+            .push(Callback::VectorContinuous(VectorContinuousCallback::new(
+                event_count,
+                save,
+                condition,
+                affect,
+            )));
+        self
+    }
+
     /// Appends another set, preserving callback order within each set.
     pub fn append(mut self, mut other: Self) -> Self {
         self.callbacks.append(&mut other.callbacks);
@@ -345,12 +458,18 @@ impl CallbackOutcome {
 }
 
 impl EventDirection {
-    pub(crate) fn accepts(self, before: f64, after: f64) -> bool {
-        match self {
-            Self::Any => (before < 0.0 && after >= 0.0) || (before > 0.0 && after <= 0.0),
-            Self::Rising => before < 0.0 && after >= 0.0,
-            Self::Falling => before > 0.0 && after <= 0.0,
+    pub(crate) fn crossing(self, before: f64, after: f64) -> EventCrossing {
+        if before < 0.0 && after >= 0.0 && !matches!(self, Self::Falling) {
+            EventCrossing::Rising
+        } else if before > 0.0 && after <= 0.0 && !matches!(self, Self::Rising) {
+            EventCrossing::Falling
+        } else {
+            EventCrossing::None
         }
+    }
+
+    pub(crate) fn accepts(self, before: f64, after: f64) -> bool {
+        self.crossing(before, after) != EventCrossing::None
     }
 }
 

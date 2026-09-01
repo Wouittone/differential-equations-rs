@@ -1,20 +1,27 @@
+use std::cell::RefCell;
+
 use super::coefficient_data::*;
-use crate::callback::{CallbackOutcome, CallbackSave, PresetTimes};
+use crate::callback::{CallbackOutcome, CallbackSave, PresetTimes, VectorCallbackScratch};
 use crate::event::{
-    MAX_EVENT_ROOT_ITERATIONS, event_interval_converged, times_are_numerically_equal,
+    MAX_EVENT_ROOT_ITERATIONS, effective_event_tolerance, event_interval_converged,
+    times_are_numerically_equal,
 };
 use crate::integrator::{ControllerConfig, ControllerState, TimeStopSchedule};
 use crate::linear::{factorize, solve_factorized};
-use crate::solver::{validate_preset_time_sequences, validate_state_time_options};
+use crate::solver::{
+    validate_preset_time_sequences, validate_state_time_options, validate_vector_callback_lengths,
+};
 use crate::{
-    CallbackAction, ConfigurationError, EventDirection, InterpolationError, SaveMode, SolveError,
-    SolveOptions, SolverStats,
+    CallbackAction, ConfigurationError, EventCrossing, EventDirection, InterpolationError,
+    SaveMode, SolveError, SolveOptions, SolverStats,
 };
 use thiserror::Error;
 
 type DiscreteCondition<P> = dyn Fn(&[f64], &[f64], &P, f64) -> bool;
 type ContinuousCondition<P> = dyn Fn(&[f64], &[f64], &P, f64) -> f64;
 type Affect<P> = dyn Fn(&mut [f64], &mut [f64], &P, f64) -> CallbackAction;
+type VectorContinuousCondition<P> = dyn Fn(&mut [f64], &[f64], &[f64], &P, f64);
+type VectorAffect<P> = dyn Fn(&mut [f64], &mut [f64], &P, f64, &[EventCrossing]) -> CallbackAction;
 type LifecycleHook<P> = dyn Fn(&mut [f64], &mut [f64], &P, f64);
 type PartitionedInterpolator<'a> =
     dyn FnMut(f64, &mut [f64], &mut [f64]) -> Result<(), SolveError> + 'a;
@@ -60,9 +67,34 @@ struct ContinuousCallback<P> {
     save: CallbackSave,
 }
 
+struct VectorContinuousCallback<P> {
+    condition: Box<VectorContinuousCondition<P>>,
+    affect: Box<VectorAffect<P>>,
+    event_count: usize,
+    save: CallbackSave,
+    scratch: RefCell<VectorCallbackScratch>,
+}
+
+impl<P> VectorContinuousCallback<P> {
+    fn new<C, A>(event_count: usize, save: CallbackSave, condition: C, affect: A) -> Self
+    where
+        C: Fn(&mut [f64], &[f64], &[f64], &P, f64) + 'static,
+        A: Fn(&mut [f64], &mut [f64], &P, f64, &[EventCrossing]) -> CallbackAction + 'static,
+    {
+        Self {
+            condition: Box::new(condition),
+            affect: Box::new(affect),
+            event_count,
+            save,
+            scratch: RefCell::new(VectorCallbackScratch::new(event_count)),
+        }
+    }
+}
+
 enum PartitionedCallback<P> {
     Discrete(DiscreteCallback<P>),
     Continuous(ContinuousCallback<P>),
+    VectorContinuous(VectorContinuousCallback<P>),
 }
 
 struct InitializationHook<P> {
@@ -254,6 +286,46 @@ impl<P> SecondOrderCallbackSet<P> {
         self
     }
 
+    /// Adds a vector-valued partitioned zero-crossing callback.
+    ///
+    /// The effect runs once at the earliest root and receives all simultaneous
+    /// crossing directions in condition index order.
+    pub fn with_vector_continuous_callback<C, A>(
+        self,
+        event_count: usize,
+        condition: C,
+        affect: A,
+    ) -> Self
+    where
+        C: Fn(&mut [f64], &[f64], &[f64], &P, f64) + 'static,
+        A: Fn(&mut [f64], &mut [f64], &P, f64, &[EventCrossing]) -> CallbackAction + 'static,
+    {
+        self.with_vector_continuous_callback_saving(
+            event_count,
+            CallbackSave::Both,
+            condition,
+            affect,
+        )
+    }
+
+    /// Adds a partitioned vector callback with explicit saving behavior.
+    pub fn with_vector_continuous_callback_saving<C, A>(
+        mut self,
+        event_count: usize,
+        save: CallbackSave,
+        condition: C,
+        affect: A,
+    ) -> Self
+    where
+        C: Fn(&mut [f64], &[f64], &[f64], &P, f64) + 'static,
+        A: Fn(&mut [f64], &mut [f64], &P, f64, &[EventCrossing]) -> CallbackAction + 'static,
+    {
+        self.callbacks.push(PartitionedCallback::VectorContinuous(
+            VectorContinuousCallback::new(event_count, save, condition, affect),
+        ));
+        self
+    }
+
     /// Appends another set, preserving callback order within each set.
     pub fn append(mut self, mut other: Self) -> Self {
         self.callbacks.append(&mut other.callbacks);
@@ -440,6 +512,47 @@ impl<F, P> SecondOrderOdeProblem<F, P> {
         )
     }
 
+    /// Adds a vector-valued partitioned zero-crossing callback.
+    pub fn with_vector_continuous_callback<C, A>(
+        self,
+        event_count: usize,
+        condition: C,
+        affect: A,
+    ) -> Self
+    where
+        C: Fn(&mut [f64], &[f64], &[f64], &P, f64) + 'static,
+        A: Fn(&mut [f64], &mut [f64], &P, f64, &[EventCrossing]) -> CallbackAction + 'static,
+    {
+        self.with_vector_continuous_callback_saving(
+            event_count,
+            CallbackSave::Both,
+            condition,
+            affect,
+        )
+    }
+
+    /// Adds a partitioned vector callback with explicit saving behavior.
+    pub fn with_vector_continuous_callback_saving<C, A>(
+        self,
+        event_count: usize,
+        save: CallbackSave,
+        condition: C,
+        affect: A,
+    ) -> Self
+    where
+        C: Fn(&mut [f64], &[f64], &[f64], &P, f64) + 'static,
+        A: Fn(&mut [f64], &mut [f64], &P, f64, &[EventCrossing]) -> CallbackAction + 'static,
+    {
+        self.with_callback_set(
+            SecondOrderCallbackSet::new().with_vector_continuous_callback_saving(
+                event_count,
+                save,
+                condition,
+                affect,
+            ),
+        )
+    }
+
     /// Initial velocity.
     pub fn initial_velocity(&self) -> &[f64] {
         &self.initial_velocity
@@ -503,6 +616,15 @@ impl<F, P> SecondOrderOdeProblem<F, P> {
                     candidate
                 }
             })
+    }
+
+    pub(crate) fn vector_callback_lengths(&self) -> impl Iterator<Item = usize> + '_ {
+        self.callbacks.iter().filter_map(|callback| {
+            let PartitionedCallback::VectorContinuous(callback) = callback else {
+                return None;
+            };
+            Some(callback.event_count)
+        })
     }
 }
 
@@ -1487,6 +1609,7 @@ fn validate<F, P>(
     }
     validate_state_time_options(&problem.initial_position, problem.time_span, options)?;
     validate_preset_time_sequences(problem.preset_time_sequences(), problem.time_span)?;
+    validate_vector_callback_lengths(problem.vector_callback_lengths())?;
     if !problem
         .initial_velocity
         .iter()
@@ -3598,38 +3721,90 @@ pub(super) fn apply_step_callbacks<F, P>(
     let mut outcome = CallbackOutcome::default();
     let mut root = None;
     for (index, callback) in problem.callbacks.iter().enumerate() {
-        let PartitionedCallback::Continuous(callback) = callback else {
-            continue;
-        };
-        let before = (callback.condition)(
-            previous_velocity,
-            previous_position,
-            &problem.parameters,
-            previous_time,
-        );
-        let after = (callback.condition)(velocity, position, &problem.parameters, *time);
-        if !before.is_finite() || !after.is_finite() {
-            return Err(SolveError::NonFiniteCallbackCondition);
-        }
-        if callback.direction.accepts(before, after) {
-            let fraction = locate_root(
-                callback,
-                previous_velocity,
-                previous_position,
-                previous_time,
-                velocity,
-                position,
-                *time,
-                before,
-                state_before_velocity,
-                state_before_position,
-                &problem.parameters,
-                event_tolerance,
-                interpolator.as_deref_mut(),
-            )?;
-            if root.is_none_or(|(_, earliest)| fraction < earliest) {
-                root = Some((index, fraction));
+        match callback {
+            PartitionedCallback::Continuous(callback) => {
+                let before = (callback.condition)(
+                    previous_velocity,
+                    previous_position,
+                    &problem.parameters,
+                    previous_time,
+                );
+                let after = (callback.condition)(velocity, position, &problem.parameters, *time);
+                if !before.is_finite() || !after.is_finite() {
+                    return Err(SolveError::NonFiniteCallbackCondition);
+                }
+                if callback.direction.accepts(before, after) {
+                    let fraction = locate_root(
+                        callback,
+                        previous_velocity,
+                        previous_position,
+                        previous_time,
+                        velocity,
+                        position,
+                        *time,
+                        before,
+                        state_before_velocity,
+                        state_before_position,
+                        &problem.parameters,
+                        event_tolerance,
+                        interpolator.as_deref_mut(),
+                    )?;
+                    if root.is_none_or(|(_, earliest)| fraction < earliest) {
+                        root = Some((index, fraction));
+                    }
+                }
             }
+            PartitionedCallback::VectorContinuous(callback) => {
+                let mut scratch = callback.scratch.borrow_mut();
+                evaluate_partitioned_vector_condition(
+                    callback,
+                    &mut scratch.before,
+                    previous_velocity,
+                    previous_position,
+                    &problem.parameters,
+                    previous_time,
+                )?;
+                evaluate_partitioned_vector_condition(
+                    callback,
+                    &mut scratch.after,
+                    velocity,
+                    position,
+                    &problem.parameters,
+                    *time,
+                )?;
+                scratch.root_fractions.fill(f64::INFINITY);
+                scratch.crossings.fill(EventCrossing::None);
+                for event_index in 0..callback.event_count {
+                    let before = scratch.before[event_index];
+                    let crossing = EventDirection::Any.crossing(before, scratch.after[event_index]);
+                    if crossing == EventCrossing::None {
+                        continue;
+                    }
+                    let fraction = locate_partitioned_vector_root(
+                        callback,
+                        event_index,
+                        previous_velocity,
+                        previous_position,
+                        previous_time,
+                        velocity,
+                        position,
+                        *time,
+                        before,
+                        state_before_velocity,
+                        state_before_position,
+                        &problem.parameters,
+                        event_tolerance,
+                        interpolator.as_deref_mut(),
+                        &mut scratch.middle,
+                    )?;
+                    scratch.root_fractions[event_index] = fraction;
+                    scratch.crossings[event_index] = crossing;
+                    if root.is_none_or(|(_, earliest)| fraction < earliest) {
+                        root = Some((index, fraction));
+                    }
+                }
+            }
+            PartitionedCallback::Discrete(_) => {}
         }
     }
     if let Some((index, fraction)) = root {
@@ -3651,12 +3826,40 @@ pub(super) fn apply_step_callbacks<F, P>(
         velocity.copy_from_slice(state_before_velocity);
         position.copy_from_slice(state_before_position);
         *time = previous_time + fraction * (end_time - previous_time);
-        let PartitionedCallback::Continuous(callback) = &problem.callbacks[index] else {
-            return Err(SolveError::InvalidCallbackState);
-        };
-        outcome.register(callback.save);
-        outcome.terminate = (callback.affect)(velocity, position, &problem.parameters, *time)
-            == CallbackAction::Terminate;
+        match &problem.callbacks[index] {
+            PartitionedCallback::Continuous(callback) => {
+                outcome.register(callback.save);
+                outcome.terminate =
+                    (callback.affect)(velocity, position, &problem.parameters, *time)
+                        == CallbackAction::Terminate;
+            }
+            PartitionedCallback::VectorContinuous(callback) => {
+                let root_time = *time;
+                let mut scratch = callback.scratch.borrow_mut();
+                for event_index in 0..callback.event_count {
+                    let event_time = previous_time
+                        + scratch.root_fractions[event_index] * (end_time - previous_time);
+                    let tolerance =
+                        effective_event_tolerance(event_tolerance, root_time, event_time);
+                    let crossing = scratch.crossings[event_index];
+                    scratch.simultaneous_events[event_index] =
+                        if (event_time - root_time).abs() <= tolerance {
+                            crossing
+                        } else {
+                            EventCrossing::None
+                        };
+                }
+                outcome.register(callback.save);
+                outcome.terminate = (callback.affect)(
+                    velocity,
+                    position,
+                    &problem.parameters,
+                    *time,
+                    &scratch.simultaneous_events,
+                ) == CallbackAction::Terminate;
+            }
+            PartitionedCallback::Discrete(_) => return Err(SolveError::InvalidCallbackState),
+        }
         ensure_finite_state(velocity, position)?;
     }
     if !outcome.terminate {
@@ -3749,6 +3952,89 @@ fn locate_root<P>(
     }
     // Keep the accepted state on the post-crossing side so a continuing
     // callback cannot immediately retrigger the same root.
+    Ok(right)
+}
+
+fn evaluate_partitioned_vector_condition<P>(
+    callback: &VectorContinuousCallback<P>,
+    output: &mut [f64],
+    velocity: &[f64],
+    position: &[f64],
+    parameters: &P,
+    time: f64,
+) -> Result<(), SolveError> {
+    output.fill(f64::NAN);
+    (callback.condition)(output, velocity, position, parameters, time);
+    output
+        .iter()
+        .all(|value| value.is_finite())
+        .then_some(())
+        .ok_or(SolveError::NonFiniteCallbackCondition)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn locate_partitioned_vector_root<P>(
+    callback: &VectorContinuousCallback<P>,
+    event_index: usize,
+    previous_velocity: &[f64],
+    previous_position: &[f64],
+    previous_time: f64,
+    velocity: &[f64],
+    position: &[f64],
+    time: f64,
+    before: f64,
+    interpolation_velocity: &mut [f64],
+    interpolation_position: &mut [f64],
+    parameters: &P,
+    event_tolerance: f64,
+    mut interpolator: Option<&mut PartitionedInterpolator<'_>>,
+    condition_values: &mut [f64],
+) -> Result<f64, SolveError> {
+    let mut left = 0.0;
+    let mut right = 1.0;
+    let mut left_value = before;
+    for _ in 0..MAX_EVENT_ROOT_ITERATIONS {
+        let middle = 0.5 * (left + right);
+        if middle == left || middle == right {
+            break;
+        }
+        if let Some(interpolator) = interpolator.as_deref_mut() {
+            interpolator(middle, interpolation_velocity, interpolation_position)?;
+        } else {
+            interpolate_partitioned(
+                previous_velocity,
+                previous_position,
+                velocity,
+                position,
+                time - previous_time,
+                middle,
+                interpolation_velocity,
+                interpolation_position,
+            );
+        }
+        let middle_time = previous_time + middle * (time - previous_time);
+        evaluate_partitioned_vector_condition(
+            callback,
+            condition_values,
+            interpolation_velocity,
+            interpolation_position,
+            parameters,
+            middle_time,
+        )?;
+        let value = condition_values[event_index];
+        if value == 0.0 {
+            return Ok(middle);
+        }
+        if left_value.signum() == value.signum() {
+            left = middle;
+            left_value = value;
+        } else {
+            right = middle;
+        }
+        if event_interval_converged(event_tolerance, previous_time, time, left, right) {
+            break;
+        }
+    }
     Ok(right)
 }
 
