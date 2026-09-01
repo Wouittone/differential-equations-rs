@@ -18,6 +18,16 @@ pub(crate) struct TimeStopSchedule<'a> {
     direction: f64,
 }
 
+pub(crate) fn callback_requested_step(
+    callbacks: CallbackOutcome,
+    direction: f64,
+    maximum_step: f64,
+) -> Option<f64> {
+    callbacks
+        .requested_step
+        .map(|step| direction * step.min(maximum_step))
+}
+
 impl<'a> TimeStopSchedule<'a> {
     pub(crate) fn new(stops: &'a [f64], start: f64, end: f64) -> Self {
         let direction = (end - start).signum();
@@ -604,20 +614,25 @@ where
     }
 
     kernel.initialize(problem, &state, start, &mut stats)?;
-    let step_magnitude = match options.initial_step {
-        Some(step) => step.min(maximum_step),
-        None => kernel.estimate_initial_step(
-            problem,
-            &state,
-            start,
-            direction,
-            maximum_step,
-            &mut candidate,
-            options,
-            &mut stats,
-        )?,
+    let initial_step = callback_requested_step(initial_callbacks, direction, maximum_step);
+    let mut step = if let Some(step) = initial_step {
+        kernel.modify_step(step)
+    } else {
+        let step_magnitude = match options.initial_step {
+            Some(step) => step.min(maximum_step),
+            None => kernel.estimate_initial_step(
+                problem,
+                &state,
+                start,
+                direction,
+                maximum_step,
+                &mut candidate,
+                options,
+                &mut stats,
+            )?,
+        };
+        kernel.modify_step(direction * step_magnitude)
     };
-    let mut step = kernel.modify_step(direction * step_magnitude);
     let mut time = start;
     let mut attempted_steps = 0;
     let mut time_stops = TimeStopSchedule::new(&options.time_stops, start, end);
@@ -808,13 +823,15 @@ where
                 default_dense.accepted(callbacks.invocations > 0);
             }
 
-            if options.adaptive {
-                if callbacks.invocations > 0 {
-                    // A callback may change the accepted state discontinuously.
-                    // Do not let an error measured before that mutation bias the
-                    // next PI proposal.
-                    controller_state.reset();
-                }
+            if callbacks.invocations > 0 {
+                // A callback may change the state or parameters discontinuously.
+                // Do not let an error measured before that mutation bias the
+                // next PI proposal.
+                controller_state.reset();
+            }
+            if let Some(requested) = callback_requested_step(callbacks, direction, maximum_step) {
+                step = kernel.modify_step(requested);
+            } else if options.adaptive {
                 controller_state.accepted(estimate.error_norm);
                 let mut factor = estimate.proposed_factor.unwrap_or_else(|| {
                     controller_state.factor(estimate.error_norm, capabilities.controller)

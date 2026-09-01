@@ -1,12 +1,19 @@
 use std::cell::RefCell;
 
 /// The action requested after an ODE callback changes the state.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
 #[non_exhaustive]
 pub enum CallbackAction {
     /// Resume integration from the callback time and state.
     #[default]
     Continue,
+    /// Resume integration and use this positive step-size magnitude next.
+    ///
+    /// The request overrides the adaptive controller or fixed-step size for
+    /// the next attempt, but remains bounded by [`crate::SolveOptions::max_step`]
+    /// and any pending exact time stop. When several callbacks request a step
+    /// at the same time, the last request wins.
+    ContinueWithStepSize(f64),
     /// Stop integration and return the callback time and state as the endpoint.
     Terminate,
 }
@@ -430,13 +437,14 @@ impl<P> Default for CallbackSet<P> {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub(crate) struct CallbackOutcome {
     pub invocations: usize,
     pub terminate: bool,
     pub state_modified: bool,
     pub save_before: bool,
     pub save_after: bool,
+    pub requested_step: Option<f64>,
 }
 
 impl CallbackOutcome {
@@ -449,6 +457,20 @@ impl CallbackOutcome {
     pub(crate) fn register_initialization(&mut self, save: CallbackSave) {
         self.state_modified = true;
         self.register_save(save);
+    }
+
+    pub(crate) fn apply_action(&mut self, action: CallbackAction) -> Result<(), crate::SolveError> {
+        match action {
+            CallbackAction::Continue => {}
+            CallbackAction::ContinueWithStepSize(step) if step.is_finite() && step > 0.0 => {
+                self.requested_step = Some(step);
+            }
+            CallbackAction::ContinueWithStepSize(_) => {
+                return Err(crate::SolveError::InvalidCallbackStepSize);
+            }
+            CallbackAction::Terminate => self.terminate = true,
+        }
+        Ok(())
     }
 
     fn register_save(&mut self, save: CallbackSave) {

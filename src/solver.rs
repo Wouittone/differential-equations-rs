@@ -222,6 +222,9 @@ pub enum SolveError {
     /// A callback effect produced a non-finite state.
     #[error("a callback produced a non-finite state")]
     NonFiniteCallbackState,
+    /// A callback requested a non-positive or non-finite next step.
+    #[error("a callback-requested step size must be finite and positive")]
+    InvalidCallbackStepSize,
     /// Callback state changed inconsistently during event localization.
     #[error("the callback selected during event localization is no longer available")]
     InvalidCallbackState,

@@ -4,7 +4,7 @@
 //! component is its `explicit` half.  This matches `OrdinaryDiffEqMultirate`'s
 //! `SplitFunction(fast, slow)` convention.
 
-use crate::integrator::TimeStopSchedule;
+use crate::integrator::{TimeStopSchedule, callback_requested_step};
 use crate::linear::{factorize, solve_factorized};
 use crate::solution::{BorrowedHermiteSegment, DenseSegment, HermiteSegment, TrajectoryRecorder};
 use crate::solver::{
@@ -346,11 +346,13 @@ where
         return finish_successful(problem, &mut state, start, recorder, stats);
     }
     evaluate_total(problem, &state, start, &mut start_derivative, &mut stats)?;
-    let mut step = direction
-        * match options.initial_step {
-            Some(value) => value.min(maximum_step),
-            None => estimate_initial_step(&state, &start_derivative, maximum_step),
-        };
+    let mut step = callback_requested_step(initial, direction, maximum_step).unwrap_or_else(|| {
+        direction
+            * match options.initial_step {
+                Some(value) => value.min(maximum_step),
+                None => estimate_initial_step(&state, &start_derivative, maximum_step),
+            }
+    });
     let mut time = start;
     let mut attempted = 0usize;
     let mut previous_rejected = false;
@@ -475,7 +477,9 @@ where
             } else {
                 evaluate_total(problem, &state, time, &mut start_derivative, &mut stats)?;
             }
-            if options.adaptive {
+            if let Some(requested) = callback_requested_step(callbacks, direction, maximum_step) {
+                step = requested;
+            } else if options.adaptive {
                 let factor = if error_norm == 0.0 {
                     5.0
                 } else if error_norm.is_finite() {

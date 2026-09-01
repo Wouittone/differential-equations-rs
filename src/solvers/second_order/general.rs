@@ -6,7 +6,9 @@ use crate::event::{
     MAX_EVENT_ROOT_ITERATIONS, effective_event_tolerance, event_interval_converged,
     times_are_numerically_equal,
 };
-use crate::integrator::{ControllerConfig, ControllerState, TimeStopSchedule};
+use crate::integrator::{
+    ControllerConfig, ControllerState, TimeStopSchedule, callback_requested_step,
+};
 use crate::linear::{factorize, solve_factorized};
 use crate::solver::{
     validate_preset_time_sequences, validate_state_time_options, validate_vector_callback_lengths,
@@ -1822,6 +1824,9 @@ where
             stats,
         );
     }
+    if let Some(requested) = callback_requested_step(initial, direction, maximum_step) {
+        step_magnitude = requested.abs();
+    }
     evaluate_acceleration(
         problem,
         &mut acceleration,
@@ -2031,10 +2036,12 @@ where
             std::mem::swap(&mut acceleration, &mut workspace.candidate_acceleration);
         }
 
-        if options.adaptive {
-            if callback.invocations > 0 {
-                controller_state.reset();
-            }
+        if callback.invocations > 0 {
+            controller_state.reset();
+        }
+        if let Some(requested) = callback_requested_step(callback, direction, maximum_step) {
+            step_magnitude = requested.abs();
+        } else if options.adaptive {
             controller_state.accepted(error);
             let mut factor = controller_state.factor(error, controller);
             if previous_attempt_rejected {
@@ -2288,7 +2295,10 @@ where
     let fixed_step = options
         .initial_step
         .ok_or(SolveError::InitialStepRequired)?;
-    let maximum_step = fixed_step.min(options.max_step);
+    let (start, end) = problem.time_span;
+    let direction = (end - start).signum();
+    let maximum_step = options.max_step.min((end - start).abs());
+    let mut step_magnitude = fixed_step.min(maximum_step);
     let dimension = problem.initial_position.len();
     let stages = tableau.nodes.len();
     debug_assert_eq!(tableau.position_coefficients.len(), stages);
@@ -2300,8 +2310,6 @@ where
             .is_none_or(|rows| rows.len() == stages)
     );
 
-    let (start, end) = problem.time_span;
-    let direction = (end - start).signum();
     let mut velocity = problem.initial_velocity.clone();
     let mut position = problem.initial_position.clone();
     let mut workspace = RknWorkspace::new(dimension, stages, !problem.callbacks.is_empty());
@@ -2331,6 +2339,9 @@ where
             stats,
         );
     }
+    if let Some(requested) = callback_requested_step(initial, direction, maximum_step) {
+        step_magnitude = requested.abs();
+    }
 
     let mut time = start;
     let mut steps = 0;
@@ -2342,7 +2353,7 @@ where
         steps += 1;
         let step = time_stops.clip_step_with(
             time,
-            direction * maximum_step,
+            direction * step_magnitude,
             problem.next_preset_time(time, direction),
         );
         if time + step == time {
@@ -2470,6 +2481,9 @@ where
         if callback.terminate {
             return finish_successful(problem, &mut velocity, &mut position, time, recorder, stats);
         }
+        if let Some(requested) = callback_requested_step(callback, direction, maximum_step) {
+            step_magnitude = requested.abs();
+        }
     }
     finish_successful(problem, &mut velocity, &mut position, time, recorder, stats)
 }
@@ -2541,6 +2555,9 @@ where
             recorder,
             stats,
         );
+    }
+    if let Some(requested) = callback_requested_step(initial, direction, maximum_step) {
+        step_magnitude = requested.abs();
     }
 
     let mut time = start;
@@ -2767,7 +2784,10 @@ where
                 );
             }
 
-            if options.adaptive {
+            if let Some(requested) = callback_requested_step(callback, direction, maximum_step) {
+                step_magnitude = requested.abs();
+                previous_attempt_rejected = false;
+            } else if options.adaptive {
                 let factor = controller_state.factor(error, controller);
                 controller_state.accepted(error);
                 let factor = if previous_attempt_rejected {
@@ -2967,10 +2987,11 @@ where
     let fixed_step = options
         .initial_step
         .ok_or(SolveError::InitialStepRequired)?;
-    let maximum_step = fixed_step.min(options.max_step);
-    let dimension = problem.initial_position.len();
     let (start, end) = problem.time_span;
     let direction = (end - start).signum();
+    let maximum_step = options.max_step.min((end - start).abs());
+    let mut step_magnitude = fixed_step.min(maximum_step);
+    let dimension = problem.initial_position.len();
     let mut velocity = problem.initial_velocity.clone();
     let mut position = problem.initial_position.clone();
     let mut acceleration = vec![0.0; dimension];
@@ -3001,6 +3022,9 @@ where
             stats,
         );
     }
+    if let Some(requested) = callback_requested_step(initial, direction, maximum_step) {
+        step_magnitude = requested.abs();
+    }
     evaluate_acceleration(
         problem,
         &mut acceleration,
@@ -3021,13 +3045,13 @@ where
         attempts += 1;
         let step = time_stops.clip_step_with(
             time,
-            direction * maximum_step,
+            direction * step_magnitude,
             problem.next_preset_time(time, direction),
         );
         if time + step == time {
             return Err(SolveError::StepSizeUnderflow.into());
         }
-        let constant_step = step.abs() == maximum_step;
+        let constant_step = step.abs() == step_magnitude;
         let bootstrap = !history_valid || !constant_step;
 
         if bootstrap {
@@ -3309,6 +3333,10 @@ where
             acceleration.copy_from_slice(&workspace.next_acceleration);
             history_valid = constant_step;
         }
+        if let Some(requested) = callback_requested_step(callback, direction, maximum_step) {
+            step_magnitude = requested.abs();
+            history_valid = false;
+        }
     }
     finish_successful(problem, &mut velocity, &mut position, time, recorder, stats)
 }
@@ -3327,10 +3355,11 @@ where
     let fixed_step = options
         .initial_step
         .ok_or(SolveError::InitialStepRequired)?;
-    let maximum_step = fixed_step.min(options.max_step);
-    let dimension = problem.initial_position.len();
     let (start, end) = problem.time_span;
     let direction = (end - start).signum();
+    let maximum_step = options.max_step.min((end - start).abs());
+    let mut step_magnitude = fixed_step.min(maximum_step);
+    let dimension = problem.initial_position.len();
     let mut velocity = problem.initial_velocity.clone();
     let mut position = problem.initial_position.clone();
     let mut workspace = Workspace::new(dimension, !problem.callbacks.is_empty());
@@ -3360,6 +3389,9 @@ where
             stats,
         );
     }
+    if let Some(requested) = callback_requested_step(initial, direction, maximum_step) {
+        step_magnitude = requested.abs();
+    }
 
     let caches_acceleration = matches!(method, Method::VelocityVerlet | Method::VerletLeapfrog);
     if caches_acceleration {
@@ -3383,7 +3415,7 @@ where
         steps += 1;
         let step = time_stops.clip_step_with(
             time,
-            direction * maximum_step,
+            direction * step_magnitude,
             problem.next_preset_time(time, direction),
         );
         if time + step == time {
@@ -3456,6 +3488,9 @@ where
         }
         if callback.terminate {
             return finish_successful(problem, &mut velocity, &mut position, time, recorder, stats);
+        }
+        if let Some(requested) = callback_requested_step(callback, direction, maximum_step) {
+            step_magnitude = requested.abs();
         }
         if callback.invocations > 0 && caches_acceleration {
             evaluate_acceleration(
@@ -3677,8 +3712,12 @@ pub(super) fn apply_initial_callbacks<F, P>(
             .is_triggered(velocity, position, &problem.parameters, time)
         {
             outcome.register(callback.save);
-            outcome.terminate = (callback.affect)(velocity, position, &problem.parameters, time)
-                == CallbackAction::Terminate;
+            outcome.apply_action((callback.affect)(
+                velocity,
+                position,
+                &problem.parameters,
+                time,
+            ))?;
             ensure_finite_state(velocity, position)?;
             if outcome.terminate {
                 break;
@@ -3829,9 +3868,12 @@ pub(super) fn apply_step_callbacks<F, P>(
         match &problem.callbacks[index] {
             PartitionedCallback::Continuous(callback) => {
                 outcome.register(callback.save);
-                outcome.terminate =
-                    (callback.affect)(velocity, position, &problem.parameters, *time)
-                        == CallbackAction::Terminate;
+                outcome.apply_action((callback.affect)(
+                    velocity,
+                    position,
+                    &problem.parameters,
+                    *time,
+                ))?;
             }
             PartitionedCallback::VectorContinuous(callback) => {
                 let root_time = *time;
@@ -3850,13 +3892,13 @@ pub(super) fn apply_step_callbacks<F, P>(
                         };
                 }
                 outcome.register(callback.save);
-                outcome.terminate = (callback.affect)(
+                outcome.apply_action((callback.affect)(
                     velocity,
                     position,
                     &problem.parameters,
                     *time,
                     &scratch.simultaneous_events,
-                ) == CallbackAction::Terminate;
+                ))?;
             }
             PartitionedCallback::Discrete(_) => return Err(SolveError::InvalidCallbackState),
         }
@@ -3876,9 +3918,12 @@ pub(super) fn apply_step_callbacks<F, P>(
                     state_before_position.copy_from_slice(position);
                 }
                 outcome.register(callback.save);
-                outcome.terminate =
-                    (callback.affect)(velocity, position, &problem.parameters, *time)
-                        == CallbackAction::Terminate;
+                outcome.apply_action((callback.affect)(
+                    velocity,
+                    position,
+                    &problem.parameters,
+                    *time,
+                ))?;
                 ensure_finite_state(velocity, position)?;
                 if outcome.terminate {
                     break;

@@ -41,6 +41,10 @@
 //!   first-order or split problem and provides initialization/finalization
 //!   hooks around successful integration. Vector continuous callbacks group
 //!   several root functions; they are separate from ndarray state shape.
+//!   [`CallbackAction::ContinueWithStepSize`] overrides the next proposed step;
+//!   Rust interior-mutability types such as [`std::cell::Cell`] let sequential
+//!   callback effects update parameters without imposing mutable problem
+//!   ownership on every solve.
 //! - [`SolveOptions`] controls tolerances, step sizes, exact time stops, saved
 //!   output, and dense output retention; [`solve`] runs an [`OdeAlgorithm`].
 //! - [`solvers::explicit`] is a good starting point for non-stiff problems,

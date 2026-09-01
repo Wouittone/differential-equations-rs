@@ -68,7 +68,13 @@ provided.
   affected state. `CallbackSet` and `SecondOrderCallbackSet` let applications
   assemble ordered callback policies separately from their problems, run
   initialization hooks before initial conditions are tested, and synchronize
-  finalized endpoint states after successful solves.
+  finalized endpoint states after successful solves. Effects can return
+  `CallbackAction::ContinueWithStepSize` to override the next adaptive or
+  fixed-step proposal. Parameters remain ordinary Rust values: use `Cell` or
+  `RefCell` when a sequential callback must mutate them, or a synchronized
+  type when intentionally sharing them across threads. Every callback effect
+  invalidates solver caches, so subsequent right-hand-side and Jacobian calls
+  observe the updated parameter value.
   Saved-time sampling, retained dense output, and the
   documented solver families are also supported. SDEs, DDEs,
   boundary-value problems, and external solver wrappers are out of scope.

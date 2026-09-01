@@ -393,8 +393,7 @@ impl<FE, FI, P> SplitOdeProblem<FE, FI, P> {
             };
             if callback.trigger.is_triggered(state, &self.parameters, time) {
                 outcome.register(callback.save);
-                outcome.terminate =
-                    (callback.affect)(state, &self.parameters, time) == CallbackAction::Terminate;
+                outcome.apply_action((callback.affect)(state, &self.parameters, time))?;
                 ensure_finite_callback_state(state)?;
                 if outcome.terminate {
                     break;
@@ -525,8 +524,7 @@ impl<FE, FI, P> SplitOdeProblem<FE, FI, P> {
             match &self.callbacks[index] {
                 Callback::Continuous(callback) => {
                     outcome.register(callback.save);
-                    outcome.terminate = (callback.affect)(state, &self.parameters, *time)
-                        == CallbackAction::Terminate;
+                    outcome.apply_action((callback.affect)(state, &self.parameters, *time))?;
                 }
                 Callback::VectorContinuous(callback) => {
                     let mut scratch = callback.scratch.borrow_mut();
@@ -544,12 +542,12 @@ impl<FE, FI, P> SplitOdeProblem<FE, FI, P> {
                             };
                     }
                     outcome.register(callback.save);
-                    outcome.terminate = (callback.affect)(
+                    outcome.apply_action((callback.affect)(
                         state,
                         &self.parameters,
                         *time,
                         &scratch.simultaneous_events,
-                    ) == CallbackAction::Terminate;
+                    ))?;
                 }
                 Callback::Discrete(_) => return Err(SolveError::InvalidCallbackState),
             }
@@ -568,8 +566,7 @@ impl<FE, FI, P> SplitOdeProblem<FE, FI, P> {
                         state_before_effect.copy_from_slice(state);
                     }
                     outcome.register(callback.save);
-                    outcome.terminate = (callback.affect)(state, &self.parameters, *time)
-                        == CallbackAction::Terminate;
+                    outcome.apply_action((callback.affect)(state, &self.parameters, *time))?;
                     ensure_finite_callback_state(state)?;
                     if outcome.terminate {
                         break;
@@ -1179,8 +1176,7 @@ impl<F, P> OdeProblem<F, P> {
             };
             if callback.trigger.is_triggered(state, &self.parameters, time) {
                 outcome.register(callback.save);
-                outcome.terminate =
-                    (callback.affect)(state, &self.parameters, time) == CallbackAction::Terminate;
+                outcome.apply_action((callback.affect)(state, &self.parameters, time))?;
                 ensure_finite_callback_state(state)?;
                 if outcome.terminate {
                     break;
@@ -1313,8 +1309,7 @@ impl<F, P> OdeProblem<F, P> {
             match &self.callbacks[index] {
                 Callback::Continuous(callback) => {
                     outcome.register(callback.save);
-                    outcome.terminate = (callback.affect)(state, &self.parameters, *time)
-                        == CallbackAction::Terminate;
+                    outcome.apply_action((callback.affect)(state, &self.parameters, *time))?;
                 }
                 Callback::VectorContinuous(callback) => {
                     let mut scratch = callback.scratch.borrow_mut();
@@ -1332,12 +1327,12 @@ impl<F, P> OdeProblem<F, P> {
                             };
                     }
                     outcome.register(callback.save);
-                    outcome.terminate = (callback.affect)(
+                    outcome.apply_action((callback.affect)(
                         state,
                         &self.parameters,
                         *time,
                         &scratch.simultaneous_events,
-                    ) == CallbackAction::Terminate;
+                    ))?;
                 }
                 Callback::Discrete(_) => return Err(SolveError::InvalidCallbackState),
             }
@@ -1357,8 +1352,7 @@ impl<F, P> OdeProblem<F, P> {
                         state_before_effect.copy_from_slice(state);
                     }
                     outcome.register(callback.save);
-                    outcome.terminate = (callback.affect)(state, &self.parameters, *time)
-                        == CallbackAction::Terminate;
+                    outcome.apply_action((callback.affect)(state, &self.parameters, *time))?;
                     ensure_finite_callback_state(state)?;
                     if outcome.terminate {
                         break;

@@ -7,7 +7,7 @@
 //! [`crate::SplitOdeProblem`]. Residual DAEs, mass matrices,
 //! custom nonlinear solvers, and custom linear solvers are not represented.
 
-use crate::integrator::TimeStopSchedule;
+use crate::integrator::{TimeStopSchedule, callback_requested_step};
 use crate::linear::{factorize, solve_factorized};
 use crate::solution::{BorrowedHermiteSegment, DenseSegment, HermiteSegment, TrajectoryRecorder};
 use crate::solver::{
@@ -249,7 +249,6 @@ where
             .ok_or(SolveError::InitialStepRequired)?
             .min(options.max_step)
             .min((end - start).abs());
-    let mut step = nominal_step;
     let mut state = problem.initial_state().to_vec();
     let mut workspace = Workspace::new(dimension);
     let mut stats = SolverStats::default();
@@ -268,6 +267,12 @@ where
     if initial_callbacks.terminate {
         return finish_successful(problem, &mut state, start, recorder, stats);
     }
+    let mut step = callback_requested_step(
+        initial_callbacks,
+        direction,
+        options.max_step.min((end - start).abs()),
+    )
+    .unwrap_or(nominal_step);
     evaluate_explicit(problem, &mut workspace.explicit, &state, start, &mut stats)?;
     evaluate_implicit(problem, &mut workspace.implicit, &state, start, &mut stats)?;
     let mut state_before_effect = if problem.has_callbacks() {
@@ -425,7 +430,12 @@ where
         state = next_state;
         time = next_time;
         time_stops.accepted(time);
-        step = nominal_step;
+        step = callback_requested_step(
+            callbacks,
+            direction,
+            options.max_step.min((end - start).abs()),
+        )
+        .unwrap_or(nominal_step);
     }
 
     finish_successful(problem, &mut state, time, recorder, stats)

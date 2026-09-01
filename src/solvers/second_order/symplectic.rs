@@ -8,7 +8,7 @@
 
 use crate::callback::CallbackOutcome;
 use crate::event::times_are_numerically_equal;
-use crate::integrator::TimeStopSchedule;
+use crate::integrator::{TimeStopSchedule, callback_requested_step};
 use crate::solver::{
     validate_preset_time_sequences, validate_state_time_options, validate_vector_callback_lengths,
 };
@@ -641,7 +641,8 @@ where
     }
 
     let direction = (end - start).signum();
-    let step_size = fixed_step.min(options.max_step);
+    let maximum_step = options.max_step.min((end - start).abs());
+    let mut step_size = fixed_step.min(maximum_step);
     let dimension = problem.initial_position().len();
     let mut position = problem.initial_position().to_vec();
     let mut velocity = problem.initial_velocity().to_vec();
@@ -673,6 +674,9 @@ where
     };
     if initial_callbacks.terminate {
         return finish_successful(problem, &mut velocity, &mut position, start, recorder, 0);
+    }
+    if let Some(requested) = callback_requested_step(initial_callbacks, direction, maximum_step) {
+        step_size = requested.abs();
     }
     let mut time = start;
     let mut steps = 0usize;
@@ -762,6 +766,9 @@ where
                 recorder,
                 rhs_evaluations,
             );
+        }
+        if let Some(requested) = callback_requested_step(callback, direction, maximum_step) {
+            step_size = requested.abs();
         }
     }
 
