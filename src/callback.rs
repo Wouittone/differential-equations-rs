@@ -1,5 +1,6 @@
 use std::cell::RefCell;
 
+use crate::SolveError;
 use crate::event::times_are_representably_equal;
 
 /// The action requested after an ODE callback runs.
@@ -107,6 +108,8 @@ pub enum EventCrossing {
 pub(crate) type Condition<P> = dyn Fn(&[f64], &P, f64) -> bool;
 pub(crate) type EventCondition<P> = dyn Fn(&[f64], &P, f64) -> f64;
 pub(crate) type Affect<P> = dyn Fn(&mut [f64], &P, f64) -> CallbackAction;
+pub(crate) type FallibleAffect<P> =
+    dyn Fn(&mut [f64], &P, f64) -> Result<CallbackAction, SolveError>;
 pub(crate) type VectorEventCondition<P> = dyn Fn(&mut [f64], &[f64], &P, f64);
 pub(crate) type VectorAffect<P> = dyn Fn(&mut [f64], &P, f64, &[EventCrossing]) -> CallbackAction;
 pub(crate) type LifecycleHook<P> = dyn Fn(&mut [f64], &P, f64);
@@ -242,7 +245,7 @@ pub(crate) enum DiscreteTrigger<P> {
 
 pub(crate) struct DiscreteCallback<P> {
     pub trigger: DiscreteTrigger<P>,
-    pub affect: Box<Affect<P>>,
+    pub affect: Box<FallibleAffect<P>>,
     pub save: CallbackSave,
 }
 
@@ -432,7 +435,7 @@ impl<P> CallbackSet<P> {
 
     /// Adds a discrete callback with explicit callback-time saving behavior.
     pub fn with_discrete_callback_saving<C, A>(
-        mut self,
+        self,
         save: CallbackSave,
         condition: C,
         affect: A,
@@ -440,6 +443,23 @@ impl<P> CallbackSet<P> {
     where
         C: Fn(&[f64], &P, f64) -> bool + 'static,
         A: Fn(&mut [f64], &P, f64) -> CallbackAction + 'static,
+    {
+        self.with_fallible_discrete_callback_saving(
+            save,
+            condition,
+            move |state, parameters, time| Ok(affect(state, parameters, time)),
+        )
+    }
+
+    pub(crate) fn with_fallible_discrete_callback_saving<C, A>(
+        mut self,
+        save: CallbackSave,
+        condition: C,
+        affect: A,
+    ) -> Self
+    where
+        C: Fn(&[f64], &P, f64) -> bool + 'static,
+        A: Fn(&mut [f64], &P, f64) -> Result<CallbackAction, SolveError> + 'static,
     {
         self.callbacks.push(Callback::Discrete(DiscreteCallback {
             trigger: DiscreteTrigger::Condition(Box::new(condition)),
@@ -463,13 +483,29 @@ impl<P> CallbackSet<P> {
 
     /// Adds a preset-time callback with explicit callback-time saving behavior.
     pub fn with_preset_time_callback_saving<A>(
-        mut self,
+        self,
         times: impl IntoIterator<Item = f64>,
         save: CallbackSave,
         affect: A,
     ) -> Self
     where
         A: Fn(&mut [f64], &P, f64) -> CallbackAction + 'static,
+    {
+        self.with_fallible_preset_time_callback_saving(
+            times,
+            save,
+            move |state, parameters, time| Ok(affect(state, parameters, time)),
+        )
+    }
+
+    pub(crate) fn with_fallible_preset_time_callback_saving<A>(
+        mut self,
+        times: impl IntoIterator<Item = f64>,
+        save: CallbackSave,
+        affect: A,
+    ) -> Self
+    where
+        A: Fn(&mut [f64], &P, f64) -> Result<CallbackAction, SolveError> + 'static,
     {
         self.callbacks.push(Callback::Discrete(DiscreteCallback {
             trigger: DiscreteTrigger::PresetTimes(PresetTimes::new(times)),

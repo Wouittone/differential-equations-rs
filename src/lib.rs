@@ -45,6 +45,8 @@
 //!   callback effects or trajectory saving.
 //!   [`callbacks::PositiveDomain`] cheaply restricts upcoming steps and clamps
 //!   accepted states to preserve componentwise non-negativity.
+//!   [`callbacks::ManifoldProjection`] enforces implicit conservation laws
+//!   with rectangular residuals and typed nonlinear failure.
 //!   [`CallbackAction::ContinueWithStepSize`] overrides the next proposed step;
 //!   Rust interior-mutability types such as [`std::cell::Cell`] let sequential
 //!   callback effects update parameters without imposing mutable problem

@@ -6,6 +6,10 @@
 //! [`crate::CallbackSet::append`] before attaching the resulting set to a
 //! problem.
 
+mod manifold;
+
+pub use manifold::ManifoldProjection;
+
 use std::rc::Rc;
 
 use crate::ConfigurationError;
@@ -87,7 +91,9 @@ impl PeriodicCallback {
         Ok(CallbackSet {
             callbacks: vec![Callback::Discrete(DiscreteCallback {
                 trigger: DiscreteTrigger::Periodic(times),
-                affect: Box::new(affect),
+                affect: Box::new(move |state, parameters, time| {
+                    Ok(affect(state, parameters, time))
+                }),
                 save: self.save,
             })],
             initializers: Vec::new(),

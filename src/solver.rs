@@ -225,6 +225,15 @@ pub enum SolveError {
     /// A callback effect produced a non-finite state.
     #[error("a callback produced a non-finite state")]
     NonFiniteCallbackState,
+    /// A manifold residual or its Jacobian produced a non-finite value.
+    #[error("a manifold projection function produced a non-finite value")]
+    NonFiniteManifoldProjection,
+    /// The manifold has more constraints than state components.
+    #[error("the manifold residual dimension exceeds the state dimension")]
+    InvalidManifoldDimension,
+    /// A manifold projection iteration was singular or did not converge.
+    #[error("the manifold projection did not converge")]
+    ManifoldProjectionFailed,
     /// A callback requested a non-positive or non-finite next step.
     #[error("a callback-requested step size must be finite and positive")]
     InvalidCallbackStepSize,

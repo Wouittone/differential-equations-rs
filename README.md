@@ -134,6 +134,13 @@ attempt, repeatedly reduces an unsafe upcoming step, applies a `0.9` safety
 factor, and clamps negative accepted components to zero. It defaults to the
 solve's absolute tolerance, supports an explicit override, and works for
 ordinary and split first-order problems with scalar, vector, or matrix state.
+`ManifoldProjection` enforces one or more implicit conservation constraints
+after initialization and every accepted step. It supports rectangular
+residuals, finite-difference or analytic Jacobians, backtracked Newton
+corrections, and typed non-convergence errors for ordinary and split
+first-order problems. Because projection changes endpoints after dense output
+is constructed, requested samples that must be projected should also be listed
+as exact time stops.
 
 ```rust
 use differential_equations::callbacks::PeriodicCallback;
@@ -160,8 +167,8 @@ let problem = OdeProblem::new(
 `DomainGuard` also construct partitioned callback sets for second-order
 problems through `into_second_order_callback_set`. `DomainGuard` checks actual
 candidate states and may repeat their computation; `PositiveDomain` predicts
-the next state before the attempt. Generic `GeneralDomain` and nonlinear
-manifold projection remain future work.
+the next state before the attempt. Generic `GeneralDomain` remains future
+work and will reuse the manifold projection engine.
 
 ## Tableau extensions
 
