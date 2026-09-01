@@ -134,22 +134,45 @@ fn the_last_simultaneous_step_request_wins_and_initial_requests_apply_immediatel
 }
 
 #[test]
+fn simultaneous_step_limits_compose_and_cap_explicit_requests() {
+    let problem = OdeProblem::new(
+        |derivative: &mut [f64], _: &[f64], _: &(), _: f64| derivative[0] = 0.0,
+        [0.0],
+        (0.0, 0.5),
+        (),
+    )
+    .with_preset_time_callback([0.0], |_, _, _| CallbackAction::LimitStepSize(0.2))
+    .with_preset_time_callback([0.0], |_, _, _| CallbackAction::LimitStepSize(0.1))
+    .with_preset_time_callback([0.0], |_, _, _| {
+        CallbackAction::ContinueUnmodifiedWithStepSize(0.4)
+    });
+
+    let solution = solve(&problem, Rk4, &options(0.5, false)).unwrap();
+
+    assert!(has_step_after(solution.times(), 0.0, 0.1));
+}
+
+#[test]
 fn invalid_callback_step_requests_are_typed_errors() {
     for step in [0.0, -1.0, f64::NAN, f64::INFINITY] {
-        let problem = OdeProblem::new(
-            |derivative: &mut [f64], _: &[f64], _: &(), _: f64| derivative[0] = 0.0,
-            [0.0],
-            (0.0, 1.0),
-            (),
-        )
-        .with_preset_time_callback([0.0], move |_, _, _| {
-            CallbackAction::ContinueWithStepSize(step)
-        });
+        for action in [
+            CallbackAction::ContinueWithStepSize(step),
+            CallbackAction::ContinueUnmodifiedWithStepSize(step),
+            CallbackAction::LimitStepSize(step),
+        ] {
+            let problem = OdeProblem::new(
+                |derivative: &mut [f64], _: &[f64], _: &(), _: f64| derivative[0] = 0.0,
+                [0.0],
+                (0.0, 1.0),
+                (),
+            )
+            .with_preset_time_callback([0.0], move |_, _, _| action);
 
-        assert_eq!(
-            solve(&problem, Rk4, &options(0.5, false)),
-            Err(SolveError::InvalidCallbackStepSize)
-        );
+            assert_eq!(
+                solve(&problem, Rk4, &options(0.5, false)),
+                Err(SolveError::InvalidCallbackStepSize)
+            );
+        }
     }
 }
 

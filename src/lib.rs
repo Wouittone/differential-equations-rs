@@ -46,9 +46,9 @@
 //!   callback effects update parameters without imposing mutable problem
 //!   ownership on every solve.
 //! - [`callbacks`] contains reusable integration-time policies. Its periodic
-//!   scheduler uses constant memory, while its function-calling policy marks
-//!   read-only observations explicitly so state-dependent solver caches remain
-//!   reusable.
+//!   scheduler uses constant memory, its function-calling policy marks
+//!   read-only observations explicitly, and its step-size limiter applies
+//!   dynamic stability bounds without interfering with smaller adaptive steps.
 //! - [`SolveOptions`] controls tolerances, step sizes, exact time stops, saved
 //!   output, and dense output retention; [`solve`] runs an [`OdeAlgorithm`].
 //! - [`solvers::explicit`] is a good starting point for non-stiff problems,

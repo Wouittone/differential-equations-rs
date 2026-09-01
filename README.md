@@ -124,6 +124,8 @@ without materializing every time in memory, supports phase offsets and forward
 or backward solves, and can optionally affect the initial and final states.
 `FunctionCallingCallback` observes the initial state, every accepted step, or
 an explicit set of exact times without invalidating solver caches.
+`StepsizeLimiter` applies a state-dependent stability bound, such as a CFL
+limit, while leaving adaptive controllers free to choose a smaller step.
 
 ```rust
 use differential_equations::callbacks::PeriodicCallback;
@@ -146,11 +148,11 @@ let problem = OdeProblem::new(
 # Ok::<(), differential_equations::ConfigurationError>(())
 ```
 
-Both policies also construct partitioned callback sets for second-order
+All three policies also construct partitioned callback sets for second-order
 problems through `into_second_order_callback_set`. More invasive SciML callback
-policies—such as manifold projection, domain rejection, and dynamic stability
-limits—require a richer public integrator-control interface and are not yet
-presented as prebuilt policies.
+policies—such as manifold projection and domain rejection—require state
+projection or step-rejection controls and are not yet presented as prebuilt
+policies.
 
 ## Tableau extensions
 

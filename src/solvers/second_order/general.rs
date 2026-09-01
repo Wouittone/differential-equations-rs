@@ -9,7 +9,7 @@ use crate::event::{
     times_are_numerically_equal, times_are_representably_equal,
 };
 use crate::integrator::{
-    ControllerConfig, ControllerState, TimeStopSchedule, callback_requested_step,
+    ControllerConfig, ControllerState, TimeStopSchedule, callback_adjusted_step,
 };
 use crate::linear::{factorize, solve_factorized};
 use crate::solver::{
@@ -1848,9 +1848,8 @@ where
             stats,
         );
     }
-    if let Some(requested) = callback_requested_step(initial, direction, maximum_step) {
-        step_magnitude = requested.abs();
-    }
+    step_magnitude =
+        callback_adjusted_step(initial, direction * step_magnitude, direction, maximum_step).abs();
     evaluate_acceleration(
         problem,
         &mut acceleration,
@@ -2063,15 +2062,35 @@ where
         if callback.state_modified {
             controller_state.reset();
         }
-        if let Some(requested) = callback_requested_step(callback, direction, maximum_step) {
-            step_magnitude = requested.abs();
+        if callback.requested_step.is_some() {
+            step_magnitude = callback_adjusted_step(
+                callback,
+                direction * step_magnitude,
+                direction,
+                maximum_step,
+            )
+            .abs();
         } else if options.adaptive {
             controller_state.accepted(error);
             let mut factor = controller_state.factor(error, controller);
             if previous_attempt_rejected {
                 factor = factor.min(1.0);
             }
-            step_magnitude = (step.abs() * factor).min(maximum_step);
+            step_magnitude = callback_adjusted_step(
+                callback,
+                direction * step.abs() * factor,
+                direction,
+                maximum_step,
+            )
+            .abs();
+        } else if callback.step_limit.is_some() {
+            step_magnitude = callback_adjusted_step(
+                callback,
+                direction * step_magnitude,
+                direction,
+                maximum_step,
+            )
+            .abs();
         }
         previous_attempt_rejected = false;
     }
@@ -2363,9 +2382,8 @@ where
             stats,
         );
     }
-    if let Some(requested) = callback_requested_step(initial, direction, maximum_step) {
-        step_magnitude = requested.abs();
-    }
+    step_magnitude =
+        callback_adjusted_step(initial, direction * step_magnitude, direction, maximum_step).abs();
 
     let mut time = start;
     let mut steps = 0;
@@ -2505,9 +2523,13 @@ where
         if callback.terminate {
             return finish_successful(problem, &mut velocity, &mut position, time, recorder, stats);
         }
-        if let Some(requested) = callback_requested_step(callback, direction, maximum_step) {
-            step_magnitude = requested.abs();
-        }
+        step_magnitude = callback_adjusted_step(
+            callback,
+            direction * step_magnitude,
+            direction,
+            maximum_step,
+        )
+        .abs();
     }
     finish_successful(problem, &mut velocity, &mut position, time, recorder, stats)
 }
@@ -2580,9 +2602,8 @@ where
             stats,
         );
     }
-    if let Some(requested) = callback_requested_step(initial, direction, maximum_step) {
-        step_magnitude = requested.abs();
-    }
+    step_magnitude =
+        callback_adjusted_step(initial, direction * step_magnitude, direction, maximum_step).abs();
 
     let mut time = start;
     let mut attempts = 0;
@@ -2810,8 +2831,14 @@ where
                 );
             }
 
-            if let Some(requested) = callback_requested_step(callback, direction, maximum_step) {
-                step_magnitude = requested.abs();
+            if callback.requested_step.is_some() {
+                step_magnitude = callback_adjusted_step(
+                    callback,
+                    direction * step_magnitude,
+                    direction,
+                    maximum_step,
+                )
+                .abs();
                 previous_attempt_rejected = false;
             } else if options.adaptive {
                 let factor = controller_state.factor(error, controller);
@@ -2821,8 +2848,22 @@ where
                 } else {
                     factor
                 };
-                step_magnitude = (step.abs() * factor).min(maximum_step);
+                step_magnitude = callback_adjusted_step(
+                    callback,
+                    direction * step.abs() * factor,
+                    direction,
+                    maximum_step,
+                )
+                .abs();
                 previous_attempt_rejected = false;
+            } else if callback.step_limit.is_some() {
+                step_magnitude = callback_adjusted_step(
+                    callback,
+                    direction * step_magnitude,
+                    direction,
+                    maximum_step,
+                )
+                .abs();
             }
         } else {
             stats.rejected_steps += 1;
@@ -3048,9 +3089,8 @@ where
             stats,
         );
     }
-    if let Some(requested) = callback_requested_step(initial, direction, maximum_step) {
-        step_magnitude = requested.abs();
-    }
+    step_magnitude =
+        callback_adjusted_step(initial, direction * step_magnitude, direction, maximum_step).abs();
     evaluate_acceleration(
         problem,
         &mut acceleration,
@@ -3359,9 +3399,16 @@ where
             acceleration.copy_from_slice(&workspace.next_acceleration);
             history_valid = constant_step;
         }
-        if let Some(requested) = callback_requested_step(callback, direction, maximum_step) {
-            step_magnitude = requested.abs();
-            history_valid = false;
+        if callback.requested_step.is_some() || callback.step_limit.is_some() {
+            let adjusted = callback_adjusted_step(
+                callback,
+                direction * step_magnitude,
+                direction,
+                maximum_step,
+            )
+            .abs();
+            history_valid &= adjusted == step_magnitude;
+            step_magnitude = adjusted;
         }
     }
     finish_successful(problem, &mut velocity, &mut position, time, recorder, stats)
@@ -3415,9 +3462,8 @@ where
             stats,
         );
     }
-    if let Some(requested) = callback_requested_step(initial, direction, maximum_step) {
-        step_magnitude = requested.abs();
-    }
+    step_magnitude =
+        callback_adjusted_step(initial, direction * step_magnitude, direction, maximum_step).abs();
 
     let caches_acceleration = matches!(method, Method::VelocityVerlet | Method::VerletLeapfrog);
     if caches_acceleration {
@@ -3515,9 +3561,13 @@ where
         if callback.terminate {
             return finish_successful(problem, &mut velocity, &mut position, time, recorder, stats);
         }
-        if let Some(requested) = callback_requested_step(callback, direction, maximum_step) {
-            step_magnitude = requested.abs();
-        }
+        step_magnitude = callback_adjusted_step(
+            callback,
+            direction * step_magnitude,
+            direction,
+            maximum_step,
+        )
+        .abs();
         if callback.state_modified && caches_acceleration {
             evaluate_acceleration(
                 problem,

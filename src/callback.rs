@@ -17,6 +17,20 @@ pub enum CallbackAction {
     /// still invalidate caches when they localize a root because the accepted
     /// step is truncated at the event time.
     ContinueUnmodified,
+    /// Resume integration and cap the next proposed step-size magnitude.
+    ///
+    /// Unlike [`Self::ContinueWithStepSize`], this keeps a smaller step chosen
+    /// by the adaptive controller. The callback must not have changed the
+    /// state or right-hand-side parameters because this action preserves
+    /// state-dependent solver caches.
+    LimitStepSize(f64),
+    /// Request this exact next step-size magnitude without invalidating
+    /// state-dependent solver caches.
+    ///
+    /// The callback must not have changed the state or right-hand-side
+    /// parameters. Concurrent step limits can still reduce the request.
+    /// State-mutating effects should use [`Self::ContinueWithStepSize`] instead.
+    ContinueUnmodifiedWithStepSize(f64),
     /// Resume integration and use this positive step-size magnitude next.
     ///
     /// The request overrides the adaptive controller or fixed-step size for
@@ -551,6 +565,7 @@ pub(crate) struct CallbackOutcome {
     pub save_before: bool,
     pub save_after: bool,
     pub requested_step: Option<f64>,
+    pub step_limit: Option<f64>,
 }
 
 impl CallbackOutcome {
@@ -568,11 +583,21 @@ impl CallbackOutcome {
         match action {
             CallbackAction::Continue => self.state_modified = true,
             CallbackAction::ContinueUnmodified => {}
+            CallbackAction::LimitStepSize(step) if step.is_finite() && step > 0.0 => {
+                self.step_limit = Some(self.step_limit.map_or(step, |limit| limit.min(step)));
+            }
+            CallbackAction::ContinueUnmodifiedWithStepSize(step)
+                if step.is_finite() && step > 0.0 =>
+            {
+                self.requested_step = Some(step);
+            }
             CallbackAction::ContinueWithStepSize(step) if step.is_finite() && step > 0.0 => {
                 self.state_modified = true;
                 self.requested_step = Some(step);
             }
-            CallbackAction::ContinueWithStepSize(_) => {
+            CallbackAction::LimitStepSize(_)
+            | CallbackAction::ContinueUnmodifiedWithStepSize(_)
+            | CallbackAction::ContinueWithStepSize(_) => {
                 return Err(crate::SolveError::InvalidCallbackStepSize);
             }
             CallbackAction::Terminate => {

@@ -18,14 +18,20 @@ pub(crate) struct TimeStopSchedule<'a> {
     direction: f64,
 }
 
-pub(crate) fn callback_requested_step(
+pub(crate) fn callback_adjusted_step(
     callbacks: CallbackOutcome,
+    proposed_step: f64,
     direction: f64,
     maximum_step: f64,
-) -> Option<f64> {
-    callbacks
+) -> f64 {
+    let mut magnitude = callbacks
         .requested_step
-        .map(|step| direction * step.min(maximum_step))
+        .unwrap_or_else(|| proposed_step.abs())
+        .min(maximum_step);
+    if let Some(limit) = callbacks.step_limit {
+        magnitude = magnitude.min(limit);
+    }
+    direction * magnitude
 }
 
 impl<'a> TimeStopSchedule<'a> {
@@ -614,25 +620,28 @@ where
     }
 
     kernel.initialize(problem, &state, start, &mut stats)?;
-    let initial_step = callback_requested_step(initial_callbacks, direction, maximum_step);
-    let mut step = if let Some(step) = initial_step {
-        kernel.modify_step(step)
-    } else {
-        let step_magnitude = match options.initial_step {
-            Some(step) => step.min(maximum_step),
-            None => kernel.estimate_initial_step(
-                problem,
-                &state,
-                start,
-                direction,
-                maximum_step,
-                &mut candidate,
-                options,
-                &mut stats,
-            )?,
-        };
-        kernel.modify_step(direction * step_magnitude)
+    let proposed_initial_step = match options.initial_step {
+        Some(step) => direction * step.min(maximum_step),
+        None => {
+            direction
+                * kernel.estimate_initial_step(
+                    problem,
+                    &state,
+                    start,
+                    direction,
+                    maximum_step,
+                    &mut candidate,
+                    options,
+                    &mut stats,
+                )?
+        }
     };
+    let mut step = kernel.modify_step(callback_adjusted_step(
+        initial_callbacks,
+        proposed_initial_step,
+        direction,
+        maximum_step,
+    ));
     let mut time = start;
     let mut attempted_steps = 0;
     let mut time_stops = TimeStopSchedule::new(&options.time_stops, start, end);
@@ -829,8 +838,13 @@ where
                 // next PI proposal.
                 controller_state.reset();
             }
-            if let Some(requested) = callback_requested_step(callbacks, direction, maximum_step) {
-                step = kernel.modify_step(requested);
+            if callbacks.requested_step.is_some() {
+                step = kernel.modify_step(callback_adjusted_step(
+                    callbacks,
+                    step,
+                    direction,
+                    maximum_step,
+                ));
             } else if options.adaptive {
                 controller_state.accepted(estimate.error_norm);
                 let mut factor = estimate.proposed_factor.unwrap_or_else(|| {
@@ -839,8 +853,20 @@ where
                 if previous_step_rejected {
                     factor = factor.min(capabilities.controller.rejected_acceptance_maximum);
                 }
-                step = kernel
-                    .modify_step(direction * (attempted_step.abs() * factor).min(maximum_step));
+                let proposed = direction * attempted_step.abs() * factor;
+                step = kernel.modify_step(callback_adjusted_step(
+                    callbacks,
+                    proposed,
+                    direction,
+                    maximum_step,
+                ));
+            } else if callbacks.step_limit.is_some() {
+                step = kernel.modify_step(callback_adjusted_step(
+                    callbacks,
+                    step,
+                    direction,
+                    maximum_step,
+                ));
             }
             previous_step_rejected = false;
         } else {

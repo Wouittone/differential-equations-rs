@@ -134,6 +134,96 @@ impl PeriodicCallback {
     }
 }
 
+/// A state-dependent upper bound for the next integration step.
+///
+/// This policy is useful for stability restrictions such as a CFL condition.
+/// The supplied function returns a positive step-size magnitude from the
+/// current state, parameters, and time. By default, the solver may choose a
+/// smaller step; [`Self::with_max_step`] instead makes a fixed-step solve track
+/// the scaled bound exactly.
+#[derive(Clone, Copy, Debug)]
+#[must_use]
+pub struct StepsizeLimiter<F> {
+    limit: F,
+    safety_factor: f64,
+    max_step: bool,
+}
+
+impl<F> StepsizeLimiter<F> {
+    /// Creates a limiter with a safety factor of `0.9`.
+    pub const fn new(limit: F) -> Self {
+        Self {
+            limit,
+            safety_factor: 0.9,
+            max_step: false,
+        }
+    }
+
+    /// Sets the factor applied below the returned stability limit.
+    ///
+    /// The value is validated when a callback set is built and must lie in
+    /// `(0, 1]`.
+    pub const fn with_safety_factor(mut self, safety_factor: f64) -> Self {
+        self.safety_factor = safety_factor;
+        self
+    }
+
+    /// Selects whether each next step is set to, rather than capped by, the
+    /// scaled limit.
+    ///
+    /// This mirrors the fixed-step `max_step` mode of SciML's policy. Adaptive
+    /// solves should normally keep this disabled so their error controller can
+    /// select a smaller step.
+    pub const fn with_max_step(mut self, enabled: bool) -> Self {
+        self.max_step = enabled;
+        self
+    }
+
+    /// Builds a callback set for an ordinary or split ODE problem.
+    pub fn into_callback_set<P>(self) -> Result<CallbackSet<P>, ConfigurationError>
+    where
+        F: Fn(&[f64], &P, f64) -> f64 + 'static,
+    {
+        validate_safety_factor(self.safety_factor)?;
+        let safety_factor = self.safety_factor;
+        let max_step = self.max_step;
+        let limit = self.limit;
+        Ok(CallbackSet::new().with_discrete_callback_saving(
+            CallbackSave::None,
+            |_, _, _| true,
+            move |state, parameters, time| {
+                step_limit_action(safety_factor * limit(state, parameters, time), max_step)
+            },
+        ))
+    }
+
+    /// Builds a callback set for a partitioned second-order ODE problem.
+    ///
+    /// The limit function receives velocity before position, matching the
+    /// partitioned solver API.
+    pub fn into_second_order_callback_set<P>(
+        self,
+    ) -> Result<SecondOrderCallbackSet<P>, ConfigurationError>
+    where
+        F: Fn(&[f64], &[f64], &P, f64) -> f64 + 'static,
+    {
+        validate_safety_factor(self.safety_factor)?;
+        let safety_factor = self.safety_factor;
+        let max_step = self.max_step;
+        let limit = self.limit;
+        Ok(SecondOrderCallbackSet::new().with_discrete_callback_saving(
+            CallbackSave::None,
+            |_, _, _, _| true,
+            move |velocity, position, parameters, time| {
+                step_limit_action(
+                    safety_factor * limit(velocity, position, parameters, time),
+                    max_step,
+                )
+            },
+        ))
+    }
+}
+
 /// Configuration for an observation-only function callback.
 ///
 /// The default policy calls the function at the initial condition and after
@@ -338,4 +428,22 @@ fn validate_representable_period(
         });
     }
     Ok(())
+}
+
+fn validate_safety_factor(safety_factor: f64) -> Result<(), ConfigurationError> {
+    if !safety_factor.is_finite() || safety_factor <= 0.0 || safety_factor > 1.0 {
+        return Err(ConfigurationError::InvalidParameter {
+            parameter: "stepsize safety factor",
+            reason: "must be finite and lie in (0, 1]",
+        });
+    }
+    Ok(())
+}
+
+fn step_limit_action(step: f64, max_step: bool) -> CallbackAction {
+    if max_step {
+        CallbackAction::ContinueUnmodifiedWithStepSize(step)
+    } else {
+        CallbackAction::LimitStepSize(step)
+    }
 }
