@@ -165,6 +165,9 @@ pub enum SolveError {
     /// At least one initial-state component is NaN or infinite.
     #[error("the initial state contains a non-finite value")]
     NonFiniteInitialState,
+    /// The initialized state lies outside an attached domain guard.
+    #[error("the initialized state lies outside an attached domain guard")]
+    InitialStateOutOfDomain,
     /// The time span is degenerate or contains a non-finite endpoint.
     #[error("the time span must contain distinct finite values")]
     InvalidTimeSpan,

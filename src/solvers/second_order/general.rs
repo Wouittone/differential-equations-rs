@@ -27,6 +27,7 @@ type Affect<P> = dyn Fn(&mut [f64], &mut [f64], &P, f64) -> CallbackAction;
 type VectorContinuousCondition<P> = dyn Fn(&mut [f64], &[f64], &[f64], &P, f64);
 type VectorAffect<P> = dyn Fn(&mut [f64], &mut [f64], &P, f64, &[EventCrossing]) -> CallbackAction;
 type LifecycleHook<P> = dyn Fn(&mut [f64], &mut [f64], &P, f64);
+type DomainCondition<P> = dyn Fn(&[f64], &[f64], &P, f64) -> bool;
 type PartitionedInterpolator<'a> =
     dyn FnMut(f64, &mut [f64], &mut [f64]) -> Result<(), SolveError> + 'a;
 
@@ -110,6 +111,11 @@ struct InitializationHook<P> {
     save: CallbackSave,
 }
 
+struct StepGuard<P> {
+    is_out_of_domain: Box<DomainCondition<P>>,
+    reduction_factor: f64,
+}
+
 /// An ordered collection of callbacks for a second-order ODE problem.
 ///
 /// Conditions receive velocity before position, and effects receive mutable
@@ -119,6 +125,7 @@ pub struct SecondOrderCallbackSet<P> {
     callbacks: Vec<PartitionedCallback<P>>,
     initializers: Vec<InitializationHook<P>>,
     finalizers: Vec<Box<LifecycleHook<P>>>,
+    step_guards: Vec<StepGuard<P>>,
 }
 
 impl<P> SecondOrderCallbackSet<P> {
@@ -128,17 +135,23 @@ impl<P> SecondOrderCallbackSet<P> {
             callbacks: Vec::new(),
             initializers: Vec::new(),
             finalizers: Vec::new(),
+            step_guards: Vec::new(),
         }
     }
 
-    /// Returns the number of callbacks in the set.
+    /// Returns the number of event callbacks in the set.
+    ///
+    /// Lifecycle hooks and candidate-state guards are not included.
     pub fn len(&self) -> usize {
         self.callbacks.len()
     }
 
-    /// Returns whether the set contains no callbacks.
+    /// Returns whether the set contains no callbacks, hooks, or guards.
     pub fn is_empty(&self) -> bool {
-        self.callbacks.is_empty() && self.initializers.is_empty() && self.finalizers.is_empty()
+        self.callbacks.is_empty()
+            && self.initializers.is_empty()
+            && self.finalizers.is_empty()
+            && self.step_guards.is_empty()
     }
 
     /// Adds a partitioned initialization hook that saves the initialized state.
@@ -167,6 +180,17 @@ impl<P> SecondOrderCallbackSet<P> {
         F: Fn(&mut [f64], &mut [f64], &P, f64) + 'static,
     {
         self.finalizers.push(Box::new(finalize));
+        self
+    }
+
+    pub(crate) fn with_step_guard<G>(mut self, reduction_factor: f64, guard: G) -> Self
+    where
+        G: Fn(&[f64], &[f64], &P, f64) -> bool + 'static,
+    {
+        self.step_guards.push(StepGuard {
+            is_out_of_domain: Box::new(guard),
+            reduction_factor,
+        });
         self
     }
 
@@ -357,6 +381,7 @@ impl<P> SecondOrderCallbackSet<P> {
         self.callbacks.append(&mut other.callbacks);
         self.initializers.append(&mut other.initializers);
         self.finalizers.append(&mut other.finalizers);
+        self.step_guards.append(&mut other.step_guards);
         self
     }
 }
@@ -384,6 +409,7 @@ pub struct SecondOrderOdeProblem<F, P> {
     callbacks: Vec<PartitionedCallback<P>>,
     initializers: Vec<InitializationHook<P>>,
     finalizers: Vec<Box<LifecycleHook<P>>>,
+    step_guards: Vec<StepGuard<P>>,
 }
 
 impl<F, P> SecondOrderOdeProblem<F, P> {
@@ -404,6 +430,7 @@ impl<F, P> SecondOrderOdeProblem<F, P> {
             callbacks: Vec::new(),
             initializers: Vec::new(),
             finalizers: Vec::new(),
+            step_guards: Vec::new(),
         }
     }
 
@@ -412,6 +439,7 @@ impl<F, P> SecondOrderOdeProblem<F, P> {
         self.callbacks.append(&mut callback_set.callbacks);
         self.initializers.append(&mut callback_set.initializers);
         self.finalizers.append(&mut callback_set.finalizers);
+        self.step_guards.append(&mut callback_set.step_guards);
         self
     }
 
@@ -614,7 +642,23 @@ impl<F, P> SecondOrderOdeProblem<F, P> {
     }
 
     pub(crate) fn has_callbacks(&self) -> bool {
-        !self.callbacks.is_empty() || !self.initializers.is_empty() || !self.finalizers.is_empty()
+        !self.callbacks.is_empty()
+            || !self.initializers.is_empty()
+            || !self.finalizers.is_empty()
+            || !self.step_guards.is_empty()
+    }
+
+    pub(crate) fn domain_rejection_factor(
+        &self,
+        velocity: &[f64],
+        position: &[f64],
+        time: f64,
+    ) -> Option<f64> {
+        self.step_guards
+            .iter()
+            .filter(|guard| (guard.is_out_of_domain)(velocity, position, &self.parameters, time))
+            .map(|guard| guard.reduction_factor)
+            .reduce(f64::min)
     }
 
     pub(crate) fn preset_time_sequences(&self) -> impl Iterator<Item = &[f64]> {
@@ -1838,6 +1882,12 @@ where
             true,
         );
     }
+    if problem
+        .domain_rejection_factor(&velocity, &position, start)
+        .is_some()
+    {
+        return Err(SolveError::InitialStateOutOfDomain.into());
+    }
     if initial.terminate {
         return finish_successful(
             problem,
@@ -1987,6 +2037,17 @@ where
         } else {
             attempted_time
         };
+        if let Some(reduction_factor) = problem.domain_rejection_factor(
+            &workspace.candidate_velocity,
+            &workspace.candidate_position,
+            next_time,
+        ) {
+            stats.rejected_steps += 1;
+            controller_state.reset();
+            step_magnitude = step.abs() * reduction_factor;
+            previous_attempt_rejected = true;
+            continue;
+        }
         let callback = apply_step_callbacks(
             problem,
             &velocity,
@@ -2372,6 +2433,12 @@ where
             true,
         );
     }
+    if problem
+        .domain_rejection_factor(&velocity, &position, start)
+        .is_some()
+    {
+        return Err(SolveError::InitialStateOutOfDomain.into());
+    }
     if initial.terminate {
         return finish_successful(
             problem,
@@ -2470,6 +2537,15 @@ where
         let mut next_time = time + step;
         if direction * (end - next_time) <= 0.0 {
             next_time = end;
+        }
+        if let Some(reduction_factor) = problem.domain_rejection_factor(
+            &workspace.candidate_velocity,
+            &workspace.candidate_position,
+            next_time,
+        ) {
+            stats.rejected_steps += 1;
+            step_magnitude = step.abs() * reduction_factor;
+            continue;
         }
         let callback = apply_step_callbacks(
             problem,
@@ -2592,6 +2668,12 @@ where
             true,
         );
     }
+    if problem
+        .domain_rejection_factor(&velocity, &position, start)
+        .is_some()
+    {
+        return Err(SolveError::InitialStateOutOfDomain.into());
+    }
     if initial.terminate {
         return finish_successful(
             problem,
@@ -2706,6 +2788,17 @@ where
             } else {
                 attempted_time
             };
+            if let Some(reduction_factor) = problem.domain_rejection_factor(
+                &workspace.candidate_velocity,
+                &workspace.candidate_position,
+                next_time,
+            ) {
+                stats.rejected_steps += 1;
+                controller_state.reset();
+                step_magnitude = step.abs() * reduction_factor;
+                previous_attempt_rejected = true;
+                continue;
+            }
             let callback = if tableau.dense_position_coefficients.is_some() {
                 let stage_accelerations = &workspace.stage_accelerations;
                 let mut interpolate =
@@ -3079,6 +3172,12 @@ where
             true,
         );
     }
+    if problem
+        .domain_rejection_factor(&velocity, &position, start)
+        .is_some()
+    {
+        return Err(SolveError::InitialStateOutOfDomain.into());
+    }
     if initial.terminate {
         return finish_successful(
             problem,
@@ -3319,6 +3418,16 @@ where
         } else {
             time + step
         };
+        if let Some(reduction_factor) = problem.domain_rejection_factor(
+            &workspace.candidate_velocity,
+            &workspace.candidate_position,
+            next_time,
+        ) {
+            stats.rejected_steps += 1;
+            step_magnitude = step.abs() * reduction_factor;
+            history_valid = false;
+            continue;
+        }
         let callback = apply_step_callbacks(
             problem,
             &velocity,
@@ -3452,6 +3561,12 @@ where
             true,
         );
     }
+    if problem
+        .domain_rejection_factor(&velocity, &position, start)
+        .is_some()
+    {
+        return Err(SolveError::InitialStateOutOfDomain.into());
+    }
     if initial.terminate {
         return finish_successful(
             problem,
@@ -3508,6 +3623,25 @@ where
         let mut next_time = time + step;
         if direction * (end - next_time) <= 0.0 {
             next_time = end;
+        }
+        if let Some(reduction_factor) = problem.domain_rejection_factor(
+            &workspace.candidate_velocity,
+            &workspace.candidate_position,
+            next_time,
+        ) {
+            stats.rejected_steps += 1;
+            step_magnitude = step.abs() * reduction_factor;
+            if caches_acceleration {
+                evaluate_acceleration(
+                    problem,
+                    &mut workspace.acceleration,
+                    &velocity,
+                    &position,
+                    time,
+                    &mut stats,
+                )?;
+            }
+            continue;
         }
         let callback = apply_step_callbacks(
             problem,

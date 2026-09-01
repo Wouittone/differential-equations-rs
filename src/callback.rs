@@ -305,6 +305,13 @@ pub(crate) enum Callback<P> {
     VectorContinuous(VectorContinuousCallback<P>),
 }
 
+pub(crate) type DomainCondition<P> = dyn Fn(&[f64], &P, f64) -> bool;
+
+pub(crate) struct StepGuard<P> {
+    pub(crate) is_out_of_domain: Box<DomainCondition<P>>,
+    pub(crate) reduction_factor: f64,
+}
+
 /// An ordered collection of callbacks that can be attached to an ODE problem.
 ///
 /// A set is useful when callback configuration is built separately from a
@@ -316,6 +323,7 @@ pub struct CallbackSet<P> {
     pub(crate) callbacks: Vec<Callback<P>>,
     pub(crate) initializers: Vec<InitializationHook<P>>,
     pub(crate) finalizers: Vec<Box<LifecycleHook<P>>>,
+    pub(crate) step_guards: Vec<StepGuard<P>>,
 }
 
 impl<P> CallbackSet<P> {
@@ -325,17 +333,23 @@ impl<P> CallbackSet<P> {
             callbacks: Vec::new(),
             initializers: Vec::new(),
             finalizers: Vec::new(),
+            step_guards: Vec::new(),
         }
     }
 
-    /// Returns the number of callbacks in the set.
+    /// Returns the number of event callbacks in the set.
+    ///
+    /// Lifecycle hooks and candidate-state guards are not included.
     pub fn len(&self) -> usize {
         self.callbacks.len()
     }
 
-    /// Returns whether the set contains no callbacks.
+    /// Returns whether the set contains no callbacks, hooks, or guards.
     pub fn is_empty(&self) -> bool {
-        self.callbacks.is_empty() && self.initializers.is_empty() && self.finalizers.is_empty()
+        self.callbacks.is_empty()
+            && self.initializers.is_empty()
+            && self.finalizers.is_empty()
+            && self.step_guards.is_empty()
     }
 
     /// Adds a state initialization hook that saves the initialized state.
@@ -372,6 +386,17 @@ impl<P> CallbackSet<P> {
         F: Fn(&mut [f64], &P, f64) + 'static,
     {
         self.finalizers.push(Box::new(finalize));
+        self
+    }
+
+    pub(crate) fn with_step_guard<G>(mut self, reduction_factor: f64, guard: G) -> Self
+    where
+        G: Fn(&[f64], &P, f64) -> bool + 'static,
+    {
+        self.step_guards.push(StepGuard {
+            is_out_of_domain: Box::new(guard),
+            reduction_factor,
+        });
         self
     }
 
@@ -547,6 +572,7 @@ impl<P> CallbackSet<P> {
         self.callbacks.append(&mut other.callbacks);
         self.initializers.append(&mut other.initializers);
         self.finalizers.append(&mut other.finalizers);
+        self.step_guards.append(&mut other.step_guards);
         self
     }
 }

@@ -2,7 +2,7 @@ use crate::SolveError;
 use crate::callback::{
     Callback, CallbackAction, CallbackOutcome, CallbackSave, CallbackSet, ContinuousCallback,
     DiscreteCallback, DiscreteTrigger, EventCrossing, EventDirection, InitializationHook,
-    LifecycleHook, PresetTimes, VectorContinuousCallback,
+    LifecycleHook, PresetTimes, StepGuard, VectorContinuousCallback,
 };
 use crate::event::{
     MAX_EVENT_ROOT_ITERATIONS, effective_event_tolerance, event_interval_converged,
@@ -27,6 +27,7 @@ pub struct OdeProblem<F, P> {
     callbacks: Vec<Callback<P>>,
     initializers: Vec<InitializationHook<P>>,
     finalizers: Vec<Box<LifecycleHook<P>>>,
+    step_guards: Vec<StepGuard<P>>,
 }
 
 type JacobianFunction<P> = dyn Fn(&mut [f64], &[f64], &P, f64);
@@ -49,6 +50,7 @@ pub struct SplitOdeProblem<FE, FI, P> {
     callbacks: Vec<Callback<P>>,
     initializers: Vec<InitializationHook<P>>,
     finalizers: Vec<Box<LifecycleHook<P>>>,
+    step_guards: Vec<StepGuard<P>>,
 }
 
 #[allow(dead_code)]
@@ -105,6 +107,7 @@ impl SplitOdeProblem<(), (), ()> {
             callbacks: Vec::new(),
             initializers: Vec::new(),
             finalizers: Vec::new(),
+            step_guards: Vec::new(),
         }
     }
 }
@@ -132,6 +135,7 @@ impl<FE, FI, P> SplitOdeProblem<FE, FI, P> {
             callbacks: Vec::new(),
             initializers: Vec::new(),
             finalizers: Vec::new(),
+            step_guards: Vec::new(),
         }
     }
 
@@ -140,6 +144,7 @@ impl<FE, FI, P> SplitOdeProblem<FE, FI, P> {
         self.callbacks.append(&mut callback_set.callbacks);
         self.initializers.append(&mut callback_set.initializers);
         self.finalizers.append(&mut callback_set.finalizers);
+        self.step_guards.append(&mut callback_set.step_guards);
         self
     }
 
@@ -342,9 +347,20 @@ impl<FE, FI, P> SplitOdeProblem<FE, FI, P> {
         self.initial_state.len()
     }
 
-    /// Returns whether event callbacks were supplied.
+    /// Returns whether callback policies, lifecycle hooks, or guards were supplied.
     pub fn has_callbacks(&self) -> bool {
-        !self.callbacks.is_empty() || !self.initializers.is_empty() || !self.finalizers.is_empty()
+        !self.callbacks.is_empty()
+            || !self.initializers.is_empty()
+            || !self.finalizers.is_empty()
+            || !self.step_guards.is_empty()
+    }
+
+    pub(crate) fn domain_rejection_factor(&self, state: &[f64], time: f64) -> Option<f64> {
+        self.step_guards
+            .iter()
+            .filter(|guard| (guard.is_out_of_domain)(state, &self.parameters, time))
+            .map(|guard| guard.reduction_factor)
+            .reduce(f64::min)
     }
 
     /// Evaluates the explicit right-hand side.
@@ -675,6 +691,7 @@ impl OdeProblem<(), ()> {
             callbacks: Vec::new(),
             initializers: Vec::new(),
             finalizers: Vec::new(),
+            step_guards: Vec::new(),
         }
     }
 }
@@ -699,6 +716,7 @@ impl<F, P> OdeProblem<F, P> {
             callbacks: Vec::new(),
             initializers: Vec::new(),
             finalizers: Vec::new(),
+            step_guards: Vec::new(),
         }
     }
 
@@ -707,6 +725,7 @@ impl<F, P> OdeProblem<F, P> {
         self.callbacks.append(&mut callback_set.callbacks);
         self.initializers.append(&mut callback_set.initializers);
         self.finalizers.append(&mut callback_set.finalizers);
+        self.step_guards.append(&mut callback_set.step_guards);
         self
     }
 
@@ -1136,9 +1155,20 @@ impl<F, P> OdeProblem<F, P> {
         self.jacobian.is_some()
     }
 
-    /// Returns whether event callbacks were supplied.
+    /// Returns whether callback policies, lifecycle hooks, or guards were supplied.
     pub fn has_callbacks(&self) -> bool {
-        !self.callbacks.is_empty() || !self.initializers.is_empty() || !self.finalizers.is_empty()
+        !self.callbacks.is_empty()
+            || !self.initializers.is_empty()
+            || !self.finalizers.is_empty()
+            || !self.step_guards.is_empty()
+    }
+
+    pub(crate) fn domain_rejection_factor(&self, state: &[f64], time: f64) -> Option<f64> {
+        self.step_guards
+            .iter()
+            .filter(|guard| (guard.is_out_of_domain)(state, &self.parameters, time))
+            .map(|guard| guard.reduction_factor)
+            .reduce(f64::min)
     }
 
     pub(crate) fn has_continuous_callbacks(&self) -> bool {

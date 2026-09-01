@@ -169,6 +169,15 @@ where
         self.problem.apply_finalize_callbacks(state, time)
     }
 
+    fn domain_rejection_factor(
+        &self,
+        _: &OdeProblem<fn(&mut [f64], &[f64], &(), f64), ()>,
+        state: &[f64],
+        time: f64,
+    ) -> Option<f64> {
+        self.problem.domain_rejection_factor(state, time)
+    }
+
     fn has_custom_callback_handling(&self) -> bool {
         // Route callback dispatch through the typed split problem while still
         // allowing the shared Hermite lifecycle to serve save-at requests.

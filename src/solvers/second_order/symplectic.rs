@@ -659,6 +659,12 @@ where
             true,
         );
     }
+    if problem
+        .domain_rejection_factor(&velocity, &position, start)
+        .is_some()
+    {
+        return Err(SolveError::InitialStateOutOfDomain.into());
+    }
     let mut candidate_position = position.clone();
     let mut candidate_velocity = velocity.clone();
     let mut acceleration = vec![0.0; dimension];
@@ -691,6 +697,7 @@ where
         if steps >= options.max_steps {
             return Err(SolveError::MaxStepsExceeded.into());
         }
+        steps += 1;
         let step = time_stops.clip_step_with(
             time,
             direction * step_size,
@@ -715,6 +722,12 @@ where
         if direction * (end - next_time) <= 0.0 {
             next_time = end;
         }
+        if let Some(reduction_factor) =
+            problem.domain_rejection_factor(&candidate_velocity, &candidate_position, next_time)
+        {
+            step_size = step.abs() * reduction_factor;
+            continue;
+        }
         let callback = apply_step_callbacks(
             problem,
             &velocity,
@@ -728,7 +741,6 @@ where
             options.event_tolerance,
             None,
         )?;
-        steps += 1;
         recorder.record_step(
             &position,
             &velocity,

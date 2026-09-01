@@ -342,6 +342,9 @@ where
     if initial.state_modified {
         recorder.record_callback(start, problem.initial_state(), &state, initial, true);
     }
+    if problem.domain_rejection_factor(&state, start).is_some() {
+        return Err(SolveError::InitialStateOutOfDomain);
+    }
     if initial.terminate {
         return finish_successful(problem, &mut state, start, recorder, stats);
     }
@@ -394,6 +397,14 @@ where
         if !options.adaptive || error_norm <= 1.0 {
             let previous_time = time;
             let attempted_time = time + step;
+            if let Some(reduction_factor) =
+                problem.domain_rejection_factor(&candidate, attempted_time)
+            {
+                stats.rejected_steps += 1;
+                step *= reduction_factor;
+                previous_rejected = true;
+                continue;
+            }
             dense_endpoint.copy_from_slice(&candidate);
             evaluate_total(
                 problem,

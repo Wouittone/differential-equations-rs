@@ -264,6 +264,9 @@ where
             true,
         );
     }
+    if problem.domain_rejection_factor(&state, start).is_some() {
+        return Err(SolveError::InitialStateOutOfDomain);
+    }
     if initial_callbacks.terminate {
         return finish_successful(problem, &mut state, start, recorder, stats);
     }
@@ -322,6 +325,15 @@ where
             &mut workspace,
             &mut stats,
         )?;
+
+        if let Some(reduction_factor) =
+            problem.domain_rejection_factor(&workspace.candidate, attempted_time)
+        {
+            stats.rejected_steps += 1;
+            step *= reduction_factor;
+            workspace.clear_history();
+            continue;
+        }
 
         let previous_state = state;
         let mut next_state = std::mem::take(&mut workspace.candidate);

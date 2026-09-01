@@ -252,6 +252,19 @@ where
         problem.apply_finalize_callbacks(state, time)
     }
 
+    /// Returns the retry factor when the effective problem rejects a state.
+    ///
+    /// Typed adapters override this when the shared driver receives a
+    /// callback-free placeholder problem.
+    fn domain_rejection_factor(
+        &self,
+        problem: &OdeProblem<F, P>,
+        state: &[f64],
+        time: f64,
+    ) -> Option<f64> {
+        problem.domain_rejection_factor(state, time)
+    }
+
     /// Adjusts a controller proposal before it becomes the next attempted
     /// step. Most methods keep the proposal unchanged; interval-prediction
     /// methods can snap it to a precomputed exponential grid.
@@ -615,6 +628,12 @@ where
             true,
         );
     }
+    if kernel
+        .domain_rejection_factor(problem, &state, start)
+        .is_some()
+    {
+        return Err(SolveError::InitialStateOutOfDomain);
+    }
     if initial_callbacks.terminate {
         return finish_successful(&mut kernel, problem, &mut state, start, recorder, stats);
     }
@@ -693,6 +712,16 @@ where
             let mut next_time = time + attempted_step;
             if direction * (end - next_time) <= 0.0 {
                 next_time = end;
+            }
+            if let Some(reduction_factor) =
+                kernel.domain_rejection_factor(problem, &candidate, next_time)
+            {
+                stats.rejected_steps += 1;
+                kernel.reject_step();
+                controller_state.reset();
+                step = kernel.modify_step(attempted_step * reduction_factor);
+                previous_step_rejected = true;
+                continue;
             }
             let attempted_time = next_time;
             if custom_callback_handling && default_dense_enabled {

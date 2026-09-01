@@ -126,6 +126,9 @@ or backward solves, and can optionally affect the initial and final states.
 an explicit set of exact times without invalidating solver caches.
 `StepsizeLimiter` applies a state-dependent stability bound, such as a CFL
 limit, while leaving adaptive controllers free to choose a smaller step.
+`DomainGuard` rejects a finite candidate state before callbacks or saving and
+retries the attempt with a configurable reduction factor. It works with
+ordinary, split, and partitioned second-order problems.
 
 ```rust
 use differential_equations::callbacks::PeriodicCallback;
@@ -148,11 +151,11 @@ let problem = OdeProblem::new(
 # Ok::<(), differential_equations::ConfigurationError>(())
 ```
 
-All three policies also construct partitioned callback sets for second-order
-problems through `into_second_order_callback_set`. More invasive SciML callback
-policies—such as manifold projection and domain rejection—require state
-projection or step-rejection controls and are not yet presented as prebuilt
-policies.
+All four policies also construct partitioned callback sets for second-order
+problems through `into_second_order_callback_set`. `DomainGuard` checks actual
+candidate states; it does not extrapolate or project them. Projection-based
+policies such as SciML's `PositiveDomain`, `GeneralDomain`, and manifold
+projection remain separate future work.
 
 ## Tableau extensions
 

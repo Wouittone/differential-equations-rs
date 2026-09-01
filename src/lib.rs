@@ -41,6 +41,8 @@
 //!   first-order or split problem and provides initialization/finalization
 //!   hooks around successful integration. Vector continuous callbacks group
 //!   several root functions; they are separate from ndarray state shape.
+//!   [`callbacks::DomainGuard`] rejects out-of-domain candidate states before
+//!   callback effects or trajectory saving.
 //!   [`CallbackAction::ContinueWithStepSize`] overrides the next proposed step;
 //!   Rust interior-mutability types such as [`std::cell::Cell`] let sequential
 //!   callback effects update parameters without imposing mutable problem

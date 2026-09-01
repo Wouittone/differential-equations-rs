@@ -91,6 +91,7 @@ impl PeriodicCallback {
             })],
             initializers: Vec::new(),
             finalizers: Vec::new(),
+            step_guards: Vec::new(),
         })
     }
 
@@ -131,6 +132,66 @@ impl PeriodicCallback {
             self.initial_affect,
             self.final_affect,
         ))
+    }
+}
+
+/// Rejects candidate steps whose state lies outside an application-defined domain.
+///
+/// The predicate is evaluated on the initialized state and on each finite
+/// candidate state before callbacks run or output is saved. Returning `true`
+/// for a candidate rejects that attempt and retries it with a smaller step.
+/// Rejecting the initialized state returns
+/// [`crate::SolveError::InitialStateOutOfDomain`]. When several guards reject
+/// the same candidate, the solver uses their smallest reduction factor.
+/// This checks the state produced by the numerical method; unlike SciML's
+/// `PositiveDomain`, it does not extrapolate or project state components.
+#[derive(Clone, Copy, Debug)]
+#[must_use]
+pub struct DomainGuard<G> {
+    is_out_of_domain: G,
+    reduction_factor: f64,
+}
+
+impl<G> DomainGuard<G> {
+    /// Creates a guard that halves the attempted step after a rejection.
+    pub const fn new(is_out_of_domain: G) -> Self {
+        Self {
+            is_out_of_domain,
+            reduction_factor: 0.5,
+        }
+    }
+
+    /// Sets the factor applied to the rejected attempted-step magnitude.
+    ///
+    /// The factor is validated when a callback set is built and must lie
+    /// strictly between zero and one.
+    pub const fn with_reduction_factor(mut self, reduction_factor: f64) -> Self {
+        self.reduction_factor = reduction_factor;
+        self
+    }
+
+    /// Builds a guard policy for an ordinary or split ODE problem.
+    pub fn into_callback_set<P>(self) -> Result<CallbackSet<P>, ConfigurationError>
+    where
+        G: Fn(&[f64], &P, f64) -> bool + 'static,
+    {
+        validate_reduction_factor(self.reduction_factor)?;
+        Ok(CallbackSet::new().with_step_guard(self.reduction_factor, self.is_out_of_domain))
+    }
+
+    /// Builds a guard policy for a partitioned second-order ODE problem.
+    ///
+    /// The predicate receives velocity before position, matching the
+    /// partitioned solver API.
+    pub fn into_second_order_callback_set<P>(
+        self,
+    ) -> Result<SecondOrderCallbackSet<P>, ConfigurationError>
+    where
+        G: Fn(&[f64], &[f64], &P, f64) -> bool + 'static,
+    {
+        validate_reduction_factor(self.reduction_factor)?;
+        Ok(SecondOrderCallbackSet::new()
+            .with_step_guard(self.reduction_factor, self.is_out_of_domain))
     }
 }
 
@@ -435,6 +496,16 @@ fn validate_safety_factor(safety_factor: f64) -> Result<(), ConfigurationError> 
         return Err(ConfigurationError::InvalidParameter {
             parameter: "stepsize safety factor",
             reason: "must be finite and lie in (0, 1]",
+        });
+    }
+    Ok(())
+}
+
+fn validate_reduction_factor(reduction_factor: f64) -> Result<(), ConfigurationError> {
+    if !reduction_factor.is_finite() || reduction_factor <= 0.0 || reduction_factor >= 1.0 {
+        return Err(ConfigurationError::InvalidParameter {
+            parameter: "domain-guard reduction factor",
+            reason: "must be finite and lie in (0, 1)",
         });
     }
     Ok(())
