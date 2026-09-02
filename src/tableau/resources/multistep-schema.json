@@ -1,0 +1,21 @@
+{
+  "$schema"              : "https://json-schema.org/draft/2020-12/schema",
+  "title"                : "Canonical linear multistep tableau",
+  "description"          : "sum alpha[j] y[n+1-j] = h sum beta[j] f[n+1-j].",
+  "type"                 : "object",
+  "additionalProperties" : false,
+  "required"             : ["name", "description", "kind", "order", "alpha", "beta"],
+  "properties"           : {
+    "$schema"     : { "type": "string", "format": "uri-reference" },
+    "name"        : { "type": "string", "minLength": 1 },
+    "description" : { "type": "string", "minLength": 1 },
+    "kind"        : { "const": "linear-multistep" },
+    "order"       : { "type": "integer", "minimum": 1 },
+    "alpha"       : { "$ref": "#/$defs/vector" },
+    "beta"        : { "$ref": "#/$defs/vector" }
+  },
+  "$defs"                : {
+    "scalar" : { "oneOf": [{ "type": "number" }, { "type": "string", "minLength": 1 }] },
+    "vector" : { "type": "array", "minItems": 2, "items": { "$ref": "#/$defs/scalar" } }
+  }
+}

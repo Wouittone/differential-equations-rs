@@ -1,8 +1,8 @@
 # differential-equations-tableau-core
 
-Shared Serde parser and validator for canonical JSON Runge--Kutta and
-symplectic-composition tableau resources used by `differential-equations`
-and its procedural macros.
+Shared Serde parser and validator for canonical JSON Runge--Kutta, linear
+multistep, and symplectic-composition tableau resources used by
+`differential-equations` and its procedural macros.
 
 Most users should depend on `differential-equations`, which exposes the public
 tableau API and compile-validating definition macros. This crate is published

@@ -11,6 +11,7 @@ use crate::solver::{
     validate_preset_time_sequences, validate_state_time_options, validate_vector_callback_lengths,
 };
 use crate::solvers::explicit::split_euler::SplitOdeAlgorithm;
+use crate::solvers::multistep::tableaux::adams_bashforth;
 use crate::{Solution, SolveError, SolveOptions, SolverStats, SplitOdeProblem};
 
 const MAX_NEWTON_ITERATIONS: usize = 12;
@@ -76,6 +77,12 @@ impl Mrab {
     /// Returns the configured Adams--Bashforth order.
     pub const fn order(&self) -> usize {
         self.order
+    }
+
+    /// Returns the nominal-order formula shared with fixed-step Adams solvers.
+    /// Startup microsteps load only the lower-order formulas they actually use.
+    pub fn tableau(&self) -> Result<&'static crate::tableau::LinearMultistepTableau, SolveError> {
+        adams_bashforth(self.order)
     }
 
     /// Returns the number of fast microsteps per macro step.
@@ -746,19 +753,6 @@ where
         .collect())
 }
 
-const AB1: &[f64] = &[1.0];
-const AB2: &[f64] = &[1.5, -0.5];
-const AB3: &[f64] = &[23.0 / 12.0, -16.0 / 12.0, 5.0 / 12.0];
-const AB4: &[f64] = &[55.0 / 24.0, -59.0 / 24.0, 37.0 / 24.0, -9.0 / 24.0];
-const AB5: &[f64] = &[
-    1901.0 / 720.0,
-    -2774.0 / 720.0,
-    2616.0 / 720.0,
-    -1274.0 / 720.0,
-    251.0 / 720.0,
-];
-const AB: [&[f64]; 5] = [AB1, AB2, AB3, AB4, AB5];
-
 #[allow(clippy::too_many_arguments)]
 fn mrab_step<FE, FI, P>(
     problem: &SplitOdeProblem<FE, FI, P>,
@@ -787,7 +781,7 @@ where
         let combined: Vec<f64> = fast.iter().zip(&slow).map(|(a, b)| a + b).collect();
         history.insert(0, combined);
         history.truncate(order);
-        let weights = AB[history.len().min(order) - 1];
+        let weights = &adams_bashforth(history.len().min(order))?.beta()[1..];
         for index in 0..dimension {
             value[index] += h * weights
                 .iter()
@@ -800,10 +794,10 @@ where
     if order == 1 {
         return Ok(vec![0.0; dimension]);
     }
-    let high = AB[order - 1];
-    let low = AB[order - 2];
     let mut error = vec![0.0; dimension];
     if history.len() >= order {
+        let high = &adams_bashforth(order)?.beta()[1..];
+        let low = &adams_bashforth(order - 1)?.beta()[1..];
         for index in 0..dimension {
             error[index] = h
                 * (high

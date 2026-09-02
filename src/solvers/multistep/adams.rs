@@ -1,30 +1,24 @@
 use crate::integrator::{KernelCapabilities, StepEstimate, StepKernel, integrate};
 use crate::{OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions, SolverStats};
 
-const AB3_WEIGHTS: &[f64] = &[23.0 / 12.0, -16.0 / 12.0, 5.0 / 12.0];
-const AB4_WEIGHTS: &[f64] = &[55.0 / 24.0, -59.0 / 24.0, 37.0 / 24.0, -9.0 / 24.0];
-const AB5_WEIGHTS: &[f64] = &[
-    1_901.0 / 720.0,
-    -2_774.0 / 720.0,
-    2_616.0 / 720.0,
-    -1_274.0 / 720.0,
-    251.0 / 720.0,
-];
-const AM3_WEIGHTS: &[f64] = &[5.0 / 12.0, 8.0 / 12.0, -1.0 / 12.0];
-const AM4_WEIGHTS: &[f64] = &[9.0 / 24.0, 19.0 / 24.0, -5.0 / 24.0, 1.0 / 24.0];
-const AM5_WEIGHTS: &[f64] = &[
-    251.0 / 720.0,
-    646.0 / 720.0,
-    -264.0 / 720.0,
-    106.0 / 720.0,
-    -19.0 / 720.0,
-];
+use super::tableaux;
+use crate::solvers::explicit::{Ralston, Rk4};
+use crate::tableau::{
+    LazyMultistepTableau, LinearMultistepTableau, RungeKuttaTableau, TableauError, load_tableau,
+};
+
+struct AdamsDefinition {
+    predictor: &'static LazyMultistepTableau,
+    bootstrap: Bootstrap,
+    corrector: Option<&'static LazyMultistepTableau>,
+    repeating_bootstrap_predictor: bool,
+}
 
 #[derive(Clone, Copy)]
 struct AdamsMethod {
     order: usize,
     weights: &'static [f64],
-    bootstrap: Bootstrap,
+    bootstrap: &'static RungeKuttaTableau,
     corrector_weights: Option<&'static [f64]>,
     repeating_bootstrap_predictor: bool,
 }
@@ -35,49 +29,90 @@ enum Bootstrap {
     Rk4,
 }
 
-const AB3_METHOD: AdamsMethod = AdamsMethod {
-    order: 3,
-    weights: AB3_WEIGHTS,
+static AB3_METHOD: AdamsDefinition = AdamsDefinition {
+    predictor: &tableaux::AB3,
     bootstrap: Bootstrap::Ralston,
-    corrector_weights: None,
+    corrector: None,
     repeating_bootstrap_predictor: false,
 };
-const AB4_METHOD: AdamsMethod = AdamsMethod {
-    order: 4,
-    weights: AB4_WEIGHTS,
+static AB4_METHOD: AdamsDefinition = AdamsDefinition {
+    predictor: &tableaux::AB4,
     bootstrap: Bootstrap::Rk4,
-    corrector_weights: None,
+    corrector: None,
     repeating_bootstrap_predictor: false,
 };
-const AB5_METHOD: AdamsMethod = AdamsMethod {
-    order: 5,
-    weights: AB5_WEIGHTS,
+static AB5_METHOD: AdamsDefinition = AdamsDefinition {
+    predictor: &tableaux::AB5,
     bootstrap: Bootstrap::Rk4,
-    corrector_weights: None,
+    corrector: None,
     repeating_bootstrap_predictor: false,
 };
-const ABM32_METHOD: AdamsMethod = AdamsMethod {
-    corrector_weights: Some(AM3_WEIGHTS),
-    // OrdinaryDiffEq passes step counter 2 into a fresh AB3 predictor cache.
+static ABM32_METHOD: AdamsDefinition = AdamsDefinition {
+    corrector: Some(&tableaux::AM3),
+    // Preserve upstream's fresh AB3 predictor at startup step 2.
     repeating_bootstrap_predictor: true,
     ..AB3_METHOD
 };
-const ABM43_METHOD: AdamsMethod = AdamsMethod {
-    corrector_weights: Some(AM4_WEIGHTS),
-    // OrdinaryDiffEq likewise keeps its fresh AB4 predictor at startup step 3.
+static ABM43_METHOD: AdamsDefinition = AdamsDefinition {
+    corrector: Some(&tableaux::AM4),
+    // Preserve upstream's fresh AB4 predictor at startup step 3.
     repeating_bootstrap_predictor: true,
     ..AB4_METHOD
 };
-const ABM54_METHOD: AdamsMethod = AdamsMethod {
-    corrector_weights: Some(AM5_WEIGHTS),
+static ABM54_METHOD: AdamsDefinition = AdamsDefinition {
+    corrector: Some(&tableaux::AM5),
     ..AB5_METHOD
 };
+
+impl AdamsDefinition {
+    fn load(&self) -> Result<AdamsMethod, SolveError> {
+        let predictor = load_tableau(self.predictor).map_err(|_| SolveError::InvalidTableau)?;
+        let corrector = self
+            .corrector
+            .map(load_tableau)
+            .transpose()
+            .map_err(|_| SolveError::InvalidTableau)?;
+        if !tableaux::is_adams(predictor, false)
+            || corrector.is_some_and(|tableau| {
+                !tableaux::is_adams(tableau, true) || tableau.order() != predictor.order()
+            })
+        {
+            return Err(SolveError::InvalidTableau);
+        }
+        let bootstrap = match self.bootstrap {
+            Bootstrap::Ralston => Ralston.tableau(),
+            Bootstrap::Rk4 => Rk4.tableau(),
+        }
+        .map_err(|_| SolveError::InvalidTableau)?;
+        Ok(AdamsMethod {
+            order: predictor.order(),
+            weights: &predictor.beta()[1..],
+            bootstrap,
+            corrector_weights: corrector.map(LinearMultistepTableau::beta),
+            repeating_bootstrap_predictor: self.repeating_bootstrap_predictor,
+        })
+    }
+}
 
 macro_rules! algorithm {
     ($name:ident, $documentation:literal, $method:ident) => {
         #[doc = $documentation]
         #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
         pub struct $name;
+
+        impl $name {
+            /// Returns the primary formula (the corrector for an ABM method).
+            pub fn tableau(self) -> Result<&'static LinearMultistepTableau, TableauError> {
+                load_tableau($method.corrector.unwrap_or($method.predictor))
+            }
+
+            /// Returns the Adams--Bashforth predictor shared with multirate methods.
+            pub fn predictor_tableau(
+                self,
+            ) -> Result<&'static LinearMultistepTableau, TableauError> {
+                load_tableau($method.predictor)
+            }
+        }
 
         impl OdeAlgorithm for $name {
             fn solve_validated<F, P>(
@@ -88,7 +123,7 @@ macro_rules! algorithm {
             where
                 F: crate::OdeFunction<P>,
             {
-                integrate(problem, options, AdamsKernel::new(&$method))
+                integrate(problem, options, AdamsKernel::new(&$method)?)
             }
         }
     };
@@ -129,22 +164,18 @@ struct Workspace {
     history: Vec<Vec<f64>>,
     history_len: usize,
     temporary: Vec<f64>,
-    stage2: Vec<f64>,
-    stage3: Vec<f64>,
-    stage4: Vec<f64>,
+    bootstrap_stages: Vec<f64>,
     predicted_derivative: Vec<f64>,
     next_derivative: Vec<f64>,
 }
 
 impl Workspace {
-    fn new(dimension: usize, order: usize) -> Self {
+    fn new(dimension: usize, order: usize, bootstrap_stages: usize) -> Self {
         Self {
             history: (0..order).map(|_| vec![0.0; dimension]).collect(),
             history_len: 0,
             temporary: vec![0.0; dimension],
-            stage2: vec![0.0; dimension],
-            stage3: vec![0.0; dimension],
-            stage4: vec![0.0; dimension],
+            bootstrap_stages: vec![0.0; dimension * bootstrap_stages],
             predicted_derivative: vec![0.0; dimension],
             next_derivative: vec![0.0; dimension],
         }
@@ -152,16 +183,16 @@ impl Workspace {
 }
 
 struct AdamsKernel {
-    method: &'static AdamsMethod,
+    method: AdamsMethod,
     workspace: Option<Workspace>,
 }
 
 impl AdamsKernel {
-    const fn new(method: &'static AdamsMethod) -> Self {
-        Self {
-            method,
+    fn new(definition: &AdamsDefinition) -> Result<Self, SolveError> {
+        Ok(Self {
+            method: definition.load()?,
             workspace: None,
-        }
+        })
     }
 
     fn workspace(&mut self) -> Result<&mut Workspace, SolveError> {
@@ -186,7 +217,11 @@ where
         time: f64,
         stats: &mut SolverStats,
     ) -> Result<(), SolveError> {
-        let mut workspace = Workspace::new(state.len(), self.method.order);
+        let mut workspace = Workspace::new(
+            state.len(),
+            self.method.order,
+            self.method.bootstrap.b().len(),
+        );
         evaluate(problem, &mut workspace.history[0], state, time, stats)?;
         ensure_finite(&workspace.history[0])?;
         workspace.history_len = 1;
@@ -307,7 +342,7 @@ fn bootstrap_step<F, P>(
     state: &[f64],
     time: f64,
     step: f64,
-    method: Bootstrap,
+    tableau: &RungeKuttaTableau,
     candidate: &mut [f64],
     workspace: &mut Workspace,
     stats: &mut SolverStats,
@@ -315,64 +350,38 @@ fn bootstrap_step<F, P>(
 where
     F: crate::OdeFunction<P>,
 {
-    match method {
-        Bootstrap::Ralston => {
-            for (index, &value) in state.iter().enumerate() {
-                workspace.temporary[index] =
-                    value + (2.0 / 3.0) * step * workspace.history[0][index];
+    let dimension = state.len();
+    workspace.bootstrap_stages[..dimension].copy_from_slice(&workspace.history[0]);
+    for stage in 1..tableau.b().len() {
+        workspace.temporary.copy_from_slice(state);
+        for (previous, coefficient) in tableau.stage_row(stage).iter().enumerate() {
+            if *coefficient == 0.0 {
+                continue;
             }
-            evaluate(
-                problem,
-                &mut workspace.stage2,
-                &workspace.temporary,
-                time + (2.0 / 3.0) * step,
-                stats,
-            )?;
-            for (index, &value) in state.iter().enumerate() {
-                candidate[index] = value
-                    + (step / 4.0) * (workspace.history[0][index] + 3.0 * workspace.stage2[index]);
+            let derivative =
+                &workspace.bootstrap_stages[previous * dimension..(previous + 1) * dimension];
+            for (value, derivative) in workspace.temporary.iter_mut().zip(derivative) {
+                *value += step * coefficient * derivative;
             }
         }
-        Bootstrap::Rk4 => {
-            for (index, &value) in state.iter().enumerate() {
-                workspace.temporary[index] = value + 0.5 * step * workspace.history[0][index];
-            }
-            evaluate(
-                problem,
-                &mut workspace.stage2,
-                &workspace.temporary,
-                time + 0.5 * step,
-                stats,
-            )?;
-            for (index, &value) in state.iter().enumerate() {
-                workspace.temporary[index] = value + 0.5 * step * workspace.stage2[index];
-            }
-            evaluate(
-                problem,
-                &mut workspace.stage3,
-                &workspace.temporary,
-                time + 0.5 * step,
-                stats,
-            )?;
-            for (index, &value) in state.iter().enumerate() {
-                workspace.temporary[index] = value + step * workspace.stage3[index];
-            }
-            evaluate(
-                problem,
-                &mut workspace.stage4,
-                &workspace.temporary,
-                time + step,
-                stats,
-            )?;
-            for (index, &value) in state.iter().enumerate() {
-                candidate[index] = value
-                    + (step / 6.0)
-                        * (workspace.history[0][index]
-                            + 2.0 * workspace.stage2[index]
-                            + 2.0 * workspace.stage3[index]
-                            + workspace.stage4[index]);
-            }
-        }
+        evaluate(
+            problem,
+            &mut workspace.bootstrap_stages[stage * dimension..(stage + 1) * dimension],
+            &workspace.temporary,
+            time + tableau.c()[stage] * step,
+            stats,
+        )?;
+    }
+    for (component, (candidate, state)) in candidate.iter_mut().zip(state).enumerate() {
+        let increment = tableau
+            .b()
+            .iter()
+            .enumerate()
+            .map(|(stage, weight)| {
+                weight * workspace.bootstrap_stages[stage * dimension + component]
+            })
+            .sum::<f64>();
+        *candidate = state + step * increment;
     }
     Ok(())
 }
@@ -435,6 +444,26 @@ mod tests {
     use crate::{CallbackAction, OdeProblem, SaveMode, SolveError, SolveOptions, solve};
 
     type TestRhs = fn(&mut [f64], &[f64], &(), f64);
+
+    #[test]
+    fn coefficient_resource_fingerprints() {
+        for (values, expected) in [
+            (&Ab3.tableau().unwrap().beta()[1..], 0x9c91c0c13ec8a373_u64),
+            (&Ab4.tableau().unwrap().beta()[1..], 0x8b6c59df829fe74a),
+            (&Ab5.tableau().unwrap().beta()[1..], 0x5307d2f48d7215ad),
+            (Abm32.tableau().unwrap().beta(), 0x6dfa3147f6a2f0ab),
+            (Abm43.tableau().unwrap().beta(), 0x19d09c1d1024b402),
+            (Abm54.tableau().unwrap().beta(), 0x719c8bff7423d160),
+        ] {
+            let mut hash = 0xcbf29ce484222325_u64;
+            for value in values {
+                for byte in value.to_bits().to_le_bytes() {
+                    hash = (hash ^ u64::from(byte)).wrapping_mul(0x100000001b3);
+                }
+            }
+            assert_eq!(hash, expected);
+        }
+    }
 
     fn exponential() -> OdeProblem<TestRhs, ()> {
         fn rhs(du: &mut [f64], u: &[f64], _: &(), _: f64) {

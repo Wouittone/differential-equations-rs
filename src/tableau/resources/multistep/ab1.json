@@ -1,0 +1,9 @@
+{
+  "$schema"      : "../multistep-schema.json",
+  "name"         : "Ab1",
+  "description"  : "Order-1 Adams-Bashforth formula, newest derivative first.",
+  "kind"         : "linear-multistep",
+  "order"        : 1,
+  "alpha"        : ["1", "-1"],
+  "beta"         : ["0", "1.0"]
+}

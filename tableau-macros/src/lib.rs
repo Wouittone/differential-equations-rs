@@ -1,7 +1,8 @@
 //! Compile-time validation and expansion of declarative solver tableau resources.
 
 use differential_equations_tableau_core::{
-    RungeKuttaKind, parse_numeric_expression, parse_symplectic_tableau, parse_tableau,
+    RungeKuttaKind, parse_multistep_tableau, parse_numeric_expression, parse_symplectic_tableau,
+    parse_tableau,
 };
 use proc_macro::TokenStream;
 use proc_macro2::{Literal, TokenStream as TokenStream2};
@@ -485,6 +486,54 @@ pub fn define_explicit_rk_tableau_from_file(input: TokenStream) -> TokenStream {
     }
 }
 
+/// Defines a lazy canonical linear multistep tableau from a JSON resource.
+///
+/// Accepts `visibility STATIC_NAME, "MethodName", "resource.json"` and an
+/// optional `crate = local_name`. Validates coefficients and polynomial order
+/// conditions at compile time, then embeds only source text for lazy parsing.
+#[proc_macro]
+pub fn define_multistep_tableau_from_file(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as StaticTableauInput);
+    let result = (|| {
+        let manifest_dir = std::env::var_os("CARGO_MANIFEST_DIR")
+            .map(PathBuf::from)
+            .ok_or("CARGO_MANIFEST_DIR is unavailable during macro expansion")?;
+        let path = manifest_dir.join(input.path.value());
+        let source = std::fs::read_to_string(&path)
+            .map_err(|error| format!("failed to read `{}`: {error}", path.display()))?;
+        expand_multistep_source(input, &source)
+    })();
+    match result {
+        Ok(tokens) => tokens.into(),
+        Err(error) => syn::Error::new(proc_macro2::Span::call_site(), error)
+            .into_compile_error()
+            .into(),
+    }
+}
+
+fn expand_multistep_source(
+    input: StaticTableauInput,
+    source: &str,
+) -> Result<TokenStream2, String> {
+    parse_multistep_tableau(source, &input.method_name.value())
+        .map_err(|error| format!("invalid tableau `{}`: {error}", input.path.value()))?;
+    let visibility = input.visibility;
+    let static_name = input.static_name;
+    let method_name = input.method_name;
+    let source_path = input.path;
+    let crate_path = input.crate_path;
+    Ok(quote! {
+        #[doc = concat!("Lazily parsed linear multistep formula `", #method_name, "`.")]
+        #visibility static #static_name: #crate_path::tableau::LazyMultistepTableau =
+            ::std::sync::LazyLock::new(|| {
+                #crate_path::tableau::parse_multistep_tableau(
+                    include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/", #source_path)),
+                    #method_name,
+                )
+            });
+    })
+}
+
 fn expand_static(
     input: StaticTableauInput,
     expected_kind: RungeKuttaKind,
@@ -685,5 +734,37 @@ mod symplectic_tests {
         assert!(tokens.contains("parse_symplectic_tableau"));
         assert!(!tokens.contains("0.5"));
         assert!(!tokens.contains("const "));
+    }
+}
+
+#[cfg(test)]
+mod multistep_tests {
+    use super::*;
+
+    const SOURCE: &str = r#"{"name":"AB2","description":"Macro test","kind":"linear-multistep","order":2,"alpha":[1,-1,0],"beta":[0,"3/2","-1/2"]}"#;
+
+    fn input() -> StaticTableauInput {
+        syn::parse_str("pub FORMULA, \"AB2\", \"formula.json\", crate = renamed").unwrap()
+    }
+
+    #[test]
+    fn multistep_expansion_embeds_source_not_coefficients() {
+        let tokens = expand_multistep_source(input(), SOURCE)
+            .unwrap()
+            .to_string();
+        assert!(tokens.contains("LazyMultistepTableau"));
+        assert!(tokens.contains("include_str"));
+        assert!(tokens.contains("parse_multistep_tableau"));
+        assert!(tokens.contains("renamed"));
+        assert!(!tokens.contains("1.5"));
+        assert!(!tokens.contains("const "));
+    }
+
+    #[test]
+    fn multistep_expansion_rejects_incorrect_order_conditions_with_the_path() {
+        let invalid = SOURCE.replace("\"order\":2", "\"order\":3");
+        let error = expand_multistep_source(input(), &invalid).unwrap_err();
+        assert!(error.contains("formula.json"), "{error}");
+        assert!(error.contains("order condition 3 failed"), "{error}");
     }
 }

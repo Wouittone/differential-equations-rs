@@ -1,0 +1,9 @@
+{
+  "$schema"      : "../multistep-schema.json",
+  "name"         : "Am3",
+  "description"  : "Order-3 Adams-Moulton formula, newest derivative first.",
+  "kind"         : "linear-multistep",
+  "order"        : 3,
+  "alpha"        : ["1", "-1", "0"],
+  "beta"         : ["5.0 / 12.0", "8.0 / 12.0", "-1.0 / 12.0"]
+}

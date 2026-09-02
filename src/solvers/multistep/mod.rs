@@ -12,6 +12,7 @@ pub mod mebdf2;
 pub mod nordsieck;
 pub mod qndf1;
 pub mod qndf2;
+pub(crate) mod tableaux;
 /// Trapezoid--backward-differentiation formula method.
 pub mod trbdf2;
 /// Variable-step Adams methods and correctors.

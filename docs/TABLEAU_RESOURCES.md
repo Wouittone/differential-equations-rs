@@ -3,7 +3,8 @@
 Resource-backed method data lives below `src/tableau/resources` as JSON.
 Explicit and implicit Runge--Kutta resources use canonical Butcher matrices;
 symplectic compositions use paired drift/kick vectors. Specialized families
-also use this tree for typed method data. Migration is not yet complete:
+also use this tree for typed method data, including canonical linear multistep
+formulas for fixed-step Adams and MRAB. Migration is not yet complete:
 legacy embedded coefficients remain in some multirate, multistep,
 exponential, and Rosenbrock implementations.
 
@@ -91,6 +92,53 @@ define_explicit_rk_from_file!(
     crate = diffeq,
 );
 ```
+
+## Linear multistep formulas
+
+Constant-step formulas use coefficients ordered from newest to oldest:
+
+`sum(alpha[j] * y[n+1-j]) = h * sum(beta[j] * f[n+1-j])`.
+
+For example, Adams--Bashforth of order two is:
+
+```json
+{
+  "name"        : "FileAB2",
+  "description" : "Second-order Adams-Bashforth formula.",
+  "kind"        : "linear-multistep",
+  "order"       : 2,
+  "alpha"       : [1, -1, 0],
+  "beta"        : [0, "3/2", "-1/2"]
+}
+```
+
+Define a shared lazy tableau without generating Rust coefficients:
+
+```rust,ignore
+use differential_equations::tableau::{define_multistep_tableau_from_file, load_tableau};
+
+define_multistep_tableau_from_file!(pub FORMULA, "FileAB2", "resources/ab2.json");
+let tableau = load_tableau(&FORMULA)?;
+assert_eq!(tableau.order(), 2);
+```
+
+The optional `crate = local_name` argument supports renamed dependencies.
+This defines a tableau, not a generic multistep solver: a numerical driver must
+support the formula's structure. `LinearMultistepTableau` exposes `alpha()`,
+`beta()`, `steps()`, `order()`, and `is_explicit()`. The leading `alpha` coefficient
+must be nonzero; arrays must have equal lengths of at least two. Validation
+checks polynomial order conditions through the declared order, using normalized
+coefficients only for the checks. It preserves the resource's coefficient bits
+and does not prove zero-stability or the stability region. The editor schema is
+[`multistep-schema.json`](../src/tableau/resources/multistep-schema.json).
+
+Fixed-step Adams methods and MRAB share individual resources under
+`src/tableau/resources/multistep`: `Ab3.tableau()` and
+`MRAB::new(3, 8).tableau()` refer to the same parsed formula. ABM methods expose
+the corrector through `tableau()` and the shared explicit predictor through
+`predictor_tableau()`. MRAB loads lower-order startup formulas only as needed;
+fixed-step Adams startup reuses the ordinary Ralston or RK4 tableau. The
+upstream ABM32/ABM43 repeating-startup predictor behavior remains unchanged.
 
 ## Interaction-picture methods
 
