@@ -1,4 +1,5 @@
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
+use std::rc::Rc;
 
 use crate::SolveError;
 use crate::event::times_are_representably_equal;
@@ -113,6 +114,7 @@ pub(crate) type FallibleAffect<P> =
 pub(crate) type VectorEventCondition<P> = dyn Fn(&mut [f64], &[f64], &P, f64);
 pub(crate) type VectorAffect<P> = dyn Fn(&mut [f64], &P, f64, &[EventCrossing]) -> CallbackAction;
 pub(crate) type LifecycleHook<P> = dyn Fn(&mut [f64], &P, f64);
+pub(crate) type IterativeInitialization<P> = dyn Fn(&[f64], &P, f64) -> Result<(), SolveError>;
 
 pub(crate) struct InitializationHook<P> {
     pub hook: Box<LifecycleHook<P>>,
@@ -237,10 +239,78 @@ impl PeriodicTimes {
     }
 }
 
+/// A constant-memory schedule shared by an iterative trigger and its effect.
+pub(crate) struct IterativeTimes {
+    start: f64,
+    end: f64,
+    direction: f64,
+    pending: Cell<Option<f64>>,
+}
+
+impl IterativeTimes {
+    pub(crate) fn new(time_span: (f64, f64)) -> Self {
+        Self {
+            start: time_span.0,
+            end: time_span.1,
+            direction: (time_span.1 - time_span.0).signum(),
+            pending: Cell::new(None),
+        }
+    }
+
+    pub(crate) fn initialize(&self, time: f64, initial_affect: bool) -> Result<(), SolveError> {
+        self.pending.set(None);
+        if time != self.start {
+            return Err(SolveError::InvalidIterativeCallbackTime);
+        }
+        if initial_affect {
+            self.pending.set(Some(time));
+        }
+        Ok(())
+    }
+
+    pub(crate) fn contains(&self, time: f64) -> bool {
+        self.pending
+            .get()
+            .is_some_and(|pending| times_are_representably_equal(time, pending))
+    }
+
+    pub(crate) fn next(&self, time: f64, direction: f64) -> Option<f64> {
+        self.pending
+            .get()
+            .filter(|next| direction * (*next - time) > 0.0)
+    }
+
+    pub(crate) fn finished(&self, time: f64) -> bool {
+        self.direction * (self.end - time) <= 0.0
+    }
+
+    pub(crate) fn schedule(&self, time: f64, next: Option<f64>) -> Result<(), SolveError> {
+        self.pending.set(None);
+        if let Some(next) = next {
+            if !next.is_finite()
+                || self.direction * (next - time) <= 0.0
+                || times_are_representably_equal(next, time)
+            {
+                return Err(SolveError::InvalidIterativeCallbackTime);
+            }
+            if times_are_representably_equal(next, self.end) {
+                self.pending.set(Some(self.end));
+            } else if self.direction * (self.end - next) > 0.0 {
+                self.pending.set(Some(next));
+            }
+        }
+        Ok(())
+    }
+}
+
 pub(crate) enum DiscreteTrigger<P> {
     Condition(Box<Condition<P>>),
     PresetTimes(PresetTimes),
     Periodic(PeriodicTimes),
+    Iterative {
+        times: Rc<IterativeTimes>,
+        initialize: Box<IterativeInitialization<P>>,
+    },
 }
 
 pub(crate) struct DiscreteCallback<P> {
@@ -410,6 +480,28 @@ impl<P> CallbackSet<P> {
             is_out_of_domain: Box::new(guard),
             reduction_factor,
         });
+        self
+    }
+
+    pub(crate) fn with_iterative_callback<I, A>(
+        mut self,
+        times: Rc<IterativeTimes>,
+        save: CallbackSave,
+        initialize: I,
+        affect: A,
+    ) -> Self
+    where
+        I: Fn(&[f64], &P, f64) -> Result<(), SolveError> + 'static,
+        A: Fn(&mut [f64], &P, f64) -> Result<CallbackAction, SolveError> + 'static,
+    {
+        self.callbacks.push(Callback::Discrete(DiscreteCallback {
+            trigger: DiscreteTrigger::Iterative {
+                times,
+                initialize: Box::new(initialize),
+            },
+            affect: Box::new(affect),
+            save,
+        }));
         self
     }
 
@@ -732,11 +824,24 @@ impl EventDirection {
 }
 
 impl<P> DiscreteTrigger<P> {
+    pub(crate) fn initialize(
+        &self,
+        state: &[f64],
+        parameters: &P,
+        time: f64,
+    ) -> Result<(), SolveError> {
+        if let Self::Iterative { initialize, .. } = self {
+            initialize(state, parameters, time)?;
+        }
+        Ok(())
+    }
+
     pub(crate) fn is_triggered(&self, state: &[f64], parameters: &P, time: f64) -> bool {
         match self {
             Self::Condition(condition) => condition(state, parameters, time),
             Self::PresetTimes(times) => times.contains(time),
             Self::Periodic(times) => times.contains(time),
+            Self::Iterative { times, .. } => times.contains(time),
         }
     }
 
@@ -745,6 +850,7 @@ impl<P> DiscreteTrigger<P> {
             Self::Condition(_) => None,
             Self::PresetTimes(times) => Some(times.as_slice()),
             Self::Periodic(_) => None,
+            Self::Iterative { .. } => None,
         }
     }
 
@@ -753,6 +859,7 @@ impl<P> DiscreteTrigger<P> {
             Self::Condition(_) => None,
             Self::PresetTimes(times) => times.next(time, direction),
             Self::Periodic(times) => times.next(time, direction),
+            Self::Iterative { times, .. } => times.next(time, direction),
         }
     }
 }

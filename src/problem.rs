@@ -439,6 +439,7 @@ impl<FE, FI, P> SplitOdeProblem<FE, FI, P> {
             let Callback::Discrete(callback) = callback else {
                 continue;
             };
+            callback.trigger.initialize(state, &self.parameters, time)?;
             if callback.trigger.is_triggered(state, &self.parameters, time) {
                 outcome.register(callback.save);
                 outcome.apply_action((callback.affect)(state, &self.parameters, time)?)?;
@@ -1270,6 +1271,7 @@ impl<F, P> OdeProblem<F, P> {
             let Callback::Discrete(callback) = callback else {
                 continue;
             };
+            callback.trigger.initialize(state, &self.parameters, time)?;
             if callback.trigger.is_triggered(state, &self.parameters, time) {
                 outcome.register(callback.save);
                 outcome.apply_action((callback.affect)(state, &self.parameters, time)?)?;

@@ -122,6 +122,11 @@ The `callbacks` module provides common policies as independently composable
 callback sets. `PeriodicCallback` schedules effects at exact integration times
 without materializing every time in memory, supports phase offsets and forward
 or backward solves, and can optionally affect the initial and final states.
+`IterativeCallback` chooses each next absolute event time from the updated
+state and parameters. It retains only one pending time, resets each solve,
+and accepts `None` to stop scheduling. Non-finite or non-advancing choices
+return a typed solve error. Initialization chooses the first time without
+firing or saving an effect unless `with_initial_affect(true)` is selected.
 `FunctionCallingCallback` observes the initial state, every accepted step, or
 an explicit set of exact times without invalidating solver caches.
 `StepsizeLimiter` applies a state-dependent stability bound, such as a CFL
@@ -175,8 +180,8 @@ let problem = OdeProblem::new(
 # Ok::<(), differential_equations::ConfigurationError>(())
 ```
 
-`PeriodicCallback`, `FunctionCallingCallback`, `StepsizeLimiter`, and
-`DomainGuard` also construct partitioned callback sets for second-order
+`PeriodicCallback`, `IterativeCallback`, `FunctionCallingCallback`,
+`StepsizeLimiter`, and `DomainGuard` also construct partitioned callback sets for second-order
 problems through `into_second_order_callback_set`. `DomainGuard` checks actual
 candidate states and may repeat their computation; `PositiveDomain` predicts
 the next state before the attempt. `GeneralDomain` extends that predictive

@@ -1,8 +1,10 @@
 use std::cell::RefCell;
+use std::rc::Rc;
 
 use super::coefficient_data::*;
 use crate::callback::{
-    CallbackOutcome, CallbackSave, PeriodicTimes, PresetTimes, VectorCallbackScratch,
+    CallbackOutcome, CallbackSave, IterativeTimes, PeriodicTimes, PresetTimes,
+    VectorCallbackScratch,
 };
 use crate::event::{
     MAX_EVENT_ROOT_ITERATIONS, effective_event_tolerance, event_interval_converged,
@@ -24,6 +26,9 @@ use thiserror::Error;
 type DiscreteCondition<P> = dyn Fn(&[f64], &[f64], &P, f64) -> bool;
 type ContinuousCondition<P> = dyn Fn(&[f64], &[f64], &P, f64) -> f64;
 type Affect<P> = dyn Fn(&mut [f64], &mut [f64], &P, f64) -> CallbackAction;
+type FallibleAffect<P> =
+    dyn Fn(&mut [f64], &mut [f64], &P, f64) -> Result<CallbackAction, SolveError>;
+type IterativeInitialization<P> = dyn Fn(&[f64], &[f64], &P, f64) -> Result<(), SolveError>;
 type VectorContinuousCondition<P> = dyn Fn(&mut [f64], &[f64], &[f64], &P, f64);
 type VectorAffect<P> = dyn Fn(&mut [f64], &mut [f64], &P, f64, &[EventCrossing]) -> CallbackAction;
 type LifecycleHook<P> = dyn Fn(&mut [f64], &mut [f64], &P, f64);
@@ -35,20 +40,38 @@ enum DiscreteTrigger<P> {
     Condition(Box<DiscreteCondition<P>>),
     PresetTimes(PresetTimes),
     Periodic(PeriodicTimes),
+    Iterative {
+        times: Rc<IterativeTimes>,
+        initialize: Box<IterativeInitialization<P>>,
+    },
 }
 
 struct DiscreteCallback<P> {
     trigger: DiscreteTrigger<P>,
-    affect: Box<Affect<P>>,
+    affect: Box<FallibleAffect<P>>,
     save: CallbackSave,
 }
 
 impl<P> DiscreteTrigger<P> {
+    fn initialize(
+        &self,
+        velocity: &[f64],
+        position: &[f64],
+        parameters: &P,
+        time: f64,
+    ) -> Result<(), SolveError> {
+        if let Self::Iterative { initialize, .. } = self {
+            initialize(velocity, position, parameters, time)?;
+        }
+        Ok(())
+    }
+
     fn is_triggered(&self, velocity: &[f64], position: &[f64], parameters: &P, time: f64) -> bool {
         match self {
             Self::Condition(condition) => condition(velocity, position, parameters, time),
             Self::PresetTimes(times) => times.contains(time),
             Self::Periodic(times) => times.contains(time),
+            Self::Iterative { times, .. } => times.contains(time),
         }
     }
 
@@ -57,6 +80,7 @@ impl<P> DiscreteTrigger<P> {
             Self::Condition(_) => None,
             Self::PresetTimes(times) => Some(times.as_slice()),
             Self::Periodic(_) => None,
+            Self::Iterative { .. } => None,
         }
     }
 
@@ -65,6 +89,7 @@ impl<P> DiscreteTrigger<P> {
             Self::Condition(_) => None,
             Self::PresetTimes(times) => times.next(time, direction),
             Self::Periodic(times) => times.next(time, direction),
+            Self::Iterative { times, .. } => times.next(time, direction),
         }
     }
 }
@@ -217,7 +242,7 @@ impl<P> SecondOrderCallbackSet<P> {
         self.callbacks
             .push(PartitionedCallback::Discrete(DiscreteCallback {
                 trigger: DiscreteTrigger::Condition(Box::new(condition)),
-                affect: Box::new(affect),
+                affect: Box::new(move |v, q, p, t| Ok(affect(v, q, p, t))),
                 save,
             }));
         self
@@ -248,7 +273,7 @@ impl<P> SecondOrderCallbackSet<P> {
         self.callbacks
             .push(PartitionedCallback::Discrete(DiscreteCallback {
                 trigger: DiscreteTrigger::PresetTimes(PresetTimes::new(times)),
-                affect: Box::new(affect),
+                affect: Box::new(move |v, q, p, t| Ok(affect(v, q, p, t))),
                 save,
             }));
         self
@@ -266,6 +291,29 @@ impl<P> SecondOrderCallbackSet<P> {
         self.callbacks
             .push(PartitionedCallback::Discrete(DiscreteCallback {
                 trigger: DiscreteTrigger::Periodic(times),
+                affect: Box::new(move |v, q, p, t| Ok(affect(v, q, p, t))),
+                save,
+            }));
+        self
+    }
+
+    pub(crate) fn with_iterative_callback<I, A>(
+        mut self,
+        times: Rc<IterativeTimes>,
+        save: CallbackSave,
+        initialize: I,
+        affect: A,
+    ) -> Self
+    where
+        I: Fn(&[f64], &[f64], &P, f64) -> Result<(), SolveError> + 'static,
+        A: Fn(&mut [f64], &mut [f64], &P, f64) -> Result<CallbackAction, SolveError> + 'static,
+    {
+        self.callbacks
+            .push(PartitionedCallback::Discrete(DiscreteCallback {
+                trigger: DiscreteTrigger::Iterative {
+                    times,
+                    initialize: Box::new(initialize),
+                },
                 affect: Box::new(affect),
                 save,
             }));
@@ -3917,6 +3965,9 @@ pub(super) fn apply_initial_callbacks<F, P>(
         let PartitionedCallback::Discrete(callback) = callback else {
             continue;
         };
+        callback
+            .trigger
+            .initialize(velocity, position, &problem.parameters, time)?;
         if callback
             .trigger
             .is_triggered(velocity, position, &problem.parameters, time)
@@ -3927,7 +3978,7 @@ pub(super) fn apply_initial_callbacks<F, P>(
                 position,
                 &problem.parameters,
                 time,
-            ))?;
+            )?)?;
             ensure_finite_state(velocity, position)?;
             if outcome.terminate {
                 break;
@@ -4137,7 +4188,7 @@ pub(super) fn apply_step_callbacks<F, P>(
                     position,
                     &problem.parameters,
                     *time,
-                ))?;
+                )?)?;
                 ensure_finite_state(velocity, position)?;
                 if outcome.terminate {
                     break;

@@ -54,7 +54,9 @@
 //!   callback effects update parameters without imposing mutable problem
 //!   ownership on every solve.
 //! - [`callbacks`] contains reusable integration-time policies. Its periodic
-//!   scheduler uses constant memory, its function-calling policy marks
+//!   and iterative schedulers use constant memory; [`callbacks::IterativeCallback`]
+//!   chooses each next event from the state after the previous effect.
+//!   Its function-calling policy marks
 //!   read-only observations explicitly, and its step-size limiter applies
 //!   dynamic stability bounds without interfering with smaller adaptive steps.
 //! - [`SolveOptions`] controls tolerances, step sizes, exact time stops, saved

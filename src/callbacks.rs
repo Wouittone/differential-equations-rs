@@ -7,9 +7,11 @@
 //! problem.
 
 mod domain;
+mod iterative;
 mod manifold;
 
 pub use domain::GeneralDomain;
+pub use iterative::IterativeCallback;
 pub use manifold::ManifoldProjection;
 
 use std::rc::Rc;

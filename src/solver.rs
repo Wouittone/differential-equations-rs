@@ -231,6 +231,12 @@ pub enum SolveError {
     /// A predictive domain residual produced a non-finite value.
     #[error("a predictive domain residual produced a non-finite value")]
     NonFiniteDomainResidual,
+    /// An iterative callback returned a non-finite or non-advancing time,
+    /// or was initialized at a different start than its configured time span.
+    #[error(
+        "an iterative callback must use its configured start and request finite, advancing times"
+    )]
+    InvalidIterativeCallbackTime,
     /// The manifold has more constraints than state components.
     #[error("the manifold residual dimension exceeds the state dimension")]
     InvalidManifoldDimension,
