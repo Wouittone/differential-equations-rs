@@ -4,13 +4,14 @@
 //! QNDF, residual DAEs, singular mass matrices, and split/IMEX paths are out
 //! of scope.
 
+use super::tableaux::{backward_differentiation, error_constant, ndf_kappa};
 use crate::integrator::{
     ControllerConfig, KernelCapabilities, StepEstimate, StepKernel, integrate as drive_integration,
 };
 use crate::linear::{DenseLu, LinearError, StateLayout, factorize, solve_factorized};
+use crate::tableau::LinearMultistepTableau;
 use crate::{OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions, SolverStats};
 
-const DEFAULT_KAPPA: f64 = -1.0 / 9.0;
 const MAX_NEWTON_ITERATIONS: usize = 12;
 const NEWTON_TOLERANCE: f64 = 1.0e-12;
 const CONTROLLER: ControllerConfig = ControllerConfig::proportional(3, 0.9, 0.2, 10.0, 0.2);
@@ -22,6 +23,20 @@ pub struct Qndf2;
 /// Second-order quasi-constant-step BDF method (`QNDF2(kappa = 0)`).
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Qbdf2;
+
+impl Qndf2 {
+    /// Returns the shared BDF2 base formula with its NDF modifier.
+    pub fn tableau(self) -> Result<&'static LinearMultistepTableau, SolveError> {
+        backward_differentiation(2)
+    }
+}
+
+impl Qbdf2 {
+    /// Returns the shared BDF2 formula; this solver ignores its NDF modifier.
+    pub fn tableau(self) -> Result<&'static LinearMultistepTableau, SolveError> {
+        backward_differentiation(2)
+    }
+}
 
 impl OdeAlgorithm for Qndf2 {
     fn solve_validated<F, P>(
@@ -35,7 +50,7 @@ impl OdeAlgorithm for Qndf2 {
         drive_integration(
             problem,
             options,
-            Qndf2Kernel::new(problem.initial_state().len(), DEFAULT_KAPPA),
+            Qndf2Kernel::new(problem.initial_state().len(), true)?,
         )
     }
 }
@@ -52,7 +67,7 @@ impl OdeAlgorithm for Qbdf2 {
         drive_integration(
             problem,
             options,
-            Qndf2Kernel::new(problem.initial_state().len(), 0.0),
+            Qndf2Kernel::new(problem.initial_state().len(), false)?,
         )
     }
 }
@@ -119,14 +134,19 @@ impl Workspace {
 struct Qndf2Kernel {
     workspace: Workspace,
     kappa: f64,
+    gamma: f64,
+    error_constant: f64,
 }
 
 impl Qndf2Kernel {
-    fn new(dimension: usize, kappa: f64) -> Self {
-        Self {
+    fn new(dimension: usize, ndf: bool) -> Result<Self, SolveError> {
+        let tableau = backward_differentiation(2)?;
+        Ok(Self {
             workspace: Workspace::new(dimension),
-            kappa,
-        }
+            kappa: ndf_kappa(tableau, ndf)?,
+            gamma: tableau.alpha()[0],
+            error_constant: error_constant(tableau, ndf)?,
+        })
     }
 }
 
@@ -192,7 +212,7 @@ where
         let (beta_zero, gamma_two) = if startup {
             (1.0, 1.0)
         } else {
-            (1.0 / ((1.0 - self.kappa) * 1.5), 1.5)
+            (1.0 / ((1.0 - self.kappa) * self.gamma), self.gamma)
         };
         build_differences(&mut self.workspace, state, step)?;
         for (((out, &now), &d1), &d2) in self
@@ -239,7 +259,7 @@ where
                 .zip(candidate.iter().zip(state))
                 .zip(&self.workspace.difference_one)
             {
-                *out = (self.kappa * gamma_two + 1.0 / 3.0) * ((next - now) - d1);
+                *out = self.error_constant * ((next - now) - d1);
             }
             rms_scaled(
                 self.workspace.difference_three.iter().copied(),

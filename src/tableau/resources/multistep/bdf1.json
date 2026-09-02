@@ -1,0 +1,10 @@
+{
+  "$schema"     : "../multistep-schema.json",
+  "name"        : "Bdf1",
+  "description" : "Order-1 BDF base formula with the OrdinaryDiffEq NDF modifier.",
+  "kind"        : "backward-differentiation",
+  "order"       : 1,
+  "alpha"       : [1, -1],
+  "beta"        : [1, 0],
+  "ndf_kappa"   : "-37.0 / 200.0"
+}

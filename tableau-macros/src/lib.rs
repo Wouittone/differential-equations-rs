@@ -767,4 +767,18 @@ mod multistep_tests {
         assert!(error.contains("formula.json"), "{error}");
         assert!(error.contains("order condition 3 failed"), "{error}");
     }
+
+    #[test]
+    fn multistep_expansion_validates_bdf_modifiers_before_runtime_use() {
+        let source = r#"{"name":"AB2","description":"BDF macro test","kind":"backward-differentiation","order":2,"alpha":["3/2",-2,"1/2"],"beta":[1,0,0],"ndf_kappa":"-1/9"}"#;
+        let tokens = expand_multistep_source(input(), source)
+            .unwrap()
+            .to_string();
+        assert!(tokens.contains("include_str"));
+        assert!(!tokens.contains("const "));
+        let invalid = source.replace("\"-1/9\"", "1");
+        let error = expand_multistep_source(input(), &invalid).unwrap_err();
+        assert!(error.contains("formula.json"), "{error}");
+        assert!(error.contains("NDF modifier"), "{error}");
+    }
 }

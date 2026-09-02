@@ -277,7 +277,9 @@ explicit Runge--Kutta algorithm from their own JSON file with
 `tableau::define_symplectic_from_file!`. Embedded Runge--Kutta pairs may specify
 `b_hat` instead of precomputed error weights; RKIP uses this same resource format.
 Fixed-step Adams methods and MRAB share lazily loaded `alpha`/`beta` multistep
-resources. All named symplectic compositions use individual resources and
+resources. BDF/NDF methods reuse that format with one base formula and NDF
+modifier per order, shared across fixed- and variable-order solvers.
+All named symplectic compositions use individual resources and
 expose fallible `Method::tableau()` access with
 `a()`/`b()` coefficient slices. Some other specialized families still retain
 legacy embedded coefficient data; see

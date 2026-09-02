@@ -5,32 +5,18 @@
 //! `211142263781255a9aa2f910f6760b9f18ec29c8`.  Residual DAEs and singular
 //! mass matrices are deliberately outside the crate's current problem model.
 
+use super::tableaux::{backward_differentiation, error_constant, ndf_kappa};
 use crate::integrator::{
     ControllerConfig, KernelCapabilities, StepEstimate, StepKernel, integrate as drive_integration,
 };
 use crate::linear::{DenseLu, LinearError, StateLayout, factorize, solve_factorized};
+use crate::tableau::LinearMultistepTableau;
 use crate::{OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions, SolverStats};
 
 const MAX_ORDER: usize = 5;
 const DIFFERENCE_COUNT: usize = MAX_ORDER + 2;
 const MAX_NEWTON_ITERATIONS: usize = 12;
 const NEWTON_TOLERANCE: f64 = 1.0e-12;
-const KAPPA_NDF: [f64; MAX_ORDER] = [
-    -37.0 / 200.0,
-    -1.0 / 9.0,
-    -823.0 / 10_000.0,
-    -83.0 / 2_000.0,
-    0.0,
-];
-const KAPPA_BDF: [f64; MAX_ORDER] = [0.0; MAX_ORDER];
-const GAMMA: [f64; MAX_ORDER] = [1.0, 3.0 / 2.0, 11.0 / 6.0, 25.0 / 12.0, 137.0 / 60.0];
-const BDF_COEFFICIENTS: [[f64; MAX_ORDER + 1]; MAX_ORDER] = [
-    [1.0, -1.0, 0.0, 0.0, 0.0, 0.0],
-    [3.0 / 2.0, -2.0, 1.0 / 2.0, 0.0, 0.0, 0.0],
-    [11.0 / 6.0, -3.0, 3.0 / 2.0, -1.0 / 3.0, 0.0, 0.0],
-    [25.0 / 12.0, -4.0, 3.0, -4.0 / 3.0, 1.0 / 4.0, 0.0],
-    [137.0 / 60.0, -5.0, 5.0, -10.0 / 3.0, 5.0 / 4.0, -1.0 / 5.0],
-];
 
 // A sixth-order controller exponent is converted back to each BDF order in
 // `reported_error`, so the shared driver uses the pinned 1/(k+1) exponent.
@@ -65,6 +51,21 @@ pub const QBDF: Qbdf = Qbdf;
 /// Exact OrdinaryDiffEq-compatible value spelling for [`Fbdf`].
 pub const FBDF: Fbdf = Fbdf;
 
+macro_rules! tableau_access {
+    ($($method:ty),+ $(,)?) => {$(
+        impl $method {
+            /// Returns an order's shared BDF base formula and optional NDF modifier.
+            ///
+            /// QNDF applies `ndf_kappa()`; QBDF and FBDF use the unmodified
+            /// `alpha()`/`beta()` formula. Orders outside 1..=5 return an error.
+            pub fn tableau(self, order: usize) -> Result<&'static LinearMultistepTableau, SolveError> {
+                backward_differentiation(order)
+            }
+        }
+    )+};
+}
+tableau_access!(Qndf, Qbdf, Fbdf);
+
 impl OdeAlgorithm for Qndf {
     fn solve_validated<F, P>(
         &self,
@@ -77,7 +78,7 @@ impl OdeAlgorithm for Qndf {
         drive_integration(
             problem,
             options,
-            QndfKernel::new(problem.initial_state().len(), KAPPA_NDF),
+            QndfKernel::new(problem.initial_state().len(), true),
         )
     }
 }
@@ -94,7 +95,7 @@ impl OdeAlgorithm for Qbdf {
         drive_integration(
             problem,
             options,
-            QndfKernel::new(problem.initial_state().len(), KAPPA_BDF),
+            QndfKernel::new(problem.initial_state().len(), false),
         )
     }
 }
@@ -155,7 +156,7 @@ struct QndfKernel {
     predictor: Vec<f64>,
     forcing: Vec<f64>,
     current_derivative: Vec<f64>,
-    kappa: [f64; MAX_ORDER],
+    ndf: bool,
     order: usize,
     attempted_order: usize,
     previous_order: usize,
@@ -170,7 +171,7 @@ struct QndfKernel {
 }
 
 impl QndfKernel {
-    fn new(dimension: usize, kappa: [f64; MAX_ORDER]) -> Self {
+    fn new(dimension: usize, ndf: bool) -> Self {
         Self {
             newton: NewtonWorkspace::new(dimension),
             differences: vec![vec![0.0; dimension]; DIFFERENCE_COUNT],
@@ -178,7 +179,7 @@ impl QndfKernel {
             predictor: vec![0.0; dimension],
             forcing: vec![0.0; dimension],
             current_derivative: vec![0.0; dimension],
-            kappa,
+            ndf,
             order: 1,
             attempted_order: 1,
             previous_order: 1,
@@ -278,11 +279,13 @@ where
                 *value += delta;
             }
         }
-        let beta = 1.0 / ((1.0 - self.kappa[order - 1]) * GAMMA[order - 1]);
+        let tableau = backward_differentiation(order)?;
+        let beta = 1.0 / ((1.0 - ndf_kappa(tableau, self.ndf)?) * tableau.alpha()[0]);
         self.forcing.copy_from_slice(&self.predictor);
         for (index, difference) in self.attempted_differences[..order].iter().enumerate() {
+            let gamma = backward_differentiation(index + 1)?.alpha()[0];
             for (value, &delta) in self.forcing.iter_mut().zip(difference) {
-                *value -= beta * GAMMA[index] * delta;
+                *value -= beta * gamma * delta;
             }
         }
         candidate.copy_from_slice(&self.predictor);
@@ -306,11 +309,11 @@ where
         }
         update_differences(&mut self.attempted_differences, &correction, order);
 
-        let error = error_constant(self.kappa, order)
+        let error = error_constant(tableau, self.ndf)?
             * rms_scaled(correction.iter().copied(), candidate, state, options);
         self.attempted_error = error;
         self.attempted_lower_error = if order > 1 {
-            error_constant(self.kappa, order - 1)
+            error_constant(backward_differentiation(order - 1)?, self.ndf)?
                 * rms_scaled(
                     self.attempted_differences[order - 1].iter().copied(),
                     candidate,
@@ -320,8 +323,8 @@ where
         } else {
             f64::INFINITY
         };
-        self.attempted_upper_error = if order < MAX_ORDER {
-            error_constant(self.kappa, order + 1)
+        self.attempted_upper_error = if options.adaptive && order < MAX_ORDER {
+            error_constant(backward_differentiation(order + 1)?, self.ndf)?
                 * rms_scaled(
                     self.attempted_differences[order + 1].iter().copied(),
                     candidate,
@@ -514,7 +517,7 @@ where
             (order + 1).min(self.states.len()),
         );
 
-        let coefficients = &BDF_COEFFICIENTS[order - 1];
+        let coefficients = backward_differentiation(order)?.alpha();
         let beta = 1.0 / coefficients[0];
         for (value, &now) in self.forcing.iter_mut().zip(state) {
             *value = -beta * coefficients[1] * now;
@@ -602,10 +605,6 @@ where
         self.constant_steps = 0;
         self.newton.factorization_ready = false;
     }
-}
-
-fn error_constant(kappa: [f64; MAX_ORDER], order: usize) -> f64 {
-    kappa[order - 1] * GAMMA[order - 1] + 1.0 / (order + 1) as f64
 }
 
 fn reported_error(error: f64, order: usize) -> f64 {
@@ -730,7 +729,7 @@ fn fbdf_lte_scale(
     evaluation_time: f64,
     step: f64,
     times: &[f64],
-    coefficients: &[f64; MAX_ORDER + 1],
+    coefficients: &[f64],
 ) -> f64 {
     if times.len() < order + 1 {
         return 1.0 / (order + 1) as f64;

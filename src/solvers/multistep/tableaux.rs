@@ -35,3 +35,64 @@ pub(super) fn is_adams(tableau: &LinearMultistepTableau, corrector: bool) -> boo
         && tableau.is_explicit() != corrector
         && tableau.beta().len() == tableau.order() + usize::from(!corrector)
 }
+
+define_multistep_tableau_from_file!(
+    BDF1,
+    "Bdf1",
+    "src/tableau/resources/multistep/bdf1.json",
+    crate = crate
+);
+define_multistep_tableau_from_file!(
+    BDF2,
+    "Bdf2",
+    "src/tableau/resources/multistep/bdf2.json",
+    crate = crate
+);
+define_multistep_tableau_from_file!(
+    BDF3,
+    "Bdf3",
+    "src/tableau/resources/multistep/bdf3.json",
+    crate = crate
+);
+define_multistep_tableau_from_file!(
+    BDF4,
+    "Bdf4",
+    "src/tableau/resources/multistep/bdf4.json",
+    crate = crate
+);
+define_multistep_tableau_from_file!(
+    BDF5,
+    "Bdf5",
+    "src/tableau/resources/multistep/bdf5.json",
+    crate = crate
+);
+
+pub(super) fn backward_differentiation(
+    order: usize,
+) -> Result<&'static LinearMultistepTableau, SolveError> {
+    let resource = match order {
+        1 => &BDF1,
+        2 => &BDF2,
+        3 => &BDF3,
+        4 => &BDF4,
+        5 => &BDF5,
+        _ => return Err(SolveError::InvalidMultistepOrder),
+    };
+    let tableau = load_tableau(resource).map_err(|_| SolveError::InvalidTableau)?;
+    if tableau.order() != order || tableau.ndf_kappa().is_none() {
+        return Err(SolveError::InvalidTableau);
+    }
+    Ok(tableau)
+}
+
+pub(super) fn ndf_kappa(tableau: &LinearMultistepTableau, ndf: bool) -> Result<f64, SolveError> {
+    let kappa = tableau.ndf_kappa().ok_or(SolveError::InvalidTableau)?;
+    Ok(if ndf { kappa } else { 0.0 })
+}
+
+pub(super) fn error_constant(
+    tableau: &LinearMultistepTableau,
+    ndf: bool,
+) -> Result<f64, SolveError> {
+    Ok(ndf_kappa(tableau, ndf)? * tableau.alpha()[0] + 1.0 / (tableau.order() + 1) as f64)
+}

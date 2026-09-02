@@ -15,6 +15,7 @@ pub struct LinearMultistepTableau {
     order: usize,
     alpha: Vec<f64>,
     beta: Vec<f64>,
+    ndf_kappa: Option<f64>,
 }
 
 impl LinearMultistepTableau {
@@ -46,12 +47,22 @@ impl LinearMultistepTableau {
     pub fn is_explicit(&self) -> bool {
         self.beta[0] == 0.0
     }
+
+    /// Optional NDF modifier accompanying a canonical BDF base formula.
+    ///
+    /// `alpha()` and `beta()` still describe the unmodified BDF formula.
+    /// An NDF driver subtracts `kappa * alpha[0] * difference^(order+1)(y)`
+    /// from its left-hand side. BDF drivers ignore this modifier.
+    pub fn ndf_kappa(&self) -> Option<f64> {
+        self.ndf_kappa
+    }
 }
 
 #[derive(Deserialize)]
 #[serde(rename_all = "kebab-case")]
 enum Kind {
     LinearMultistep,
+    BackwardDifferentiation,
 }
 
 #[derive(Deserialize)]
@@ -61,17 +72,26 @@ struct RawTableau {
     _schema: Option<String>,
     name: String,
     description: String,
-    #[serde(rename = "kind")]
-    _kind: Kind,
+    kind: Kind,
     order: usize,
     alpha: Vec<Scalar>,
     beta: Vec<Scalar>,
+    #[serde(default, deserialize_with = "optional_scalar")]
+    ndf_kappa: Option<Scalar>,
+}
+
+fn optional_scalar<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<Scalar>, D::Error> {
+    Scalar::deserialize(deserializer).map(Some)
 }
 
 /// Parses a canonical JSON linear multistep formula.
 ///
 /// Checks metadata, finite equally sized arrays, a nonzero leading solution
 /// coefficient, and polynomial order conditions through the declared order.
+/// Backward-differentiation resources also validate the normalized BDF
+/// structure and their accompanying NDF modifier. The base arrays remain BDF.
 /// The same parser runs during macro expansion and lazy initialization.
 pub fn parse_multistep_tableau(
     source: &str,
@@ -106,12 +126,41 @@ pub fn parse_multistep_tableau(
         ));
     }
     validate_order(&alpha, &beta, raw.order)?;
+    let ndf_kappa = match (raw.kind, raw.ndf_kappa) {
+        (Kind::LinearMultistep, None) => None,
+        (Kind::BackwardDifferentiation, Some(kappa)) => {
+            // The order conditions uniquely specify the normalized BDF formula
+            // when it has exactly `order` steps and only the new derivative.
+            if alpha.len() != raw.order + 1
+                || alpha[0] <= 0.0
+                || beta[0] != 1.0
+                || beta[1..].iter().any(|value| *value != 0.0)
+            {
+                return Err(TableauError::new("invalid canonical BDF structure"));
+            }
+            let kappa = kappa.materialize()?;
+            let leading = (1.0 - kappa) * alpha[0];
+            let error = kappa * alpha[0] + 1.0 / (raw.order + 1) as f64;
+            if !leading.is_finite() || leading <= 0.0 || !error.is_finite() || error <= 0.0 {
+                return Err(TableauError::new(
+                    "NDF modifier must give positive finite leading and error coefficients",
+                ));
+            }
+            Some(kappa)
+        }
+        _ => {
+            return Err(TableauError::new(
+                "ndf_kappa is required only for backward-differentiation resources",
+            ));
+        }
+    };
     Ok(LinearMultistepTableau {
         name: raw.name,
         description: raw.description,
         order: raw.order,
         alpha,
         beta,
+        ndf_kappa,
     })
 }
 
@@ -205,9 +254,38 @@ mod tests {
             SOURCE.replace("[1,-1,0]", "[1e-300,-1e300,0]"),
             SOURCE.replace("\"order\":2", "\"order\":2,\"schema_version\":1"),
             SOURCE.replace("\"order\":2", "\"order\":2,\"$schema\":42"),
+            SOURCE.replace("\"order\":2", "\"order\":2,\"ndf_kappa\":null"),
+            SOURCE.replace("\"order\":2", "\"order\":2,\"ndf_kappa\":0"),
         ] {
             assert!(
                 parse_multistep_tableau(&invalid, "AB2").is_err(),
+                "accepted {invalid}"
+            );
+        }
+    }
+
+    #[test]
+    fn backward_differentiation_reuses_order_validation_and_checks_ndf_modifier() {
+        let source = r#"{"name":"BDF2","description":"BDF with NDF modifier","kind":"backward-differentiation","order":2,"alpha":["3/2",-2,"1/2"],"beta":[1,0,0],"ndf_kappa":"-1/9"}"#;
+        let tableau = parse_multistep_tableau(source, "BDF2").unwrap();
+        assert_eq!(tableau.alpha(), &[1.5, -2.0, 0.5]);
+        assert_eq!(tableau.ndf_kappa(), Some(-1.0 / 9.0));
+        for invalid in [
+            source.replace("\"-1/9\"", "1"),
+            source.replace("\"-1/9\"", "-1"),
+            source.replace("\"-1/9\"", "\"1/0\""),
+            source.replace("\"-1/9\"", "null"),
+            source.replace("backward-differentiation", "linear-multistep"),
+            source.replace("[\"3/2\",-2,\"1/2\"]", "[\"3/2\",-3,\"1/2\"]"),
+            source
+                .replace("[\"3/2\",-2,\"1/2\"]", "[3,-4,1]")
+                .replace("[1,0,0]", "[2,0,0]"),
+            source
+                .replace("[\"3/2\",-2,\"1/2\"]", "[\"3/2\",-2,\"1/2\",0]")
+                .replace("[1,0,0]", "[1,0,0,0]"),
+        ] {
+            assert!(
+                parse_multistep_tableau(&invalid, "BDF2").is_err(),
                 "accepted {invalid}"
             );
         }

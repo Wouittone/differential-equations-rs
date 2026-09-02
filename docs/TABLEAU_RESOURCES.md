@@ -140,6 +140,48 @@ the corrector through `tableau()` and the shared explicit predictor through
 fixed-step Adams startup reuses the ordinary Ralston or RK4 tableau. The
 upstream ABM32/ABM43 repeating-startup predictor behavior remains unchanged.
 
+### Backward differentiation and NDF
+
+The same parser and macro accept `"kind": "backward-differentiation"` with
+canonical BDF `alpha`/`beta` arrays and an `ndf_kappa` scalar. These resources
+describe the **BDF base formula**, with its accompanying NDF modifier, rather
+than a second bank of precomputed NDF coefficients. For example:
+
+```json
+{
+  "name"        : "FileBDF2",
+  "description" : "BDF2 base formula with its NDF modifier.",
+  "kind"        : "backward-differentiation",
+  "order"       : 2,
+  "alpha"       : ["3/2", -2, "1/2"],
+  "beta"        : [1, 0, 0],
+  "ndf_kappa"   : "-1/9"
+}
+```
+
+BDF drivers use the base arrays unchanged. NDF subtracts
+`ndf_kappa * alpha[0] * difference^(order+1)(y)` from the left-hand side,
+where `difference` is the backward difference on the constant-step history.
+The quasi-constant-step drivers reinterpolate that history when steps change.
+Their harmonic weight is the BDF leading coefficient `alpha[0]`, not a
+separate coefficient table. The shared error factor is
+`ndf_kappa * alpha[0] + 1/(order+1)` (with zero kappa for BDF).
+
+Validation additionally requires exactly `order` steps, `beta = [1, 0, ...]`,
+a positive leading coefficient, and positive finite NDF leading/error factors.
+The modifier is required for this resource kind and forbidden for ordinary
+`linear-multistep` resources. As with other multistep data, these checks do not
+prove zero-stability or the stability region.
+
+`Qndf.tableau(order)`, `Qbdf.tableau(order)`, and `Fbdf.tableau(order)` share
+the same per-order resource for orders one through five. Fixed-order
+`Qndf1`, `Qbdf1`, `Qndf2`, and `Qbdf2` expose `tableau()` without an order
+argument. `ndf_kappa()` returns `Some(kappa)` on these base tableaux and `None`
+on ordinary Adams resources. Merely inspecting an order does not initialize
+the other orders; adaptive QNDF/QBDF also load adjacent orders as needed for
+their error comparisons. These resource definitions do not change the
+existing startup, history, or order-selection algorithms.
+
 ## Interaction-picture methods
 
 RKIP uses the canonical explicit Runge--Kutta resource

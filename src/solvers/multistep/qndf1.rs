@@ -4,13 +4,14 @@
 //! pinned OrdinaryDiffEqBDF source. Singular mass matrices, residual DAEs,
 //! split/IMEX paths, and variable-order QNDF are intentionally excluded.
 
+use super::tableaux::{backward_differentiation, error_constant, ndf_kappa};
 use crate::integrator::{
     ControllerConfig, KernelCapabilities, StepEstimate, StepKernel, integrate as drive_integration,
 };
 use crate::linear::{DenseLu, LinearError, StateLayout, factorize, solve_factorized};
+use crate::tableau::LinearMultistepTableau;
 use crate::{OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions, SolverStats};
 
-const DEFAULT_KAPPA: f64 = -37.0 / 200.0;
 const MAX_NEWTON_ITERATIONS: usize = 12;
 const NEWTON_TOLERANCE: f64 = 1.0e-12;
 // The shared driver's proportional controller uses a conservative safety
@@ -25,6 +26,20 @@ pub struct Qndf1;
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Qbdf1;
 
+impl Qndf1 {
+    /// Returns the shared BDF1 base formula with its NDF modifier.
+    pub fn tableau(self) -> Result<&'static LinearMultistepTableau, SolveError> {
+        backward_differentiation(1)
+    }
+}
+
+impl Qbdf1 {
+    /// Returns the shared BDF1 formula; this solver ignores its NDF modifier.
+    pub fn tableau(self) -> Result<&'static LinearMultistepTableau, SolveError> {
+        backward_differentiation(1)
+    }
+}
+
 impl OdeAlgorithm for Qndf1 {
     fn solve_validated<F, P>(
         &self,
@@ -37,7 +52,7 @@ impl OdeAlgorithm for Qndf1 {
         drive_integration(
             problem,
             options,
-            Qndf1Kernel::new(problem.initial_state().len(), DEFAULT_KAPPA),
+            Qndf1Kernel::new(problem.initial_state().len(), true)?,
         )
     }
 }
@@ -54,7 +69,7 @@ impl OdeAlgorithm for Qbdf1 {
         drive_integration(
             problem,
             options,
-            Qndf1Kernel::new(problem.initial_state().len(), 0.0),
+            Qndf1Kernel::new(problem.initial_state().len(), false)?,
         )
     }
 }
@@ -103,14 +118,17 @@ impl Workspace {
 struct Qndf1Kernel {
     workspace: Workspace,
     kappa: f64,
+    error_constant: f64,
 }
 
 impl Qndf1Kernel {
-    fn new(dimension: usize, kappa: f64) -> Self {
-        Self {
+    fn new(dimension: usize, ndf: bool) -> Result<Self, SolveError> {
+        let tableau = backward_differentiation(1)?;
+        Ok(Self {
             workspace: Workspace::new(dimension),
-            kappa,
-        }
+            kappa: ndf_kappa(tableau, ndf)?,
+            error_constant: error_constant(tableau, ndf)?,
+        })
     }
 }
 
@@ -223,7 +241,7 @@ where
             .zip(&self.workspace.history_state)
             .map(|((&next, &now), &previous)| {
                 let d = next - now - rho * (now - previous);
-                (self.kappa + 0.5) * d
+                self.error_constant * d
             });
         Ok(StepEstimate::new(rms_scaled(
             difference, candidate, state, options,
