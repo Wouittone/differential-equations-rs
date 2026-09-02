@@ -273,7 +273,11 @@ Runge--Kutta data is stored as compile-time JSON resources below
 `src/tableau/resources`. Resources are validated while compiling and parsed
 lazily when their method is first used. Downstream crates can define an
 explicit Runge--Kutta algorithm from their own JSON file with
-`define_explicit_rk_from_file!`; see
+`define_explicit_rk_from_file!`, or a drift/kick composition with
+`tableau::define_symplectic_from_file!`. All named symplectic compositions now
+use individual resources and expose fallible `Method::tableau()` access with
+`a()`/`b()` coefficient slices. Some other specialized families still retain
+legacy embedded coefficient data; see
 [the tableau resource guide](docs/TABLEAU_RESOURCES.md).
 
 ## Development

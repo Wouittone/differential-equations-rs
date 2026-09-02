@@ -1,0 +1,9 @@
+{
+  "$schema"     : "../symplectic-schema.json",
+  "name"        : "Ruth3",
+  "description" : "Ruth3 drift/kick composition, pinned from OrdinaryDiffEqSymplecticRK.",
+  "kind"        : "symplectic-composition",
+  "order"       : 3,
+  "a"           : ["2.0 / 3.0", "-2.0 / 3.0", "1.0"],
+  "b"           : ["7.0 / 24.0", "3.0 / 4.0", "-1.0 / 24.0"]
+}

@@ -1,7 +1,7 @@
-//! Compile-time expansion of declarative Runge--Kutta tableau resources.
+//! Compile-time validation and expansion of declarative solver tableau resources.
 
 use differential_equations_tableau_core::{
-    RungeKuttaKind, parse_numeric_expression, parse_tableau,
+    RungeKuttaKind, parse_numeric_expression, parse_symplectic_tableau, parse_tableau,
 };
 use proc_macro::TokenStream;
 use proc_macro2::{Literal, TokenStream as TokenStream2};
@@ -524,6 +524,64 @@ fn expand_static(
     })
 }
 
+/// Defines a symplectic composition from a validated JSON resource.
+///
+/// Like [`define_explicit_rk_from_file!`], accepts a visibility, method name,
+/// resource path, and optional `crate = path`. The expansion contains an
+/// `include_str!` resource and a per-method lazy tableau, not coefficient arrays.
+#[proc_macro]
+pub fn define_symplectic_from_file(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as MacroInput);
+    match expand_symplectic(input) {
+        Ok(tokens) => tokens.into(),
+        Err(error) => syn::Error::new(proc_macro2::Span::call_site(), error)
+            .into_compile_error()
+            .into(),
+    }
+}
+
+fn expand_symplectic(input: MacroInput) -> Result<TokenStream2, String> {
+    let manifest_dir = std::env::var_os("CARGO_MANIFEST_DIR")
+        .map(PathBuf::from)
+        .ok_or("CARGO_MANIFEST_DIR is unavailable during macro expansion")?;
+    let path = manifest_dir.join(input.path.value());
+    let source = std::fs::read_to_string(&path)
+        .map_err(|error| format!("failed to read `{}`: {error}", path.display()))?;
+    expand_symplectic_source(input, &source)
+}
+
+fn expand_symplectic_source(input: MacroInput, source: &str) -> Result<TokenStream2, String> {
+    parse_symplectic_tableau(source, &input.name.to_string())
+        .map_err(|error| format!("invalid tableau `{}`: {error}", input.path.value()))?;
+    let visibility = input.visibility;
+    let name = input.name;
+    let static_name = format_ident!("__{}_TABLEAU", name.to_string().to_uppercase());
+    let source_path = input.path;
+    let crate_path = input.crate_path;
+    Ok(quote! {
+        static #static_name: #crate_path::tableau::LazySymplecticTableau = ::std::sync::LazyLock::new(|| {
+            #crate_path::tableau::parse_symplectic_tableau(
+                include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/", #source_path)),
+                stringify!(#name),
+            )
+        });
+        #[doc = concat!("Resource-backed symplectic composition `", stringify!(#name), "`.")]
+        #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+        #visibility struct #name;
+        impl #name {
+            /// Returns this method's lazily initialized tableau.
+            pub fn tableau() -> ::std::result::Result<&'static #crate_path::tableau::SymplecticTableau, #crate_path::tableau::TableauError> {
+                #crate_path::tableau::load_tableau(&#static_name)
+            }
+        }
+        impl #crate_path::solvers::second_order::SymplecticAlgorithm for #name {
+            fn tableau() -> ::std::result::Result<&'static #crate_path::tableau::SymplecticTableau, #crate_path::tableau::TableauError> {
+                Self::tableau()
+            }
+        }
+    })
+}
+
 fn expand(input: MacroInput) -> Result<TokenStream2, String> {
     let manifest_dir = std::env::var_os("CARGO_MANIFEST_DIR")
         .map(PathBuf::from)
@@ -592,4 +650,40 @@ fn expand(input: MacroInput) -> Result<TokenStream2, String> {
             }
         }
     })
+}
+
+#[cfg(test)]
+mod symplectic_tests {
+    use super::*;
+
+    fn input() -> MacroInput {
+        MacroInput {
+            visibility: parse_quote!(pub),
+            name: parse_quote!(TestComposition),
+            path: LitStr::new("composition.json", proc_macro2::Span::call_site()),
+            crate_path: parse_quote!(crate),
+        }
+    }
+
+    const SOURCE: &str = r#"{"name":"TestComposition","description":"Macro test","kind":"symplectic-composition","order":2,"a":[1,0],"b":["1/2","1/2"]}"#;
+
+    #[test]
+    fn expansion_rejects_malformed_compositions_with_the_resource_path() {
+        let source = SOURCE.replace("[1,0]", "[1]");
+        let error = expand_symplectic_source(input(), &source).unwrap_err();
+        assert!(error.contains("composition.json"), "{error}");
+        assert!(error.contains("same non-zero stage count"), "{error}");
+    }
+
+    #[test]
+    fn expansion_embeds_only_source_and_lazy_loading_not_coefficient_arrays() {
+        let tokens = expand_symplectic_source(input(), SOURCE)
+            .unwrap()
+            .to_string();
+        assert!(tokens.contains("include_str"));
+        assert!(tokens.contains("LazyLock"));
+        assert!(tokens.contains("parse_symplectic_tableau"));
+        assert!(!tokens.contains("0.5"));
+        assert!(!tokens.contains("const "));
+    }
 }

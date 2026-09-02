@@ -1,9 +1,11 @@
 # Tableau resources
 
-All built-in compile-time method data lives below `src/tableau/resources` as
-JSON. Explicit and implicit Runge--Kutta resources use canonical Butcher
-matrices; specialized families use the same resource tree for their typed
-method data instead of maintaining a separate coefficient directory or parser.
+Resource-backed method data lives below `src/tableau/resources` as JSON.
+Explicit and implicit Runge--Kutta resources use canonical Butcher matrices;
+symplectic compositions use paired drift/kick vectors. Specialized families
+also use this tree for typed method data. Migration is not yet complete:
+legacy embedded coefficients remain in some multirate, multistep,
+exponential, and Rosenbrock implementations.
 
 Resources use a FracturedJson-style layout: object fields have stable ordering,
 scalar arrays stay on one line, and every matrix row occupies one line. This is
@@ -84,6 +86,48 @@ define_explicit_rk_from_file!(
     crate = diffeq,
 );
 ```
+
+## Symplectic compositions
+
+Every built-in named drift/kick composition uses its own lazily parsed JSON
+file under `src/tableau/resources/symplectic`. The representation follows the
+upstream `SymplecticTableau`: each stage first drifts the position by `b[i]`,
+then kicks the velocity by `a[i]`. Negative coefficients are allowed. The
+parser shares the same numeric-expression machinery as Runge--Kutta resources.
+
+```json
+{
+  "name"        : "FileDriftKick",
+  "description" : "Second-order drift/kick composition.",
+  "kind"        : "symplectic-composition",
+  "order"       : 2,
+  "a"           : [1, 0],
+  "b"           : ["1/2", "1/2"]
+}
+```
+
+Define a downstream method with one call:
+
+```rust,ignore
+use differential_equations::tableau::define_symplectic_from_file;
+
+define_symplectic_from_file!(pub FileDriftKick, "resources/file_drift_kick.json");
+```
+
+The result implements `SymplecticAlgorithm` and works with `solve_symplectic`.
+The optional `crate = local_name` argument supports renamed dependencies.
+Compile-time validation rejects unknown fields, name mismatches, invalid
+expressions, non-finite coefficients, unequal or empty stage counts, and sums
+of `a` or `b` inconsistent with one. Higher-order conditions are not proved by
+this structural validation. The editor schema is
+[`symplectic-schema.json`](../src/tableau/resources/symplectic-schema.json).
+
+`Method::tableau()` now returns `Result<&'static SymplecticTableau, TableauError>`.
+Use `a()` and `b()` instead of public fields; metadata includes `name()`,
+`description()`, `order()`, and `stages()`. Raw `SymplecticTableau::new` has
+been replaced by `parse_symplectic_tableau`, so solver inputs are validated.
+Each method caches its own result and does not parse other methods' files.
+The expansion embeds source text, never Rust coefficient arrays.
 
 ## Packaging
 

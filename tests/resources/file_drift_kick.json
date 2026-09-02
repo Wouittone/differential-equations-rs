@@ -1,0 +1,8 @@
+{
+  "name"        : "FileDriftKick",
+  "description" : "Second-order drift/kick composition for downstream extension tests.",
+  "kind"        : "symplectic-composition",
+  "order"       : 2,
+  "a"           : [1, 0],
+  "b"           : ["1/2", "1/2"]
+}

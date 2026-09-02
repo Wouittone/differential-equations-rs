@@ -10,7 +10,7 @@ use std::sync::LazyLock;
 #[doc(inline)]
 pub use differential_equations_tableau_core::{
     FittedWeight, LazyDenseStage as ParsedLazyDenseStage, RungeKuttaKind, RungeKuttaTableau,
-    TableauError, parse_tableau,
+    SymplecticTableau, TableauError, parse_symplectic_tableau, parse_tableau,
 };
 
 /// A lazily initialized, validated Runge--Kutta tableau.
@@ -18,10 +18,13 @@ pub use differential_equations_tableau_core::{
 /// Parse errors remain values instead of poisoning the process with a panic.
 pub type LazyTableau = LazyLock<Result<RungeKuttaTableau, TableauError>>;
 
+/// A lazily initialized, validated drift/kick composition tableau.
+pub type LazySymplecticTableau = LazyLock<Result<SymplecticTableau, TableauError>>;
+
 /// Returns a parsed lazy tableau, preserving any validation error.
-pub fn load_tableau(
-    resource: &'static LazyTableau,
-) -> Result<&'static RungeKuttaTableau, TableauError> {
+pub fn load_tableau<T>(
+    resource: &'static LazyLock<Result<T, TableauError>>,
+) -> Result<&'static T, TableauError> {
     match &**resource {
         Ok(tableau) => Ok(tableau),
         Err(error) => Err(error.clone()),
@@ -36,3 +39,5 @@ pub use crate::solvers::explicit::general::{
 };
 #[doc(inline)]
 pub use differential_equations_tableau_macros::define_explicit_rk_from_file;
+#[doc(inline)]
+pub use differential_equations_tableau_macros::define_symplectic_from_file;

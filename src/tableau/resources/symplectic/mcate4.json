@@ -1,0 +1,9 @@
+{
+  "$schema"     : "../symplectic-schema.json",
+  "name"        : "McAte4",
+  "description" : "McAte4 drift/kick composition, pinned from OrdinaryDiffEqSymplecticRK.",
+  "kind"        : "symplectic-composition",
+  "order"       : 4,
+  "a"           : ["0.515352837431122936", "-0.085782019412973646", "0.441583023616466524", "0.128846158365384185"],
+  "b"           : ["0.134496199277431089", "-0.224819803079420806", "0.756320000515668291", "0.334003603286321425"]
+}

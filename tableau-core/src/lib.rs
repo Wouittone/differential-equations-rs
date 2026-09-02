@@ -1,5 +1,8 @@
 //! Shared JSON parser and validator for canonical solver tableaus.
 
+mod symplectic;
+pub use symplectic::{SymplecticTableau, parse_symplectic_tableau};
+
 use serde::Deserialize;
 use std::fmt;
 

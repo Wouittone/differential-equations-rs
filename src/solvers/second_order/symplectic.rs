@@ -4,8 +4,6 @@
 //! OrdinaryDiffEqSymplecticRK.  A stage is a drift of the position by `bᵢ`
 //! followed by a kick of the velocity by `aᵢ`.
 
-#![allow(clippy::excessive_precision)]
-
 use super::function::SecondOrderFunction;
 use crate::callback::CallbackOutcome;
 use crate::event::{times_are_numerically_equal, times_are_representably_equal};
@@ -21,353 +19,29 @@ use super::general::{
     SecondOrderOdeProblem, apply_finalize_callbacks, apply_initial_callbacks, apply_step_callbacks,
 };
 
-/// A pinned alternating drift/kick composition.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct SymplecticTableau {
-    /// Velocity (kick) coefficients.
-    pub a: &'static [f64],
-    /// Position (drift) coefficients.
-    pub b: &'static [f64],
-}
-
-impl SymplecticTableau {
-    /// Creates a validated view of a pinned composition.
-    pub const fn new(a: &'static [f64], b: &'static [f64]) -> Self {
-        Self { a, b }
-    }
-
-    /// Number of alternating stages.
-    pub const fn stages(self) -> usize {
-        self.a.len()
-    }
-}
+pub use crate::tableau::SymplecticTableau;
+use crate::tableau::{TableauError, define_symplectic_from_file};
 
 /// A named explicit symplectic composition.
 pub trait SymplecticAlgorithm: Copy {
-    /// Returns the pinned composition coefficients.
-    fn tableau() -> SymplecticTableau;
+    /// Returns the validated, lazily initialized composition tableau.
+    fn tableau() -> Result<&'static SymplecticTableau, TableauError>;
 }
 
-macro_rules! symplectic_algorithm {
-    ($name:ident, $a:expr, $b:expr) => {
-        #[doc = concat!("Named explicit symplectic composition `", stringify!($name), "`.")]
-        #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-        pub struct $name;
-
-        impl $name {
-            /// Returns this method's pinned composition coefficients.
-            pub const fn tableau() -> SymplecticTableau {
-                SymplecticTableau::new($a, $b)
-            }
-        }
-
-        impl SymplecticAlgorithm for $name {
-            fn tableau() -> SymplecticTableau {
-                Self::tableau()
-            }
-        }
-    };
-}
-
-#[allow(clippy::approx_constant)]
-const MCATE2_A: &[f64] = &[0.7071067811865476, 0.2928932188134524];
-const MCATE2_B: &[f64] = &[0.29289321881345254, 0.7071067811865475];
-
-const MCATE3_A: &[f64] = &[0.9196615230173999, -0.18799161879915982, 0.2683300957817599];
-const MCATE3_B: &[f64] = &[0.2683300957817599, -0.18799161879915982, 0.9196615230173999];
-
-const CANDY_ROZ_A: &[f64] = &[
-    0.6756035959798289,
-    -0.17560359597982886,
-    -0.17560359597982886,
-    0.6756035959798289,
-];
-const CANDY_ROZ_B: &[f64] = &[
-    0.0,
-    1.3512071919596578,
-    -1.7024143839193155,
-    1.3512071919596578,
-];
-
-const MCATE4_A: &[f64] = &[
-    0.515352837431122936,
-    -0.085782019412973646,
-    0.441583023616466524,
-    0.128846158365384185,
-];
-const MCATE4_B: &[f64] = &[
-    0.134496199277431089,
-    -0.224819803079420806,
-    0.756320000515668291,
-    0.334003603286321425,
-];
-
-const CALVO_SANZ4_A: &[f64] = &[
-    0.20517766154229,
-    0.40302128160421,
-    -0.12092087633891,
-    0.51272193319241,
-    0.0,
-];
-const CALVO_SANZ4_B: &[f64] = &[
-    0.061758858135626,
-    0.33897802655364,
-    0.61479130717558,
-    -0.14054801465937,
-    0.12501982279453,
-];
-
-const MCATE42_A: &[f64] = &[
-    0.40518861839525227722,
-    -0.287144040816524089,
-    0.76391084484254362356,
-    -0.287144040816524089,
-    0.40518861839525227722,
-];
-const MCATE42_B: &[f64] = &[
-    -3.0 / 73.0,
-    17.0 / 59.0,
-    1.0 - 2.0 * (-3.0 / 73.0) - 2.0 * (17.0 / 59.0),
-    17.0 / 59.0,
-    -3.0 / 73.0,
-];
-
-const MCATE5_A: &[f64] = &[
-    0.33983962583911,
-    -0.088601336903027329,
-    0.5858564768259621188,
-    -0.603039356536491888,
-    0.3235807965546976394,
-    0.4423637942197494587,
-];
-const MCATE5_B: &[f64] = &[
-    0.1193900292875672758,
-    0.6989273703824752308,
-    -0.1713123582716007754,
-    0.401269502251353448,
-    0.010705081848235984,
-    -0.0589796254980311632,
-];
-
-const YOSHIDA6_A: &[f64] = &[
-    0.78451361047756,
-    0.23557321335936,
-    -1.1776799841789,
-    1.3151863206839,
-    -1.1776799841789,
-    0.23557321335936,
-    0.78451361047756,
-    0.0,
-];
-const YOSHIDA6_B: &[f64] = &[
-    0.39225680523878,
-    0.51004341191846,
-    -0.47105338540977,
-    0.0687531682525,
-    0.0687531682525,
-    -0.47105338540977,
-    0.51004341191846,
-    0.39225680523878,
-];
-
-const KAHAN_LI6_A: &[f64] = &[
-    0.39216144400731413927925056,
-    0.33259913678935943859974864,
-    -0.70624617255763935980996482,
-    0.08221359629355080023149045,
-    0.79854399093482996339895035,
-    0.08221359629355080023149045,
-    -0.70624617255763935980996482,
-    0.33259913678935943859974864,
-    0.39216144400731413927925056,
-    0.0,
-];
-const KAHAN_LI6_B: &[f64] = &[
-    0.19608072200365706963962528,
-    0.3623802903983367889394994,
-    -0.18682351788413996060510809,
-    -0.31201628813204427978923719,
-    0.4403787936141903818111176,
-    0.4403787936141903818111176,
-    -0.31201628813204427978923719,
-    -0.18682351788413996060510809,
-    0.3623802903983367889394994,
-    0.19608072200365706963962528,
-];
-
-const MCATE8_A: &[f64] = &[
-    0.7416703643506129534482278,
-    -0.4091008258000315939973001,
-    0.19075471029623837995387626,
-    -0.57386247111608226665638773,
-    0.29906418130365592384446354,
-    0.33462491824529818378495798,
-    0.31529309239676659663205666,
-    -0.79688793935291635401978884,
-    0.31529309239676659663205666,
-    0.33462491824529818378495798,
-    0.29906418130365592384446354,
-    -0.57386247111608226665638773,
-    0.19075471029623837995387626,
-    -0.4091008258000315939973001,
-    0.7416703643506129534482278,
-    0.0,
-];
-const MCATE8_B: &[f64] = &[
-    0.3708351821753065,
-    0.16628476927529068,
-    -0.1091730577518966,
-    -0.19155388040992194,
-    -0.13739914490621316,
-    0.31684454977447707,
-    0.3249590053210324,
-    -0.24079742347807487,
-    -0.24079742347807487,
-    0.3249590053210324,
-    0.31684454977447707,
-    -0.13739914490621316,
-    -0.19155388040992194,
-    -0.1091730577518966,
-    0.16628476927529068,
-    0.3708351821753065,
-];
-
-const KAHAN_LI8_A: &[f64] = &[
-    0.13020248308889008087881763,
-    0.56116298177510838456196441,
-    -0.3894749626448472864080786,
-    0.15884190655515560089621075,
-    -0.39590389413323757733623154,
-    0.18453964097831570709183254,
-    0.25837438768632204729397911,
-    0.29501172360931029887096624,
-    -0.60550853383003451169892108,
-    0.29501172360931029887096624,
-    0.25837438768632204729397911,
-    0.18453964097831570709183254,
-    -0.39590389413323757733623154,
-    0.15884190655515560089621075,
-    -0.3894749626448472864080786,
-    0.56116298177510838456196441,
-    0.13020248308889008087881763,
-    0.0,
-];
-const KAHAN_LI8_B: &[f64] = &[
-    0.06510124154444503,
-    0.3456827324319992,
-    0.08584400956513055,
-    -0.11531652804484584,
-    -0.11853099378904099,
-    -0.10568212657746093,
-    0.22145701433231887,
-    0.27669305564781616,
-    -0.15524840511036214,
-    -0.15524840511036214,
-    0.27669305564781616,
-    0.22145701433231887,
-    -0.10568212657746093,
-    -0.11853099378904099,
-    -0.11531652804484584,
-    0.08584400956513055,
-    0.3456827324319992,
-    0.06510124154444503,
-];
-
-const SOFSPA10_A: &[f64] = &[
-    0.07879572252168641926390768,
-    0.31309610341510852776481247,
-    0.02791838323507806610952027,
-    -0.2295928415939070941512134,
-    0.13096206107716486317465686,
-    -0.26973340565451071434460973,
-    0.07497334315589143566613711,
-    0.11199342399981020488957508,
-    0.36613344954622675119314812,
-    -0.39910563013603589787862981,
-    0.10308739852747107731580277,
-    0.41143087395589023782070412,
-    -0.00486636058313526176219566,
-    -0.39203335370863990644808194,
-    0.0519425029624496470371829,
-    0.05066509075992449633587434,
-    0.0496743706397298790545688,
-    0.04931773575959453791768001,
-    0.0496743706397298790545688,
-    0.05066509075992449633587434,
-    0.0519425029624496470371829,
-    -0.39203335370863990644808194,
-    -0.00486636058313526176219566,
-    0.41143087395589023782070412,
-    0.10308739852747107731580277,
-    -0.39910563013603589787862981,
-    0.36613344954622675119314812,
-    0.11199342399981020488957508,
-    0.07497334315589143566613711,
-    -0.26973340565451071434460973,
-    0.13096206107716486317465686,
-    -0.2295928415939070941512134,
-    0.02791838323507806610952027,
-    0.31309610341510852776481247,
-    0.07879572252168641926390768,
-    0.0,
-];
-const SOFSPA10_B: &[f64] = &[
-    0.03939786126084321,
-    0.19594591296839747,
-    0.1705072433250933,
-    -0.10083722917941451,
-    -0.0493153902583711,
-    -0.06938567228867291,
-    -0.09738003124930963,
-    0.09348338357785083,
-    0.23906343677301847,
-    -0.016486090294904582,
-    -0.14800911580428242,
-    0.2572591362416807,
-    0.20328225668637748,
-    -0.1984498571458876,
-    -0.17004542537309514,
-    0.05130379686118707,
-    0.050169730699827185,
-    0.0494960531996622,
-    0.0494960531996622,
-    0.050169730699827185,
-    0.05130379686118707,
-    -0.17004542537309514,
-    -0.1984498571458876,
-    0.20328225668637748,
-    0.2572591362416807,
-    -0.14800911580428242,
-    -0.016486090294904582,
-    0.23906343677301847,
-    0.09348338357785083,
-    -0.09738003124930963,
-    -0.06938567228867291,
-    -0.0493153902583711,
-    -0.10083722917941451,
-    0.1705072433250933,
-    0.19594591296839747,
-    0.03939786126084321,
-];
-
-symplectic_algorithm!(PseudoVerletLeapfrog, &[1.0, 0.0], &[0.5, 0.5]);
-symplectic_algorithm!(McAte2, MCATE2_A, MCATE2_B);
-symplectic_algorithm!(
-    Ruth3,
-    &[2.0 / 3.0, -2.0 / 3.0, 1.0],
-    &[7.0 / 24.0, 3.0 / 4.0, -1.0 / 24.0]
-);
-symplectic_algorithm!(McAte3, MCATE3_A, MCATE3_B);
-symplectic_algorithm!(CandyRoz4, CANDY_ROZ_A, CANDY_ROZ_B);
-symplectic_algorithm!(McAte4, MCATE4_A, MCATE4_B);
-symplectic_algorithm!(CalvoSanz4, CALVO_SANZ4_A, CALVO_SANZ4_B);
-symplectic_algorithm!(McAte42, MCATE42_A, MCATE42_B);
-symplectic_algorithm!(McAte5, MCATE5_A, MCATE5_B);
-symplectic_algorithm!(Yoshida6, YOSHIDA6_A, YOSHIDA6_B);
-symplectic_algorithm!(KahanLi6, KAHAN_LI6_A, KAHAN_LI6_B);
-symplectic_algorithm!(McAte8, MCATE8_A, MCATE8_B);
-symplectic_algorithm!(KahanLi8, KAHAN_LI8_A, KAHAN_LI8_B);
-symplectic_algorithm!(SofSpa10, SOFSPA10_A, SOFSPA10_B);
+define_symplectic_from_file!(pub PseudoVerletLeapfrog, "src/tableau/resources/symplectic/pseudoverletleapfrog.json", crate = crate);
+define_symplectic_from_file!(pub McAte2, "src/tableau/resources/symplectic/mcate2.json", crate = crate);
+define_symplectic_from_file!(pub Ruth3, "src/tableau/resources/symplectic/ruth3.json", crate = crate);
+define_symplectic_from_file!(pub McAte3, "src/tableau/resources/symplectic/mcate3.json", crate = crate);
+define_symplectic_from_file!(pub CandyRoz4, "src/tableau/resources/symplectic/candyroz4.json", crate = crate);
+define_symplectic_from_file!(pub McAte4, "src/tableau/resources/symplectic/mcate4.json", crate = crate);
+define_symplectic_from_file!(pub CalvoSanz4, "src/tableau/resources/symplectic/calvosanz4.json", crate = crate);
+define_symplectic_from_file!(pub McAte42, "src/tableau/resources/symplectic/mcate42.json", crate = crate);
+define_symplectic_from_file!(pub McAte5, "src/tableau/resources/symplectic/mcate5.json", crate = crate);
+define_symplectic_from_file!(pub Yoshida6, "src/tableau/resources/symplectic/yoshida6.json", crate = crate);
+define_symplectic_from_file!(pub KahanLi6, "src/tableau/resources/symplectic/kahanli6.json", crate = crate);
+define_symplectic_from_file!(pub McAte8, "src/tableau/resources/symplectic/mcate8.json", crate = crate);
+define_symplectic_from_file!(pub KahanLi8, "src/tableau/resources/symplectic/kahanli8.json", crate = crate);
+define_symplectic_from_file!(pub SofSpa10, "src/tableau/resources/symplectic/sofspa10.json", crate = crate);
 
 /// A trajectory returned by [`solve_symplectic`].
 ///
@@ -674,17 +348,7 @@ where
         .initial_step
         .ok_or(SolveError::InitialStepRequired)?;
     let (start, end) = problem.time_span();
-    let tableau = A::tableau();
-    if tableau.a.is_empty()
-        || tableau.a.len() != tableau.b.len()
-        || !tableau
-            .a
-            .iter()
-            .chain(tableau.b)
-            .all(|coefficient| coefficient.is_finite())
-    {
-        return Err(SolveError::InvalidTableau.into());
-    }
+    let tableau = A::tableau().map_err(|_| SolveError::InvalidTableau)?;
 
     let direction = (end - start).signum();
     let maximum_step = options.max_step.min((end - start).abs());
@@ -884,7 +548,7 @@ fn validate<F, P>(
 #[allow(clippy::too_many_arguments)]
 fn perform_step<F, P>(
     problem: &SecondOrderOdeProblem<F, P>,
-    tableau: SymplecticTableau,
+    tableau: &SymplecticTableau,
     position: &mut [f64],
     velocity: &mut [f64],
     acceleration: &mut [f64],
@@ -895,7 +559,7 @@ where
     F: SecondOrderFunction<P>,
 {
     let mut stage_time = time;
-    for (stage, (&kick, &drift)) in tableau.a.iter().zip(tableau.b).enumerate() {
+    for (stage, (&kick, &drift)) in tableau.a().iter().zip(tableau.b()).enumerate() {
         for (position, &velocity) in position.iter_mut().zip(&*velocity) {
             *position += drift * step * velocity;
         }

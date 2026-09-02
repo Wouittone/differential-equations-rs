@@ -1,0 +1,9 @@
+{
+  "$schema"     : "../symplectic-schema.json",
+  "name"        : "CalvoSanz4",
+  "description" : "CalvoSanz4 drift/kick composition, pinned from OrdinaryDiffEqSymplecticRK.",
+  "kind"        : "symplectic-composition",
+  "order"       : 4,
+  "a"           : ["0.20517766154229", "0.40302128160421", "-0.12092087633891", "0.51272193319241", "0.0"],
+  "b"           : ["0.061758858135626", "0.33897802655364", "0.61479130717558", "-0.14054801465937", "0.12501982279453"]
+}

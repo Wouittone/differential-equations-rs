@@ -52,14 +52,15 @@ fn all_recovered_names_expose_pinned_tableaus() {
         ("SofSpa10", SofSpa10::tableau(), 36),
     ];
     for (name, tableau, stages) in methods {
+        let tableau = tableau.unwrap();
         assert_eq!(tableau.stages(), stages, "{name} stage count");
-        assert_eq!(tableau.a.len(), tableau.b.len());
+        assert_eq!(tableau.a().len(), tableau.b().len());
         assert!(
-            (tableau.a.iter().sum::<f64>() - 1.0).abs() < 5.0e-12,
+            (tableau.a().iter().sum::<f64>() - 1.0).abs() < 5.0e-12,
             "{name} a sum"
         );
         assert!(
-            (tableau.b.iter().sum::<f64>() - 1.0).abs() < 5.0e-12,
+            (tableau.b().iter().sum::<f64>() - 1.0).abs() < 5.0e-12,
             "{name} b sum"
         );
     }
@@ -147,7 +148,10 @@ fn fixed_steps_work_backward_and_honor_save_at() {
 fn work_count_is_one_acceleration_evaluation_per_stage() {
     let solution = solve_symplectic(&oscillator(), McAte4, &options(0.25)).unwrap();
 
-    assert_eq!(solution.rhs_evaluations(), 4 * McAte4::tableau().stages());
+    assert_eq!(
+        solution.rhs_evaluations(),
+        4 * McAte4::tableau().unwrap().stages()
+    );
     assert_eq!(solution.dimension(), 1);
     assert_eq!(solution.position_values().len(), 2);
     assert_eq!(solution.velocity_values().len(), 2);

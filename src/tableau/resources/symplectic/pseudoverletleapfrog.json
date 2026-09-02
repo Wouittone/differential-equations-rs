@@ -1,0 +1,9 @@
+{
+  "$schema"     : "../symplectic-schema.json",
+  "name"        : "PseudoVerletLeapfrog",
+  "description" : "PseudoVerletLeapfrog drift/kick composition, pinned from OrdinaryDiffEqSymplecticRK.",
+  "kind"        : "symplectic-composition",
+  "order"       : 2,
+  "a"           : ["1.0", "0.0"],
+  "b"           : ["0.5", "0.5"]
+}
