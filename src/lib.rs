@@ -72,6 +72,8 @@
 //!   states while numerical kernels retain contiguous flat workspaces.
 //!   [`OdeProblem::from_array_out_of_place`] accepts functions returning arrays;
 //!   [`OdeFunction`] unifies them with in-place closures and propagates errors.
+//!   [`solvers::second_order::SecondOrderOdeProblem`] provides matching ndarray
+//!   constructors while keeping velocity and position partitions separate.
 //! - [`solve_ensemble`] and [`solve_batch`] preserve input order. The default
 //!   `parallel` feature also enables their Rayon-backed variants.
 //!

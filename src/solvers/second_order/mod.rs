@@ -1,5 +1,6 @@
 //! Runge--Kutta--Nyström, structural, and symplectic algorithms.
 
+pub mod function;
 /// Second-order problem, solution, structural, and RKN algorithms.
 pub mod general;
 pub mod symplectic;
@@ -22,5 +23,6 @@ mod coefficient_data {
     );
 }
 
+pub use function::SecondOrderFunction;
 pub use general::*;
 pub use symplectic::*;

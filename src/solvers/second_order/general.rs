@@ -1,4 +1,8 @@
+mod arrays;
+
+use super::function::SecondOrderFunction;
 use crate::callbacks::SteadyStateCondition;
+use ndarray::IxDyn;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -471,6 +475,8 @@ impl<P> Default for SecondOrderCallbackSet<P> {
 /// The acceleration function follows SciML's in-place calling convention
 /// `f(dv, v, q, p, t)`. Positions and velocities remain separate throughout
 /// the public API; callers do not need to flatten the partitioned state.
+/// [`Self::from_array`] accepts ndarray states, and
+/// [`Self::from_array_out_of_place`] accepts functions returning accelerations.
 /// This represents SciML's `SecondOrderODEProblem` specialization `q' = v`,
 /// not a general `DynamicalODEProblem` with a separately supplied position
 /// rate.
@@ -478,6 +484,7 @@ pub struct SecondOrderOdeProblem<F, P> {
     pub(crate) acceleration: F,
     initial_velocity: Vec<f64>,
     initial_position: Vec<f64>,
+    state_shape: IxDyn,
     time_span: (f64, f64),
     parameters: P,
     callbacks: Vec<PartitionedCallback<P>>,
@@ -495,10 +502,12 @@ impl<F, P> SecondOrderOdeProblem<F, P> {
         time_span: (f64, f64),
         parameters: P,
     ) -> Self {
+        let initial_position = initial_position.into();
         Self {
             acceleration,
             initial_velocity: initial_velocity.into(),
-            initial_position: initial_position.into(),
+            state_shape: IxDyn(&[initial_position.len()]),
+            initial_position,
             time_span,
             parameters,
             callbacks: Vec::new(),
@@ -703,16 +712,20 @@ impl<F, P> SecondOrderOdeProblem<F, P> {
 
     /// Evaluates the acceleration callback for a specialized partitioned
     /// solver without exposing the problem's internal storage.
+    ///
+    /// Propagates function errors, including incompatible returned array shapes.
     pub fn evaluate_acceleration(
         &self,
         output: &mut [f64],
         velocity: &[f64],
         position: &[f64],
         time: f64,
-    ) where
-        F: Fn(&mut [f64], &[f64], &[f64], &P, f64),
+    ) -> Result<(), SolveError>
+    where
+        F: SecondOrderFunction<P>,
     {
-        (self.acceleration)(output, velocity, position, &self.parameters, time);
+        self.acceleration
+            .evaluate(output, velocity, position, &self.parameters, time)
     }
 
     pub(crate) fn has_callbacks(&self) -> bool {
@@ -783,6 +796,7 @@ pub struct SecondOrderSolution {
     velocities: Vec<f64>,
     positions: Vec<f64>,
     dimension: usize,
+    state_shape: IxDyn,
     stats: SolverStats,
     dense_segments: Vec<PartitionedDenseSegment>,
 }
@@ -996,7 +1010,8 @@ impl PartitionedDenseSegment {
 
 fn partition(values: &[f64], dimension: usize, index: usize) -> Option<&[f64]> {
     let start = index.checked_mul(dimension)?;
-    values.get(start..start + dimension)
+    let end = start.checked_add(dimension)?;
+    values.get(start..end)
 }
 
 /// Configuration or integration failure specific to partitioned ODE states.
@@ -1024,7 +1039,7 @@ pub trait SecondOrderOdeAlgorithm {
         options: &SolveOptions,
     ) -> Result<SecondOrderSolution, SecondOrderSolveError>
     where
-        F: Fn(&mut [f64], &[f64], &[f64], &P, f64),
+        F: SecondOrderFunction<P>,
     {
         validate(problem, options)?;
         self.solve_validated(problem, options)
@@ -1043,7 +1058,7 @@ pub trait SecondOrderOdeAlgorithm {
         options: &SolveOptions,
     ) -> Result<SecondOrderSolution, SecondOrderSolveError>
     where
-        F: Fn(&mut [f64], &[f64], &[f64], &P, f64);
+        F: SecondOrderFunction<P>;
 }
 
 /// Solves a second-order ODE without flattening its position and velocity.
@@ -1053,7 +1068,7 @@ pub fn solve_second_order<F, P, A>(
     options: &SolveOptions,
 ) -> Result<SecondOrderSolution, SecondOrderSolveError>
 where
-    F: Fn(&mut [f64], &[f64], &[f64], &P, f64),
+    F: SecondOrderFunction<P>,
     A: SecondOrderOdeAlgorithm,
 {
     algorithm.solve(problem, options)
@@ -1607,7 +1622,7 @@ macro_rules! impl_algorithm {
                 options: &SolveOptions,
             ) -> Result<SecondOrderSolution, SecondOrderSolveError>
             where
-                F: Fn(&mut [f64], &[f64], &[f64], &P, f64),
+                F: SecondOrderFunction<P>,
             {
                 solve_fixed(problem, options, $method)
             }
@@ -1629,7 +1644,7 @@ macro_rules! impl_rkn_algorithm {
                 options: &SolveOptions,
             ) -> Result<SecondOrderSolution, SecondOrderSolveError>
             where
-                F: Fn(&mut [f64], &[f64], &[f64], &P, f64),
+                F: SecondOrderFunction<P>,
             {
                 solve_rkn_fixed(problem, options, &$tableau)
             }
@@ -1651,7 +1666,7 @@ macro_rules! impl_adaptive_rkn_algorithm {
                 options: &SolveOptions,
             ) -> Result<SecondOrderSolution, SecondOrderSolveError>
             where
-                F: Fn(&mut [f64], &[f64], &[f64], &P, f64),
+                F: SecondOrderFunction<P>,
             {
                 solve_rkn_adaptive(problem, options, &$tableau)
             }
@@ -1678,7 +1693,7 @@ impl SecondOrderOdeAlgorithm for NewmarkBeta {
         options: &SolveOptions,
     ) -> Result<SecondOrderSolution, SecondOrderSolveError>
     where
-        F: Fn(&mut [f64], &[f64], &[f64], &P, f64),
+        F: SecondOrderFunction<P>,
     {
         solve_newmark(
             problem,
@@ -1700,7 +1715,7 @@ impl SecondOrderOdeAlgorithm for GeneralizedAlpha {
         options: &SolveOptions,
     ) -> Result<SecondOrderSolution, SecondOrderSolveError>
     where
-        F: Fn(&mut [f64], &[f64], &[f64], &P, f64),
+        F: SecondOrderFunction<P>,
     {
         solve_newmark(
             problem,
@@ -1722,7 +1737,7 @@ impl SecondOrderOdeAlgorithm for Irkn3 {
         options: &SolveOptions,
     ) -> Result<SecondOrderSolution, SecondOrderSolveError>
     where
-        F: Fn(&mut [f64], &[f64], &[f64], &P, f64),
+        F: SecondOrderFunction<P>,
     {
         solve_irkn(problem, options, IrknMethod::ThirdOrder)
     }
@@ -1735,7 +1750,7 @@ impl SecondOrderOdeAlgorithm for Irkn4 {
         options: &SolveOptions,
     ) -> Result<SecondOrderSolution, SecondOrderSolveError>
     where
-        F: Fn(&mut [f64], &[f64], &[f64], &P, f64),
+        F: SecondOrderFunction<P>,
     {
         solve_irkn(problem, options, IrknMethod::FourthOrder)
     }
@@ -1905,12 +1920,12 @@ fn finish_successful<F, P>(
     stats: SolverStats,
 ) -> Result<SecondOrderSolution, SecondOrderSolveError>
 where
-    F: Fn(&mut [f64], &[f64], &[f64], &P, f64),
+    F: SecondOrderFunction<P>,
 {
     if apply_finalize_callbacks(problem, velocity, position, time)? {
         recorder.synchronize_endpoint(time, velocity, position);
     }
-    Ok(recorder.finish(stats))
+    Ok(recorder.finish(stats, problem.state_shape.clone()))
 }
 
 fn solve_newmark<F, P>(
@@ -1919,7 +1934,7 @@ fn solve_newmark<F, P>(
     method: StructuralParameters,
 ) -> Result<SecondOrderSolution, SecondOrderSolveError>
 where
-    F: Fn(&mut [f64], &[f64], &[f64], &P, f64),
+    F: SecondOrderFunction<P>,
 {
     if !options.adaptive && options.initial_step.is_none() {
         return Err(SolveError::InitialStepRequired.into());
@@ -2259,7 +2274,7 @@ fn structural_substep<F, P>(
     stats: &mut SolverStats,
 ) -> Result<(), SecondOrderSolveError>
 where
-    F: Fn(&mut [f64], &[f64], &[f64], &P, f64),
+    F: SecondOrderFunction<P>,
 {
     const MAX_ITERATIONS: usize = 12;
     const TOLERANCE: f64 = 1.0e-12;
@@ -2368,7 +2383,7 @@ fn structural_residual<F, P>(
     stats: &mut SolverStats,
 ) -> Result<(), SecondOrderSolveError>
 where
-    F: Fn(&mut [f64], &[f64], &[f64], &P, f64),
+    F: SecondOrderFunction<P>,
 {
     update_structural_state(
         method,
@@ -2467,7 +2482,7 @@ fn solve_rkn_fixed<F, P>(
     tableau: &RknTableau,
 ) -> Result<SecondOrderSolution, SecondOrderSolveError>
 where
-    F: Fn(&mut [f64], &[f64], &[f64], &P, f64),
+    F: SecondOrderFunction<P>,
 {
     if options.adaptive {
         return Err(SolveError::AdaptiveStepUnsupported.into());
@@ -2694,7 +2709,7 @@ fn solve_rkn_adaptive<F, P>(
     tableau: &AdaptiveRknTableau,
 ) -> Result<SecondOrderSolution, SecondOrderSolveError>
 where
-    F: Fn(&mut [f64], &[f64], &[f64], &P, f64),
+    F: SecondOrderFunction<P>,
 {
     if !options.adaptive && options.initial_step.is_none() {
         return Err(SolveError::InitialStepRequired.into());
@@ -3203,7 +3218,7 @@ fn solve_irkn<F, P>(
     method: IrknMethod,
 ) -> Result<SecondOrderSolution, SecondOrderSolveError>
 where
-    F: Fn(&mut [f64], &[f64], &[f64], &P, f64),
+    F: SecondOrderFunction<P>,
 {
     match method {
         IrknMethod::ThirdOrder => {
@@ -3611,7 +3626,7 @@ fn solve_fixed<F, P>(
     method: Method,
 ) -> Result<SecondOrderSolution, SecondOrderSolveError>
 where
-    F: Fn(&mut [f64], &[f64], &[f64], &P, f64),
+    F: SecondOrderFunction<P>,
 {
     if options.adaptive {
         return Err(SolveError::AdaptiveStepUnsupported.into());
@@ -3812,7 +3827,7 @@ fn perform_step<F, P>(
     stats: &mut SolverStats,
 ) -> Result<(), SolveError>
 where
-    F: Fn(&mut [f64], &[f64], &[f64], &P, f64),
+    F: SecondOrderFunction<P>,
 {
     match method {
         Method::SymplecticEuler => {
@@ -3974,9 +3989,11 @@ fn evaluate_acceleration<F, P>(
     stats: &mut SolverStats,
 ) -> Result<(), SolveError>
 where
-    F: Fn(&mut [f64], &[f64], &[f64], &P, f64),
+    F: SecondOrderFunction<P>,
 {
-    (problem.acceleration)(output, velocity, position, &problem.parameters, time);
+    problem
+        .acceleration
+        .evaluate(output, velocity, position, &problem.parameters, time)?;
     stats.rhs_evaluations += 1;
     output
         .iter()
@@ -3992,7 +4009,7 @@ pub(super) fn apply_initial_callbacks<F, P>(
     time: f64,
 ) -> Result<CallbackOutcome, SolveError>
 where
-    F: Fn(&mut [f64], &[f64], &[f64], &P, f64),
+    F: SecondOrderFunction<P>,
 {
     let mut outcome = CallbackOutcome::default();
     for initialization in &problem.initializers {
@@ -4014,7 +4031,13 @@ where
             time,
             |du, _| {
                 let (acceleration, rate) = du.split_at_mut(velocity.len());
-                (problem.acceleration)(acceleration, velocity, position, &problem.parameters, time);
+                problem.acceleration.evaluate(
+                    acceleration,
+                    velocity,
+                    position,
+                    &problem.parameters,
+                    time,
+                )?;
                 rate.copy_from_slice(velocity);
                 outcome.rhs_evaluations += 1;
                 Ok(())
@@ -4064,7 +4087,7 @@ pub(super) fn apply_step_callbacks<F, P>(
     mut interpolator: Option<&mut PartitionedInterpolator<'_>>,
 ) -> Result<CallbackOutcome, SolveError>
 where
-    F: Fn(&mut [f64], &[f64], &[f64], &P, f64),
+    F: SecondOrderFunction<P>,
 {
     if problem.callbacks.is_empty() {
         return Ok(CallbackOutcome::default());
@@ -4232,13 +4255,13 @@ where
                 *time,
                 |du, _| {
                     let (acceleration, rate) = du.split_at_mut(velocity.len());
-                    (problem.acceleration)(
+                    problem.acceleration.evaluate(
                         acceleration,
                         velocity,
                         position,
                         &problem.parameters,
                         *time,
-                    );
+                    )?;
                     rate.copy_from_slice(velocity);
                     outcome.rhs_evaluations += 1;
                     Ok(())
@@ -4642,12 +4665,13 @@ impl<'a> PartitionedRecorder<'a> {
         self.positions.extend_from_slice(position);
     }
 
-    fn finish(self, stats: SolverStats) -> SecondOrderSolution {
+    fn finish(self, stats: SolverStats, state_shape: IxDyn) -> SecondOrderSolution {
         SecondOrderSolution {
             times: self.times,
             velocities: self.velocities,
             positions: self.positions,
             dimension: self.dimension,
+            state_shape,
             stats,
             dense_segments: self.dense_segments,
         }

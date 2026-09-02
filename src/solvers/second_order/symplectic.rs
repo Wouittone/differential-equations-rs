@@ -6,6 +6,7 @@
 
 #![allow(clippy::excessive_precision)]
 
+use super::function::SecondOrderFunction;
 use crate::callback::CallbackOutcome;
 use crate::event::{times_are_numerically_equal, times_are_representably_equal};
 use crate::integrator::{TimeStopSchedule, callback_adjusted_step};
@@ -13,6 +14,7 @@ use crate::solver::{
     validate_preset_time_sequences, validate_state_time_options, validate_vector_callback_lengths,
 };
 use crate::{InterpolationError, SaveMode, SolveError, SolveOptions};
+use ndarray::{ArrayD, ArrayViewD, Dimension, IxDyn};
 use thiserror::Error;
 
 use super::general::{
@@ -378,11 +380,55 @@ pub struct SymplecticSolution {
     positions: Vec<f64>,
     velocities: Vec<f64>,
     dimension: usize,
+    state_shape: IxDyn,
     rhs_evaluations: usize,
     dense_segments: Vec<SymplecticDenseSegment>,
 }
 
 impl SymplecticSolution {
+    /// Shape of each partition; an empty slice denotes an ndarray scalar.
+    pub fn state_shape(&self) -> &[usize] {
+        self.state_shape.slice()
+    }
+
+    /// Saved position as a shape-preserving ndarray view.
+    pub fn position_array(&self, index: usize) -> Option<ArrayViewD<'_, f64>> {
+        ArrayViewD::from_shape(self.state_shape.clone(), self.position(index)?).ok()
+    }
+
+    /// Saved velocity as a shape-preserving ndarray view.
+    pub fn velocity_array(&self, index: usize) -> Option<ArrayViewD<'_, f64>> {
+        ArrayViewD::from_shape(self.state_shape.clone(), self.velocity(index)?).ok()
+    }
+
+    /// Last saved position as a shape-preserving ndarray view.
+    pub fn last_position_array(&self) -> ArrayViewD<'_, f64> {
+        ArrayViewD::from_shape(self.state_shape.clone(), self.last_position())
+            .expect("partition shape must match its validated storage")
+    }
+
+    /// Last saved velocity as a shape-preserving ndarray view.
+    pub fn last_velocity_array(&self) -> ArrayViewD<'_, f64> {
+        ArrayViewD::from_shape(self.state_shape.clone(), self.last_velocity())
+            .expect("partition shape must match its validated storage")
+    }
+
+    /// Interpolates shape-preserving `(position, velocity)` arrays.
+    ///
+    /// This follows the existing symplectic interpolation order, which differs
+    /// from the `(velocity, position)` order of `SecondOrderSolution`.
+    pub fn interpolate_array(
+        &self,
+        time: f64,
+    ) -> Result<(ArrayD<f64>, ArrayD<f64>), InterpolationError> {
+        let (position, velocity) = self.try_interpolate(time)?;
+        let reshape = |values| {
+            ArrayD::from_shape_vec(self.state_shape.clone(), values)
+                .map_err(|_| InterpolationError::DimensionMismatch)
+        };
+        Ok((reshape(position)?, reshape(velocity)?))
+    }
+
     /// Saved times in integration order.
     pub fn times(&self) -> &[f64] {
         &self.times
@@ -617,7 +663,7 @@ pub fn solve_symplectic<F, P, A>(
     options: &SolveOptions,
 ) -> Result<SymplecticSolution, SymplecticSolveError>
 where
-    F: Fn(&mut [f64], &[f64], &[f64], &P, f64),
+    F: SecondOrderFunction<P>,
     A: SymplecticAlgorithm,
 {
     validate(problem, options)?;
@@ -806,12 +852,12 @@ fn finish_successful<F, P>(
     rhs_evaluations: usize,
 ) -> Result<SymplecticSolution, SymplecticSolveError>
 where
-    F: Fn(&mut [f64], &[f64], &[f64], &P, f64),
+    F: SecondOrderFunction<P>,
 {
     if apply_finalize_callbacks(problem, velocity, position, time)? {
         recorder.synchronize_endpoint(time, position, velocity);
     }
-    Ok(recorder.finish(rhs_evaluations))
+    Ok(recorder.finish(rhs_evaluations, IxDyn(problem.state_shape())))
 }
 
 fn validate<F, P>(
@@ -846,14 +892,14 @@ fn perform_step<F, P>(
     step: f64,
 ) -> Result<usize, SolveError>
 where
-    F: Fn(&mut [f64], &[f64], &[f64], &P, f64),
+    F: SecondOrderFunction<P>,
 {
     let mut stage_time = time;
     for (stage, (&kick, &drift)) in tableau.a.iter().zip(tableau.b).enumerate() {
         for (position, &velocity) in position.iter_mut().zip(&*velocity) {
             *position += drift * step * velocity;
         }
-        problem.evaluate_acceleration(acceleration, velocity, position, stage_time);
+        problem.evaluate_acceleration(acceleration, velocity, position, stage_time)?;
         if !acceleration.iter().all(|value| value.is_finite()) {
             return Err(SolveError::NonFiniteDerivative);
         }
@@ -1040,12 +1086,13 @@ impl<'a> SymplecticRecorder<'a> {
         self.velocities.extend_from_slice(velocity);
     }
 
-    fn finish(self, rhs_evaluations: usize) -> SymplecticSolution {
+    fn finish(self, rhs_evaluations: usize, state_shape: IxDyn) -> SymplecticSolution {
         SymplecticSolution {
             times: self.times,
             positions: self.positions,
             velocities: self.velocities,
             dimension: self.dimension,
+            state_shape,
             rhs_evaluations,
             dense_segments: self.dense_segments,
         }

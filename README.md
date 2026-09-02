@@ -145,6 +145,43 @@ custom functions can implement it to return a typed error. Direct calls to
 `SplitOdeProblem::evaluate_explicit` and `evaluate_implicit` now return a
 `Result` that callers must handle.
 
+### Second-order array states
+
+`SecondOrderOdeProblem::from_array` and `from_array_out_of_place` offer the
+same ndarray forms for `q'' = f(v, q, p, t)`. Velocity and position remain
+separate and must have exactly matching shapes; constructors return a
+`Result` to report incompatible partitions. This applies to the RKN,
+structural, and symplectic solvers.
+
+```rust
+use differential_equations::ndarray::{arr0, ArrayView0};
+use differential_equations::solvers::second_order::SecondOrderOdeProblem;
+
+let problem = SecondOrderOdeProblem::from_array_out_of_place(
+    |_: ArrayView0<'_, f64>, q: ArrayView0<'_, f64>, _: &(), _| -&q,
+    arr0(0.0), // Initial velocity.
+    arr0(1.0), // Initial position.
+    (0.0, 1.0),
+    (),
+)?;
+# let _ = problem;
+# Ok::<(), differential_equations::ConfigurationError>(())
+```
+
+Shape-aware `with_array_*_callback` methods receive velocity before position.
+Solutions provide `position_array`, `velocity_array`, their `last_*` forms,
+and `interpolate_array`. Interpolation preserves the existing tuple order:
+`(velocity, position)` for `SecondOrderSolution`, `(position, velocity)` for
+`SymplecticSolution`. Scalar arrays retain their zero-dimensional shape.
+
+Custom second-order algorithms now bound their acceleration type by
+`SecondOrderFunction<P>`. Existing in-place closures implement this trait
+automatically; direct `evaluate_acceleration` calls now return a `Result`.
+Returned acceleration shapes are checked at each evaluation. In-place
+fixed-rank ndarray adapters do not allocate per evaluation, while returned
+owned arrays can allocate. This remains the `q' = v` specialization, not yet
+a general dynamical problem with an independent position-rate function.
+
 ## Reusable callback policies
 
 The `callbacks` module provides common policies as independently composable
