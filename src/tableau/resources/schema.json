@@ -33,6 +33,11 @@
     "c": { "$ref": "#/$defs/vector" },
     "error": { "$ref": "#/$defs/vector" },
     "second_error": { "$ref": "#/$defs/vector" },
+    "stage_predictors": {
+      "type": "array",
+      "description": "Implicit-stage initial guesses. Each row weights prior stage derivatives; an empty row uses the driver's default predictor.",
+      "items": { "type": "array", "items": { "$ref": "#/$defs/scalar" } }
+    },
     "dense": {
       "type": "array",
       "items": { "$ref": "#/$defs/vector" }
@@ -78,6 +83,10 @@
   },
   "allOf": [
     { "not": { "required": ["error", "b_hat"] } },
+    {
+      "if": { "required": ["stage_predictors"], "properties": { "stage_predictors": { "minItems": 1 } } },
+      "then": { "properties": { "kind": { "const": "implicit-runge-kutta" } } }
+    },
     {
       "if": { "required": ["embedded_order"] },
       "then": { "oneOf": [{ "required": ["error"] }, { "required": ["b_hat"] }] },

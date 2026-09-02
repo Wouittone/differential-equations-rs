@@ -2,17 +2,16 @@ use crate::integrator::{
     ControllerConfig, KernelCapabilities, StepEstimate, StepKernel, integrate as drive_integration,
 };
 use crate::linear::{factorize, solve_factorized};
+use crate::tableau::{RungeKuttaKind, RungeKuttaTableau, TableauError, load_tableau};
 use crate::{OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions, SolverStats};
+use differential_equations_tableau_macros::define_implicit_rk_tableau_from_file;
 
-const SQRT_2: f64 = std::f64::consts::SQRT_2;
-const GAMMA: f64 = 2.0 - SQRT_2;
-const DIAGONAL: f64 = 1.0 - SQRT_2 / 2.0;
-const OMEGA: f64 = SQRT_2 / 4.0;
-const ERROR_1: f64 = (1.0 - SQRT_2) / 3.0;
-const ERROR_2: f64 = 1.0 / 3.0;
-const ERROR_3: f64 = (SQRT_2 - 2.0) / 3.0;
-const PREDICT_1: f64 = -SQRT_2 / 2.0;
-const PREDICT_2: f64 = 1.0 + SQRT_2 / 2.0;
+define_implicit_rk_tableau_from_file!(
+    TABLEAU,
+    "Trbdf2",
+    "src/tableau/resources/implicit/trbdf2.json",
+    crate = crate
+);
 
 const MAX_NEWTON_ITERATIONS: usize = 12;
 const NEWTON_TOLERANCE: f64 = 1.0e-12;
@@ -26,6 +25,13 @@ const CONTROLLER: ControllerConfig = ControllerConfig::proportional(3, 0.9, 0.2,
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Trbdf2;
 
+impl Trbdf2 {
+    /// Returns the shared lazy tableau, including embedded and predictor weights.
+    pub fn tableau(self) -> Result<&'static RungeKuttaTableau, TableauError> {
+        load_tableau(&TABLEAU)
+    }
+}
+
 impl OdeAlgorithm for Trbdf2 {
     fn solve_validated<F, P>(
         &self,
@@ -38,12 +44,13 @@ impl OdeAlgorithm for Trbdf2 {
         drive_integration(
             problem,
             options,
-            Trbdf2Kernel::new(problem.initial_state().len()),
+            Trbdf2Kernel::new(problem.initial_state().len())?,
         )
     }
 }
 
 struct Workspace {
+    tableau: &'static RungeKuttaTableau,
     current_derivative: Vec<f64>,
     stage_base: Vec<f64>,
     stage_state: Vec<f64>,
@@ -62,8 +69,9 @@ struct Workspace {
 }
 
 impl Workspace {
-    fn new(dimension: usize) -> Self {
+    fn new(dimension: usize, tableau: &'static RungeKuttaTableau) -> Self {
         Self {
+            tableau,
             current_derivative: vec![0.0; dimension],
             stage_base: vec![0.0; dimension],
             stage_state: vec![0.0; dimension],
@@ -89,12 +97,43 @@ struct Trbdf2Kernel {
 }
 
 impl Trbdf2Kernel {
-    fn new(dimension: usize) -> Self {
-        Self {
-            workspace: Workspace::new(dimension),
+    fn new(dimension: usize) -> Result<Self, SolveError> {
+        let tableau = Trbdf2.tableau().map_err(|_| SolveError::InvalidTableau)?;
+        validate_tableau(tableau)?;
+        Ok(Self {
+            workspace: Workspace::new(dimension, tableau),
             attempted_step: 0.0,
-        }
+        })
     }
+}
+
+fn validate_tableau(tableau: &RungeKuttaTableau) -> Result<(), SolveError> {
+    if tableau.kind() != RungeKuttaKind::Implicit || tableau.b().len() != 3 {
+        return Err(SolveError::InvalidTableau);
+    }
+    let a = tableau.a();
+    if tableau.order() != 2
+        || tableau.embedded_order() != Some(3)
+        || !tableau.fsal()
+        || tableau.c()[0] != 0.0
+        || tableau.c()[2] != 1.0
+        || a[0].iter().any(|value| *value != 0.0)
+        || a[1][2] != 0.0
+        || a[1][0] != a[1][1]
+        || a[2][0] != a[2][1]
+        || a[1][1] != a[2][2]
+        || a[1][1] <= 0.0
+        || a[2] != tableau.b()
+        || tableau.error().is_none()
+        || tableau.stage_predictor(1).is_none_or(|row| row.len() != 1)
+        || tableau.stage_predictor(2).is_none_or(|row| row.len() != 2)
+        || tableau.second_error().is_some()
+        || tableau.dense().is_some()
+        || !tableau.fitted_weights().is_empty()
+    {
+        return Err(SolveError::InvalidTableau);
+    }
+    Ok(())
 }
 
 impl<F, P> StepKernel<F, P> for Trbdf2Kernel
@@ -214,34 +253,51 @@ where
     F: crate::OdeFunction<P>,
 {
     let (time, step) = time_and_step;
+    let tableau = workspace.tableau;
+    let a = tableau.a();
+    let predictor_two = tableau
+        .stage_predictor(1)
+        .ok_or(SolveError::InvalidTableau)?;
+    let predictor_three = tableau
+        .stage_predictor(2)
+        .ok_or(SolveError::InvalidTableau)?;
     for (z, &derivative) in workspace.z1.iter_mut().zip(&workspace.current_derivative) {
         *z = step * derivative;
     }
 
     for (index, &value) in state.iter().enumerate() {
-        workspace.stage_base[index] = value + DIAGONAL * workspace.z1[index];
-        workspace.z2[index] = workspace.z1[index];
+        workspace.stage_base[index] = value + a[1][0] * workspace.z1[index];
+        workspace.z2[index] = predictor_two[0] * workspace.z1[index];
     }
-    solve_stage(problem, time + GAMMA * step, step, workspace, 2, stats)?;
+    solve_stage(
+        problem,
+        time + tableau.c()[1] * step,
+        step,
+        workspace,
+        2,
+        stats,
+    )?;
 
     for (index, &value) in state.iter().enumerate() {
         workspace.stage_base[index] =
-            value + OMEGA * workspace.z1[index] + OMEGA * workspace.z2[index];
-        workspace.z3[index] = PREDICT_1 * workspace.z1[index] + PREDICT_2 * workspace.z2[index];
+            value + a[2][0] * workspace.z1[index] + a[2][1] * workspace.z2[index];
+        workspace.z3[index] =
+            predictor_three[0] * workspace.z1[index] + predictor_three[1] * workspace.z2[index];
     }
     solve_stage(problem, time + step, step, workspace, 3, stats)?;
 
     for (index, candidate) in candidate.iter_mut().enumerate() {
-        *candidate = workspace.stage_base[index] + DIAGONAL * workspace.z3[index];
+        *candidate = workspace.stage_base[index] + a[2][2] * workspace.z3[index];
     }
     if !options.adaptive {
         return Ok(0.0);
     }
 
+    let error = tableau.error().ok_or(SolveError::InvalidTableau)?;
     for index in 0..state.len() {
-        workspace.error[index] = ERROR_1 * workspace.z1[index]
-            + ERROR_2 * workspace.z2[index]
-            + ERROR_3 * workspace.z3[index];
+        workspace.error[index] = error[0] * workspace.z1[index]
+            + error[1] * workspace.z2[index]
+            + error[2] * workspace.z3[index];
     }
 
     // OrdinaryDiffEq's TRBDF2 defaults `smooth_est=true`: apply the last
@@ -284,6 +340,7 @@ where
 {
     workspace.factorization_valid = false;
     let dimension = workspace.z2.len();
+    let diagonal = workspace.tableau.a()[1][1];
     for _ in 0..MAX_NEWTON_ITERATIONS {
         stats.nonlinear_iterations += 1;
         for index in 0..dimension {
@@ -292,7 +349,7 @@ where
             } else {
                 workspace.z3[index]
             };
-            workspace.stage_state[index] = workspace.stage_base[index] + DIAGONAL * z;
+            workspace.stage_state[index] = workspace.stage_base[index] + diagonal * z;
         }
         evaluate_checked(
             problem,
@@ -351,6 +408,7 @@ where
     F: crate::OdeFunction<P>,
 {
     let dimension = workspace.stage_state.len();
+    let diagonal = workspace.tableau.a()[1][1];
     workspace.factorization_valid = false;
     if problem.evaluate_jacobian(
         &mut workspace.matrix,
@@ -364,7 +422,7 @@ where
                 if !derivative.is_finite() {
                     return Err(SolveError::NonFiniteDerivative);
                 }
-                workspace.matrix[index] = f64::from(row == column) - DIAGONAL * step * derivative;
+                workspace.matrix[index] = f64::from(row == column) - diagonal * step * derivative;
             }
         }
     } else {
@@ -389,7 +447,7 @@ where
                     return Err(SolveError::NonFiniteDerivative);
                 }
                 workspace.matrix[row * dimension + column] =
-                    f64::from(row == column) - DIAGONAL * step * derivative;
+                    f64::from(row == column) - diagonal * step * derivative;
             }
         }
     }
@@ -455,6 +513,28 @@ mod tests {
 
     use super::Trbdf2;
     use crate::{CallbackAction, OdeProblem, SaveMode, SolveOptions, solve};
+
+    #[test]
+    fn incompatible_tableaus_return_errors_without_indexing_panics() {
+        let euler = crate::tableau::parse_tableau(
+            include_str!("../../tableau/resources/implicit/implicit_euler.json"),
+            "ImplicitEuler",
+        )
+        .unwrap();
+        assert_eq!(
+            super::validate_tableau(&euler),
+            Err(crate::SolveError::InvalidTableau)
+        );
+        let mut value: serde_json::Value =
+            serde_json::from_str(include_str!("../../tableau/resources/implicit/trbdf2.json"))
+                .unwrap();
+        value.as_object_mut().unwrap().remove("stage_predictors");
+        let missing = crate::tableau::parse_tableau(&value.to_string(), "Trbdf2").unwrap();
+        assert_eq!(
+            super::validate_tableau(&missing),
+            Err(crate::SolveError::InvalidTableau)
+        );
+    }
 
     #[test]
     fn solves_a_stiff_nonautonomous_problem_adaptively() {

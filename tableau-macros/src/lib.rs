@@ -544,8 +544,16 @@ fn expand_static(
     let path = manifest_dir.join(input.path.value());
     let source = std::fs::read_to_string(&path)
         .map_err(|error| format!("failed to read `{}`: {error}", path.display()))?;
-    let tableau = parse_tableau(&source, &input.method_name.value())
-        .map_err(|error| format!("invalid tableau `{}`: {error}", path.display()))?;
+    expand_static_source(input, &source, expected_kind)
+}
+
+fn expand_static_source(
+    input: StaticTableauInput,
+    source: &str,
+    expected_kind: RungeKuttaKind,
+) -> Result<TokenStream2, String> {
+    let tableau = parse_tableau(source, &input.method_name.value())
+        .map_err(|error| format!("invalid tableau `{}`: {error}", input.path.value()))?;
     if tableau.kind() != expected_kind {
         let expected = match expected_kind {
             RungeKuttaKind::Explicit => "explicit",
@@ -553,7 +561,7 @@ fn expand_static(
         };
         return Err(format!(
             "tableau `{}` is not an {expected} Runge--Kutta method",
-            path.display(),
+            input.path.value(),
         ));
     }
 
@@ -571,6 +579,38 @@ fn expand_static(
                 )
             });
     })
+}
+
+#[cfg(test)]
+mod implicit_tests {
+    use super::*;
+
+    #[test]
+    fn implicit_expansion_validates_predictors_and_embeds_only_source() {
+        let source = r#"{"name":"Pair","description":"Implicit pair","kind":"implicit-runge-kutta","order":1,"embedded_order":2,"A":[[0,0],["1/2","1/2"]],"b":[0,1],"c":[0,1],"error":["-1/2","1/2"],"stage_predictors":[[],[1]]}"#;
+        let input = || {
+            syn::parse_str::<StaticTableauInput>(
+                "pub TABLEAU, \"Pair\", \"pair.json\", crate = renamed",
+            )
+            .unwrap()
+        };
+        let tokens = expand_static_source(input(), source, RungeKuttaKind::Implicit)
+            .unwrap()
+            .to_string();
+        assert!(tokens.contains("include_str"));
+        assert!(tokens.contains("LazyLock"));
+        assert!(tokens.contains("renamed"));
+        assert!(!tokens.contains("const "));
+        for invalid in [
+            source.replace("[[],[1]]", "[[],[1,0]]"),
+            source.replace("[[],[1]]", "[[],[2]]"),
+        ] {
+            let error =
+                expand_static_source(input(), &invalid, RungeKuttaKind::Implicit).unwrap_err();
+            assert!(error.contains("pair.json"), "{error}");
+            assert!(error.contains("stage_predictors"), "{error}");
+        }
+    }
 }
 
 /// Defines a symplectic composition from a validated JSON resource.

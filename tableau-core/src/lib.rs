@@ -79,6 +79,7 @@ pub struct RungeKuttaTableau {
     dense: Option<Vec<Vec<f64>>>,
     lazy_dense_stages: Vec<LazyDenseStage>,
     fitted_weights: Vec<FittedWeight>,
+    stage_predictors: Vec<Vec<f64>>,
 }
 
 impl RungeKuttaTableau {
@@ -102,7 +103,8 @@ impl RungeKuttaTableau {
         self.order
     }
 
-    /// Returns the lower order of an embedded pair, when present.
+    /// Returns the order of an embedded companion, when present.
+    /// Implicit methods may use a higher-order companion for error estimation.
     pub fn embedded_order(&self) -> Option<usize> {
         self.embedded_order
     }
@@ -165,6 +167,18 @@ impl RungeKuttaTableau {
         self.fitted_weights
             .iter()
             .find(|weight| weight.stage == stage)
+    }
+
+    /// Returns initial-guess weights on prior stage derivatives for an implicit stage.
+    ///
+    /// Entry `j` multiplies prior derivative `k[j]` (or `h*k[j]` when solving
+    /// for scaled increments). Missing or empty rows select the driver's
+    /// default predictor. An out-of-range stage returns `None`.
+    pub fn stage_predictor(&self, stage: usize) -> Option<&[f64]> {
+        self.stage_predictors
+            .get(stage)
+            .filter(|row| !row.is_empty())
+            .map(Vec::as_slice)
     }
 }
 
@@ -238,6 +252,8 @@ struct RawTableau {
     lazy_dense_stages: Vec<RawLazyDenseStage>,
     #[serde(default)]
     fitted_weights: Vec<RawFittedWeight>,
+    #[serde(default)]
+    stage_predictors: Vec<Vec<Scalar>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -293,12 +309,11 @@ impl RawTableau {
         if self.order == 0 {
             return Err(TableauError::new("tableau order must be positive"));
         }
-        if self
-            .embedded_order
-            .is_some_and(|order| order == 0 || order >= self.order)
-        {
+        if self.embedded_order.is_some_and(|order| {
+            order == 0 || (matches!(self.kind, RawKind::ExplicitRungeKutta) && order >= self.order)
+        }) {
             return Err(TableauError::new(
-                "embedded order must be positive and below the primary order",
+                "embedded order must be positive; explicit methods require a lower-order companion",
             ));
         }
 
@@ -324,6 +339,27 @@ impl RawTableau {
                 if coefficients[row..].iter().any(|value| *value != 0.0) {
                     return Err(TableauError::new(format!(
                         "explicit tableau A row {row} is not strictly lower triangular"
+                    )));
+                }
+            }
+        }
+
+        let stage_predictors = materialize_matrix(&self.stage_predictors, "stage_predictors")?;
+        if !stage_predictors.is_empty() {
+            if kind != RungeKuttaKind::Implicit || stage_predictors.len() != stages {
+                return Err(TableauError::new(
+                    "stage_predictors requires an implicit tableau and one row per stage",
+                ));
+            }
+            for (stage, row) in stage_predictors.iter().enumerate() {
+                if row.len() > stage {
+                    return Err(TableauError::new(format!(
+                        "stage_predictors row {stage} references an unavailable stage",
+                    )));
+                }
+                if !row.is_empty() && !approximately_equal(row.iter().sum(), 1.0) {
+                    return Err(TableauError::new(format!(
+                        "stage_predictors row {stage} must sum to one",
                     )));
                 }
             }
@@ -467,18 +503,18 @@ impl RawTableau {
         }
 
         if self.fsal
-            && (kind != RungeKuttaKind::Explicit
+            && (c.first() != Some(&0.0)
+                || a[0].iter().any(|value| *value != 0.0)
                 || c.last() != Some(&1.0)
-                || b.last() != Some(&0.0)
+                || (kind == RungeKuttaKind::Explicit && b.last() != Some(&0.0))
                 || a.last().is_none_or(|row| {
-                    row[..stages - 1]
-                        .iter()
-                        .zip(&b[..stages - 1])
+                    row.iter()
+                        .zip(&b)
                         .any(|(stage, weight)| !approximately_equal(*stage, *weight))
                 }))
         {
             return Err(TableauError::new(
-                "FSAL requires the final explicit stage row to equal b",
+                "FSAL requires an explicit first stage at c=0 and a final stage at c=1 with row b",
             ));
         }
 
@@ -497,6 +533,7 @@ impl RawTableau {
             dense,
             lazy_dense_stages,
             fitted_weights,
+            stage_predictors,
         })
     }
 }
@@ -625,6 +662,61 @@ mod tests {
             parse_tableau(&second, "Heun").unwrap().second_error(),
             Some([0.0, 0.0].as_slice())
         );
+    }
+
+    #[test]
+    fn implicit_companions_and_stage_predictors_are_validated() {
+        // First-order endpoint update with a second-order trapezoidal companion.
+        let source = r#"{"name":"Pair","description":"Implicit pair","kind":"implicit-runge-kutta","order":1,"embedded_order":2,"A":[[0,0],["1/2","1/2"]],"b":[0,1],"c":[0,1],"error":["-1/2","1/2"],"stage_predictors":[[],[1]]}"#;
+        let tableau = parse_tableau(source, "Pair").unwrap();
+        assert_eq!(tableau.embedded_order(), Some(2));
+        assert_eq!(tableau.stage_predictor(1), Some([1.0].as_slice()));
+        assert_eq!(tableau.stage_predictor(0), None);
+        assert_eq!(tableau.stage_predictor(2), None);
+        for invalid in [
+            source.replace("[[],[1]]", "[[]]"),
+            source.replace("[[],[1]]", "[[1],[1]]"),
+            source.replace("[[],[1]]", "[[],[1,0]]"),
+            source.replace("[[],[1]]", "[[],[2]]"),
+            source.replace("[[],[1]]", "[[],[\"1/0\"]]"),
+            source.replace("[[],[1]]", "null"),
+            source.replace("\"embedded_order\":2", "\"embedded_order\":0"),
+            source.replace("implicit-runge-kutta", "explicit-runge-kutta"),
+        ] {
+            assert!(
+                parse_tableau(&invalid, "Pair").is_err(),
+                "accepted {invalid}"
+            );
+        }
+        let defaults = source.replace("[[],[1]]", "[[],[]]");
+        assert_eq!(
+            parse_tableau(&defaults, "Pair").unwrap().stage_predictor(1),
+            None
+        );
+        let explicit = RESOURCE.replace(
+            "\"order\": 2,",
+            "\"order\": 2, \"stage_predictors\": [[],[1]],",
+        );
+        assert!(parse_tableau(&explicit, "Heun").is_err());
+    }
+
+    #[test]
+    fn fsal_checks_both_endpoint_stages_for_explicit_and_implicit_tableaus() {
+        let implicit = r#"{"name":"Trap","description":"Trapezoidal rule","kind":"implicit-runge-kutta","order":2,"fsal":true,"A":[[0,0],["1/2","1/2"]],"b":["1/2","1/2"],"c":[0,1]}"#;
+        assert!(parse_tableau(implicit, "Trap").unwrap().fsal());
+        for invalid in [
+            implicit.replace("[0,1]", "[0.1,1]"),
+            implicit.replace("[0,1]", "[0,0.5]"),
+            implicit.replace("[0,0]", "[\"1/2\",\"-1/2\"]"),
+            implicit.replace("\"b\":[\"1/2\",\"1/2\"]", "\"b\":[1,0]"),
+        ] {
+            assert!(
+                parse_tableau(&invalid, "Trap").is_err(),
+                "accepted {invalid}"
+            );
+        }
+        let explicit = r#"{"name":"Heun","description":"Heun with a final FSAL stage","kind":"explicit-runge-kutta","order":2,"fsal":true,"A":[[0,0,0],[1,0,0],["1/2","1/2",0]],"b":["1/2","1/2",0],"c":[0,1,1]}"#;
+        assert!(parse_tableau(explicit, "Heun").unwrap().fsal());
     }
 
     #[test]

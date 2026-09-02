@@ -279,6 +279,7 @@ explicit Runge--Kutta algorithm from their own JSON file with
 Fixed-step Adams methods and MRAB share lazily loaded `alpha`/`beta` multistep
 resources. BDF/NDF methods reuse that format with one base formula and NDF
 modifier per order, shared across fixed- and variable-order solvers.
+TR-BDF2 uses a canonical implicit RK resource, including its Newton predictors.
 All named symplectic compositions use individual resources and
 expose fallible `Method::tableau()` access with
 `a()`/`b()` coefficient slices. Some other specialized families still retain
