@@ -131,6 +131,9 @@ impl RungeKuttaTableau {
     }
 
     /// Returns direct stage-combination error weights.
+    ///
+    /// Resources can provide `error` directly or `b_hat`, in which case these
+    /// weights are materialized as `b - b_hat` once during parsing.
     pub fn error(&self) -> Option<&[f64]> {
         self.error.as_deref()
     }
@@ -225,6 +228,7 @@ struct RawTableau {
     a: Vec<Vec<Scalar>>,
     b: Vec<Scalar>,
     c: Vec<Scalar>,
+    b_hat: Option<Vec<Scalar>>,
     error: Option<Vec<Scalar>>,
     second_error: Option<Vec<Scalar>>,
     dense: Option<Vec<Vec<Scalar>>>,
@@ -330,15 +334,44 @@ impl RawTableau {
             )));
         }
 
-        let error = materialize_optional_vector(self.error.as_deref(), "error", stages)?;
+        let error = match (self.error.as_deref(), self.b_hat.as_deref()) {
+            (Some(_), Some(_)) => {
+                return Err(TableauError::new("provide error or b_hat, not both"));
+            }
+            (error, None) => materialize_optional_vector(error, "error", stages)?,
+            (None, Some(weights)) => {
+                if weights.len() != stages {
+                    return Err(TableauError::new("b_hat must contain one entry per stage"));
+                }
+                let weights = materialize_vector(weights, "b_hat")?;
+                let sum = weights.iter().sum::<f64>();
+                if !approximately_equal(sum, 1.0) {
+                    return Err(TableauError::new(format!(
+                        "embedded weights b_hat must sum to one; found {sum}"
+                    )));
+                }
+                Some(
+                    b.iter()
+                        .zip(weights)
+                        .enumerate()
+                        .map(|(stage, (b, b_hat))| {
+                            let error = b - b_hat;
+                            error.is_finite().then_some(error).ok_or_else(|| {
+                                TableauError::new(format!("derived error[{stage}] is not finite"))
+                            })
+                        })
+                        .collect::<Result<Vec<_>, _>>()?,
+                )
+            }
+        };
         let second_error =
             materialize_optional_vector(self.second_error.as_deref(), "second_error", stages)?;
         if second_error.is_some() && error.is_none() {
-            return Err(TableauError::new("second_error requires error"));
+            return Err(TableauError::new("second_error requires error or b_hat"));
         }
         if self.embedded_order.is_some() != error.is_some() {
             return Err(TableauError::new(
-                "embedded_order and error must either both be present or both be absent",
+                "embedded_order requires exactly one of error or b_hat, and vice versa",
             ));
         }
 
@@ -511,7 +544,7 @@ fn materialize_matrix(rows: &[Vec<Scalar>], label: &str) -> Result<Vec<Vec<f64>>
 
 fn approximately_equal(left: f64, right: f64) -> bool {
     let scale = left.abs().max(right.abs()).max(1.0);
-    (left - right).abs() <= 1.0e-10 * scale
+    left.is_finite() && right.is_finite() && (left - right).abs() <= 1.0e-10 * scale
 }
 
 /// Parses the restricted arithmetic syntax accepted by numeric resource fields.
@@ -573,6 +606,60 @@ mod tests {
         assert_eq!(tableau.a(), &[vec![0.0, 0.0], vec![1.0, 0.0]]);
         assert_eq!(tableau.b(), &[0.5, 0.5]);
         assert_eq!(tableau.c(), &[0.0, 1.0]);
+    }
+
+    #[test]
+    fn embedded_weights_and_direct_errors_materialize_identically() {
+        let embedded = RESOURCE.replace(
+            "\"order\": 2,",
+            "\"order\": 2, \"embedded_order\": 1, \"b_hat\": [1, 0],",
+        );
+        let direct = embedded.replace("\"b_hat\": [1, 0]", "\"error\": [\"-1/2\", \"1/2\"]");
+        let tableau = parse_tableau(&embedded, "Heun").unwrap();
+        assert_eq!(tableau, parse_tableau(&direct, "Heun").unwrap());
+        assert_eq!(tableau.error(), Some([-0.5, 0.5].as_slice()));
+        let second = embedded.replace("\"c\": [0, 1]", "\"c\": [0, 1], \"second_error\": [0, 0]");
+        assert_eq!(
+            parse_tableau(&second, "Heun").unwrap().second_error(),
+            Some([0.0, 0.0].as_slice())
+        );
+    }
+
+    #[test]
+    fn rejects_invalid_or_ambiguous_embedded_weights() {
+        let embedded = RESOURCE.replace(
+            "\"order\": 2,",
+            "\"order\": 2, \"embedded_order\": 1, \"b_hat\": [1, 0],",
+        );
+        for invalid in [
+            embedded.replace("\"b_hat\": [1, 0]", "\"b_hat\": [1]"),
+            embedded.replace("\"b_hat\": [1, 0]", "\"b_hat\": [1, 1]"),
+            embedded.replace("\"b_hat\": [1, 0]", "\"b_hat\": [\"1/0\", 0]"),
+            embedded.replace("\"b_hat\": [1, 0]", "\"b_hat\": [1e308, 1e308]"),
+            embedded.replace("\"b_hat\": [1, 0]", "\"b_hat\": [1, 0], \"error\": [0, 0]"),
+            embedded.replace("\"embedded_order\": 1,", ""),
+            embedded.replace("\"b_hat\": [1, 0],", ""),
+        ] {
+            assert!(
+                parse_tableau(&invalid, "Heun").is_err(),
+                "accepted {invalid}"
+            );
+        }
+        // Each weight sum is finite and one, but subtraction can still overflow.
+        let overflow = r#"{"name":"Overflow","description":"Subtraction overflow","kind":"explicit-runge-kutta","order":2,"embedded_order":1,"A":[[0,0,0],[0,0,0],[0,0,0]],"b":[1e308,-1e308,1],"b_hat":[-1e308,1e308,1],"c":[0,0,0]}"#;
+        let error = parse_tableau(overflow, "Overflow").unwrap_err();
+        assert!(error.to_string().contains("derived error[0] is not finite"));
+    }
+
+    #[test]
+    fn overflowing_coefficient_sums_are_not_approximately_consistent() {
+        let weights = RESOURCE.replace("[\"1/2\", \"1/2\"]", "[1e308, 1e308]");
+        assert!(parse_tableau(&weights, "Heun").is_err());
+        let dense = RESOURCE.replace(
+            "\"c\": [0, 1]",
+            "\"c\": [0, 1], \"dense\": [[1e308, 1e308], [\"1/2\"]]",
+        );
+        assert!(parse_tableau(&dense, "Heun").is_err());
     }
 
     #[test]

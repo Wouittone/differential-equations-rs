@@ -26,6 +26,10 @@
       "items": { "$ref": "#/$defs/vector" }
     },
     "b": { "$ref": "#/$defs/vector" },
+    "b_hat": {
+      "$ref": "#/$defs/vector",
+      "description": "Embedded weights; the parser derives error = b - b_hat. Mutually exclusive with error."
+    },
     "c": { "$ref": "#/$defs/vector" },
     "error": { "$ref": "#/$defs/vector" },
     "second_error": { "$ref": "#/$defs/vector" },
@@ -72,6 +76,14 @@
       }
     }
   },
+  "allOf": [
+    { "not": { "required": ["error", "b_hat"] } },
+    {
+      "if": { "required": ["embedded_order"] },
+      "then": { "oneOf": [{ "required": ["error"] }, { "required": ["b_hat"] }] },
+      "else": { "not": { "anyOf": [{ "required": ["error"] }, { "required": ["b_hat"] }] } }
+    }
+  ],
   "$defs": {
     "scalar": {
       "description": "A JSON number or an exact-style arithmetic expression such as \"(3 - sqrt(3)) / 6\".",

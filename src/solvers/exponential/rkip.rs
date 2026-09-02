@@ -5,96 +5,20 @@ use crate::integrator::{
     ControllerConfig, KernelCapabilities, StepEstimate, StepKernel, integrate as drive_integration,
 };
 use crate::solver::validate_state_time_options;
+use crate::tableau::{RungeKuttaTableau, TableauError, load_tableau};
 use crate::{
     ConfigurationError, OdeProblem, SemilinearOdeProblem, Solution, SolveError, SolveOptions,
     SolverStats,
 };
 
-const C: [f64; 8] = [
-    0.0,
-    1.0 / 7.0,
-    2.0 / 9.0,
-    3.0 / 7.0,
-    2.0 / 3.0,
-    3.0 / 4.0,
-    1.0,
-    1.0,
-];
-const B: [f64; 8] = [
-    79.0 / 1080.0,
-    0.0,
-    19683.0 / 69160.0,
-    16807.0 / 84240.0,
-    0.0,
-    2816.0 / 7695.0,
-    1.0 / 100.0,
-    187.0 / 2800.0,
-];
-const BHAT: [f64; 8] = [
-    763.0 / 10800.0,
-    0.0,
-    59049.0 / 197600.0,
-    88837.0 / 526500.0,
-    243.0 / 4000.0,
-    12352.0 / 38475.0,
-    0.0,
-    2.0 / 25.0,
-];
-const A: [[f64; 8]; 8] = [
-    [0.0; 8],
-    [1.0 / 7.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-    [4.0 / 81.0, 14.0 / 81.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-    [
-        291.0 / 1372.0,
-        -27.0 / 49.0,
-        1053.0 / 1372.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-    ],
-    [
-        86.0 / 297.0,
-        -14.0 / 33.0,
-        42.0 / 143.0,
-        1960.0 / 3861.0,
-        0.0,
-        0.0,
-        0.0,
-        0.0,
-    ],
-    [
-        -267.0 / 22528.0,
-        189.0 / 704.0,
-        63099.0 / 585728.0,
-        58653.0 / 366080.0,
-        4617.0 / 20480.0,
-        0.0,
-        0.0,
-        0.0,
-    ],
-    [
-        10949.0 / 6912.0,
-        -69.0 / 32.0,
-        -90891.0 / 68096.0,
-        112931.0 / 25920.0,
-        -69861.0 / 17920.0,
-        26378.0 / 10773.0,
-        0.0,
-        0.0,
-    ],
-    [
-        1501.0 / 19008.0,
-        -21.0 / 88.0,
-        219519.0 / 347776.0,
-        163807.0 / 926640.0,
-        -417.0 / 640.0,
-        1544.0 / 1539.0,
-        0.0,
-        0.0,
-    ],
-];
+use differential_equations_tableau_macros::define_explicit_rk_tableau_from_file;
+
+define_explicit_rk_tableau_from_file!(
+    RKIP_TABLEAU,
+    "RKIP",
+    "src/tableau/resources/explicit/rkip.json",
+    crate = crate
+);
 
 /// Observable interaction-picture exponential-cache counters.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -124,15 +48,15 @@ impl ExponentialCache {
         }
     }
 
-    fn prepare(&mut self, operator: &[f64], steps: usize) {
+    fn prepare(&mut self, operator: &[f64], steps: usize, stages: usize) {
         if self.operator != operator {
             self.operator = operator.to_vec();
-            self.positive = vec![vec![None; 7]; steps];
-            self.negative = vec![vec![None; 7]; steps];
+            self.positive = vec![vec![None; stages]; steps];
+            self.negative = vec![vec![None; stages]; steps];
             self.stats = RkipCacheStats::default();
         } else if self.positive.len() != steps {
-            self.positive.resize_with(steps, || vec![None; 7]);
-            self.negative.resize_with(steps, || vec![None; 7]);
+            self.positive.resize_with(steps, || vec![None; stages]);
+            self.negative.resize_with(steps, || vec![None; stages]);
         }
     }
 }
@@ -232,6 +156,9 @@ impl RKIP {
     }
 
     /// Configures whether steps outside the cached range are clamped to it.
+    ///
+    /// After a rejected attempt, the error controller's reduction takes
+    /// precedence over cache snapping, including the lower cache bound.
     #[must_use]
     pub fn with_clamping(mut self, lower: bool, higher: bool) -> Self {
         self.clamp_lower_dt = lower;
@@ -246,6 +173,10 @@ impl RKIP {
     /// Returns the embedded estimator order.
     pub fn adaptive_order(&self) -> usize {
         5
+    }
+    /// Returns the compile-validated Verner pair, parsed lazily on first use.
+    pub fn tableau(&self) -> Result<&'static RungeKuttaTableau, TableauError> {
+        load_tableau(&RKIP_TABLEAU)
     }
     /// Returns observable exponential-cache usage statistics.
     pub fn cache_stats(&self) -> RkipCacheStats {
@@ -321,11 +252,13 @@ where
         problem.time_span(),
         (),
     );
-    algorithm
-        .cache
-        .borrow_mut()
-        .prepare(problem.linear_operator(), algorithm.cached_steps.len());
-    drive_integration(&dummy, options, RkipKernel::new(problem, algorithm))
+    let kernel = RkipKernel::new(problem, algorithm)?;
+    algorithm.cache.borrow_mut().prepare(
+        problem.linear_operator(),
+        algorithm.cached_steps.len(),
+        kernel.tableau.b().len(),
+    );
+    drive_integration(&dummy, options, kernel)
 }
 
 fn noop(_: &mut [f64], _: &[f64], _: &(), _: f64) {}
@@ -333,18 +266,31 @@ fn noop(_: &mut [f64], _: &[f64], _: &(), _: f64) {}
 struct RkipKernel<'a, G, P> {
     problem: &'a SemilinearOdeProblem<G, P>,
     algorithm: &'a RKIP,
+    tableau: &'static RungeKuttaTableau,
+    error_weights: &'static [f64],
+    retry_step: bool,
     stages: Vec<Vec<f64>>,
     derivative: Vec<f64>,
 }
 
 impl<'a, G, P> RkipKernel<'a, G, P> {
-    fn new(problem: &'a SemilinearOdeProblem<G, P>, algorithm: &'a RKIP) -> Self {
-        Self {
+    fn new(
+        problem: &'a SemilinearOdeProblem<G, P>,
+        algorithm: &'a RKIP,
+    ) -> Result<Self, SolveError> {
+        let tableau = algorithm
+            .tableau()
+            .map_err(|_| SolveError::InvalidTableau)?;
+        let error_weights = tableau.error().ok_or(SolveError::InvalidTableau)?;
+        Ok(Self {
             problem,
             algorithm,
-            stages: vec![vec![0.0; problem.dimension()]; 8],
+            tableau,
+            error_weights,
+            retry_step: false,
+            stages: vec![vec![0.0; problem.dimension()]; tableau.b().len()],
             derivative: vec![0.0; problem.dimension()],
-        }
+        })
     }
 
     fn action(&self, vector: &[f64], step: f64, c: f64) -> Vec<f64> {
@@ -352,7 +298,9 @@ impl<'a, G, P> RkipKernel<'a, G, P> {
             return vector.to_vec();
         }
         let magnitude = step.abs();
-        let stage_index = unique_c_index(c);
+        // Equal nodes share the first matching slot. An unlisted node is
+        // evaluated without caching rather than aliasing another exponential.
+        let stage_index = self.tableau.c().iter().position(|node| *node == c);
         let grid_index = self
             .algorithm
             .cached_steps
@@ -360,7 +308,7 @@ impl<'a, G, P> RkipKernel<'a, G, P> {
             .position(|value| approx(*value, magnitude));
         let positive = step.is_sign_positive();
         let mut cache = self.algorithm.cache.borrow_mut();
-        let matrix = if let Some(grid_index) = grid_index {
+        let matrix = if let (Some(grid_index), Some(stage_index)) = (grid_index, stage_index) {
             let existing = if positive {
                 &cache.positive[grid_index][stage_index]
             } else {
@@ -400,11 +348,24 @@ where
     fn capabilities(&self) -> KernelCapabilities {
         KernelCapabilities::with_controller(
             true,
-            ControllerConfig::proportional(5, 0.9, 0.2, 6.0, 0.2),
+            ControllerConfig::proportional(
+                self.tableau
+                    .embedded_order()
+                    .unwrap_or(self.tableau.order()),
+                0.9,
+                0.2,
+                6.0,
+                0.2,
+            ),
         )
     }
     fn modify_step(&mut self, proposed_step: f64) -> f64 {
-        self.algorithm.snap(proposed_step)
+        let snapped = self.algorithm.snap(proposed_step);
+        if std::mem::take(&mut self.retry_step) && snapped.abs() > proposed_step.abs() {
+            proposed_step
+        } else {
+            snapped
+        }
     }
     fn evaluate_dense_derivative(
         &mut self,
@@ -463,26 +424,27 @@ where
         stats: &mut SolverStats,
     ) -> Result<StepEstimate, SolveError> {
         let n = state.len();
-        for i in 0..8 {
+        for i in 0..self.stages.len() {
             let mut interaction = state.to_vec();
-            for (coefficient, stage) in A[i].iter().zip(&self.stages).take(i) {
+            for (coefficient, stage) in self.tableau.stage_row(i).iter().zip(&self.stages) {
                 for (value, stage) in interaction.iter_mut().zip(stage) {
                     *value += step * coefficient * stage;
                 }
             }
-            let true_state = self.action(&interaction, step, C[i]);
+            let c = self.tableau.c()[i];
+            let true_state = self.action(&interaction, step, c);
             self.problem
-                .evaluate_nonlinear(&mut self.stages[i], &true_state, time + C[i] * step);
+                .evaluate_nonlinear(&mut self.stages[i], &true_state, time + c * step);
             stats.rhs_evaluations += 1;
             checked(&self.stages[i])?;
-            self.stages[i] = self.action(&self.stages[i], -step, C[i]);
+            self.stages[i] = self.action(&self.stages[i], -step, c);
         }
         let mut interaction = state.to_vec();
         let mut embedded_error = vec![0.0; n];
-        for i in 0..8 {
+        for i in 0..self.stages.len() {
             for k in 0..n {
-                interaction[k] += step * B[i] * self.stages[i][k];
-                embedded_error[k] += step * (B[i] - BHAT[i]) * self.stages[i][k];
+                interaction[k] += step * self.tableau.b()[i] * self.stages[i][k];
+                embedded_error[k] += step * self.error_weights[i] * self.stages[i][k];
             }
         }
         candidate.copy_from_slice(&self.action(&interaction, step, 1.0));
@@ -508,24 +470,11 @@ where
         stats.rhs_evaluations += 1;
         checked(&self.derivative)
     }
-    fn reject_step(&mut self) {}
+    fn reject_step(&mut self) {
+        self.retry_step = true;
+    }
 }
 
-fn unique_c_index(c: f64) -> usize {
-    const UNIQUE: [f64; 7] = [
-        1.0 / 7.0,
-        2.0 / 9.0,
-        3.0 / 7.0,
-        2.0 / 3.0,
-        3.0 / 4.0,
-        1.0,
-        0.0,
-    ];
-    UNIQUE
-        .iter()
-        .position(|value| approx(*value, c))
-        .unwrap_or(5)
-}
 fn approx(left: f64, right: f64) -> bool {
     (left - right).abs() <= 16.0 * f64::EPSILON * left.abs().max(right.abs()).max(1.0)
 }
@@ -551,4 +500,29 @@ fn scaled_error(error: &[f64], old: &[f64], new: &[f64], options: &SolveOptions)
         })
         .sum::<f64>();
     (sum / error.len() as f64).sqrt()
+}
+
+#[cfg(test)]
+mod resource_tests {
+    use super::*;
+
+    #[test]
+    fn coefficients_preserve_legacy_bit_patterns() {
+        let tableau = RKIP::default().tableau().unwrap();
+        let mut hash = 0xcbf29ce484222325_u64;
+        for value in tableau
+            .a()
+            .iter()
+            .flatten()
+            .chain(tableau.b())
+            .chain(tableau.c())
+            .chain(tableau.error().unwrap())
+        {
+            for byte in value.to_bits().to_le_bytes() {
+                hash = (hash ^ u64::from(byte)).wrapping_mul(0x100000001b3);
+            }
+        }
+        // FNV-1a over A, b, c, and b-b_hat from the pre-migration Rust constants.
+        assert_eq!(hash, 0x554bfb7076b25bbb);
+    }
 }

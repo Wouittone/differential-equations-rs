@@ -274,7 +274,9 @@ Runge--Kutta data is stored as compile-time JSON resources below
 lazily when their method is first used. Downstream crates can define an
 explicit Runge--Kutta algorithm from their own JSON file with
 `define_explicit_rk_from_file!`, or a drift/kick composition with
-`tableau::define_symplectic_from_file!`. All named symplectic compositions now
+`tableau::define_symplectic_from_file!`. Embedded Runge--Kutta pairs may specify
+`b_hat` instead of precomputed error weights; RKIP uses this same resource format.
+All named symplectic compositions now
 use individual resources and expose fallible `Method::tableau()` access with
 `a()`/`b()` coefficient slices. Some other specialized families still retain
 legacy embedded coefficient data; see

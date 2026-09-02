@@ -72,6 +72,11 @@ materialized tableau for inspection.
 
 `A` must be square, and an explicit method must be strictly lower triangular.
 `error`, `second_error`, and dense rows use the same stage ordering as `b`.
+Alternatively, provide the embedded formula's weights as `b_hat`, together
+with `embedded_order`. The parser validates their length, finite values, and
+sum of one, then materializes `error = b - b_hat`. Do not provide both `error`
+and `b_hat`. Derived errors and coefficient sums are checked for overflow;
+`second_error` can accompany either representation.
 `lazy_dense_stages` can add sparse stages used only by continuous output.
 Parametric primary weights can use `fitted_weights`, whose numerator and
 denominator vectors are stored in ascending powers of the solver's fit
@@ -86,6 +91,21 @@ define_explicit_rk_from_file!(
     crate = diffeq,
 );
 ```
+
+## Interaction-picture methods
+
+RKIP uses the canonical explicit Runge--Kutta resource
+[`explicit/rkip.json`](../src/tableau/resources/explicit/rkip.json), including
+the Verner pair's primary and embedded weights. No separate interaction-picture
+coefficient parser or Rust coefficient arrays are needed. `algorithm.tableau()`
+returns the shared, lazily parsed tableau; constructing an RKIP algorithm does
+not materialize it. Cache slots and repeated-node sharing use the resource's
+stage nodes rather than a second coefficient list.
+
+The exponential cache can snap proposed steps to its configured grid. After
+rejection, however, the controller's smaller step takes precedence, even below
+the lower cache bound. This prevents rounding a retry back to the same rejected
+step indefinitely. Cache clamping is a reuse preference, not an accuracy limit.
 
 ## Symplectic compositions
 
