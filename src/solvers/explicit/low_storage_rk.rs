@@ -102,7 +102,7 @@ macro_rules! method {
                 options: &SolveOptions,
             ) -> Result<Solution, SolveError>
             where
-                F: Fn(&mut [f64], &[f64], &P, f64),
+                F: crate::OdeFunction<P>,
             {
                 integrate::<F, P, $coefficients>(problem, options)
             }
@@ -171,7 +171,7 @@ macro_rules! method_3s {
                 options: &SolveOptions,
             ) -> Result<Solution, SolveError>
             where
-                F: Fn(&mut [f64], &[f64], &P, f64),
+                F: crate::OdeFunction<P>,
             {
                 integrate_3s::<F, P, $coefficients>(problem, options)
             }
@@ -220,7 +220,7 @@ macro_rules! method_2c {
                 options: &SolveOptions,
             ) -> Result<Solution, SolveError>
             where
-                F: Fn(&mut [f64], &[f64], &P, f64),
+                F: crate::OdeFunction<P>,
             {
                 integrate_2c::<F, P, $coefficients>(problem, options)
             }
@@ -290,7 +290,7 @@ macro_rules! method_3sp {
                 options: &SolveOptions,
             ) -> Result<Solution, SolveError>
             where
-                F: Fn(&mut [f64], &[f64], &P, f64),
+                F: crate::OdeFunction<P>,
             {
                 integrate_3s::<F, P, $coefficients>(problem, options)
             }
@@ -345,7 +345,7 @@ macro_rules! method_rp {
                 options: &SolveOptions,
             ) -> Result<Solution, SolveError>
             where
-                F: Fn(&mut [f64], &[f64], &P, f64),
+                F: crate::OdeFunction<P>,
             {
                 integrate_rp::<F, P, $coefficients>(problem, options)
             }
@@ -409,7 +409,7 @@ macro_rules! method_alternating_2n {
                 options: &SolveOptions,
             ) -> Result<Solution, SolveError>
             where
-                F: Fn(&mut [f64], &[f64], &P, f64),
+                F: crate::OdeFunction<P>,
             {
                 integrate_alternating_2n::<F, P, $coefficients>(problem, options)
             }
@@ -895,7 +895,7 @@ fn integrate<F, P, T>(
     options: &SolveOptions,
 ) -> Result<Solution, SolveError>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
     T: LowStorage2N,
 {
     validate_recurrence::<T>()?;
@@ -911,7 +911,7 @@ fn integrate_3s<F, P, T>(
     options: &SolveOptions,
 ) -> Result<Solution, SolveError>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
     T: LowStorage3S,
 {
     validate_recurrence_3s::<T>()?;
@@ -927,7 +927,7 @@ fn integrate_2c<F, P, T>(
     options: &SolveOptions,
 ) -> Result<Solution, SolveError>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
     T: LowStorage2C,
 {
     validate_recurrence_2c::<T>()?;
@@ -943,7 +943,7 @@ fn integrate_alternating_2n<F, P, T>(
     options: &SolveOptions,
 ) -> Result<Solution, SolveError>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
     T: LowStorageAlternating2N,
 {
     validate_alternating_recurrence::<T>()?;
@@ -959,7 +959,7 @@ fn integrate_rp<F, P, T>(
     options: &SolveOptions,
 ) -> Result<Solution, SolveError>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
     T: LowStorageRP,
 {
     validate_recurrence_rp::<T>()?;
@@ -1115,7 +1115,7 @@ impl<T> LowStorageKernel<T> {
 
 impl<F, P, T> StepKernel<F, P> for LowStorageKernel<T>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
     T: LowStorage2N,
 {
     fn capabilities(&self) -> KernelCapabilities {
@@ -1208,7 +1208,7 @@ where
 
 impl<F, P, T> StepKernel<F, P> for LowStorage3SKernel<T>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
     T: LowStorage3S,
 {
     fn capabilities(&self) -> KernelCapabilities {
@@ -1304,7 +1304,7 @@ where
 
 impl<F, P, T> StepKernel<F, P> for LowStorage2CKernel<T>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
     T: LowStorage2C,
 {
     fn capabilities(&self) -> KernelCapabilities {
@@ -1388,7 +1388,7 @@ where
 
 impl<F, P, T> StepKernel<F, P> for LowStorageAlternating2NKernel<T>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
     T: LowStorageAlternating2N,
 {
     fn capabilities(&self) -> KernelCapabilities {
@@ -1487,7 +1487,7 @@ where
 
 impl<F, P, T> StepKernel<F, P> for LowStorageRPKernel<T>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
     T: LowStorageRP,
 {
     fn capabilities(&self) -> KernelCapabilities {
@@ -1611,9 +1611,11 @@ fn evaluate<F, P>(
     stats: &mut SolverStats,
 ) -> Result<(), SolveError>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
-    (problem.rhs)(derivative, state, problem.parameters(), time);
+    problem
+        .rhs
+        .evaluate(derivative, state, problem.parameters(), time)?;
     stats.rhs_evaluations += 1;
     ensure_finite(derivative)
 }

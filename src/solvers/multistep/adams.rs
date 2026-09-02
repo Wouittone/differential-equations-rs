@@ -86,7 +86,7 @@ macro_rules! algorithm {
                 options: &SolveOptions,
             ) -> Result<Solution, SolveError>
             where
-                F: Fn(&mut [f64], &[f64], &P, f64),
+                F: crate::OdeFunction<P>,
             {
                 integrate(problem, options, AdamsKernel::new(&$method))
             }
@@ -173,7 +173,7 @@ impl AdamsKernel {
 
 impl<F, P> StepKernel<F, P> for AdamsKernel
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     fn capabilities(&self) -> KernelCapabilities {
         KernelCapabilities::new(false, self.method.order)
@@ -187,7 +187,7 @@ where
         stats: &mut SolverStats,
     ) -> Result<(), SolveError> {
         let mut workspace = Workspace::new(state.len(), self.method.order);
-        evaluate(problem, &mut workspace.history[0], state, time, stats);
+        evaluate(problem, &mut workspace.history[0], state, time, stats)?;
         ensure_finite(&workspace.history[0])?;
         workspace.history_len = 1;
         self.workspace = Some(workspace);
@@ -232,7 +232,7 @@ where
                 candidate,
                 workspace,
                 stats,
-            );
+            )?;
         } else {
             weighted_update(
                 candidate,
@@ -252,7 +252,7 @@ where
                     candidate,
                     time + step,
                     stats,
-                );
+                )?;
                 weighted_update(
                     candidate,
                     state,
@@ -284,7 +284,7 @@ where
     ) -> Result<(), SolveError> {
         let method = self.method;
         let workspace = self.workspace()?;
-        evaluate(problem, &mut workspace.next_derivative, state, time, stats);
+        evaluate(problem, &mut workspace.next_derivative, state, time, stats)?;
         ensure_finite(&workspace.next_derivative)?;
         if callback_applied {
             workspace.history_len = 1;
@@ -311,8 +311,9 @@ fn bootstrap_step<F, P>(
     candidate: &mut [f64],
     workspace: &mut Workspace,
     stats: &mut SolverStats,
-) where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+) -> Result<(), SolveError>
+where
+    F: crate::OdeFunction<P>,
 {
     match method {
         Bootstrap::Ralston => {
@@ -326,7 +327,7 @@ fn bootstrap_step<F, P>(
                 &workspace.temporary,
                 time + (2.0 / 3.0) * step,
                 stats,
-            );
+            )?;
             for (index, &value) in state.iter().enumerate() {
                 candidate[index] = value
                     + (step / 4.0) * (workspace.history[0][index] + 3.0 * workspace.stage2[index]);
@@ -342,7 +343,7 @@ fn bootstrap_step<F, P>(
                 &workspace.temporary,
                 time + 0.5 * step,
                 stats,
-            );
+            )?;
             for (index, &value) in state.iter().enumerate() {
                 workspace.temporary[index] = value + 0.5 * step * workspace.stage2[index];
             }
@@ -352,7 +353,7 @@ fn bootstrap_step<F, P>(
                 &workspace.temporary,
                 time + 0.5 * step,
                 stats,
-            );
+            )?;
             for (index, &value) in state.iter().enumerate() {
                 workspace.temporary[index] = value + step * workspace.stage3[index];
             }
@@ -362,7 +363,7 @@ fn bootstrap_step<F, P>(
                 &workspace.temporary,
                 time + step,
                 stats,
-            );
+            )?;
             for (index, &value) in state.iter().enumerate() {
                 candidate[index] = value
                     + (step / 6.0)
@@ -373,6 +374,7 @@ fn bootstrap_step<F, P>(
             }
         }
     }
+    Ok(())
 }
 
 fn weighted_update(
@@ -405,11 +407,15 @@ fn evaluate<F, P>(
     state: &[f64],
     time: f64,
     stats: &mut SolverStats,
-) where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+) -> Result<(), SolveError>
+where
+    F: crate::OdeFunction<P>,
 {
-    (problem.rhs)(derivative, state, problem.parameters(), time);
+    problem
+        .rhs
+        .evaluate(derivative, state, problem.parameters(), time)?;
     stats.rhs_evaluations += 1;
+    Ok(())
 }
 
 fn ensure_finite(values: &[f64]) -> Result<(), SolveError> {

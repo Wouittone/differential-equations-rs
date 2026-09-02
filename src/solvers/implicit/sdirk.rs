@@ -76,7 +76,7 @@ impl OdeAlgorithm for Sdirk2 {
         options: &SolveOptions,
     ) -> Result<Solution, SolveError>
     where
-        F: Fn(&mut [f64], &[f64], &P, f64),
+        F: crate::OdeFunction<P>,
     {
         let tableau = self.tableau().map_err(|_| SolveError::InvalidTableau)?;
         drive_integration(
@@ -140,7 +140,7 @@ impl Sdirk2Kernel {
 
 impl<F, P> StepKernel<F, P> for Sdirk2Kernel
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     fn capabilities(&self) -> KernelCapabilities {
         KernelCapabilities::with_controller(true, CONTROLLER)
@@ -287,7 +287,7 @@ fn solve_stage<F, P>(
     stats: &mut SolverStats,
 ) -> Result<(), SolveError>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     let (stage_time, step) = time_and_step;
     let dimension = workspace.layout.dimension();
@@ -369,7 +369,7 @@ fn build_factorization<F, P>(
     stats: &mut SolverStats,
 ) -> Result<(), SolveError>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     let dimension = workspace.layout.dimension();
     if problem.evaluate_jacobian(
@@ -432,9 +432,11 @@ fn evaluate_checked<F, P>(
     stats: &mut SolverStats,
 ) -> Result<(), SolveError>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
-    (problem.rhs)(derivative, state, problem.parameters(), time);
+    problem
+        .rhs
+        .evaluate(derivative, state, problem.parameters(), time)?;
     stats.rhs_evaluations += 1;
     derivative
         .iter()
@@ -568,7 +570,7 @@ impl ExtendedKernel {
 
 impl<F, P> StepKernel<F, P> for ExtendedKernel
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     fn capabilities(&self) -> KernelCapabilities {
         KernelCapabilities::with_controller(
@@ -727,7 +729,7 @@ impl ExtendedKernel {
         stats: &mut SolverStats,
     ) -> Result<(), SolveError>
     where
-        F: Fn(&mut [f64], &[f64], &P, f64),
+        F: crate::OdeFunction<P>,
     {
         let diagonal = self.tableau.a()[stage_index][stage_index];
         for _ in 0..MAX_NEWTON_ITERATIONS {
@@ -797,7 +799,7 @@ impl ExtendedKernel {
         stats: &mut SolverStats,
     ) -> Result<(), SolveError>
     where
-        F: Fn(&mut [f64], &[f64], &P, f64),
+        F: crate::OdeFunction<P>,
     {
         let dimension = self.workspace.layout.dimension();
         if problem.evaluate_jacobian(
@@ -886,7 +888,7 @@ macro_rules! extended_algorithm {
                 options: &SolveOptions,
             ) -> Result<Solution, SolveError>
             where
-                F: Fn(&mut [f64], &[f64], &P, f64),
+                F: crate::OdeFunction<P>,
             {
                 let tableau = self.tableau().map_err(|_| SolveError::InvalidTableau)?;
                 drive_integration(

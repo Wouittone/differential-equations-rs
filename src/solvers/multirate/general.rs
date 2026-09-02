@@ -157,8 +157,8 @@ macro_rules! mri_algorithm {
                 options: &SolveOptions,
             ) -> Result<Solution, SolveError>
             where
-                FE: Fn(&mut [f64], &[f64], &P, f64),
-                FI: Fn(&mut [f64], &[f64], &P, f64),
+                FE: crate::OdeFunction<P>,
+                FI: crate::OdeFunction<P>,
             {
                 if self.m == 0 {
                     return Err(SolveError::InvalidMultistepOrder);
@@ -220,8 +220,8 @@ impl SplitOdeAlgorithm for Mreef {
         options: &SolveOptions,
     ) -> Result<Solution, SolveError>
     where
-        FE: Fn(&mut [f64], &[f64], &P, f64),
-        FI: Fn(&mut [f64], &[f64], &P, f64),
+        FE: crate::OdeFunction<P>,
+        FI: crate::OdeFunction<P>,
     {
         if self.m == 0 || !(2..=10).contains(&self.order) {
             return Err(SolveError::InvalidMultistepOrder);
@@ -245,8 +245,8 @@ impl SplitOdeAlgorithm for Mrab {
         options: &SolveOptions,
     ) -> Result<Solution, SolveError>
     where
-        FE: Fn(&mut [f64], &[f64], &P, f64),
-        FI: Fn(&mut [f64], &[f64], &P, f64),
+        FE: crate::OdeFunction<P>,
+        FI: crate::OdeFunction<P>,
     {
         if self.m == 0 || !(1..=5).contains(&self.order) {
             return Err(SolveError::InvalidMultistepOrder);
@@ -272,8 +272,8 @@ impl SplitOdeAlgorithm for Mis {
         options: &SolveOptions,
     ) -> Result<Solution, SolveError>
     where
-        FE: Fn(&mut [f64], &[f64], &P, f64),
-        FI: Fn(&mut [f64], &[f64], &P, f64),
+        FE: crate::OdeFunction<P>,
+        FI: crate::OdeFunction<P>,
     {
         if self.m == 0 {
             return Err(SolveError::InvalidMultistepOrder);
@@ -318,8 +318,8 @@ fn integrate_multirate<FE, FI, P>(
     method: Method,
 ) -> Result<Solution, SolveError>
 where
-    FE: Fn(&mut [f64], &[f64], &P, f64),
-    FI: Fn(&mut [f64], &[f64], &P, f64),
+    FE: crate::OdeFunction<P>,
+    FI: crate::OdeFunction<P>,
 {
     validate(problem, options)?;
     if !options.adaptive && options.initial_step.is_none() {
@@ -546,8 +546,8 @@ fn finish_successful<FE, FI, P>(
     stats: SolverStats,
 ) -> Result<Solution, SolveError>
 where
-    FE: Fn(&mut [f64], &[f64], &P, f64),
-    FI: Fn(&mut [f64], &[f64], &P, f64),
+    FE: crate::OdeFunction<P>,
+    FI: crate::OdeFunction<P>,
 {
     if problem.apply_finalize_callbacks(state, time)? {
         recorder.synchronize_endpoint(time, state);
@@ -592,8 +592,8 @@ fn attempt<FE, FI, P>(
     stats: &mut SolverStats,
 ) -> Result<f64, SolveError>
 where
-    FE: Fn(&mut [f64], &[f64], &P, f64),
-    FI: Fn(&mut [f64], &[f64], &P, f64),
+    FE: crate::OdeFunction<P>,
+    FI: crate::OdeFunction<P>,
 {
     let error = match method {
         Method::Mreef { m, order, sequence } => mreef_step(
@@ -634,9 +634,9 @@ fn evaluate_fast<FE, FI, P>(
     stats: &mut SolverStats,
 ) -> Result<(), SolveError>
 where
-    FE: Fn(&mut [f64], &[f64], &P, f64),
+    FE: crate::OdeFunction<P>,
 {
-    problem.evaluate_explicit(output, state, time);
+    problem.evaluate_explicit(output, state, time)?;
     stats.rhs_evaluations += 1;
     finite(output)
 }
@@ -649,9 +649,9 @@ fn evaluate_slow<FE, FI, P>(
     stats: &mut SolverStats,
 ) -> Result<(), SolveError>
 where
-    FI: Fn(&mut [f64], &[f64], &P, f64),
+    FI: crate::OdeFunction<P>,
 {
-    problem.evaluate_implicit(output, state, time);
+    problem.evaluate_implicit(output, state, time)?;
     stats.rhs_evaluations += 1;
     finite(output)
 }
@@ -664,8 +664,8 @@ fn evaluate_total<FE, FI, P>(
     stats: &mut SolverStats,
 ) -> Result<(), SolveError>
 where
-    FE: Fn(&mut [f64], &[f64], &P, f64),
-    FI: Fn(&mut [f64], &[f64], &P, f64),
+    FE: crate::OdeFunction<P>,
+    FI: crate::OdeFunction<P>,
 {
     let mut slow = vec![0.0; output.len()];
     evaluate_fast(problem, state, time, output, stats)?;
@@ -697,8 +697,8 @@ fn mreef_step<FE, FI, P>(
     stats: &mut SolverStats,
 ) -> Result<Vec<f64>, SolveError>
 where
-    FE: Fn(&mut [f64], &[f64], &P, f64),
-    FI: Fn(&mut [f64], &[f64], &P, f64),
+    FE: crate::OdeFunction<P>,
+    FI: crate::OdeFunction<P>,
 {
     let dimension = state.len();
     let ns: Vec<usize> = (1..=order)
@@ -771,8 +771,8 @@ fn mrab_step<FE, FI, P>(
     stats: &mut SolverStats,
 ) -> Result<Vec<f64>, SolveError>
 where
-    FE: Fn(&mut [f64], &[f64], &P, f64),
-    FI: Fn(&mut [f64], &[f64], &P, f64),
+    FE: crate::OdeFunction<P>,
+    FI: crate::OdeFunction<P>,
 {
     let dimension = state.len();
     let h = step / m as f64;
@@ -832,8 +832,8 @@ fn mis_step<FE, FI, P>(
     stats: &mut SolverStats,
 ) -> Result<Vec<f64>, SolveError>
 where
-    FE: Fn(&mut [f64], &[f64], &P, f64),
-    FI: Fn(&mut [f64], &[f64], &P, f64),
+    FE: crate::OdeFunction<P>,
+    FI: crate::OdeFunction<P>,
 {
     const ALPHA: [[f64; 4]; 4] = [
         [0.0; 4],
@@ -956,8 +956,8 @@ fn mri_step<FE, FI, P>(
     stats: &mut SolverStats,
 ) -> Result<Vec<f64>, SolveError>
 where
-    FE: Fn(&mut [f64], &[f64], &P, f64),
-    FI: Fn(&mut [f64], &[f64], &P, f64),
+    FE: crate::OdeFunction<P>,
+    FI: crate::OdeFunction<P>,
 {
     let stages_count = tableau.dc.len();
     let dimension = state.len();
@@ -1051,7 +1051,7 @@ fn mri_substage<FE, FI, P>(
     stats: &mut SolverStats,
 ) -> Result<Vec<f64>, SolveError>
 where
-    FE: Fn(&mut [f64], &[f64], &P, f64),
+    FE: crate::OdeFunction<P>,
 {
     let dimension = start.len();
     if dc == 0.0 {
@@ -1184,7 +1184,7 @@ fn mri_rate<FE, FI, P>(
     stats: &mut SolverStats,
 ) -> Result<(), SolveError>
 where
-    FE: Fn(&mut [f64], &[f64], &P, f64),
+    FE: crate::OdeFunction<P>,
 {
     evaluate_fast(
         problem,
@@ -1215,7 +1215,7 @@ fn implicit_slow_endpoint<FE, FI, P>(
     stats: &mut SolverStats,
 ) -> Result<Vec<f64>, SolveError>
 where
-    FI: Fn(&mut [f64], &[f64], &P, f64),
+    FI: crate::OdeFunction<P>,
 {
     let dimension = base.len();
     let mut value = predictor.to_vec();

@@ -116,7 +116,7 @@ impl OdeAlgorithm for AN5 {
         options: &SolveOptions,
     ) -> Result<Solution, SolveError>
     where
-        F: Fn(&mut [f64], &[f64], &P, f64),
+        F: crate::OdeFunction<P>,
     {
         drive_integration(
             problem,
@@ -133,7 +133,7 @@ impl OdeAlgorithm for JVODE {
         options: &SolveOptions,
     ) -> Result<Solution, SolveError>
     where
-        F: Fn(&mut [f64], &[f64], &P, f64),
+        F: crate::OdeFunction<P>,
     {
         if !self.bias1.is_finite()
             || !self.bias2.is_finite()
@@ -163,7 +163,7 @@ impl OdeAlgorithm for JvodeAdams {
         options: &SolveOptions,
     ) -> Result<Solution, SolveError>
     where
-        F: Fn(&mut [f64], &[f64], &P, f64),
+        F: crate::OdeFunction<P>,
     {
         JVODE::adams().solve(problem, options)
     }
@@ -176,7 +176,7 @@ impl OdeAlgorithm for JvodeBdf {
         options: &SolveOptions,
     ) -> Result<Solution, SolveError>
     where
-        F: Fn(&mut [f64], &[f64], &P, f64),
+        F: crate::OdeFunction<P>,
     {
         JVODE::bdf().solve(problem, options)
     }
@@ -315,9 +315,11 @@ impl<F, P> NordsieckKernel<F, P> {
         stats: &mut SolverStats,
     ) -> Result<(), SolveError>
     where
-        FN: Fn(&mut [f64], &[f64], &PP, f64),
+        FN: crate::OdeFunction<PP>,
     {
-        (problem.rhs)(output, state, problem.parameters(), time);
+        problem
+            .rhs
+            .evaluate(output, state, problem.parameters(), time)?;
         stats.rhs_evaluations += 1;
         output
             .iter()
@@ -540,7 +542,7 @@ impl<F, P> NordsieckKernel<F, P> {
         stats: &mut SolverStats,
     ) -> Result<(), SolveError>
     where
-        FN: Fn(&mut [f64], &[f64], &PP, f64),
+        FN: crate::OdeFunction<PP>,
     {
         let mut derivative = vec![0.0; self.dimension];
         let mut previous_delta = vec![0.0; self.dimension];
@@ -579,7 +581,7 @@ impl<F, P> NordsieckKernel<F, P> {
         stats: &mut SolverStats,
     ) -> Result<(), SolveError>
     where
-        FN: Fn(&mut [f64], &[f64], &PP, f64),
+        FN: crate::OdeFunction<PP>,
     {
         let n = self.dimension;
         let scale = step / self.l[1];
@@ -657,7 +659,7 @@ impl<F, P> NordsieckKernel<F, P> {
         stats: &mut SolverStats,
     ) -> Result<f64, SolveError>
     where
-        FN: Fn(&mut [f64], &[f64], &PP, f64),
+        FN: crate::OdeFunction<PP>,
     {
         let tableau = Tsit5.tableau().map_err(|_| SolveError::InvalidTableau)?;
         let stages_count = tableau.c().len();
@@ -736,7 +738,7 @@ impl<F, P> NordsieckKernel<F, P> {
 
 impl<F, P> StepKernel<F, P> for NordsieckKernel<F, P>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     fn capabilities(&self) -> KernelCapabilities {
         KernelCapabilities::with_controller(

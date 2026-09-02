@@ -210,7 +210,7 @@ impl OdeAlgorithm for AMF<Rosenbrock23> {
         options: &SolveOptions,
     ) -> Result<Solution, SolveError>
     where
-        F: Fn(&mut [f64], &[f64], &P, f64),
+        F: crate::OdeFunction<P>,
     {
         let n = problem.initial_state().len();
         let evaluate = |derivative: &mut [f64],
@@ -219,7 +219,9 @@ impl OdeAlgorithm for AMF<Rosenbrock23> {
                         state: &[f64],
                         time: f64,
                         stats: &mut SolverStats| {
-            (problem.rhs)(derivative, state, problem.parameters(), time);
+            problem
+                .rhs
+                .evaluate(derivative, state, problem.parameters(), time)?;
             stats.rhs_evaluations += 1;
             checked(derivative)?;
             if problem.evaluate_jacobian(jacobian, state, time) {
@@ -242,7 +244,7 @@ pub fn solve_amf<F, J, S, P>(
     options: &SolveOptions,
 ) -> Result<Solution, SolveError>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
     J: Fn(&mut [f64], &[f64], &P, f64),
     S: Fn(&mut [Vec<f64>], &[f64], &P, f64),
 {
@@ -260,7 +262,10 @@ where
                     state: &[f64],
                     time: f64,
                     stats: &mut SolverStats| {
-        (problem.function.rhs)(derivative, state, &problem.parameters, time);
+        problem
+            .function
+            .rhs
+            .evaluate(derivative, state, &problem.parameters, time)?;
         stats.rhs_evaluations += 1;
         checked(derivative)?;
         (problem.function.jacobian)(jacobian, state, &problem.parameters, time);
@@ -328,7 +333,7 @@ impl<E> AmfKernel<E> {
 
 impl<F, P, E> StepKernel<F, P> for AmfKernel<E>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
     E: FnMut(
         &mut [f64],
         &mut [f64],
@@ -529,7 +534,7 @@ fn finite_difference<F, P>(
     stats: &mut SolverStats,
 ) -> Result<(), SolveError>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     let n = state.len();
     let mut shifted = state.to_vec();
@@ -537,7 +542,9 @@ where
     for column in 0..n {
         let delta = f64::EPSILON.sqrt() * state[column].abs().max(1.0);
         shifted[column] += delta;
-        (problem.rhs)(&mut derivative, &shifted, problem.parameters(), time);
+        problem
+            .rhs
+            .evaluate(&mut derivative, &shifted, problem.parameters(), time)?;
         stats.rhs_evaluations += 1;
         for row in 0..n {
             jacobian[row * n + column] = (derivative[row] - base[row]) / delta;

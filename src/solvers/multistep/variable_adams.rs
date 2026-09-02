@@ -52,7 +52,7 @@ macro_rules! algorithm {
                 options: &SolveOptions,
             ) -> Result<Solution, SolveError>
             where
-                F: Fn(&mut [f64], &[f64], &P, f64),
+                F: crate::OdeFunction<P>,
             {
                 integrate(problem, options, VariableAdamsKernel::new(&$method))
             }
@@ -112,7 +112,7 @@ impl OdeAlgorithm for Vcabm {
         options: &SolveOptions,
     ) -> Result<Solution, SolveError>
     where
-        F: Fn(&mut [f64], &[f64], &P, f64),
+        F: crate::OdeFunction<P>,
     {
         integrate(problem, options, VariableOrderAdamsKernel::new())
     }
@@ -188,7 +188,7 @@ impl VariableAdamsKernel {
 
 impl<F, P> StepKernel<F, P> for VariableAdamsKernel
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     fn capabilities(&self) -> KernelCapabilities {
         KernelCapabilities::with_controller(
@@ -205,7 +205,7 @@ where
         stats: &mut SolverStats,
     ) -> Result<(), SolveError> {
         let mut workspace = Workspace::new(state.len(), self.method.order);
-        evaluate(problem, &mut workspace.derivative, state, time, stats);
+        evaluate(problem, &mut workspace.derivative, state, time, stats)?;
         ensure_finite(&workspace.derivative)?;
         self.workspace = Some(workspace);
         self.step_number = 1;
@@ -279,7 +279,7 @@ where
                 candidate,
                 time + step,
                 stats,
-            );
+            )?;
             ensure_finite(&workspace.next_derivative)?;
         }
         Ok(StepEstimate::new(error))
@@ -301,7 +301,7 @@ where
 
         if callback_applied {
             workspace.reset_history();
-            evaluate(problem, &mut workspace.derivative, state, time, stats);
+            evaluate(problem, &mut workspace.derivative, state, time, stats)?;
             ensure_finite(&workspace.derivative)?;
             self.step_number = 1;
         } else {
@@ -392,7 +392,7 @@ fn variable_adams_step<F, P>(
     stats: &mut SolverStats,
 ) -> Result<f64, SolveError>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     let order = method.order;
     if !method.corrector {
@@ -421,7 +421,7 @@ where
             &workspace.predicted,
             time + step,
             stats,
-        );
+        )?;
         ensure_finite(&workspace.next_derivative)?;
         workspace.phi_endpoint[0].copy_from_slice(&workspace.next_derivative);
         for index in 1..=order {
@@ -465,10 +465,10 @@ fn startup_step<F, P>(
     stats: &mut SolverStats,
 ) -> Result<f64, SolveError>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     if order == 3 {
-        bogacki_shampine_step(problem, state, time, step, candidate, workspace, stats);
+        bogacki_shampine_step(problem, state, time, step, candidate, workspace, stats)?;
         ensure_finite(&workspace.next_derivative)?;
         return Ok(if options.adaptive {
             scaled_error_norm(&workspace.error, state, candidate, options)
@@ -477,7 +477,7 @@ where
         });
     }
 
-    rk4_step(problem, state, time, step, candidate, workspace, stats);
+    rk4_step(problem, state, time, step, candidate, workspace, stats)?;
     ensure_finite(&workspace.next_derivative)?;
     if !options.adaptive {
         return Ok(0.0);
@@ -514,7 +514,7 @@ where
             &workspace.temporary,
             time + fraction * step,
             stats,
-        );
+        )?;
         ensure_finite(&workspace.predicted)?;
         for (error, derivative) in workspace.error.iter_mut().zip(&workspace.predicted) {
             *error = step * (derivative - *error);
@@ -538,8 +538,9 @@ fn bogacki_shampine_step<F, P>(
     candidate: &mut [f64],
     workspace: &mut Workspace,
     stats: &mut SolverStats,
-) where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+) -> Result<(), SolveError>
+where
+    F: crate::OdeFunction<P>,
 {
     for component in 0..state.len() {
         workspace.temporary[component] =
@@ -551,7 +552,7 @@ fn bogacki_shampine_step<F, P>(
         &workspace.temporary,
         time + 0.5 * step,
         stats,
-    );
+    )?;
     for component in 0..state.len() {
         workspace.temporary[component] =
             state[component] + 0.75 * step * workspace.stages[0][component];
@@ -562,7 +563,7 @@ fn bogacki_shampine_step<F, P>(
         &workspace.temporary,
         time + 0.75 * step,
         stats,
-    );
+    )?;
     for component in 0..state.len() {
         candidate[component] = state[component]
             + step
@@ -576,7 +577,7 @@ fn bogacki_shampine_step<F, P>(
         candidate,
         time + step,
         stats,
-    );
+    )?;
     for component in 0..state.len() {
         workspace.error[component] = step
             * (5.0 / 72.0 * workspace.derivative[component]
@@ -584,6 +585,7 @@ fn bogacki_shampine_step<F, P>(
                 - 1.0 / 9.0 * workspace.stages[1][component]
                 + 1.0 / 8.0 * workspace.next_derivative[component]);
     }
+    Ok(())
 }
 
 #[allow(clippy::needless_range_loop)]
@@ -595,8 +597,9 @@ fn rk4_step<F, P>(
     candidate: &mut [f64],
     workspace: &mut Workspace,
     stats: &mut SolverStats,
-) where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+) -> Result<(), SolveError>
+where
+    F: crate::OdeFunction<P>,
 {
     for component in 0..state.len() {
         workspace.temporary[component] =
@@ -608,7 +611,7 @@ fn rk4_step<F, P>(
         &workspace.temporary,
         time + 0.5 * step,
         stats,
-    );
+    )?;
     for component in 0..state.len() {
         workspace.temporary[component] =
             state[component] + 0.5 * step * workspace.stages[0][component];
@@ -619,7 +622,7 @@ fn rk4_step<F, P>(
         &workspace.temporary,
         time + 0.5 * step,
         stats,
-    );
+    )?;
     for component in 0..state.len() {
         workspace.temporary[component] = state[component] + step * workspace.stages[1][component];
     }
@@ -629,7 +632,7 @@ fn rk4_step<F, P>(
         &workspace.temporary,
         time + step,
         stats,
-    );
+    )?;
     for component in 0..state.len() {
         candidate[component] = state[component]
             + step / 6.0
@@ -644,7 +647,8 @@ fn rk4_step<F, P>(
         candidate,
         time + step,
         stats,
-    );
+    )?;
+    Ok(())
 }
 
 fn scaled_error_norm(
@@ -675,7 +679,7 @@ fn estimate_initial_step<F, P>(
     stats: &mut SolverStats,
 ) -> Result<f64, SolveError>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     let dimension = state.len() as f64;
     let mut state_norm = 0.0;
@@ -703,7 +707,7 @@ where
         &workspace.temporary,
         time + direction * trial_step,
         stats,
-    );
+    )?;
     ensure_finite(&workspace.predicted)?;
     let mut curvature_norm = 0.0;
     for component in 0..state.len() {
@@ -728,11 +732,15 @@ fn evaluate<F, P>(
     state: &[f64],
     time: f64,
     stats: &mut SolverStats,
-) where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+) -> Result<(), SolveError>
+where
+    F: crate::OdeFunction<P>,
 {
-    (problem.rhs)(derivative, state, problem.parameters(), time);
+    problem
+        .rhs
+        .evaluate(derivative, state, problem.parameters(), time)?;
     stats.rhs_evaluations += 1;
+    Ok(())
 }
 
 fn ensure_finite(values: &[f64]) -> Result<(), SolveError> {
@@ -778,7 +786,7 @@ impl VariableOrderAdamsKernel {
         stats: &mut SolverStats,
     ) -> Result<(), SolveError>
     where
-        F: Fn(&mut [f64], &[f64], &P, f64),
+        F: crate::OdeFunction<P>,
     {
         if self.derivatives.len() != VCABM_MAX_ORDER
             || self
@@ -790,7 +798,7 @@ impl VariableOrderAdamsKernel {
                 .map(|_| vec![0.0; state.len()])
                 .collect();
         }
-        evaluate(problem, &mut self.derivatives[0], state, time, stats);
+        evaluate(problem, &mut self.derivatives[0], state, time, stats)?;
         ensure_finite(&self.derivatives[0])?;
         self.times[0] = time;
         self.history_len = 1;
@@ -805,7 +813,7 @@ impl VariableOrderAdamsKernel {
 
 impl<F, P> StepKernel<F, P> for VariableOrderAdamsKernel
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     fn capabilities(&self) -> KernelCapabilities {
         KernelCapabilities::with_controller(
@@ -881,7 +889,7 @@ where
             &self.predicted,
             time + step,
             stats,
-        );
+        )?;
         ensure_finite(&self.trial_derivative)?;
 
         nodes[0] = 1.0;
@@ -930,7 +938,7 @@ where
         }
         self.derivatives.rotate_right(1);
         self.times.rotate_right(1);
-        evaluate(problem, &mut self.derivatives[0], state, time, stats);
+        evaluate(problem, &mut self.derivatives[0], state, time, stats)?;
         ensure_finite(&self.derivatives[0])?;
         self.times[0] = time;
         self.history_len = (self.history_len + 1).min(VCABM_MAX_ORDER);

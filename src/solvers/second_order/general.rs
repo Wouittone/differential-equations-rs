@@ -74,7 +74,7 @@ impl<P> DiscreteTrigger<P> {
         position: &[f64],
         parameters: &P,
         time: f64,
-        evaluate: impl FnOnce(&mut [f64], &mut [f64]),
+        evaluate: impl FnOnce(&mut [f64], &mut [f64]) -> Result<(), SolveError>,
     ) -> Result<bool, SolveError> {
         Ok(match self {
             Self::SteadyState(condition) => {
@@ -4017,6 +4017,7 @@ where
                 (problem.acceleration)(acceleration, velocity, position, &problem.parameters, time);
                 rate.copy_from_slice(velocity);
                 outcome.rhs_evaluations += 1;
+                Ok(())
             },
         )? {
             outcome.register(callback.save);
@@ -4240,6 +4241,7 @@ where
                     );
                     rate.copy_from_slice(velocity);
                     outcome.rhs_evaluations += 1;
+                    Ok(())
                 },
             )? {
                 if outcome.invocations == 0 {

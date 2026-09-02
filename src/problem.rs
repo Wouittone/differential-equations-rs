@@ -1,3 +1,5 @@
+mod function;
+
 use crate::SolveError;
 use crate::callback::{
     Callback, CallbackAction, CallbackOutcome, CallbackSave, CallbackSet, ContinuousCallback,
@@ -7,6 +9,8 @@ use crate::callback::{
 use crate::event::{
     MAX_EVENT_ROOT_ITERATIONS, effective_event_tolerance, event_interval_converged,
 };
+use function::ArrayFunction;
+pub use function::OdeFunction;
 use ndarray::{
     Array, ArrayView, ArrayViewD, ArrayViewMut, ArrayViewMut1, ArrayViewMut2, ArrayViewMutD,
     Dimension, IxDyn,
@@ -14,9 +18,10 @@ use ndarray::{
 
 /// An initial-value ordinary differential equation problem.
 ///
-/// The right-hand side uses the in-place SciML calling convention
-/// `f(du, u, p, t)`: it must overwrite every element of `du` with the
-/// derivative at `(u, p, t)`.
+/// In-place right-hand sides use the SciML calling convention
+/// `f(du, u, p, t)` and overwrite every element of `du` with the derivative.
+/// [`Self::from_array_out_of_place`] instead accepts `f(u, p, t)` returning
+/// an ndarray with the state's shape. Both forms implement [`OdeFunction`].
 pub struct OdeProblem<F, P> {
     pub(crate) rhs: F,
     initial_state: Vec<f64>,
@@ -39,6 +44,8 @@ type StepInterpolator<'a> = dyn FnMut(f64, &mut [f64]) -> Result<(), SolveError>
 /// The representation is solver-neutral: kernels choose how to combine the
 /// two components, while dimensions, parameters, and time semantics remain
 /// shared and checked in one place.
+/// Components can write derivatives in place or return ndarrays through
+/// [`Self::from_array_out_of_place`].
 #[allow(dead_code)]
 pub struct SplitOdeProblem<FE, FI, P> {
     explicit: FE,
@@ -57,9 +64,45 @@ pub struct SplitOdeProblem<FE, FI, P> {
 
 #[allow(dead_code)]
 impl SplitOdeProblem<(), (), ()> {
+    /// Constructs a split problem whose components return ndarray derivatives.
+    ///
+    /// Each returned array must have exactly the initial state's shape.
+    /// Invalid shapes produce [`SolveError::DerivativeShapeMismatch`]. Returning
+    /// owned arrays may allocate on every evaluation; use [`Self::from_array`]
+    /// when in-place evaluation is more suitable.
+    pub fn from_array_out_of_place<FE, FI, P, D>(
+        explicit: FE,
+        implicit: FI,
+        initial_state: Array<f64, D>,
+        time_span: (f64, f64),
+        parameters: P,
+    ) -> SplitOdeProblem<impl OdeFunction<P>, impl OdeFunction<P>, P>
+    where
+        D: Dimension,
+        FE: for<'a> Fn(ArrayView<'a, f64, D>, &P, f64) -> Array<f64, D>,
+        FI: for<'a> Fn(ArrayView<'a, f64, D>, &P, f64) -> Array<f64, D>,
+    {
+        let shape = initial_state.raw_dim();
+        let mut problem = SplitOdeProblem::new(
+            ArrayFunction {
+                rhs: explicit,
+                shape: shape.clone(),
+            },
+            ArrayFunction {
+                rhs: implicit,
+                shape: shape.clone(),
+            },
+            initial_state.iter().copied().collect::<Vec<_>>(),
+            time_span,
+            parameters,
+        );
+        problem.state_shape = shape.into_dyn();
+        problem
+    }
+
     /// Constructs a split problem from ndarray-shaped functions and state.
     ///
-    /// Both functions receive mutable/read-only dynamic ndarray views with the
+    /// Both functions receive mutable/read-only ndarray views with the
     /// same dimensionality as `initial_state`. The generated adapters are
     /// monomorphized and expose contiguous slices only to numerical kernels.
     #[allow(clippy::type_complexity)] // Preserve monomorphized RHS adapters instead of boxing.
@@ -396,19 +439,37 @@ impl<FE, FI, P> SplitOdeProblem<FE, FI, P> {
     }
 
     /// Evaluates the explicit right-hand side.
-    pub fn evaluate_explicit(&self, derivative: &mut [f64], state: &[f64], time: f64)
+    ///
+    /// Propagates errors from the function, including a returned array with an
+    /// incompatible shape.
+    pub fn evaluate_explicit(
+        &self,
+        derivative: &mut [f64],
+        state: &[f64],
+        time: f64,
+    ) -> Result<(), SolveError>
     where
-        FE: Fn(&mut [f64], &[f64], &P, f64),
+        FE: crate::OdeFunction<P>,
     {
-        (self.explicit)(derivative, state, &self.parameters, time);
+        self.explicit
+            .evaluate(derivative, state, &self.parameters, time)
     }
 
     /// Evaluates the implicit right-hand side.
-    pub fn evaluate_implicit(&self, derivative: &mut [f64], state: &[f64], time: f64)
+    ///
+    /// Propagates errors from the function, including a returned array with an
+    /// incompatible shape.
+    pub fn evaluate_implicit(
+        &self,
+        derivative: &mut [f64],
+        state: &[f64],
+        time: f64,
+    ) -> Result<(), SolveError>
     where
-        FI: Fn(&mut [f64], &[f64], &P, f64),
+        FI: crate::OdeFunction<P>,
     {
-        (self.implicit)(derivative, state, &self.parameters, time);
+        self.implicit
+            .evaluate(derivative, state, &self.parameters, time)
     }
 
     fn discrete_is_triggered(
@@ -419,16 +480,17 @@ impl<FE, FI, P> SplitOdeProblem<FE, FI, P> {
         evaluations: &mut usize,
     ) -> Result<bool, SolveError>
     where
-        FE: Fn(&mut [f64], &[f64], &P, f64),
-        FI: Fn(&mut [f64], &[f64], &P, f64),
+        FE: crate::OdeFunction<P>,
+        FI: crate::OdeFunction<P>,
     {
         trigger.is_triggered(state, &self.parameters, time, |du, work| {
-            self.evaluate_explicit(du, state, time);
-            self.evaluate_implicit(work, state, time);
+            self.evaluate_explicit(du, state, time)?;
+            self.evaluate_implicit(work, state, time)?;
             *evaluations += 2;
             for (du, implicit) in du.iter_mut().zip(work) {
                 *du += *implicit;
             }
+            Ok(())
         })
     }
 
@@ -451,8 +513,8 @@ impl<FE, FI, P> SplitOdeProblem<FE, FI, P> {
         time: f64,
     ) -> Result<CallbackOutcome, SolveError>
     where
-        FE: Fn(&mut [f64], &[f64], &P, f64),
-        FI: Fn(&mut [f64], &[f64], &P, f64),
+        FE: crate::OdeFunction<P>,
+        FI: crate::OdeFunction<P>,
     {
         let mut outcome = CallbackOutcome::default();
         for initialization in &self.initializers {
@@ -506,8 +568,8 @@ impl<FE, FI, P> SplitOdeProblem<FE, FI, P> {
         mut interpolator: Option<&mut StepInterpolator<'_>>,
     ) -> Result<CallbackOutcome, SolveError>
     where
-        FE: Fn(&mut [f64], &[f64], &P, f64),
-        FI: Fn(&mut [f64], &[f64], &P, f64),
+        FE: crate::OdeFunction<P>,
+        FI: crate::OdeFunction<P>,
     {
         if self.callbacks.is_empty() {
             return Ok(CallbackOutcome::default());
@@ -724,9 +786,54 @@ impl<'a, F, P> JacobianProvider<'a, F, P> {
 }
 
 impl OdeProblem<(), ()> {
+    /// Constructs an ODE problem whose function returns an ndarray derivative.
+    ///
+    /// Scalar (`arr0`), vector, and matrix states use one API. The returned
+    /// derivative must have exactly the initial state's shape, otherwise the
+    /// solve returns [`SolveError::DerivativeShapeMismatch`]. Array layout need
+    /// not be contiguous. Returning owned arrays may allocate each evaluation;
+    /// [`Self::from_array`] remains the in-place alternative.
+    ///
+    /// ```
+    /// use differential_equations::ndarray::{arr0, ArrayView0};
+    /// use differential_equations::solvers::explicit::Tsit5;
+    /// use differential_equations::{OdeProblem, SolveOptions, solve};
+    /// let problem = OdeProblem::from_array_out_of_place(
+    ///     |u: ArrayView0<'_, f64>, _: &(), _| -&u,
+    ///     arr0(1.0), (0.0, 1.0), (),
+    /// );
+    /// let solution = solve(&problem, Tsit5, &SolveOptions::default())?;
+    /// assert!(solution.state_shape().is_empty());
+    /// assert!((solution.last_state()[0] - (-1.0_f64).exp()).abs() < 1e-3);
+    /// # Ok::<(), differential_equations::SolveError>(())
+    /// ```
+    pub fn from_array_out_of_place<F, P, D>(
+        rhs: F,
+        initial_state: Array<f64, D>,
+        time_span: (f64, f64),
+        parameters: P,
+    ) -> OdeProblem<impl OdeFunction<P>, P>
+    where
+        D: Dimension,
+        F: for<'a> Fn(ArrayView<'a, f64, D>, &P, f64) -> Array<f64, D>,
+    {
+        let shape = initial_state.raw_dim();
+        let mut problem = OdeProblem::new(
+            ArrayFunction {
+                rhs,
+                shape: shape.clone(),
+            },
+            initial_state.iter().copied().collect::<Vec<_>>(),
+            time_span,
+            parameters,
+        );
+        problem.state_shape = shape.into_dyn();
+        problem
+    }
+
     /// Creates an ODE problem from an ndarray-shaped function and state.
     ///
-    /// The function receives mutable/read-only dynamic ndarray views with the
+    /// The function receives mutable/read-only ndarray views with the
     /// same dimensionality as `initial_state`. The generated adapter is
     /// monomorphized and exposes contiguous slices only to numerical kernels.
     #[allow(clippy::type_complexity)] // Preserve a monomorphized RHS adapter instead of boxing.
@@ -819,7 +926,8 @@ impl<F, P> OdeProblem<F, P> {
     ///
     /// The Jacobian output is a two-dimensional `dimension × dimension`
     /// matrix. The state view retains the scalar, vector, or matrix shape used
-    /// to construct this problem with [`OdeProblem::from_array`].
+    /// to construct this problem with [`OdeProblem::from_array`] or
+    /// [`OdeProblem::from_array_out_of_place`].
     pub fn with_array_jacobian<J>(mut self, jacobian: J) -> Self
     where
         J: for<'a, 'b> Fn(ArrayViewMut2<'a, f64>, ArrayViewD<'b, f64>, &P, f64) + 'static,
@@ -1292,11 +1400,12 @@ impl<F, P> OdeProblem<F, P> {
         evaluations: &mut usize,
     ) -> Result<bool, SolveError>
     where
-        F: Fn(&mut [f64], &[f64], &P, f64),
+        F: crate::OdeFunction<P>,
     {
         trigger.is_triggered(state, &self.parameters, time, |du, _| {
-            (self.rhs)(du, state, &self.parameters, time);
+            self.rhs.evaluate(du, state, &self.parameters, time)?;
             *evaluations += 1;
+            Ok(())
         })
     }
 
@@ -1314,7 +1423,7 @@ impl<F, P> OdeProblem<F, P> {
         time: f64,
     ) -> Result<CallbackOutcome, SolveError>
     where
-        F: Fn(&mut [f64], &[f64], &P, f64),
+        F: crate::OdeFunction<P>,
     {
         let mut outcome = CallbackOutcome::default();
         for initialization in &self.initializers {
@@ -1368,7 +1477,7 @@ impl<F, P> OdeProblem<F, P> {
         mut interpolator: Option<&mut StepInterpolator<'_>>,
     ) -> Result<CallbackOutcome, SolveError>
     where
-        F: Fn(&mut [f64], &[f64], &P, f64),
+        F: crate::OdeFunction<P>,
     {
         if self.callbacks.is_empty() {
             return Ok(CallbackOutcome::default());
@@ -1791,8 +1900,8 @@ mod tests {
         );
         let mut explicit = [0.0];
         let mut implicit = [0.0];
-        split.evaluate_explicit(&mut explicit, &[2.0], 0.0);
-        split.evaluate_implicit(&mut implicit, &[2.0], 0.0);
+        split.evaluate_explicit(&mut explicit, &[2.0], 0.0).unwrap();
+        split.evaluate_implicit(&mut implicit, &[2.0], 0.0).unwrap();
         assert_eq!(explicit, [2.0]);
         assert_eq!(implicit, [-2.0]);
     }

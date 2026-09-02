@@ -71,8 +71,8 @@ macro_rules! fixed_algorithm {
                 options: &SolveOptions,
             ) -> Result<Solution, SolveError>
             where
-                FE: Fn(&mut [f64], &[f64], &P, f64),
-                FI: Fn(&mut [f64], &[f64], &P, f64),
+                FE: crate::OdeFunction<P>,
+                FI: crate::OdeFunction<P>,
             {
                 integrate_split(problem, options, $method)
             }
@@ -130,8 +130,8 @@ impl SplitOdeAlgorithm for Sbdf {
         options: &SolveOptions,
     ) -> Result<Solution, SolveError>
     where
-        FE: Fn(&mut [f64], &[f64], &P, f64),
-        FI: Fn(&mut [f64], &[f64], &P, f64),
+        FE: crate::OdeFunction<P>,
+        FI: crate::OdeFunction<P>,
     {
         integrate_split(problem, options, SplitMethod::Sbdf(*self))
     }
@@ -218,8 +218,8 @@ fn integrate_split<FE, FI, P>(
     method: SplitMethod,
 ) -> Result<Solution, SolveError>
 where
-    FE: Fn(&mut [f64], &[f64], &P, f64),
-    FI: Fn(&mut [f64], &[f64], &P, f64),
+    FE: crate::OdeFunction<P>,
+    FI: crate::OdeFunction<P>,
 {
     validate(problem, options)?;
     let SplitMethod::Sbdf(sbdf) = method else {
@@ -237,8 +237,8 @@ fn integrate_validated<FE, FI, P>(
     method: SplitMethod,
 ) -> Result<Solution, SolveError>
 where
-    FE: Fn(&mut [f64], &[f64], &P, f64),
-    FI: Fn(&mut [f64], &[f64], &P, f64),
+    FE: crate::OdeFunction<P>,
+    FI: crate::OdeFunction<P>,
 {
     let dimension = problem.dimension();
     let (start, end) = problem.time_span();
@@ -480,8 +480,8 @@ fn finish_successful<FE, FI, P>(
     stats: SolverStats,
 ) -> Result<Solution, SolveError>
 where
-    FE: Fn(&mut [f64], &[f64], &P, f64),
-    FI: Fn(&mut [f64], &[f64], &P, f64),
+    FE: crate::OdeFunction<P>,
+    FI: crate::OdeFunction<P>,
 {
     if problem.apply_finalize_callbacks(state, time)? {
         recorder.synchronize_endpoint(time, state);
@@ -500,8 +500,8 @@ fn prepare_forcing<FE, FI, P>(
     stats: &mut SolverStats,
 ) -> Result<(), SolveError>
 where
-    FE: Fn(&mut [f64], &[f64], &P, f64),
-    FI: Fn(&mut [f64], &[f64], &P, f64),
+    FE: crate::OdeFunction<P>,
+    FI: crate::OdeFunction<P>,
 {
     match method {
         SplitMethod::Sbdf(config) => {
@@ -647,8 +647,8 @@ fn solve_implicit<FE, FI, P>(
     stats: &mut SolverStats,
 ) -> Result<(), SolveError>
 where
-    FE: Fn(&mut [f64], &[f64], &P, f64),
-    FI: Fn(&mut [f64], &[f64], &P, f64),
+    FE: crate::OdeFunction<P>,
+    FI: crate::OdeFunction<P>,
 {
     let dimension = workspace.candidate.len();
     let mut factorization_ready = false;
@@ -700,8 +700,8 @@ fn build_factorization<FE, FI, P>(
     stats: &mut SolverStats,
 ) -> Result<(), SolveError>
 where
-    FE: Fn(&mut [f64], &[f64], &P, f64),
-    FI: Fn(&mut [f64], &[f64], &P, f64),
+    FE: crate::OdeFunction<P>,
+    FI: crate::OdeFunction<P>,
 {
     let dimension = workspace.candidate.len();
     if problem.evaluate_implicit_jacobian(&mut workspace.matrix, &workspace.candidate, time) {
@@ -751,9 +751,9 @@ fn evaluate_explicit<FE, FI, P>(
     stats: &mut SolverStats,
 ) -> Result<(), SolveError>
 where
-    FE: Fn(&mut [f64], &[f64], &P, f64),
+    FE: crate::OdeFunction<P>,
 {
-    problem.evaluate_explicit(derivative, state, time);
+    problem.evaluate_explicit(derivative, state, time)?;
     stats.rhs_evaluations += 1;
     ensure_finite(derivative)
 }
@@ -766,9 +766,9 @@ fn evaluate_implicit<FE, FI, P>(
     stats: &mut SolverStats,
 ) -> Result<(), SolveError>
 where
-    FI: Fn(&mut [f64], &[f64], &P, f64),
+    FI: crate::OdeFunction<P>,
 {
-    problem.evaluate_implicit(derivative, state, time);
+    problem.evaluate_implicit(derivative, state, time)?;
     stats.rhs_evaluations += 1;
     ensure_finite(derivative)
 }

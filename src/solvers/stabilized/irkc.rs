@@ -54,8 +54,8 @@ impl SplitOdeAlgorithm for IRKC {
         options: &SolveOptions,
     ) -> Result<Solution, SolveError>
     where
-        FE: Fn(&mut [f64], &[f64], &P, f64),
-        FI: Fn(&mut [f64], &[f64], &P, f64),
+        FE: crate::OdeFunction<P>,
+        FI: crate::OdeFunction<P>,
     {
         solve_irkc(problem, *self, options)
     }
@@ -68,8 +68,8 @@ pub fn solve_irkc<FE, FI, P>(
     options: &SolveOptions,
 ) -> Result<Solution, SolveError>
 where
-    FE: Fn(&mut [f64], &[f64], &P, f64),
-    FI: Fn(&mut [f64], &[f64], &P, f64),
+    FE: crate::OdeFunction<P>,
+    FI: crate::OdeFunction<P>,
 {
     validate_state_time_options(problem.initial_state(), problem.time_span(), options)?;
     validate_preset_time_sequences(problem.preset_time_sequences(), problem.time_span())?;
@@ -116,8 +116,8 @@ impl<'a, FE, FI, P> IrkcKernel<'a, FE, FI, P> {
 
 impl<FE, FI, P> StepKernel<fn(&mut [f64], &[f64], &(), f64), ()> for IrkcKernel<'_, FE, FI, P>
 where
-    FE: Fn(&mut [f64], &[f64], &P, f64),
-    FI: Fn(&mut [f64], &[f64], &P, f64),
+    FE: crate::OdeFunction<P>,
+    FI: crate::OdeFunction<P>,
 {
     fn capabilities(&self) -> KernelCapabilities {
         KernelCapabilities::with_controller(
@@ -459,11 +459,11 @@ fn evaluate_parts<FE, FI, P>(
     stats: &mut SolverStats,
 ) -> Result<(), SolveError>
 where
-    FE: Fn(&mut [f64], &[f64], &P, f64),
-    FI: Fn(&mut [f64], &[f64], &P, f64),
+    FE: crate::OdeFunction<P>,
+    FI: crate::OdeFunction<P>,
 {
-    problem.evaluate_implicit(implicit, state, time);
-    problem.evaluate_explicit(explicit, state, time);
+    problem.evaluate_implicit(implicit, state, time)?;
+    problem.evaluate_explicit(explicit, state, time)?;
     stats.rhs_evaluations += 2;
     checked(implicit)?;
     checked(explicit)
@@ -479,8 +479,8 @@ fn solve_implicit_stage<FE, FI, P>(
     stats: &mut SolverStats,
 ) -> Result<Vec<f64>, SolveError>
 where
-    FE: Fn(&mut [f64], &[f64], &P, f64),
-    FI: Fn(&mut [f64], &[f64], &P, f64),
+    FE: crate::OdeFunction<P>,
+    FI: crate::OdeFunction<P>,
 {
     let n = base.len();
     let mut z = initial_z.to_vec();
@@ -491,7 +491,7 @@ where
         for k in 0..n {
             state[k] = base[k] + gamma * z[k];
         }
-        problem.evaluate_implicit(&mut derivative, &state, time);
+        problem.evaluate_implicit(&mut derivative, &state, time)?;
         stats.rhs_evaluations += 1;
         checked(&derivative)?;
         for k in 0..n {
@@ -530,11 +530,11 @@ fn solve_error_system<FE, FI, P>(
     stats: &mut SolverStats,
 ) -> Result<(), SolveError>
 where
-    FE: Fn(&mut [f64], &[f64], &P, f64),
-    FI: Fn(&mut [f64], &[f64], &P, f64),
+    FE: crate::OdeFunction<P>,
+    FI: crate::OdeFunction<P>,
 {
     let mut derivative = vec![0.0; state.len()];
-    problem.evaluate_implicit(&mut derivative, state, time);
+    problem.evaluate_implicit(&mut derivative, state, time)?;
     stats.rhs_evaluations += 1;
     let jacobian = implicit_jacobian(problem, state, time, &derivative, stats)?;
     let n = state.len();
@@ -561,8 +561,8 @@ fn implicit_jacobian<FE, FI, P>(
     stats: &mut SolverStats,
 ) -> Result<Vec<f64>, SolveError>
 where
-    FE: Fn(&mut [f64], &[f64], &P, f64),
-    FI: Fn(&mut [f64], &[f64], &P, f64),
+    FE: crate::OdeFunction<P>,
+    FI: crate::OdeFunction<P>,
 {
     let n = state.len();
     let mut jacobian = vec![0.0; n * n];
@@ -572,7 +572,7 @@ where
         for column in 0..n {
             let delta = f64::EPSILON.sqrt() * state[column].abs().max(1.0);
             shifted[column] += delta;
-            problem.evaluate_implicit(&mut derivative, &shifted, time);
+            problem.evaluate_implicit(&mut derivative, &shifted, time)?;
             stats.rhs_evaluations += 1;
             for row in 0..n {
                 jacobian[row * n + column] = (derivative[row] - base[row]) / delta;
@@ -594,8 +594,8 @@ fn estimate_eigenvalue<FE, FI, P>(
     stats: &mut SolverStats,
 ) -> Result<f64, SolveError>
 where
-    FE: Fn(&mut [f64], &[f64], &P, f64),
-    FI: Fn(&mut [f64], &[f64], &P, f64),
+    FE: crate::OdeFunction<P>,
+    FI: crate::OdeFunction<P>,
 {
     let n = state.len();
     let radius = norm(state).max(1.0) * f64::EPSILON.sqrt();
@@ -611,7 +611,7 @@ where
         for k in 0..n {
             shifted[k] = state[k] + radius * vector[k] / vector_norm;
         }
-        problem.evaluate_explicit(&mut derivative, &shifted, time);
+        problem.evaluate_explicit(&mut derivative, &shifted, time)?;
         stats.rhs_evaluations += 1;
         for k in 0..n {
             vector[k] = derivative[k] - base[k];

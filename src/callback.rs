@@ -844,7 +844,7 @@ impl<P> DiscreteTrigger<P> {
         state: &[f64],
         parameters: &P,
         time: f64,
-        evaluate: impl FnOnce(&mut [f64], &mut [f64]),
+        evaluate: impl FnOnce(&mut [f64], &mut [f64]) -> Result<(), SolveError>,
     ) -> Result<bool, SolveError> {
         Ok(match self {
             Self::SteadyState(condition) => return condition.test(state, &[], time, evaluate),

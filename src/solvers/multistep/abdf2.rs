@@ -45,7 +45,7 @@ impl OdeAlgorithm for Abdf2 {
         options: &SolveOptions,
     ) -> Result<Solution, SolveError>
     where
-        F: Fn(&mut [f64], &[f64], &P, f64),
+        F: crate::OdeFunction<P>,
     {
         drive_integration(
             problem,
@@ -110,7 +110,7 @@ impl Abdf2Kernel {
 
 impl<F, P> StepKernel<F, P> for Abdf2Kernel
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     fn capabilities(&self) -> KernelCapabilities {
         KernelCapabilities::with_controller(true, CONTROLLER)
@@ -285,7 +285,7 @@ fn newton_step<F, P>(
     stats: &mut SolverStats,
 ) -> Result<(), SolveError>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     let evaluation_time = time + step;
     for _ in 0..MAX_NEWTON_ITERATIONS {
@@ -364,7 +364,7 @@ fn build_factorization<F, P>(
     stats: &mut SolverStats,
 ) -> Result<(), SolveError>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     let dimension = workspace.layout.dimension();
     if problem.evaluate_jacobian(&mut workspace.matrix, state, time) {
@@ -454,9 +454,11 @@ fn evaluate_checked<F, P>(
     stats: &mut SolverStats,
 ) -> Result<(), SolveError>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
-    (problem.rhs)(derivative, state, problem.parameters(), time);
+    problem
+        .rhs
+        .evaluate(derivative, state, problem.parameters(), time)?;
     stats.rhs_evaluations += 1;
     derivative
         .iter()

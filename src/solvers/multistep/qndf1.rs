@@ -32,7 +32,7 @@ impl OdeAlgorithm for Qndf1 {
         options: &SolveOptions,
     ) -> Result<Solution, SolveError>
     where
-        F: Fn(&mut [f64], &[f64], &P, f64),
+        F: crate::OdeFunction<P>,
     {
         drive_integration(
             problem,
@@ -49,7 +49,7 @@ impl OdeAlgorithm for Qbdf1 {
         options: &SolveOptions,
     ) -> Result<Solution, SolveError>
     where
-        F: Fn(&mut [f64], &[f64], &P, f64),
+        F: crate::OdeFunction<P>,
     {
         drive_integration(
             problem,
@@ -116,7 +116,7 @@ impl Qndf1Kernel {
 
 impl<F, P> StepKernel<F, P> for Qndf1Kernel
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     fn capabilities(&self) -> KernelCapabilities {
         KernelCapabilities::with_controller(true, CONTROLLER)
@@ -272,7 +272,7 @@ fn newton_step<F, P>(
     stats: &mut SolverStats,
 ) -> Result<(), SolveError>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     let alpha_zero = 1.0 - kappa;
     let alpha_one = 1.0 - 2.0 * kappa;
@@ -349,7 +349,7 @@ fn build_factorization<F, P>(
     stats: &mut SolverStats,
 ) -> Result<(), SolveError>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     let dimension = workspace.layout.dimension();
     if problem.evaluate_jacobian(&mut workspace.matrix, state, time) {
@@ -458,9 +458,11 @@ fn evaluate_checked<F, P>(
     stats: &mut SolverStats,
 ) -> Result<(), SolveError>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
-    (problem.rhs)(derivative, state, problem.parameters(), time);
+    problem
+        .rhs
+        .evaluate(derivative, state, problem.parameters(), time)?;
     stats.rhs_evaluations += 1;
     derivative
         .iter()

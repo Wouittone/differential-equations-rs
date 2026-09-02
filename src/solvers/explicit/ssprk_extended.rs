@@ -35,7 +35,7 @@ fn apply_hermite_callbacks<F, P>(
     stats: &mut SolverStats,
 ) -> Result<CallbackOutcome, SolveError>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     if !problem.has_continuous_callbacks() {
         *endpoint_prepared = false;
@@ -50,12 +50,12 @@ where
         );
     }
     endpoint_state.copy_from_slice(state);
-    (problem.rhs)(
+    problem.rhs.evaluate(
         endpoint_derivative,
         endpoint_state,
         problem.parameters(),
         *time,
-    );
+    )?;
     stats.rhs_evaluations += 1;
     if !endpoint_derivative.iter().all(|value| value.is_finite()) {
         return Err(SolveError::NonFiniteDerivative);
@@ -103,7 +103,7 @@ fn record_hermite_step<F, P>(
     stats: &mut SolverStats,
 ) -> Result<bool, SolveError>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     if !recorder.needs_dense_sampling() && !recorder.retains_dense_output() {
         *endpoint_prepared = false;
@@ -111,12 +111,12 @@ where
     }
     if !*endpoint_prepared {
         endpoint_state.copy_from_slice(state);
-        (problem.rhs)(
+        problem.rhs.evaluate(
             endpoint_derivative,
             endpoint_state,
             problem.parameters(),
             attempted_time,
-        );
+        )?;
         stats.rhs_evaluations += 1;
         if !endpoint_derivative.iter().all(|value| value.is_finite()) {
             return Err(SolveError::NonFiniteDerivative);
@@ -262,11 +262,15 @@ impl Prrk22Kernel {
         state: &[f64],
         time: f64,
         stats: &mut SolverStats,
-    ) where
-        F: Fn(&mut [f64], &[f64], &P, f64),
+    ) -> Result<(), SolveError>
+    where
+        F: crate::OdeFunction<P>,
     {
-        (problem.rhs)(derivative, state, problem.parameters(), time);
+        problem
+            .rhs
+            .evaluate(derivative, state, problem.parameters(), time)?;
         stats.rhs_evaluations += 1;
+        Ok(())
     }
 
     fn ensure_finite(values: &[f64]) -> Result<(), SolveError> {
@@ -280,7 +284,7 @@ impl Prrk22Kernel {
 
 impl<F, P> StepKernel<F, P> for Prrk22Kernel
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     fn has_custom_dense_output(&self) -> bool {
         true
@@ -297,7 +301,7 @@ where
         time: f64,
         stats: &mut SolverStats,
     ) -> Result<(), SolveError> {
-        Self::evaluate(problem, &mut self.first_derivative, state, time, stats);
+        Self::evaluate(problem, &mut self.first_derivative, state, time, stats)?;
         Self::ensure_finite(&self.first_derivative)
     }
 
@@ -325,7 +329,7 @@ where
         _: &SolveOptions,
         stats: &mut SolverStats,
     ) -> Result<StepEstimate, SolveError> {
-        Self::evaluate(problem, &mut self.first_derivative, state, time, stats);
+        Self::evaluate(problem, &mut self.first_derivative, state, time, stats)?;
         Self::ensure_finite(&self.first_derivative)?;
 
         let z = self.kappa * step;
@@ -354,7 +358,7 @@ where
             &self.stage_state,
             time + c_hat1 * step_hat,
             stats,
-        );
+        )?;
         Self::ensure_finite(&self.second_derivative)?;
         for (((output, value), stage), derivative) in candidate
             .iter_mut()
@@ -448,7 +452,7 @@ impl OdeAlgorithm for Prrk22 {
         options: &SolveOptions,
     ) -> Result<Solution, SolveError>
     where
-        F: Fn(&mut [f64], &[f64], &P, f64),
+        F: crate::OdeFunction<P>,
     {
         drive_integration(
             problem,
@@ -491,11 +495,15 @@ impl Prrk33Kernel {
         state: &[f64],
         time: f64,
         stats: &mut SolverStats,
-    ) where
-        F: Fn(&mut [f64], &[f64], &P, f64),
+    ) -> Result<(), SolveError>
+    where
+        F: crate::OdeFunction<P>,
     {
-        (problem.rhs)(derivative, state, problem.parameters(), time);
+        problem
+            .rhs
+            .evaluate(derivative, state, problem.parameters(), time)?;
         stats.rhs_evaluations += 1;
+        Ok(())
     }
 
     fn ensure_finite(values: &[f64]) -> Result<(), SolveError> {
@@ -509,7 +517,7 @@ impl Prrk33Kernel {
 
 impl<F, P> StepKernel<F, P> for Prrk33Kernel
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     fn has_custom_dense_output(&self) -> bool {
         true
@@ -526,7 +534,7 @@ where
         time: f64,
         stats: &mut SolverStats,
     ) -> Result<(), SolveError> {
-        Self::evaluate(problem, &mut self.first_derivative, state, time, stats);
+        Self::evaluate(problem, &mut self.first_derivative, state, time, stats)?;
         Self::ensure_finite(&self.first_derivative)
     }
 
@@ -558,7 +566,7 @@ where
         // ssprk_perform_step.jl) use the SSPRK(3,3) Shu--Osher form:
         // (α10,β10)=(1,1), (α20,α21,β21)=(3/4,1/4,1/4),
         // (α30,α32,β32)=(1/3,2/3,2/3).
-        Self::evaluate(problem, &mut self.first_derivative, state, time, stats);
+        Self::evaluate(problem, &mut self.first_derivative, state, time, stats)?;
         Self::ensure_finite(&self.first_derivative)?;
 
         let z = self.kappa * step;
@@ -592,7 +600,7 @@ where
             &self.stage_one,
             time + c_hat1 * step_hat,
             stats,
-        );
+        )?;
         Self::ensure_finite(&self.second_derivative)?;
 
         for (((output, value), stage), derivative) in self
@@ -611,7 +619,7 @@ where
             &self.stage_two,
             time + c_hat2 * step_hat,
             stats,
-        );
+        )?;
         Self::ensure_finite(&self.third_derivative)?;
 
         for (((output, value), stage), derivative) in candidate
@@ -706,7 +714,7 @@ impl OdeAlgorithm for Prrk33 {
         options: &SolveOptions,
     ) -> Result<Solution, SolveError>
     where
-        F: Fn(&mut [f64], &[f64], &P, f64),
+        F: crate::OdeFunction<P>,
     {
         drive_integration(
             problem,
@@ -785,11 +793,15 @@ impl Prrk54Kernel {
         state: &[f64],
         time: f64,
         stats: &mut SolverStats,
-    ) where
-        F: Fn(&mut [f64], &[f64], &P, f64),
+    ) -> Result<(), SolveError>
+    where
+        F: crate::OdeFunction<P>,
     {
-        (problem.rhs)(derivative, state, problem.parameters(), time);
+        problem
+            .rhs
+            .evaluate(derivative, state, problem.parameters(), time)?;
         stats.rhs_evaluations += 1;
+        Ok(())
     }
 
     fn ensure_finite(values: &[f64]) -> Result<(), SolveError> {
@@ -803,7 +815,7 @@ impl Prrk54Kernel {
 
 impl<F, P> StepKernel<F, P> for Prrk54Kernel
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     fn has_custom_dense_output(&self) -> bool {
         true
@@ -820,7 +832,7 @@ where
         time: f64,
         stats: &mut SolverStats,
     ) -> Result<(), SolveError> {
-        Self::evaluate(problem, &mut self.start_derivative, state, time, stats);
+        Self::evaluate(problem, &mut self.start_derivative, state, time, stats)?;
         Self::ensure_finite(&self.start_derivative)
     }
 
@@ -869,7 +881,7 @@ where
         let alpha54 = 0.386_708_617_503_269;
         let beta54 = 0.226_007_483_236_906;
 
-        Self::evaluate(problem, &mut self.start_derivative, state, time, stats);
+        Self::evaluate(problem, &mut self.start_derivative, state, time, stats)?;
         Self::ensure_finite(&self.start_derivative)?;
 
         let z = self.kappa * step;
@@ -921,7 +933,7 @@ where
             &self.stage_one,
             time + c_hat1 * step_hat,
             stats,
-        );
+        )?;
         Self::ensure_finite(&self.second_derivative)?;
 
         for (((output, value), stage), derivative) in self
@@ -940,7 +952,7 @@ where
             &self.stage_two,
             time + c_hat2 * step_hat,
             stats,
-        );
+        )?;
         Self::ensure_finite(&self.third_derivative)?;
 
         for (((output, value), stage), derivative) in self
@@ -959,7 +971,7 @@ where
             &self.stage_three,
             time + c_hat3 * step_hat,
             stats,
-        );
+        )?;
         Self::ensure_finite(&self.fourth_derivative)?;
 
         for (((output, value), stage), derivative) in self
@@ -978,7 +990,7 @@ where
             &self.stage_four,
             time + c_hat4 * step_hat,
             stats,
-        );
+        )?;
         Self::ensure_finite(&self.first_derivative)?;
 
         for (
@@ -1081,7 +1093,7 @@ impl OdeAlgorithm for Prrk54 {
         options: &SolveOptions,
     ) -> Result<Solution, SolveError>
     where
-        F: Fn(&mut [f64], &[f64], &P, f64),
+        F: crate::OdeFunction<P>,
     {
         drive_integration(
             problem,

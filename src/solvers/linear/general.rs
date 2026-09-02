@@ -159,7 +159,7 @@ macro_rules! linear_algorithm {
                 options: &SolveOptions,
             ) -> Result<Solution, SolveError>
             where
-                F: Fn(&mut [f64], &[f64], &P, f64),
+                F: crate::OdeFunction<P>,
             {
                 solve_ode(problem, options, Scheme::$scheme)
             }
@@ -385,7 +385,7 @@ fn solve_ode<F, P>(
     scheme: Scheme,
 ) -> Result<Solution, SolveError>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     let n = problem.initial_state().len();
     let evaluate = |output: &mut [f64], state: &[f64], time: f64, stats: &mut SolverStats| {
@@ -424,7 +424,7 @@ impl<E> LinearKernel<E> {
 
 impl<F, P, E> StepKernel<F, P> for LinearKernel<E>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
     E: FnMut(&mut [f64], &[f64], f64, &mut SolverStats) -> OperatorResult,
 {
     fn capabilities(&self) -> KernelCapabilities {
@@ -1008,7 +1008,7 @@ impl<E> CayleyKernel<E> {
 
 impl<F, P, E> StepKernel<F, P> for CayleyKernel<E>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
     E: FnMut(&mut [f64], &[f64], f64, &mut SolverStats) -> OperatorResult,
 {
     fn capabilities(&self) -> KernelCapabilities {
@@ -1161,11 +1161,13 @@ fn finite_difference_operator<F, P>(
     stats: &mut SolverStats,
 ) -> OperatorResult
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     let n = state.len();
     let mut base = vec![0.0; n];
-    (problem.rhs)(&mut base, state, problem.parameters(), time);
+    problem
+        .rhs
+        .evaluate(&mut base, state, problem.parameters(), time)?;
     stats.rhs_evaluations += 1;
     if !base.iter().all(|value| value.is_finite()) {
         return Err(SolveError::NonFiniteDerivative);
@@ -1175,7 +1177,9 @@ where
     for column in 0..n {
         let delta = f64::EPSILON.sqrt() * state[column].abs().max(1.0);
         perturbed_state[column] += delta;
-        (problem.rhs)(&mut perturbed, &perturbed_state, problem.parameters(), time);
+        problem
+            .rhs
+            .evaluate(&mut perturbed, &perturbed_state, problem.parameters(), time)?;
         stats.rhs_evaluations += 1;
         for row in 0..n {
             output[row * n + column] = (perturbed[row] - base[row]) / delta;

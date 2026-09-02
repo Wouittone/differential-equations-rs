@@ -44,7 +44,7 @@ impl OdeAlgorithm for Pdirk44 {
         options: &SolveOptions,
     ) -> Result<Solution, SolveError>
     where
-        F: Fn(&mut [f64], &[f64], &P, f64),
+        F: crate::OdeFunction<P>,
     {
         let tableau = self.tableau().map_err(|_| SolveError::InvalidTableau)?;
         integrate(
@@ -106,7 +106,7 @@ impl Pdirk44Kernel {
 
 impl<F, P> StepKernel<F, P> for Pdirk44Kernel
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     fn capabilities(&self) -> KernelCapabilities {
         KernelCapabilities::new(false, 4)
@@ -235,7 +235,7 @@ fn solve_stage<F, P>(
     stats: &mut SolverStats,
 ) -> Result<(), SolveError>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     let dimension = workspace.stage_base.len();
     workspace.increments[stage].fill(0.0);
@@ -296,7 +296,7 @@ fn build_stage_jacobian<F, P>(
     stats: &mut SolverStats,
 ) -> Result<(), SolveError>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     stats.jacobian_evaluations += 1;
     if problem.evaluate_jacobian(&mut workspace.jacobian, &workspace.stage_state, time) {
@@ -340,9 +340,11 @@ fn evaluate_checked<F, P>(
     stats: &mut SolverStats,
 ) -> Result<(), SolveError>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
-    (problem.rhs)(derivative, state, problem.parameters(), time);
+    problem
+        .rhs
+        .evaluate(derivative, state, problem.parameters(), time)?;
     stats.rhs_evaluations += 1;
     derivative
         .iter()

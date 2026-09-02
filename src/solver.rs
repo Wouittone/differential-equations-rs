@@ -240,6 +240,9 @@ pub enum SolveError {
     /// Steady-state tolerance arrays do not match the problem's state dimension.
     #[error("steady-state tolerances must contain one value or one per state component")]
     InvalidSteadyStateDimension,
+    /// An out-of-place derivative has a different shape than the state.
+    #[error("the derivative array shape must match the state shape")]
+    DerivativeShapeMismatch,
     /// The manifold has more constraints than state components.
     #[error("the manifold residual dimension exceeds the state dimension")]
     InvalidManifoldDimension,
@@ -275,7 +278,7 @@ pub trait OdeAlgorithm {
         options: &SolveOptions,
     ) -> Result<Solution, SolveError>
     where
-        F: Fn(&mut [f64], &[f64], &P, f64),
+        F: crate::OdeFunction<P>,
     {
         validate_ode_problem(problem, options)?;
         let mut solution = self.solve_validated(problem, options)?;
@@ -297,7 +300,7 @@ pub trait OdeAlgorithm {
         options: &SolveOptions,
     ) -> Result<Solution, SolveError>
     where
-        F: Fn(&mut [f64], &[f64], &P, f64);
+        F: crate::OdeFunction<P>;
 }
 
 /// Solves an ODE problem with a selected algorithm.
@@ -307,7 +310,7 @@ pub fn solve<F, P, A>(
     options: &SolveOptions,
 ) -> Result<Solution, SolveError>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
     A: OdeAlgorithm,
 {
     algorithm.solve(problem, options)
@@ -418,7 +421,7 @@ mod tests {
             _: &SolveOptions,
         ) -> Result<Solution, SolveError>
         where
-            F: Fn(&mut [f64], &[f64], &P, f64),
+            F: crate::OdeFunction<P>,
         {
             let state = problem.initial_state().to_vec();
             Ok(Solution::new(

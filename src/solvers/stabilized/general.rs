@@ -171,9 +171,11 @@ impl StabilizedKernel {
         stats: &mut SolverStats,
     ) -> Result<(), SolveError>
     where
-        F: Fn(&mut [f64], &[f64], &P, f64),
+        F: crate::OdeFunction<P>,
     {
-        (problem.rhs)(derivative, state, problem.parameters(), time);
+        problem
+            .rhs
+            .evaluate(derivative, state, problem.parameters(), time)?;
         stats.rhs_evaluations += 1;
         finite(derivative)
     }
@@ -186,7 +188,7 @@ impl StabilizedKernel {
         stats: &mut SolverStats,
     ) -> Result<f64, SolveError>
     where
-        F: Fn(&mut [f64], &[f64], &P, f64),
+        F: crate::OdeFunction<P>,
     {
         if vector_norm(&self.eigenvector) <= f64::MIN_POSITIVE {
             self.eigenvector.copy_from_slice(&self.first_derivative);
@@ -248,7 +250,7 @@ impl StabilizedKernel {
         stats: &mut SolverStats,
     ) -> Result<(), SolveError>
     where
-        F: Fn(&mut [f64], &[f64], &P, f64),
+        F: crate::OdeFunction<P>,
     {
         match self.family {
             StabilizedFamily::Rkc => {
@@ -319,7 +321,7 @@ impl StabilizedKernel {
         stats: &mut SolverStats,
     ) -> Result<(), SolveError>
     where
-        F: Fn(&mut [f64], &[f64], &P, f64),
+        F: crate::OdeFunction<P>,
     {
         let degree = stages as f64;
         let omega_zero_minus_one = (2.0 / 13.0) / degree.powi(2);
@@ -414,7 +416,7 @@ impl StabilizedKernel {
         stats: &mut SolverStats,
     ) -> Result<(), SolveError>
     where
-        F: Fn(&mut [f64], &[f64], &P, f64),
+        F: crate::OdeFunction<P>,
     {
         let requested_total = (((1.5 + scaled_radius) / 0.811).sqrt().floor() as usize + 1)
             .clamp(1, MAX_POLYNOMIAL_STAGES);
@@ -519,7 +521,7 @@ impl StabilizedKernel {
         stats: &mut SolverStats,
     ) -> Result<(), SolveError>
     where
-        F: Fn(&mut [f64], &[f64], &P, f64),
+        F: crate::OdeFunction<P>,
     {
         let requested_total =
             (((3.0 + scaled_radius) / 0.353).sqrt().floor() as usize + 1).clamp(1, 152);
@@ -690,7 +692,7 @@ impl StabilizedKernel {
         stats: &mut SolverStats,
     ) -> Result<(), SolveError>
     where
-        F: Fn(&mut [f64], &[f64], &P, f64),
+        F: crate::OdeFunction<P>,
     {
         let requested = ((scaled_radius / 0.8).sqrt().floor() as usize + 1).min(250);
         let (degree, start) = select_serk_degree(SERK2_DEGREES, requested);
@@ -775,7 +777,7 @@ impl StabilizedKernel {
         fifth_order: bool,
     ) -> Result<(), SolveError>
     where
-        F: Fn(&mut [f64], &[f64], &P, f64),
+        F: crate::OdeFunction<P>,
     {
         let (degrees, solution_combination, error_combination, weights, requested, subdivisions) =
             if fifth_order {
@@ -917,7 +919,7 @@ impl StabilizedKernel {
         polynomial: OrthogonalPolynomial,
     ) -> Result<(), SolveError>
     where
-        F: Fn(&mut [f64], &[f64], &P, f64),
+        F: crate::OdeFunction<P>,
     {
         let degree = stages as f64;
         let omega_one = match polynomial {
@@ -1026,7 +1028,7 @@ impl StabilizedKernel {
         stats: &mut SolverStats,
     ) -> Result<(), SolveError>
     where
-        F: Fn(&mut [f64], &[f64], &P, f64),
+        F: crate::OdeFunction<P>,
     {
         let q = self
             .previous_accepted_step
@@ -1124,7 +1126,7 @@ impl StabilizedKernel {
         stats: &mut SolverStats,
     ) -> Result<(), SolveError>
     where
-        F: Fn(&mut [f64], &[f64], &P, f64),
+        F: crate::OdeFunction<P>,
     {
         let q = self
             .previous_accepted_step
@@ -1273,7 +1275,7 @@ impl StabilizedKernel {
         stats: &mut SolverStats,
     ) -> Result<(), SolveError>
     where
-        F: Fn(&mut [f64], &[f64], &P, f64),
+        F: crate::OdeFunction<P>,
     {
         let degree = stages as f64;
         let sign = if stages % 2 == 0 { 1.0 } else { -1.0 };
@@ -1378,7 +1380,7 @@ impl StabilizedKernel {
 
 impl<F, P> StepKernel<F, P> for StabilizedKernel
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     fn capabilities(&self) -> KernelCapabilities {
         KernelCapabilities::new(true, self.family.order())
@@ -1668,7 +1670,7 @@ macro_rules! implemented_method {
                 options: &SolveOptions,
             ) -> Result<Solution, SolveError>
             where
-                F: Fn(&mut [f64], &[f64], &P, f64),
+                F: crate::OdeFunction<P>,
             {
                 drive_integration(
                     problem,

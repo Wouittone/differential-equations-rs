@@ -33,7 +33,7 @@ impl OdeAlgorithm for Anas5 {
         options: &SolveOptions,
     ) -> Result<Solution, SolveError>
     where
-        F: Fn(&mut [f64], &[f64], &P, f64),
+        F: crate::OdeFunction<P>,
     {
         drive_integration(
             problem,
@@ -78,11 +78,15 @@ impl Anas5Kernel {
         state: &[f64],
         time: f64,
         stats: &mut SolverStats,
-    ) where
-        F: Fn(&mut [f64], &[f64], &P, f64),
+    ) -> Result<(), SolveError>
+    where
+        F: crate::OdeFunction<P>,
     {
-        (problem.rhs)(derivative, state, problem.parameters(), time);
+        problem
+            .rhs
+            .evaluate(derivative, state, problem.parameters(), time)?;
         stats.rhs_evaluations += 1;
+        Ok(())
     }
 
     fn ensure_finite(values: &[f64]) -> Result<(), SolveError> {
@@ -117,7 +121,7 @@ impl Anas5Kernel {
 
 impl<F, P> StepKernel<F, P> for Anas5Kernel
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     fn capabilities(&self) -> KernelCapabilities {
         KernelCapabilities::new(false, 5)
@@ -133,7 +137,7 @@ where
         if !self.w.is_finite() {
             return Err(SolveError::InvalidTableau);
         }
-        Self::evaluate(problem, &mut self.first_derivative, state, time, stats);
+        Self::evaluate(problem, &mut self.first_derivative, state, time, stats)?;
         Self::ensure_finite(&self.first_derivative)?;
         self.first_is_current = true;
         Ok(())
@@ -164,7 +168,7 @@ where
         stats: &mut SolverStats,
     ) -> Result<StepEstimate, SolveError> {
         if !self.first_is_current {
-            Self::evaluate(problem, &mut self.first_derivative, state, time, stats);
+            Self::evaluate(problem, &mut self.first_derivative, state, time, stats)?;
             Self::ensure_finite(&self.first_derivative)?;
             self.first_is_current = true;
         }
@@ -185,7 +189,7 @@ where
             &self.stage_state,
             time + 0.1 * dt,
             stats,
-        );
+        )?;
 
         for (((output, value), first), second) in self
             .stage_state
@@ -202,7 +206,7 @@ where
             &self.stage_state,
             time + dt / 3.0,
             stats,
-        );
+        )?;
 
         for ((((output, value), first), second), third) in self
             .stage_state
@@ -220,7 +224,7 @@ where
             &self.stage_state,
             time + 2.0 * dt / 3.0,
             stats,
-        );
+        )?;
 
         for (((((output, value), first), second), third), fourth) in self
             .stage_state
@@ -241,7 +245,7 @@ where
             &self.stage_state,
             time + 0.9 * dt,
             stats,
-        );
+        )?;
 
         for ((((((output, value), first), second), third), fourth), fifth) in self
             .stage_state
@@ -262,7 +266,7 @@ where
             &self.stage_state,
             time + dt,
             stats,
-        );
+        )?;
 
         for ((((((output, value), first), third), fourth), fifth), sixth) in candidate
             .iter_mut()
@@ -286,7 +290,7 @@ where
             candidate,
             time + dt,
             stats,
-        );
+        )?;
         Self::ensure_finite(&self.last_derivative)?;
         Self::ensure_finite(candidate)?;
         Ok(StepEstimate::new(0.0))

@@ -33,7 +33,7 @@ impl OdeAlgorithm for Trbdf2 {
         options: &SolveOptions,
     ) -> Result<Solution, SolveError>
     where
-        F: Fn(&mut [f64], &[f64], &P, f64),
+        F: crate::OdeFunction<P>,
     {
         drive_integration(
             problem,
@@ -99,7 +99,7 @@ impl Trbdf2Kernel {
 
 impl<F, P> StepKernel<F, P> for Trbdf2Kernel
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     fn capabilities(&self) -> KernelCapabilities {
         KernelCapabilities::with_controller(true, CONTROLLER)
@@ -211,7 +211,7 @@ fn perform_step<F, P>(
     stats: &mut SolverStats,
 ) -> Result<f64, SolveError>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     let (time, step) = time_and_step;
     for (z, &derivative) in workspace.z1.iter_mut().zip(&workspace.current_derivative) {
@@ -280,7 +280,7 @@ fn solve_stage<F, P>(
     stats: &mut SolverStats,
 ) -> Result<(), SolveError>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     workspace.factorization_valid = false;
     let dimension = workspace.z2.len();
@@ -348,7 +348,7 @@ fn build_factorization<F, P>(
     stats: &mut SolverStats,
 ) -> Result<(), SolveError>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     let dimension = workspace.stage_state.len();
     workspace.factorization_valid = false;
@@ -408,9 +408,11 @@ fn evaluate_checked<F, P>(
     stats: &mut SolverStats,
 ) -> Result<(), SolveError>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
-    (problem.rhs)(derivative, state, problem.parameters(), time);
+    problem
+        .rhs
+        .evaluate(derivative, state, problem.parameters(), time)?;
     stats.rhs_evaluations += 1;
     derivative
         .iter()

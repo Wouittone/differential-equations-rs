@@ -115,7 +115,7 @@ impl OdeAlgorithm for ResourceExplicitRungeKutta {
         options: &SolveOptions,
     ) -> Result<Solution, SolveError>
     where
-        F: Fn(&mut [f64], &[f64], &P, f64),
+        F: crate::OdeFunction<P>,
     {
         let tableau = load_tableau(self.resource).map_err(|_| SolveError::InvalidTableau)?;
         integrate_resource(problem, options, tableau)
@@ -147,7 +147,7 @@ where
         options: &SolveOptions,
     ) -> Result<Solution, SolveError>
     where
-        F: Fn(&mut [f64], &[f64], &P, f64),
+        F: crate::OdeFunction<P>,
     {
         integrate::<F, P, T>(problem, options)
     }
@@ -285,7 +285,7 @@ fn integrate<F, P, T>(
     options: &SolveOptions,
 ) -> Result<Solution, SolveError>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
     T: ButcherTableau,
 {
     validate_tableau::<T>()?;
@@ -305,7 +305,7 @@ fn integrate_resource<F, P>(
     tableau: &'static RungeKuttaTableau,
 ) -> Result<Solution, SolveError>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     if tableau.kind() != RungeKuttaKind::Explicit {
         return Err(SolveError::InvalidTableau);
@@ -438,7 +438,7 @@ impl<T: TableauAccess> ExplicitKernel<T> {
 
 impl<F, P, T> StepKernel<F, P> for ExplicitKernel<T>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
     T: TableauAccess,
 {
     fn has_custom_dense_output(&self) -> bool {
@@ -462,7 +462,7 @@ where
             state,
             time,
             stats,
-        );
+        )?;
         ensure_finite(&self.workspace.stages[..self.workspace.dimension])?;
         self.stage_zero_is_current = true;
         Ok(())
@@ -507,7 +507,7 @@ where
                 state,
                 time,
                 stats,
-            );
+            )?;
             ensure_finite(&self.workspace.stages[..self.workspace.dimension])?;
         }
         perform_step(
@@ -519,7 +519,7 @@ where
             &mut self.workspace,
             stats,
             self.tableau,
-        );
+        )?;
         self.dense_stages_prepared = false;
         ensure_finite(candidate)?;
         let error = if options.adaptive {
@@ -580,7 +580,7 @@ where
                 );
             }
             self.dense_endpoint_state.copy_from_slice(state);
-            evaluate(problem, &mut self.workspace.temporary, state, *time, stats);
+            evaluate(problem, &mut self.workspace.temporary, state, *time, stats)?;
             ensure_finite(&self.workspace.temporary)?;
             self.dense_endpoint_prepared = true;
             let attempted_time = *time;
@@ -715,7 +715,7 @@ where
                     state,
                     attempted_time,
                     stats,
-                );
+                )?;
                 ensure_finite(&self.workspace.temporary)?;
             }
             let segment = BorrowedHermiteSegment::new(
@@ -787,11 +787,15 @@ fn evaluate<F, P>(
     state: &[f64],
     time: f64,
     stats: &mut SolverStats,
-) where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+) -> Result<(), SolveError>
+where
+    F: crate::OdeFunction<P>,
 {
-    (problem.rhs)(derivative, state, problem.parameters(), time);
+    problem
+        .rhs
+        .evaluate(derivative, state, problem.parameters(), time)?;
     stats.rhs_evaluations += 1;
+    Ok(())
 }
 
 fn ensure_finite(values: &[f64]) -> Result<(), SolveError> {
@@ -812,7 +816,7 @@ fn estimate_initial_step<F, P>(
     stats: &mut SolverStats,
 ) -> Result<f64, SolveError>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     let (state, scratch) = states;
     let (time, direction, maximum_step) = integration;
@@ -847,7 +851,7 @@ where
         &workspace.temporary,
         time + direction * trial_step,
         stats,
-    );
+    )?;
     ensure_finite(scratch)?;
 
     let mut curvature_norm = 0.0;
@@ -879,8 +883,9 @@ fn perform_step<F, P, T>(
     workspace: &mut Workspace,
     stats: &mut SolverStats,
     tableau: T,
-) where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+) -> Result<(), SolveError>
+where
+    F: crate::OdeFunction<P>,
     T: TableauAccess,
 {
     let stage_count = tableau.weights().len();
@@ -901,7 +906,7 @@ fn perform_step<F, P, T>(
             &workspace.temporary,
             time + tableau.nodes()[stage_index] * step,
             stats,
-        );
+        )?;
     }
     combine(
         candidate,
@@ -912,6 +917,7 @@ fn perform_step<F, P, T>(
         stage_count,
         tableau.weights(),
     );
+    Ok(())
 }
 
 fn perform_lazy_dense_stages<F, P, T>(
@@ -924,7 +930,7 @@ fn perform_lazy_dense_stages<F, P, T>(
     tableau: T,
 ) -> Result<(), SolveError>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
     T: TableauAccess,
 {
     let base_stage_count = tableau.weights().len();
@@ -949,7 +955,7 @@ where
             &workspace.temporary,
             time + node * step,
             stats,
-        );
+        )?;
         ensure_finite(&workspace.stages[target_start..target_start + workspace.dimension])?;
     }
     Ok(())

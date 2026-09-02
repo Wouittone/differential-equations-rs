@@ -48,7 +48,7 @@ macro_rules! algorithm {
                 options: &SolveOptions,
             ) -> Result<Solution, SolveError>
             where
-                F: Fn(&mut [f64], &[f64], &P, f64),
+                F: crate::OdeFunction<P>,
             {
                 let tableau = self.tableau().map_err(|_| SolveError::InvalidTableau)?;
                 drive_integration(
@@ -139,7 +139,7 @@ impl ImplicitKernel {
 
 impl<F, P> StepKernel<F, P> for ImplicitKernel
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     fn capabilities(&self) -> KernelCapabilities {
         KernelCapabilities::new(false, self.tableau.order())
@@ -244,7 +244,7 @@ fn newton_step<F, P>(
     stats: &mut SolverStats,
 ) -> Result<(), SolveError>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     let (time, step) = time_and_step;
     let ImplicitFormula { method, tableau } = formula;
@@ -267,7 +267,7 @@ where
             &workspace.evaluation_state,
             evaluation_time,
             stats,
-        );
+        )?;
         set_residual_checked(
             &mut workspace.residual,
             previous,
@@ -377,7 +377,7 @@ fn build_factorization<F, P>(
     stats: &mut SolverStats,
 ) -> Result<(), SolveError>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     let dimension = workspace.evaluation_state.len();
     workspace.factorization_scale = None;
@@ -410,7 +410,7 @@ where
                 &workspace.perturbed_state,
                 evaluation_time,
                 stats,
-            );
+            )?;
             for row in 0..dimension {
                 let derivative = (workspace.perturbed_derivative[row]
                     - workspace.base_derivative[row])
@@ -457,11 +457,15 @@ fn evaluate_unchecked<F, P>(
     state: &[f64],
     time: f64,
     stats: &mut SolverStats,
-) where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+) -> Result<(), SolveError>
+where
+    F: crate::OdeFunction<P>,
 {
-    (problem.rhs)(derivative, state, problem.parameters(), time);
+    problem
+        .rhs
+        .evaluate(derivative, state, problem.parameters(), time)?;
     stats.rhs_evaluations += 1;
+    Ok(())
 }
 
 fn evaluate_checked<F, P>(
@@ -472,9 +476,9 @@ fn evaluate_checked<F, P>(
     stats: &mut SolverStats,
 ) -> Result<(), SolveError>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
-    evaluate_unchecked(problem, derivative, state, time, stats);
+    evaluate_unchecked(problem, derivative, state, time, stats)?;
     derivative
         .iter()
         .all(|value| value.is_finite())

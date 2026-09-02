@@ -90,7 +90,7 @@ fn apply_msvs_callbacks<F, P>(
     endpoint_prepared: &mut bool,
 ) -> Result<CallbackOutcome, SolveError>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     if !problem.has_callbacks() {
         *endpoint_prepared = false;
@@ -220,11 +220,15 @@ impl Msvs32Kernel {
         state: &[f64],
         time: f64,
         stats: &mut SolverStats,
-    ) where
-        F: Fn(&mut [f64], &[f64], &P, f64),
+    ) -> Result<(), SolveError>
+    where
+        F: crate::OdeFunction<P>,
     {
-        (problem.rhs)(derivative, state, problem.parameters(), time);
+        problem
+            .rhs
+            .evaluate(derivative, state, problem.parameters(), time)?;
         stats.rhs_evaluations += 1;
+        Ok(())
     }
 
     fn ensure_finite(values: &[f64]) -> Result<(), SolveError> {
@@ -261,11 +265,15 @@ impl Msvs43Kernel {
         state: &[f64],
         time: f64,
         stats: &mut SolverStats,
-    ) where
-        F: Fn(&mut [f64], &[f64], &P, f64),
+    ) -> Result<(), SolveError>
+    where
+        F: crate::OdeFunction<P>,
     {
-        (problem.rhs)(derivative, state, problem.parameters(), time);
+        problem
+            .rhs
+            .evaluate(derivative, state, problem.parameters(), time)?;
         stats.rhs_evaluations += 1;
+        Ok(())
     }
 
     fn ensure_finite(values: &[f64]) -> Result<(), SolveError> {
@@ -279,7 +287,7 @@ impl Msvs43Kernel {
 
 impl<F, P> StepKernel<F, P> for Msvs32Kernel
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     fn has_custom_dense_output(&self) -> bool {
         true
@@ -298,7 +306,7 @@ where
         time: f64,
         stats: &mut SolverStats,
     ) -> Result<(), SolveError> {
-        Self::evaluate(problem, &mut self.derivative, state, time, stats);
+        Self::evaluate(problem, &mut self.derivative, state, time, stats)?;
         Self::ensure_finite(&self.derivative)?;
         self.u_2.copy_from_slice(state);
         self.u_1.copy_from_slice(state);
@@ -350,7 +358,7 @@ where
                 &self.euler_state,
                 time + step,
                 stats,
-            );
+            )?;
             Self::ensure_finite(&self.next_derivative)?;
             for (((output, value), euler), derivative) in candidate
                 .iter_mut()
@@ -386,7 +394,7 @@ where
             candidate,
             time + step,
             stats,
-        );
+        )?;
         Self::ensure_finite(&self.next_derivative)?;
         Ok(StepEstimate::new(0.0))
     }
@@ -463,7 +471,7 @@ where
             self.u_1.copy_from_slice(state);
             self.step = 1;
             self.last_step = 0.0;
-            Self::evaluate(problem, &mut self.derivative, state, time, stats);
+            Self::evaluate(problem, &mut self.derivative, state, time, stats)?;
             Self::ensure_finite(&self.derivative)?;
             return Ok(());
         }
@@ -487,7 +495,7 @@ where
 
 impl<F, P> StepKernel<F, P> for Msvs43Kernel
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     fn has_custom_dense_output(&self) -> bool {
         true
@@ -506,7 +514,7 @@ where
         time: f64,
         stats: &mut SolverStats,
     ) -> Result<(), SolveError> {
-        Self::evaluate(problem, &mut self.derivative, state, time, stats);
+        Self::evaluate(problem, &mut self.derivative, state, time, stats)?;
         Self::ensure_finite(&self.derivative)?;
         self.u_1.copy_from_slice(state);
         self.u_2.copy_from_slice(state);
@@ -559,7 +567,7 @@ where
                 &self.euler_state,
                 time + step,
                 stats,
-            );
+            )?;
             Self::ensure_finite(&self.next_derivative)?;
             for (((output, value), euler), derivative) in candidate
                 .iter_mut()
@@ -591,7 +599,7 @@ where
             candidate,
             time + step,
             stats,
-        );
+        )?;
         Self::ensure_finite(&self.next_derivative)?;
         Ok(StepEstimate::new(0.0))
     }
@@ -615,7 +623,7 @@ where
             self.k3.fill(0.0);
             self.step = 1;
             self.last_step = 0.0;
-            Self::evaluate(problem, &mut self.derivative, state, time, stats);
+            Self::evaluate(problem, &mut self.derivative, state, time, stats)?;
             Self::ensure_finite(&self.derivative)?;
             return Ok(());
         }
@@ -623,17 +631,17 @@ where
         match self.step {
             1 => {
                 self.u_3.copy_from_slice(previous_state);
-                Self::evaluate(problem, &mut self.k3, previous_state, time, stats);
+                Self::evaluate(problem, &mut self.k3, previous_state, time, stats)?;
                 Self::ensure_finite(&self.k3)?;
             }
             2 => {
                 self.u_2.copy_from_slice(previous_state);
-                Self::evaluate(problem, &mut self.k2, previous_state, time, stats);
+                Self::evaluate(problem, &mut self.k2, previous_state, time, stats)?;
                 Self::ensure_finite(&self.k2)?;
             }
             3 => {
                 self.u_1.copy_from_slice(previous_state);
-                Self::evaluate(problem, &mut self.k1, previous_state, time, stats);
+                Self::evaluate(problem, &mut self.k1, previous_state, time, stats)?;
                 Self::ensure_finite(&self.k1)?;
             }
             _ => {
@@ -714,7 +722,7 @@ impl OdeAlgorithm for SspRkMsvs32 {
         options: &SolveOptions,
     ) -> Result<Solution, SolveError>
     where
-        F: Fn(&mut [f64], &[f64], &P, f64),
+        F: crate::OdeFunction<P>,
     {
         integrate(
             problem,
@@ -731,7 +739,7 @@ impl OdeAlgorithm for SspRkMsvs43 {
         options: &SolveOptions,
     ) -> Result<Solution, SolveError>
     where
-        F: Fn(&mut [f64], &[f64], &P, f64),
+        F: crate::OdeFunction<P>,
     {
         integrate(
             problem,

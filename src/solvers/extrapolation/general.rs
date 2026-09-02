@@ -126,7 +126,7 @@ macro_rules! extrapolation_algorithm {
                 options: &SolveOptions,
             ) -> Result<Solution, SolveError>
             where
-                F: Fn(&mut [f64], &[f64], &P, f64),
+                F: crate::OdeFunction<P>,
             {
                 drive_integration(
                     problem,
@@ -303,9 +303,11 @@ impl ExtrapolationKernel {
         stats: &mut SolverStats,
     ) -> Result<(), SolveError>
     where
-        F: Fn(&mut [f64], &[f64], &P, f64),
+        F: crate::OdeFunction<P>,
     {
-        (problem.rhs)(output, state, problem.parameters(), time);
+        problem
+            .rhs
+            .evaluate(output, state, problem.parameters(), time)?;
         stats.rhs_evaluations += 1;
         output
             .iter()
@@ -322,7 +324,7 @@ impl ExtrapolationKernel {
         stats: &mut SolverStats,
     ) -> Result<(), SolveError>
     where
-        F: Fn(&mut [f64], &[f64], &P, f64),
+        F: crate::OdeFunction<P>,
     {
         if problem.evaluate_jacobian(&mut self.jacobian, state, time) {
             if self.jacobian.iter().any(|value| !value.is_finite()) {
@@ -391,7 +393,7 @@ impl ExtrapolationKernel {
         stats: &mut SolverStats,
     ) -> Result<Vec<f64>, SolveError>
     where
-        F: Fn(&mut [f64], &[f64], &P, f64),
+        F: crate::OdeFunction<P>,
     {
         self.temporary.copy_from_slice(state);
         let h = step / subdivisions as f64;
@@ -420,7 +422,7 @@ impl ExtrapolationKernel {
         stats: &mut SolverStats,
     ) -> Result<Vec<f64>, SolveError>
     where
-        F: Fn(&mut [f64], &[f64], &P, f64),
+        F: crate::OdeFunction<P>,
     {
         let subdivisions = subdivisions.max(2);
         let h = step / subdivisions as f64;
@@ -459,7 +461,7 @@ impl ExtrapolationKernel {
         stats: &mut SolverStats,
     ) -> Result<Vec<f64>, SolveError>
     where
-        F: Fn(&mut [f64], &[f64], &P, f64),
+        F: crate::OdeFunction<P>,
     {
         let h = step / subdivisions as f64;
         self.factor_linearly_implicit(h, stats)?;
@@ -503,7 +505,7 @@ impl ExtrapolationKernel {
         stats: &mut SolverStats,
     ) -> Result<Vec<f64>, SolveError>
     where
-        F: Fn(&mut [f64], &[f64], &P, f64),
+        F: crate::OdeFunction<P>,
     {
         let subdivisions = subdivisions.max(4);
         let h = step / subdivisions as f64;
@@ -547,7 +549,7 @@ impl ExtrapolationKernel {
         stats: &mut SolverStats,
     ) -> Result<Vec<f64>, SolveError>
     where
-        F: Fn(&mut [f64], &[f64], &P, f64),
+        F: crate::OdeFunction<P>,
     {
         let sequence = self.sequence.term(level);
         let subdivisions = self.sequence_factor.saturating_mul(sequence);
@@ -638,7 +640,7 @@ impl ExtrapolationKernel {
 
 impl<F, P> StepKernel<F, P> for ExtrapolationKernel
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     fn has_custom_dense_output(&self) -> bool {
         true

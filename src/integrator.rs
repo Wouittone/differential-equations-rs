@@ -211,7 +211,7 @@ impl StepEstimate {
 #[allow(clippy::too_many_arguments)]
 pub(crate) trait StepKernel<F, P>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     fn capabilities(&self) -> KernelCapabilities;
 
@@ -324,7 +324,9 @@ where
         time: f64,
         stats: &mut SolverStats,
     ) -> Result<(), SolveError> {
-        (problem.rhs)(output, state, problem.parameters(), time);
+        problem
+            .rhs
+            .evaluate(output, state, problem.parameters(), time)?;
         stats.rhs_evaluations += 1;
         output
             .iter()
@@ -456,7 +458,7 @@ impl DefaultDenseState {
         stats: &mut SolverStats,
     ) -> Result<(), SolveError>
     where
-        F: Fn(&mut [f64], &[f64], &P, f64),
+        F: crate::OdeFunction<P>,
         K: StepKernel<F, P>,
     {
         self.endpoint_state.copy_from_slice(endpoint_state);
@@ -495,7 +497,7 @@ impl DefaultDenseState {
         stats: &mut SolverStats,
     ) -> Result<CallbackOutcome, SolveError>
     where
-        F: Fn(&mut [f64], &[f64], &P, f64),
+        F: crate::OdeFunction<P>,
         K: StepKernel<F, P>,
     {
         if !enabled {
@@ -608,7 +610,7 @@ pub(crate) fn integrate<F, P, K>(
     mut kernel: K,
 ) -> Result<Solution, SolveError>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
     K: StepKernel<F, P>,
 {
     crate::solver::validate_ode_problem(problem, options)?;
@@ -977,7 +979,7 @@ fn finish_successful<F, P, K>(
     stats: SolverStats,
 ) -> Result<Solution, SolveError>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
     K: StepKernel<F, P>,
 {
     if kernel.apply_finalize_callbacks(problem, state, time)? {
@@ -1111,7 +1113,7 @@ mod tests {
 
     impl<F, P> StepKernel<F, P> for &mut MockKernel
     where
-        F: Fn(&mut [f64], &[f64], &P, f64),
+        F: crate::OdeFunction<P>,
     {
         fn capabilities(&self) -> KernelCapabilities {
             let capabilities = KernelCapabilities::with_controller(

@@ -68,7 +68,7 @@ impl OdeAlgorithm for Rosenbrock23 {
         options: &SolveOptions,
     ) -> Result<Solution, SolveError>
     where
-        F: Fn(&mut [f64], &[f64], &P, f64),
+        F: crate::OdeFunction<P>,
     {
         drive_integration(
             problem,
@@ -94,7 +94,7 @@ impl Rosenbrock23Kernel {
 
 impl<F, P> StepKernel<F, P> for Rosenbrock23Kernel
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     fn has_custom_dense_output(&self) -> bool {
         true
@@ -297,7 +297,7 @@ fn perform_step<F, P>(
     stats: &mut SolverStats,
 ) -> Result<f64, SolveError>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     let dimension = state.len();
     if !workspace.differentiation_valid {
@@ -401,7 +401,7 @@ fn differentiate<F, P>(
     stats: &mut SolverStats,
 ) -> Result<(), SolveError>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     let dimension = state.len();
     if problem.evaluate_jacobian(&mut workspace.jacobian, state, time) {
@@ -419,7 +419,7 @@ where
                 &workspace.perturbed_state,
                 time,
                 stats,
-            );
+            )?;
             for row in 0..dimension {
                 let derivative = (workspace.perturbed_derivative[row]
                     - workspace.current_derivative[row])
@@ -439,7 +439,7 @@ where
         state,
         time + time_perturbation,
         stats,
-    );
+    )?;
     for index in 0..dimension {
         let derivative = (workspace.perturbed_derivative[index]
             - workspace.current_derivative[index])
@@ -459,11 +459,15 @@ fn evaluate_unchecked<F, P>(
     state: &[f64],
     time: f64,
     stats: &mut SolverStats,
-) where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+) -> Result<(), SolveError>
+where
+    F: crate::OdeFunction<P>,
 {
-    (problem.rhs)(derivative, state, problem.parameters(), time);
+    problem
+        .rhs
+        .evaluate(derivative, state, problem.parameters(), time)?;
     stats.rhs_evaluations += 1;
+    Ok(())
 }
 
 fn evaluate<F, P>(
@@ -474,9 +478,9 @@ fn evaluate<F, P>(
     stats: &mut SolverStats,
 ) -> Result<(), SolveError>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
-    evaluate_unchecked(problem, derivative, state, time, stats);
+    evaluate_unchecked(problem, derivative, state, time, stats)?;
     derivative
         .iter()
         .all(|value| value.is_finite())

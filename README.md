@@ -116,6 +116,35 @@ Use `arr0(value)` for a scalar, `array![...]` for a vector, and
 Flat slice access remains available when callers want the contiguous fast
 path directly.
 
+For equations that return a value, use `OdeProblem::from_array_out_of_place`
+(or `SplitOdeProblem::from_array_out_of_place` for two component functions):
+
+```rust
+use differential_equations::ndarray::{ArrayView2, array};
+use differential_equations::OdeProblem;
+
+let problem = OdeProblem::from_array_out_of_place(
+    |u: ArrayView2<'_, f64>, _: &(), _| -&u,
+    array![[1.0, 2.0], [3.0, 4.0]],
+    (0.0, 1.0),
+    (),
+);
+```
+
+The returned derivative must have the same shape as the state; a mismatch
+returns `SolveError::DerivativeShapeMismatch`, including during Jacobian or
+callback evaluations. Nonstandard array layouts are supported. Returning an
+owned array can allocate on every evaluation, so the in-place entry point
+remains useful for allocation-sensitive applications. Both forms use the
+same numerical kernels and retain the same callback and dense-output APIs.
+
+`OdeFunction<P>` is the common fallible evaluation interface. Existing
+in-place closures implement it automatically. Custom algorithm implementations
+should now bound their function type by `OdeFunction<P>` rather than `Fn(...)`;
+custom functions can implement it to return a typed error. Direct calls to
+`SplitOdeProblem::evaluate_explicit` and `evaluate_implicit` now return a
+`Result` that callers must handle.
+
 ## Reusable callback policies
 
 The `callbacks` module provides common policies as independently composable

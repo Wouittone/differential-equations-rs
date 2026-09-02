@@ -829,7 +829,7 @@ trait ExtendedRosenbrockMethod {
         stats: &mut SolverStats,
     ) -> Result<f64, SolveError>
     where
-        F: Fn(&mut [f64], &[f64], &P, f64);
+        F: crate::OdeFunction<P>;
 }
 
 macro_rules! algorithm {
@@ -841,7 +841,7 @@ macro_rules! algorithm {
                 options: &SolveOptions,
             ) -> Result<Solution, SolveError>
             where
-                F: Fn(&mut [f64], &[f64], &P, f64),
+                F: crate::OdeFunction<P>,
             {
                 drive_integration(
                     problem,
@@ -908,7 +908,7 @@ impl ExtendedRosenbrockMethod for Rosenbrock32 {
         stats: &mut SolverStats,
     ) -> Result<f64, SolveError>
     where
-        F: Fn(&mut [f64], &[f64], &P, f64),
+        F: crate::OdeFunction<P>,
     {
         perform_rosenbrock32(
             problem, candidate, state, time, step, options, workspace, stats,
@@ -965,7 +965,7 @@ macro_rules! rodas_method {
                 stats: &mut SolverStats,
             ) -> Result<f64, SolveError>
             where
-                F: Fn(&mut [f64], &[f64], &P, f64),
+                F: crate::OdeFunction<P>,
             {
                 perform_rodas(
                     problem,
@@ -1043,7 +1043,7 @@ impl ExtendedRosenbrockMethod for HybridExplicitImplicitRK {
         stats: &mut SolverStats,
     ) -> Result<f64, SolveError>
     where
-        F: Fn(&mut [f64], &[f64], &P, f64),
+        F: crate::OdeFunction<P>,
     {
         perform_tsit5da(
             problem, candidate, state, time, step, options, workspace, stats,
@@ -1068,7 +1068,7 @@ impl ExtendedRosenbrockMethod for Rodas5Pr {
         stats: &mut SolverStats,
     ) -> Result<f64, SolveError>
     where
-        F: Fn(&mut [f64], &[f64], &P, f64),
+        F: crate::OdeFunction<P>,
     {
         perform_rodas(
             problem,
@@ -1101,7 +1101,7 @@ impl ExtendedRosenbrockMethod for RosenbrockW6S4OS {
         stats: &mut SolverStats,
     ) -> Result<f64, SolveError>
     where
-        F: Fn(&mut [f64], &[f64], &P, f64),
+        F: crate::OdeFunction<P>,
     {
         perform_rodas(
             problem,
@@ -1197,7 +1197,7 @@ impl<M> ExtendedRosenbrockKernel<M> {
 
 impl<F, P, M> StepKernel<F, P> for ExtendedRosenbrockKernel<M>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
     M: ExtendedRosenbrockMethod,
 {
     fn has_custom_dense_output(&self) -> bool {
@@ -1559,7 +1559,7 @@ fn perform_rosenbrock32<F, P>(
     stats: &mut SolverStats,
 ) -> Result<f64, SolveError>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     let dimension = state.len();
     prepare_factorization(
@@ -1668,7 +1668,7 @@ fn perform_rodas<F, P>(
     stats: &mut SolverStats,
 ) -> Result<f64, SolveError>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     let dimension = state.len();
     prepare_factorization(problem, state, time, step, tableau.gamma, workspace, stats)?;
@@ -1823,7 +1823,7 @@ fn perform_tsit5da<F, P>(
     stats: &mut SolverStats,
 ) -> Result<f64, SolveError>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     let tableau = &TSIT5DA_TABLEAU;
     let dimension = state.len();
@@ -1900,7 +1900,7 @@ fn richardson_step_doubling<F, P>(
     stats: &mut SolverStats,
 ) -> Result<f64, SolveError>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     let dimension = state.len();
     let half_step = step / 2.0;
@@ -1978,7 +1978,7 @@ fn prepare_factorization<F, P>(
     stats: &mut SolverStats,
 ) -> Result<(), SolveError>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     if !workspace.differentiation_valid {
         differentiate(problem, state, time, workspace, stats)?;
@@ -2008,7 +2008,7 @@ fn differentiate<F, P>(
     stats: &mut SolverStats,
 ) -> Result<(), SolveError>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     let dimension = state.len();
     if problem.evaluate_jacobian(&mut workspace.jacobian, state, time) {
@@ -2024,7 +2024,7 @@ where
                 &workspace.perturbed_state,
                 time,
                 stats,
-            );
+            )?;
             for row in 0..dimension {
                 workspace.jacobian[row * dimension + column] =
                     (workspace.perturbed_derivative[row] - workspace.current_derivative[row])
@@ -2040,7 +2040,7 @@ where
         state,
         time + time_perturbation,
         stats,
-    );
+    )?;
     for component in 0..dimension {
         workspace.time_derivative[component] = (workspace.perturbed_derivative[component]
             - workspace.current_derivative[component])
@@ -2072,11 +2072,15 @@ fn evaluate_unchecked<F, P>(
     state: &[f64],
     time: f64,
     stats: &mut SolverStats,
-) where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+) -> Result<(), SolveError>
+where
+    F: crate::OdeFunction<P>,
 {
-    (problem.rhs)(derivative, state, problem.parameters(), time);
+    problem
+        .rhs
+        .evaluate(derivative, state, problem.parameters(), time)?;
     stats.rhs_evaluations += 1;
+    Ok(())
 }
 
 fn evaluate<F, P>(
@@ -2087,9 +2091,9 @@ fn evaluate<F, P>(
     stats: &mut SolverStats,
 ) -> Result<(), SolveError>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
-    evaluate_unchecked(problem, derivative, state, time, stats);
+    evaluate_unchecked(problem, derivative, state, time, stats)?;
     ensure_finite(derivative)
 }
 

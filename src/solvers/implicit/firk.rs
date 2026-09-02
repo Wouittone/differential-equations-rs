@@ -121,7 +121,7 @@ macro_rules! impl_fixed_radau {
                 options: &SolveOptions,
             ) -> Result<Solution, SolveError>
             where
-                F: Fn(&mut [f64], &[f64], &P, f64),
+                F: crate::OdeFunction<P>,
             {
                 drive_integration(
                     problem,
@@ -149,7 +149,7 @@ impl OdeAlgorithm for AdaptiveRadau {
         options: &SolveOptions,
     ) -> Result<Solution, SolveError>
     where
-        F: Fn(&mut [f64], &[f64], &P, f64),
+        F: crate::OdeFunction<P>,
     {
         drive_integration(
             problem,
@@ -171,7 +171,7 @@ impl OdeAlgorithm for GaussLegendre {
         options: &SolveOptions,
     ) -> Result<Solution, SolveError>
     where
-        F: Fn(&mut [f64], &[f64], &P, f64),
+        F: crate::OdeFunction<P>,
     {
         drive_integration(
             problem,
@@ -414,9 +414,11 @@ impl FirkKernel {
         stats: &mut SolverStats,
     ) -> Result<(), SolveError>
     where
-        F: Fn(&mut [f64], &[f64], &P, f64),
+        F: crate::OdeFunction<P>,
     {
-        (problem.rhs)(output, state, problem.parameters(), time);
+        problem
+            .rhs
+            .evaluate(output, state, problem.parameters(), time)?;
         stats.rhs_evaluations += 1;
         output
             .iter()
@@ -435,7 +437,7 @@ impl FirkKernel {
         stats: &mut SolverStats,
     ) -> Result<(), SolveError>
     where
-        F: Fn(&mut [f64], &[f64], &P, f64),
+        F: crate::OdeFunction<P>,
     {
         let n = self.dimension;
         let s = self.current_stages;
@@ -634,7 +636,7 @@ impl FirkKernel {
 
 impl<F, P> StepKernel<F, P> for FirkKernel
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     fn has_custom_dense_output(&self) -> bool {
         true

@@ -70,6 +70,8 @@
 //!   Runge--Kutta methods from compile-time-validated JSON resources.
 //! - [`OdeProblem::from_array`] accepts ndarray scalar, vector, and matrix
 //!   states while numerical kernels retain contiguous flat workspaces.
+//!   [`OdeProblem::from_array_out_of_place`] accepts functions returning arrays;
+//!   [`OdeFunction`] unifies them with in-place closures and propagates errors.
 //! - [`solve_ensemble`] and [`solve_batch`] preserve input order. The default
 //!   `parallel` feature also enables their Rayon-backed variants.
 //!
@@ -130,7 +132,7 @@ pub use event::DEFAULT_EVENT_TOLERANCE;
 /// The ndarray version used by shape-aware ODE states.
 pub use ndarray;
 pub use operator_problem::{LieGroupProblem, LinearOperatorProblem};
-pub use problem::{OdeProblem, SplitOdeProblem};
+pub use problem::{OdeFunction, OdeProblem, SplitOdeProblem};
 pub use semilinear::SemilinearOdeProblem;
 pub use solution::{InterpolationError, Solution, SolverStats};
 pub use solver::{OdeAlgorithm, SaveMode, SolveError, SolveOptions, solve};

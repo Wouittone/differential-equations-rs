@@ -111,7 +111,7 @@ impl OdeAlgorithm for ExplicitTaylor2 {
         options: &SolveOptions,
     ) -> Result<Solution, SolveError>
     where
-        F: Fn(&mut [f64], &[f64], &P, f64),
+        F: crate::OdeFunction<P>,
     {
         drive_integration(
             problem,
@@ -128,7 +128,7 @@ impl OdeAlgorithm for ExplicitTaylor {
         options: &SolveOptions,
     ) -> Result<Solution, SolveError>
     where
-        F: Fn(&mut [f64], &[f64], &P, f64),
+        F: crate::OdeFunction<P>,
     {
         drive_integration(
             problem,
@@ -145,7 +145,7 @@ impl OdeAlgorithm for ExplicitTaylorAdaptiveOrder {
         options: &SolveOptions,
     ) -> Result<Solution, SolveError>
     where
-        F: Fn(&mut [f64], &[f64], &P, f64),
+        F: crate::OdeFunction<P>,
     {
         drive_integration(
             problem,
@@ -231,9 +231,11 @@ impl TaylorKernel {
         stats: &mut SolverStats,
     ) -> Result<(), SolveError>
     where
-        F: Fn(&mut [f64], &[f64], &P, f64),
+        F: crate::OdeFunction<P>,
     {
-        (problem.rhs)(output, state, problem.parameters(), time);
+        problem
+            .rhs
+            .evaluate(output, state, problem.parameters(), time)?;
         stats.rhs_evaluations += 1;
         output
             .iter()
@@ -252,7 +254,7 @@ impl TaylorKernel {
         stats: &mut SolverStats,
     ) -> Result<(), SolveError>
     where
-        F: Fn(&mut [f64], &[f64], &P, f64),
+        F: crate::OdeFunction<P>,
     {
         self.coefficients.fill(0.0);
         self.order_errors.fill(f64::INFINITY);
@@ -298,7 +300,7 @@ impl TaylorKernel {
 
 impl<F, P> StepKernel<F, P> for TaylorKernel
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     fn has_custom_dense_output(&self) -> bool {
         true

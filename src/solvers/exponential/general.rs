@@ -67,7 +67,7 @@ macro_rules! exponential_algorithm {
                 options: &SolveOptions,
             ) -> Result<Solution, SolveError>
             where
-                F: Fn(&mut [f64], &[f64], &P, f64),
+                F: crate::OdeFunction<P>,
             {
                 solve_scheme(problem, options, Scheme::$scheme)
             }
@@ -174,7 +174,7 @@ fn solve_scheme<F, P>(
     scheme: Scheme,
 ) -> Result<Solution, SolveError>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     drive_integration(
         problem,
@@ -205,7 +205,7 @@ impl ExponentialKernel {
 
 impl<F, P> StepKernel<F, P> for ExponentialKernel
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     fn capabilities(&self) -> KernelCapabilities {
         KernelCapabilities::with_controller(
@@ -327,7 +327,7 @@ fn perform_step<F, P>(
     stats: &mut SolverStats,
 ) -> Result<StepResult, SolveError>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     let au = mat_vec(jacobian, state);
     let nonlinear0 = subtract(f0, &au);
@@ -429,7 +429,7 @@ fn etdrk2<F, P>(
     stats: &mut SolverStats,
 ) -> Result<Vec<f64>, SolveError>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     let u2 = norsett_euler(a, u, f0, h);
     let f2 = evaluate_new(problem, &u2, t + h, stats)?;
@@ -450,7 +450,7 @@ fn etdrk3<F, P>(
     stats: &mut SolverStats,
 ) -> Result<Vec<f64>, SolveError>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     let u2 = add(u, &phi_term(a, h / 2.0, 1, h / 2.0, f1));
     let f2 = shifted_stage(problem, a, &u2, u, au, t + h / 2.0, stats)?;
@@ -480,7 +480,7 @@ fn etdrk4<F, P>(
     stats: &mut SolverStats,
 ) -> Result<Vec<f64>, SolveError>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     let half = h / 2.0;
     let u2 = add(u, &phi_term(a, half, 1, half, f1));
@@ -518,7 +518,7 @@ fn hoch_ost4<F, P>(
     stats: &mut SolverStats,
 ) -> Result<Vec<f64>, SolveError>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     let half = h / 2.0;
     let p1h = |v: &[f64]| phi_term(a, half, 1, 1.0, v);
@@ -571,7 +571,7 @@ fn exp4<F, P>(
     stats: &mut SolverStats,
 ) -> Result<Vec<f64>, SolveError>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     let k1: Vec<_> = [h / 3.0, 2.0 * h / 3.0, h]
         .into_iter()
@@ -619,7 +619,7 @@ fn epirk4s3<F, P>(
     stats: &mut SolverStats,
 ) -> Result<Vec<f64>, SolveError>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     let (c2, c3, phi_order, r2c, r3c, q2c, q3c) = if variant_b {
         (0.5, 0.75, 2, 54.0, -16.0, -324.0, 144.0)
@@ -666,7 +666,7 @@ fn epirk5s3<F, P>(
     stats: &mut SolverStats,
 ) -> Result<Vec<f64>, SolveError>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     let c2 = 48.0 / 55.0;
     let mut k2 = phi_term(a, c2 * h, 2, (55.0 / (8.0 * h)) * (c2 * h).powi(2), f0);
@@ -722,7 +722,7 @@ fn exprb53s3<F, P>(
     stats: &mut SolverStats,
 ) -> Result<Vec<f64>, SolveError>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     let k2 = phi_term(a, h / 2.0, 1, h / 2.0, f0);
     let k3base = phi_term(a, 0.9 * h, 1, 0.9 * h, f0);
@@ -763,7 +763,7 @@ fn epirk5p<F, P>(
     stats: &mut SolverStats,
 ) -> Result<Vec<f64>, SolveError>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     let (g11, g21, g32, g33, a22, b2, b31, b32, b33, second_order) = if variant_2 {
         (
@@ -848,7 +848,7 @@ fn exprb32<F, P>(
     stats: &mut SolverStats,
 ) -> Result<(Vec<f64>, Vec<f64>), SolveError>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     let w1 = phi_action(a, h, 1, f1);
     let u2 = add(u, &scale(&w1, h));
@@ -877,7 +877,7 @@ fn exprb43<F, P>(
     stats: &mut SolverStats,
 ) -> Result<(Vec<f64>, Vec<f64>), SolveError>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     let w1h = phi_action(a, h / 2.0, 1, f1);
     let w11 = phi_action(a, h, 1, f1);
@@ -920,7 +920,7 @@ fn shifted_stage<F, P>(
     stats: &mut SolverStats,
 ) -> Result<Vec<f64>, SolveError>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     let mut value = evaluate_new(problem, stage, time, stats)?;
     axpy(&mut value, -1.0, &mat_vec(a, stage));
@@ -939,7 +939,7 @@ fn remainder<F, P>(
     stats: &mut SolverStats,
 ) -> Result<Vec<f64>, SolveError>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     let mut value = evaluate_new(problem, stage, time, stats)?;
     axpy(&mut value, -1.0, f0);
@@ -954,7 +954,7 @@ fn evaluate_new<F, P>(
     stats: &mut SolverStats,
 ) -> Result<Vec<f64>, SolveError>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     let mut output = vec![0.0; state.len()];
     evaluate(problem, &mut output, state, time, stats)?;
@@ -969,9 +969,11 @@ fn evaluate<F, P>(
     stats: &mut SolverStats,
 ) -> Result<(), SolveError>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
-    (problem.rhs)(output, state, problem.parameters(), time);
+    problem
+        .rhs
+        .evaluate(output, state, problem.parameters(), time)?;
     stats.rhs_evaluations += 1;
     if output.iter().all(|value| value.is_finite()) {
         Ok(())
@@ -989,7 +991,7 @@ fn compute_jacobian<F, P>(
     stats: &mut SolverStats,
 ) -> Result<(), SolveError>
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     stats.jacobian_evaluations += 1;
     if problem.evaluate_jacobian(jacobian, state, time) {

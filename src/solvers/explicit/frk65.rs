@@ -41,7 +41,7 @@ impl OdeAlgorithm for Frk65 {
         options: &SolveOptions,
     ) -> Result<Solution, SolveError>
     where
-        F: Fn(&mut [f64], &[f64], &P, f64),
+        F: crate::OdeFunction<P>,
     {
         let tableau = self.tableau().map_err(|_| SolveError::InvalidTableau)?;
         integrate(
@@ -114,15 +114,17 @@ fn eval<F, P>(
     state: &[f64],
     t: f64,
     stats: &mut SolverStats,
-) where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+) -> Result<(), SolveError>
+where
+    F: crate::OdeFunction<P>,
 {
-    (problem.rhs)(out, state, problem.parameters(), t);
+    problem.rhs.evaluate(out, state, problem.parameters(), t)?;
     stats.rhs_evaluations += 1;
+    Ok(())
 }
 impl<F, P> StepKernel<F, P> for Frk65Kernel
 where
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     fn capabilities(&self) -> KernelCapabilities {
         KernelCapabilities::new(true, 5)
@@ -134,7 +136,7 @@ where
         t: f64,
         st: &mut SolverStats,
     ) -> Result<(), SolveError> {
-        eval(p, &mut self.err, s, t, st);
+        eval(p, &mut self.err, s, t, st)?;
         self.stages[..self.dim].copy_from_slice(&self.err);
         self.fsal_current = true;
         Ok(())
@@ -172,7 +174,7 @@ where
         st: &mut SolverStats,
     ) -> Result<StepEstimate, SolveError> {
         if !self.fsal_current {
-            eval(p, self.stage_mut(0), s, t, st);
+            eval(p, self.stage_mut(0), s, t, st)?;
         }
         for i in 1..8 {
             for j in 0..self.dim {
@@ -182,7 +184,7 @@ where
                 }
                 self.tmp[j] = v;
             }
-            eval(p, &mut self.err, &self.tmp, t + self.tableau.c()[i] * h, st);
+            eval(p, &mut self.err, &self.tmp, t + self.tableau.c()[i] * h, st)?;
             let start = i * self.dim;
             self.stages[start..start + self.dim].copy_from_slice(&self.err);
         }
@@ -197,7 +199,7 @@ where
                     + weights[6] * self.stage(6)[j]
                     + weights[7] * self.stage(7)[j]);
         }
-        eval(p, self.stage_mut(8), c, t + h, st);
+        eval(p, self.stage_mut(8), c, t + h, st)?;
         self.fsal_current = false;
         let mut e = 0.0;
         if o.adaptive {
@@ -233,7 +235,7 @@ where
         r: &mut TrajectoryRecorder<'_>,
         st: &mut SolverStats,
     ) -> Result<bool, SolveError> {
-        eval(p, &mut self.err, s, t, st);
+        eval(p, &mut self.err, s, t, st)?;
         let seg = BorrowedHermiteSegment::new(pt, t, prev, s, self.stage(0), &self.err)
             .map_err(|_| SolveError::NonFiniteDerivative)?;
         r.record_step_dense(prev, pt, s, t, fin, &seg)

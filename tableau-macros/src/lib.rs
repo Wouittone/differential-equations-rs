@@ -582,7 +582,7 @@ fn expand(input: MacroInput) -> Result<TokenStream2, String> {
                 #crate_path::SolveError,
             >
             where
-                F: Fn(&mut [f64], &[f64], &P, f64),
+                F: #crate_path::OdeFunction<P>,
             {
                 #crate_path::OdeAlgorithm::solve_validated(
                     &#crate_path::tableau::ResourceExplicitRungeKutta::new(&#static_name),

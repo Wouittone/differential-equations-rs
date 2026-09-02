@@ -166,7 +166,7 @@ where
     C: Send,
     A: OdeAlgorithm + Clone + Send + Sync,
     B: Fn(C) -> OdeProblem<F, P> + Send + Sync,
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     solve_batch(
         cases,
@@ -189,7 +189,7 @@ where
     I: IntoIterator<Item = C>,
     A: OdeAlgorithm + Clone,
     B: FnMut(C) -> OdeProblem<F, P>,
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     solve_batch_sequential(cases, |case| {
         let problem = problem_factory(case);
@@ -210,7 +210,7 @@ where
     C: Send,
     A: OdeAlgorithm + Clone + Send + Sync,
     B: Fn(C) -> OdeProblem<F, P> + Send + Sync,
-    F: Fn(&mut [f64], &[f64], &P, f64),
+    F: crate::OdeFunction<P>,
 {
     solve_batch_parallel(cases, |case| {
         let problem = problem_factory(case);

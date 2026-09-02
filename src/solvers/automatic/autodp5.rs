@@ -42,7 +42,7 @@ impl<A: OdeAlgorithm> OdeAlgorithm for AutoDp5<A> {
         options: &SolveOptions,
     ) -> Result<Solution, SolveError>
     where
-        F: Fn(&mut [f64], &[f64], &P, f64),
+        F: crate::OdeFunction<P>,
     {
         match Dp5.solve(problem, options) {
             Err(error) if should_retry_with_stiff(error) => {

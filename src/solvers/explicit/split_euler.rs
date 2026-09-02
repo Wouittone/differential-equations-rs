@@ -23,8 +23,8 @@ pub trait SplitOdeAlgorithm {
         options: &SolveOptions,
     ) -> Result<Solution, SolveError>
     where
-        FE: Fn(&mut [f64], &[f64], &P, f64),
-        FI: Fn(&mut [f64], &[f64], &P, f64),
+        FE: crate::OdeFunction<P>,
+        FI: crate::OdeFunction<P>,
     {
         validate_state_time_options(problem.initial_state(), problem.time_span(), options)?;
         validate_preset_time_sequences(problem.preset_time_sequences(), problem.time_span())?;
@@ -47,8 +47,8 @@ pub trait SplitOdeAlgorithm {
         options: &SolveOptions,
     ) -> Result<Solution, SolveError>
     where
-        FE: Fn(&mut [f64], &[f64], &P, f64),
-        FI: Fn(&mut [f64], &[f64], &P, f64);
+        FE: crate::OdeFunction<P>,
+        FI: crate::OdeFunction<P>;
 }
 
 /// Solves a typed split problem with a selected split/IMEX algorithm.
@@ -58,8 +58,8 @@ pub fn solve_split<FE, FI, P, A>(
     options: &SolveOptions,
 ) -> Result<Solution, SolveError>
 where
-    FE: Fn(&mut [f64], &[f64], &P, f64),
-    FI: Fn(&mut [f64], &[f64], &P, f64),
+    FE: crate::OdeFunction<P>,
+    FI: crate::OdeFunction<P>,
     A: SplitOdeAlgorithm,
 {
     algorithm.solve(problem, options)
@@ -72,8 +72,8 @@ impl SplitOdeAlgorithm for SplitEuler {
         options: &SolveOptions,
     ) -> Result<Solution, SolveError>
     where
-        FE: Fn(&mut [f64], &[f64], &P, f64),
-        FI: Fn(&mut [f64], &[f64], &P, f64),
+        FE: crate::OdeFunction<P>,
+        FI: crate::OdeFunction<P>,
     {
         let placeholder = OdeProblem::new(
             noop as fn(&mut [f64], &[f64], &(), f64),
@@ -109,13 +109,13 @@ impl<'a, FE, FI, P> SplitEulerKernel<'a, FE, FI, P> {
         stats: &mut SolverStats,
     ) -> Result<(), SolveError>
     where
-        FE: Fn(&mut [f64], &[f64], &P, f64),
-        FI: Fn(&mut [f64], &[f64], &P, f64),
+        FE: crate::OdeFunction<P>,
+        FI: crate::OdeFunction<P>,
     {
         self.problem
-            .evaluate_explicit(&mut self.explicit, state, time);
+            .evaluate_explicit(&mut self.explicit, state, time)?;
         self.problem
-            .evaluate_implicit(&mut self.implicit, state, time);
+            .evaluate_implicit(&mut self.implicit, state, time)?;
         stats.rhs_evaluations += 2;
         self.explicit
             .iter()
@@ -128,8 +128,8 @@ impl<'a, FE, FI, P> SplitEulerKernel<'a, FE, FI, P> {
 
 impl<FE, FI, P> StepKernel<fn(&mut [f64], &[f64], &(), f64), ()> for SplitEulerKernel<'_, FE, FI, P>
 where
-    FE: Fn(&mut [f64], &[f64], &P, f64),
-    FI: Fn(&mut [f64], &[f64], &P, f64),
+    FE: crate::OdeFunction<P>,
+    FI: crate::OdeFunction<P>,
 {
     fn capabilities(&self) -> KernelCapabilities {
         KernelCapabilities::new(false, 1)
@@ -317,8 +317,8 @@ pub fn solve_split_euler<FE, FI, P>(
     options: &SolveOptions,
 ) -> Result<Solution, SolveError>
 where
-    FE: Fn(&mut [f64], &[f64], &P, f64),
-    FI: Fn(&mut [f64], &[f64], &P, f64),
+    FE: crate::OdeFunction<P>,
+    FI: crate::OdeFunction<P>,
 {
     algorithm.solve(problem, options)
 }

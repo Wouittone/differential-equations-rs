@@ -175,7 +175,7 @@ impl SteadyStateCondition {
         state: &[f64],
         second_state: &[f64],
         time: f64,
-        evaluate: impl FnOnce(&mut [f64], &mut [f64]),
+        evaluate: impl FnOnce(&mut [f64], &mut [f64]) -> Result<(), SolveError>,
     ) -> Result<bool, SolveError> {
         let dimension = state.len() + second_state.len();
         if [&self.policy.absolute, &self.policy.relative]
@@ -193,7 +193,7 @@ impl SteadyStateCondition {
         work.resize(dimension, f64::NAN);
         derivative.fill(f64::NAN);
         work.fill(f64::NAN);
-        evaluate(derivative, work);
+        evaluate(derivative, work)?;
         if derivative.iter().any(|value| !value.is_finite()) {
             return Err(SolveError::NonFiniteDerivative);
         }

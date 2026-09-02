@@ -55,7 +55,7 @@ macro_rules! automatic_facade {
                 options: &SolveOptions,
             ) -> Result<Solution, SolveError>
             where
-                F: Fn(&mut [f64], &[f64], &P, f64),
+                F: crate::OdeFunction<P>,
             {
                 match $component.solve(problem, options) {
                     Err(error) if should_retry_with_stiff(error) => {
@@ -105,7 +105,7 @@ impl OdeAlgorithm for DefaultOdeAlgorithm {
         options: &SolveOptions,
     ) -> Result<Solution, SolveError>
     where
-        F: Fn(&mut [f64], &[f64], &P, f64),
+        F: crate::OdeFunction<P>,
     {
         Tsit5.solve(problem, options)
     }
@@ -126,7 +126,7 @@ impl OdeAlgorithm for DefaultImplicitOdeAlgorithm {
         options: &SolveOptions,
     ) -> Result<Solution, SolveError>
     where
-        F: Fn(&mut [f64], &[f64], &P, f64),
+        F: crate::OdeFunction<P>,
     {
         Rodas5P.solve(problem, options)
     }

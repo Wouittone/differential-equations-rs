@@ -32,7 +32,7 @@ impl OdeAlgorithm for RecordingStiff<'_> {
         options: &SolveOptions,
     ) -> Result<Solution, SolveError>
     where
-        F: Fn(&mut [f64], &[f64], &P, f64),
+        F: differential_equations::OdeFunction<P>,
     {
         self.calls.set(self.calls.get() + 1);
         let mut recovery_options = options.clone();
