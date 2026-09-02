@@ -141,6 +141,18 @@ corrections, and typed non-convergence errors for ordinary and split
 first-order problems. Because projection changes endpoints after dense output
 is constructed, requested samples that must be projected should also be listed
 as exact time stops.
+`GeneralDomain` combines the same projection engine with a predictive domain
+check. It evaluates residuals at a forward-Euler extrapolation and its future
+time, shrinks an unsafe proposal, and applies a `0.9` safety margin. Its
+predictor tolerance defaults to the solve's absolute tolerance, independently
+of the projection tolerance. For a region, define a residual that is zero
+inside and positive outside; prediction uses a signed comparison, while
+projection always targets the zero set. Already-satisfied, locally inactive
+constraints are omitted from the correction system. As with the
+[SciML policy](https://docs.sciml.ai/DiffEqCallbacks/stable/step_control/#DiffEqCallbacks.GeneralDomain),
+nonlinear projection guarantees proximity only, not strict inequality-domain
+membership. Use `PositiveDomain` when exact componentwise non-negativity is
+required.
 
 ```rust
 use differential_equations::callbacks::PeriodicCallback;
@@ -167,8 +179,10 @@ let problem = OdeProblem::new(
 `DomainGuard` also construct partitioned callback sets for second-order
 problems through `into_second_order_callback_set`. `DomainGuard` checks actual
 candidate states and may repeat their computation; `PositiveDomain` predicts
-the next state before the attempt. Generic `GeneralDomain` remains future
-work and will reuse the manifold projection engine.
+the next state before the attempt. `GeneralDomain` extends that predictive
+control to user-defined residuals and uses `ManifoldProjection` for endpoint
+corrections. Both predictive policies support ordinary and split first-order
+problems; they do not yet expose partitioned second-order callback sets.
 
 ## Tableau extensions
 

@@ -47,6 +47,8 @@
 //!   accepted states to preserve componentwise non-negativity.
 //!   [`callbacks::ManifoldProjection`] enforces implicit conservation laws
 //!   with rectangular residuals and typed nonlinear failure.
+//!   [`callbacks::GeneralDomain`] couples that projection engine with
+//!   predictive step control for a user-defined domain residual.
 //!   [`CallbackAction::ContinueWithStepSize`] overrides the next proposed step;
 //!   Rust interior-mutability types such as [`std::cell::Cell`] let sequential
 //!   callback effects update parameters without imposing mutable problem

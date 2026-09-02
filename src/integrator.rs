@@ -265,24 +265,26 @@ where
         problem.domain_rejection_factor(state, time)
     }
 
-    /// Reports whether the effective problem predicts upcoming positive-domain steps.
-    fn has_positive_domain(&self, problem: &OdeProblem<F, P>) -> bool {
-        problem.has_positive_domain()
+    /// Reports whether the effective problem checks extrapolated states.
+    fn has_predictive_domain(&self, problem: &OdeProblem<F, P>) -> bool {
+        problem.has_predictive_domain()
     }
 
     /// Restricts an upcoming step using the effective problem's domain policy.
-    fn positive_domain_adjusted_step(
+    fn predictive_domain_adjusted_step(
         &self,
         problem: &OdeProblem<F, P>,
         state: &[f64],
         derivative: &[f64],
+        time: f64,
         proposed_step: f64,
         default_tolerance: f64,
         prediction: &mut [f64],
     ) -> Result<f64, SolveError> {
-        problem.positive_domain_adjusted_step(
+        problem.predictive_domain_adjusted_step(
             state,
             derivative,
+            time,
             proposed_step,
             default_tolerance,
             prediction,
@@ -625,8 +627,8 @@ where
     let maximum_step = options.max_step.min((end - start).abs());
     let mut state = problem.initial_state().to_vec();
     let mut candidate = vec![0.0; dimension];
-    let positive_domain_enabled = kernel.has_positive_domain(problem);
-    let mut prediction_derivative = if positive_domain_enabled {
+    let predictive_domain_enabled = kernel.has_predictive_domain(problem);
+    let mut prediction_derivative = if predictive_domain_enabled {
         vec![0.0; dimension]
     } else {
         Vec::new()
@@ -705,7 +707,7 @@ where
 
         let callback_stop = kernel.next_callback_time_stop(problem, time, direction);
         let mut attempted_step = time_stops.clip_step_with(time, step, callback_stop);
-        if positive_domain_enabled {
+        if predictive_domain_enabled {
             kernel.evaluate_dense_derivative(
                 problem,
                 &mut prediction_derivative,
@@ -713,10 +715,11 @@ where
                 time,
                 &mut stats,
             )?;
-            attempted_step = kernel.positive_domain_adjusted_step(
+            attempted_step = kernel.predictive_domain_adjusted_step(
                 problem,
                 &state,
                 &prediction_derivative,
+                time,
                 attempted_step,
                 options.absolute_tolerance,
                 &mut candidate,

@@ -167,22 +167,24 @@ where
         self.problem.domain_rejection_factor(state, time)
     }
 
-    fn has_positive_domain(&self, _: &OdeProblem<fn(&mut [f64], &[f64], &(), f64), ()>) -> bool {
-        self.problem.has_positive_domain()
+    fn has_predictive_domain(&self, _: &OdeProblem<fn(&mut [f64], &[f64], &(), f64), ()>) -> bool {
+        self.problem.has_predictive_domain()
     }
 
-    fn positive_domain_adjusted_step(
+    fn predictive_domain_adjusted_step(
         &self,
         _: &OdeProblem<fn(&mut [f64], &[f64], &(), f64), ()>,
         state: &[f64],
         derivative: &[f64],
+        time: f64,
         proposed_step: f64,
         default_tolerance: f64,
         prediction: &mut [f64],
     ) -> Result<f64, SolveError> {
-        self.problem.positive_domain_adjusted_step(
+        self.problem.predictive_domain_adjusted_step(
             state,
             derivative,
+            time,
             proposed_step,
             default_tolerance,
             prediction,

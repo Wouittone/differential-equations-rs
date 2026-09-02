@@ -309,15 +309,16 @@ pub(crate) enum Callback<P> {
 }
 
 pub(crate) type DomainCondition<P> = dyn Fn(&[f64], &P, f64) -> bool;
+pub(crate) type PredictiveDomainAcceptance<P> =
+    dyn Fn(&[f64], &P, f64, f64) -> Result<bool, SolveError>;
 
 pub(crate) struct StepGuard<P> {
     pub(crate) is_out_of_domain: Box<DomainCondition<P>>,
     pub(crate) reduction_factor: f64,
 }
 
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct PositiveDomainPolicy {
-    pub(crate) absolute_tolerance: Option<f64>,
+pub(crate) struct PredictiveDomainPolicy<P> {
+    pub(crate) accepts: Box<PredictiveDomainAcceptance<P>>,
     pub(crate) reduction_factor: f64,
 }
 
@@ -333,7 +334,7 @@ pub struct CallbackSet<P> {
     pub(crate) initializers: Vec<InitializationHook<P>>,
     pub(crate) finalizers: Vec<Box<LifecycleHook<P>>>,
     pub(crate) step_guards: Vec<StepGuard<P>>,
-    pub(crate) positive_domains: Vec<PositiveDomainPolicy>,
+    pub(crate) predictive_domains: Vec<PredictiveDomainPolicy<P>>,
 }
 
 impl<P> CallbackSet<P> {
@@ -344,7 +345,7 @@ impl<P> CallbackSet<P> {
             initializers: Vec::new(),
             finalizers: Vec::new(),
             step_guards: Vec::new(),
-            positive_domains: Vec::new(),
+            predictive_domains: Vec::new(),
         }
     }
 
@@ -361,7 +362,7 @@ impl<P> CallbackSet<P> {
             && self.initializers.is_empty()
             && self.finalizers.is_empty()
             && self.step_guards.is_empty()
-            && self.positive_domains.is_empty()
+            && self.predictive_domains.is_empty()
     }
 
     /// Adds a state initialization hook that saves the initialized state.
@@ -413,12 +414,27 @@ impl<P> CallbackSet<P> {
     }
 
     pub(crate) fn with_positive_domain(
-        mut self,
+        self,
         absolute_tolerance: Option<f64>,
         reduction_factor: f64,
     ) -> Self {
-        self.positive_domains.push(PositiveDomainPolicy {
-            absolute_tolerance,
+        self.with_predictive_domain(
+            reduction_factor,
+            move |prediction, _, _, default_tolerance| {
+                let tolerance = absolute_tolerance.unwrap_or(default_tolerance);
+                Ok(prediction.iter().all(|value| {
+                    value.partial_cmp(&-tolerance) == Some(std::cmp::Ordering::Greater)
+                }))
+            },
+        )
+    }
+
+    pub(crate) fn with_predictive_domain<A>(mut self, reduction_factor: f64, accepts: A) -> Self
+    where
+        A: Fn(&[f64], &P, f64, f64) -> Result<bool, SolveError> + 'static,
+    {
+        self.predictive_domains.push(PredictiveDomainPolicy {
+            accepts: Box::new(accepts),
             reduction_factor,
         });
         self
@@ -630,7 +646,8 @@ impl<P> CallbackSet<P> {
         self.initializers.append(&mut other.initializers);
         self.finalizers.append(&mut other.finalizers);
         self.step_guards.append(&mut other.step_guards);
-        self.positive_domains.append(&mut other.positive_domains);
+        self.predictive_domains
+            .append(&mut other.predictive_domains);
         self
     }
 }

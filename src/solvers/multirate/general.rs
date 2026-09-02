@@ -367,10 +367,11 @@ where
         attempted += 1;
         let proposed_step = step;
         step = time_stops.clip_step_with(time, step, problem.next_preset_time(time, direction));
-        if problem.has_positive_domain() {
-            step = problem.positive_domain_adjusted_step(
+        if problem.has_predictive_domain() {
+            step = problem.predictive_domain_adjusted_step(
                 &state,
                 &start_derivative,
+                time,
                 step,
                 options.absolute_tolerance,
                 &mut candidate,

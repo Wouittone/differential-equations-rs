@@ -2,7 +2,7 @@ use crate::SolveError;
 use crate::callback::{
     Callback, CallbackAction, CallbackOutcome, CallbackSave, CallbackSet, ContinuousCallback,
     DiscreteCallback, DiscreteTrigger, EventCrossing, EventDirection, InitializationHook,
-    LifecycleHook, PositiveDomainPolicy, PresetTimes, StepGuard, VectorContinuousCallback,
+    LifecycleHook, PredictiveDomainPolicy, PresetTimes, StepGuard, VectorContinuousCallback,
 };
 use crate::event::{
     MAX_EVENT_ROOT_ITERATIONS, effective_event_tolerance, event_interval_converged,
@@ -28,7 +28,7 @@ pub struct OdeProblem<F, P> {
     initializers: Vec<InitializationHook<P>>,
     finalizers: Vec<Box<LifecycleHook<P>>>,
     step_guards: Vec<StepGuard<P>>,
-    positive_domains: Vec<PositiveDomainPolicy>,
+    predictive_domains: Vec<PredictiveDomainPolicy<P>>,
 }
 
 type JacobianFunction<P> = dyn Fn(&mut [f64], &[f64], &P, f64);
@@ -52,7 +52,7 @@ pub struct SplitOdeProblem<FE, FI, P> {
     initializers: Vec<InitializationHook<P>>,
     finalizers: Vec<Box<LifecycleHook<P>>>,
     step_guards: Vec<StepGuard<P>>,
-    positive_domains: Vec<PositiveDomainPolicy>,
+    predictive_domains: Vec<PredictiveDomainPolicy<P>>,
 }
 
 #[allow(dead_code)]
@@ -110,7 +110,7 @@ impl SplitOdeProblem<(), (), ()> {
             initializers: Vec::new(),
             finalizers: Vec::new(),
             step_guards: Vec::new(),
-            positive_domains: Vec::new(),
+            predictive_domains: Vec::new(),
         }
     }
 }
@@ -139,7 +139,7 @@ impl<FE, FI, P> SplitOdeProblem<FE, FI, P> {
             initializers: Vec::new(),
             finalizers: Vec::new(),
             step_guards: Vec::new(),
-            positive_domains: Vec::new(),
+            predictive_domains: Vec::new(),
         }
     }
 
@@ -149,8 +149,8 @@ impl<FE, FI, P> SplitOdeProblem<FE, FI, P> {
         self.initializers.append(&mut callback_set.initializers);
         self.finalizers.append(&mut callback_set.finalizers);
         self.step_guards.append(&mut callback_set.step_guards);
-        self.positive_domains
-            .append(&mut callback_set.positive_domains);
+        self.predictive_domains
+            .append(&mut callback_set.predictive_domains);
         self
     }
 
@@ -359,7 +359,7 @@ impl<FE, FI, P> SplitOdeProblem<FE, FI, P> {
             || !self.initializers.is_empty()
             || !self.finalizers.is_empty()
             || !self.step_guards.is_empty()
-            || !self.positive_domains.is_empty()
+            || !self.predictive_domains.is_empty()
     }
 
     pub(crate) fn domain_rejection_factor(&self, state: &[f64], time: f64) -> Option<f64> {
@@ -370,22 +370,25 @@ impl<FE, FI, P> SplitOdeProblem<FE, FI, P> {
             .reduce(f64::min)
     }
 
-    pub(crate) fn has_positive_domain(&self) -> bool {
-        !self.positive_domains.is_empty()
+    pub(crate) fn has_predictive_domain(&self) -> bool {
+        !self.predictive_domains.is_empty()
     }
 
-    pub(crate) fn positive_domain_adjusted_step(
+    pub(crate) fn predictive_domain_adjusted_step(
         &self,
         state: &[f64],
         derivative: &[f64],
+        time: f64,
         proposed_step: f64,
         default_tolerance: f64,
         prediction: &mut [f64],
     ) -> Result<f64, SolveError> {
-        positive_domain_adjusted_step(
-            &self.positive_domains,
+        predictive_domain_adjusted_step(
+            &self.predictive_domains,
+            &self.parameters,
             state,
             derivative,
+            time,
             proposed_step,
             default_tolerance,
             prediction,
@@ -721,7 +724,7 @@ impl OdeProblem<(), ()> {
             initializers: Vec::new(),
             finalizers: Vec::new(),
             step_guards: Vec::new(),
-            positive_domains: Vec::new(),
+            predictive_domains: Vec::new(),
         }
     }
 }
@@ -747,7 +750,7 @@ impl<F, P> OdeProblem<F, P> {
             initializers: Vec::new(),
             finalizers: Vec::new(),
             step_guards: Vec::new(),
-            positive_domains: Vec::new(),
+            predictive_domains: Vec::new(),
         }
     }
 
@@ -757,8 +760,8 @@ impl<F, P> OdeProblem<F, P> {
         self.initializers.append(&mut callback_set.initializers);
         self.finalizers.append(&mut callback_set.finalizers);
         self.step_guards.append(&mut callback_set.step_guards);
-        self.positive_domains
-            .append(&mut callback_set.positive_domains);
+        self.predictive_domains
+            .append(&mut callback_set.predictive_domains);
         self
     }
 
@@ -1194,7 +1197,7 @@ impl<F, P> OdeProblem<F, P> {
             || !self.initializers.is_empty()
             || !self.finalizers.is_empty()
             || !self.step_guards.is_empty()
-            || !self.positive_domains.is_empty()
+            || !self.predictive_domains.is_empty()
     }
 
     pub(crate) fn domain_rejection_factor(&self, state: &[f64], time: f64) -> Option<f64> {
@@ -1205,22 +1208,25 @@ impl<F, P> OdeProblem<F, P> {
             .reduce(f64::min)
     }
 
-    pub(crate) fn has_positive_domain(&self) -> bool {
-        !self.positive_domains.is_empty()
+    pub(crate) fn has_predictive_domain(&self) -> bool {
+        !self.predictive_domains.is_empty()
     }
 
-    pub(crate) fn positive_domain_adjusted_step(
+    pub(crate) fn predictive_domain_adjusted_step(
         &self,
         state: &[f64],
         derivative: &[f64],
+        time: f64,
         proposed_step: f64,
         default_tolerance: f64,
         prediction: &mut [f64],
     ) -> Result<f64, SolveError> {
-        positive_domain_adjusted_step(
-            &self.positive_domains,
+        predictive_domain_adjusted_step(
+            &self.predictive_domains,
+            &self.parameters,
             state,
             derivative,
+            time,
             proposed_step,
             default_tolerance,
             prediction,
@@ -1631,10 +1637,13 @@ fn interpolate(state: &[f64], previous_state: &[f64], fraction: f64, output: &mu
     }
 }
 
-fn positive_domain_adjusted_step(
-    policies: &[PositiveDomainPolicy],
+#[allow(clippy::too_many_arguments)]
+fn predictive_domain_adjusted_step<P>(
+    policies: &[PredictiveDomainPolicy<P>],
+    parameters: &P,
     state: &[f64],
     derivative: &[f64],
+    time: f64,
     proposed_step: f64,
     default_tolerance: f64,
     prediction: &mut [f64],
@@ -1647,16 +1656,15 @@ fn positive_domain_adjusted_step(
         for ((predicted, state), derivative) in prediction.iter_mut().zip(state).zip(derivative) {
             *predicted = state + step * derivative;
         }
-        let reduction = policies
-            .iter()
-            .filter(|policy| {
-                let tolerance = policy.absolute_tolerance.unwrap_or(default_tolerance);
-                prediction.iter().any(|value| {
-                    value.partial_cmp(&-tolerance) != Some(std::cmp::Ordering::Greater)
-                })
-            })
-            .map(|policy| policy.reduction_factor)
-            .reduce(f64::min);
+        let next_time = time + step;
+        let mut reduction: Option<f64> = None;
+        for policy in policies {
+            if !(policy.accepts)(prediction, parameters, next_time, default_tolerance)? {
+                reduction = Some(reduction.map_or(policy.reduction_factor, |current| {
+                    current.min(policy.reduction_factor)
+                }));
+            }
+        }
         let Some(reduction) = reduction else {
             break;
         };

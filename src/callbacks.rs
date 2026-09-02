@@ -6,8 +6,10 @@
 //! [`crate::CallbackSet::append`] before attaching the resulting set to a
 //! problem.
 
+mod domain;
 mod manifold;
 
+pub use domain::GeneralDomain;
 pub use manifold::ManifoldProjection;
 
 use std::rc::Rc;
@@ -99,7 +101,7 @@ impl PeriodicCallback {
             initializers: Vec::new(),
             finalizers: Vec::new(),
             step_guards: Vec::new(),
-            positive_domains: Vec::new(),
+            predictive_domains: Vec::new(),
         })
     }
 

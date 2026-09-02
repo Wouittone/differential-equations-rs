@@ -20,6 +20,9 @@ const MAX_LINE_SEARCH_ITERATIONS: usize = 12;
 /// system. Projection uses Newton corrections in the row space of the
 /// residual Jacobian and backtracks corrections that do not reduce the
 /// residual norm.
+/// Locally constant residual rows that already satisfy the tolerance are
+/// omitted from the correction system, allowing inactive region constraints.
+/// The remaining Jacobian rows must be linearly independent.
 ///
 /// By default, the Jacobian is approximated with finite differences. Supply an
 /// analytic row-major `residual_dimension × state_dimension` Jacobian through
@@ -230,33 +233,50 @@ impl<P: 'static> ProjectionEngine<P> {
 
         for _ in 0..self.max_iterations {
             self.evaluate_jacobian(state, parameters, time)?;
+            self.workspace.active_rows.clear();
+            for (row, jacobian_row) in self
+                .workspace
+                .jacobian
+                .chunks_exact(state_dimension)
+                .enumerate()
+            {
+                if jacobian_row.iter().any(|value| *value != 0.0) {
+                    self.workspace.active_rows.push(row);
+                } else if self.workspace.residual[row].abs() > self.absolute_tolerance {
+                    return Err(SolveError::ManifoldProjectionFailed);
+                }
+            }
+            let active_dimension = self.workspace.active_rows.len();
+            if active_dimension == 0 {
+                return Err(SolveError::ManifoldProjectionFailed);
+            }
             form_normal_matrix(
                 &self.workspace.jacobian,
-                self.residual_dimension,
+                &self.workspace.active_rows,
                 state_dimension,
                 &mut self.workspace.normal_matrix,
             );
             self.workspace
                 .multipliers
                 .iter_mut()
-                .zip(&self.workspace.residual)
-                .for_each(|(multiplier, residual)| *multiplier = -*residual);
+                .zip(&self.workspace.active_rows)
+                .for_each(|(multiplier, &row)| *multiplier = -self.workspace.residual[row]);
             factorize(
-                &mut self.workspace.normal_matrix,
-                &mut self.workspace.pivots,
-                self.residual_dimension,
+                &mut self.workspace.normal_matrix[..active_dimension * active_dimension],
+                &mut self.workspace.pivots[..active_dimension],
+                active_dimension,
             )
             .map_err(|_| SolveError::ManifoldProjectionFailed)?;
             solve_factorized(
-                &self.workspace.normal_matrix,
-                &self.workspace.pivots,
-                &mut self.workspace.multipliers,
-                self.residual_dimension,
+                &self.workspace.normal_matrix[..active_dimension * active_dimension],
+                &self.workspace.pivots[..active_dimension],
+                &mut self.workspace.multipliers[..active_dimension],
+                active_dimension,
             );
             form_state_correction(
                 &self.workspace.jacobian,
                 &self.workspace.multipliers,
-                self.residual_dimension,
+                &self.workspace.active_rows,
                 state_dimension,
                 &mut self.workspace.correction,
             );
@@ -356,6 +376,7 @@ struct ProjectionWorkspace {
     normal_matrix: Vec<f64>,
     multipliers: Vec<f64>,
     pivots: Vec<usize>,
+    active_rows: Vec<usize>,
     correction: Vec<f64>,
     trial_state: Vec<f64>,
 }
@@ -378,6 +399,10 @@ impl ProjectionWorkspace {
         self.normal_matrix.resize(normal_length, 0.0);
         self.multipliers.resize(residual_dimension, 0.0);
         self.pivots.resize(residual_dimension, 0);
+        if self.active_rows.capacity() < residual_dimension {
+            self.active_rows
+                .reserve(residual_dimension - self.active_rows.len());
+        }
         self.correction.resize(state_dimension, 0.0);
         self.trial_state.resize(state_dimension, 0.0);
         Ok(())
@@ -414,16 +439,16 @@ fn evaluate_residual_if_finite<P>(
 
 fn form_normal_matrix(
     jacobian: &[f64],
-    residual_dimension: usize,
+    active_rows: &[usize],
     state_dimension: usize,
     normal: &mut [f64],
 ) {
-    for row in 0..residual_dimension {
-        for column in 0..residual_dimension {
-            normal[row * residual_dimension + column] = (0..state_dimension)
+    for (row, &jacobian_row) in active_rows.iter().enumerate() {
+        for (column, &jacobian_column) in active_rows.iter().enumerate() {
+            normal[row * active_rows.len() + column] = (0..state_dimension)
                 .map(|state_index| {
-                    jacobian[row * state_dimension + state_index]
-                        * jacobian[column * state_dimension + state_index]
+                    jacobian[jacobian_row * state_dimension + state_index]
+                        * jacobian[jacobian_column * state_dimension + state_index]
                 })
                 .sum();
         }
@@ -433,16 +458,15 @@ fn form_normal_matrix(
 fn form_state_correction(
     jacobian: &[f64],
     multipliers: &[f64],
-    residual_dimension: usize,
+    active_rows: &[usize],
     state_dimension: usize,
     correction: &mut [f64],
 ) {
     for state_index in 0..state_dimension {
-        correction[state_index] = (0..residual_dimension)
-            .map(|residual_index| {
-                jacobian[residual_index * state_dimension + state_index]
-                    * multipliers[residual_index]
-            })
+        correction[state_index] = active_rows
+            .iter()
+            .zip(multipliers)
+            .map(|(&row, multiplier)| jacobian[row * state_dimension + state_index] * multiplier)
             .sum();
     }
 }

@@ -228,6 +228,9 @@ pub enum SolveError {
     /// A manifold residual or its Jacobian produced a non-finite value.
     #[error("a manifold projection function produced a non-finite value")]
     NonFiniteManifoldProjection,
+    /// A predictive domain residual produced a non-finite value.
+    #[error("a predictive domain residual produced a non-finite value")]
+    NonFiniteDomainResidual,
     /// The manifold has more constraints than state components.
     #[error("the manifold residual dimension exceeds the state dimension")]
     InvalidManifoldDimension,
