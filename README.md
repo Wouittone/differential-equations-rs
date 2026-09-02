@@ -127,6 +127,17 @@ state and parameters. It retains only one pending time, resets each solve,
 and accepts `None` to stop scheduling. Non-finite or non-advancing choices
 return a typed solve error. Initialization chooses the first time without
 firing or saving an effect unless `with_initial_affect(true)` is selected.
+`TerminateSteadyState` stops when every derivative satisfies
+`abs(du[i]) <= max(absolute[i], relative[i] * abs(u[i]))`, using the problem's
+own equations. Its independent default tolerances are `1e-8` and `1e-6`;
+scalar or componentwise overrides and a minimum absolute time are supported.
+The criterion follows the
+[SciML steady-state policy](https://docs.sciml.ai/DiffEqCallbacks/stable/steady_state/).
+It checks the total derivative for split problems and both acceleration and
+velocity for second-order problems. Checks reuse scratch storage, preserve
+solver caches when not terminating, and include their derivative evaluations
+in the statistics. A small instantaneous derivative does not guarantee a
+long-term equilibrium, especially for time-dependent equations.
 `FunctionCallingCallback` observes the initial state, every accepted step, or
 an explicit set of exact times without invalidating solver caches.
 `StepsizeLimiter` applies a state-dependent stability bound, such as a CFL
@@ -181,8 +192,9 @@ let problem = OdeProblem::new(
 ```
 
 `PeriodicCallback`, `IterativeCallback`, `FunctionCallingCallback`,
-`StepsizeLimiter`, and `DomainGuard` also construct partitioned callback sets for second-order
-problems through `into_second_order_callback_set`. `DomainGuard` checks actual
+`StepsizeLimiter`, `TerminateSteadyState`, and `DomainGuard` also construct
+partitioned callback sets for second-order problems through
+`into_second_order_callback_set`. `DomainGuard` checks actual
 candidate states and may repeat their computation; `PositiveDomain` predicts
 the next state before the attempt. `GeneralDomain` extends that predictive
 control to user-defined residuals and uses `ManifoldProjection` for endpoint

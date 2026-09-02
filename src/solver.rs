@@ -237,6 +237,9 @@ pub enum SolveError {
         "an iterative callback must use its configured start and request finite, advancing times"
     )]
     InvalidIterativeCallbackTime,
+    /// Steady-state tolerance arrays do not match the problem's state dimension.
+    #[error("steady-state tolerances must contain one value or one per state component")]
+    InvalidSteadyStateDimension,
     /// The manifold has more constraints than state components.
     #[error("the manifold residual dimension exceeds the state dimension")]
     InvalidManifoldDimension,

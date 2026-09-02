@@ -9,9 +9,8 @@ use crate::{OdeProblem, Solution, SolveError, SolveOptions, SolverStats, SplitOd
 
 /// Explicit Euler applied to the sum of a split problem's two right-hand sides.
 ///
-/// Solver statistics count each paired explicit/implicit evaluation as one
-/// logical right-hand-side evaluation, matching the historical combined-
-/// problem implementation.
+/// Solver statistics count explicit and implicit evaluations separately,
+/// including evaluations requested by callbacks.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct SplitEuler;
 
@@ -117,9 +116,7 @@ impl<'a, FE, FI, P> SplitEulerKernel<'a, FE, FI, P> {
             .evaluate_explicit(&mut self.explicit, state, time);
         self.problem
             .evaluate_implicit(&mut self.implicit, state, time);
-        // A split pair is one logical right-hand-side evaluation, matching the
-        // accounting used by the previous combined-problem implementation.
-        stats.rhs_evaluations += 1;
+        stats.rhs_evaluations += 2;
         self.explicit
             .iter()
             .chain(&self.implicit)

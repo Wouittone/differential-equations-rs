@@ -37,7 +37,7 @@ pub enum InterpolationError {
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 #[non_exhaustive]
 pub struct SolverStats {
-    /// Number of right-hand-side evaluations.
+    /// Number of right-hand-side evaluations, including callback checks.
     pub rhs_evaluations: usize,
     /// Number of accepted time steps.
     pub accepted_steps: usize,

@@ -651,6 +651,7 @@ where
     let mut recorder = TrajectoryRecorder::new(&state, start, options);
     let initial_callbacks = kernel.apply_initial_callbacks(problem, &mut state, start)?;
     stats.callback_invocations += initial_callbacks.invocations;
+    stats.rhs_evaluations += initial_callbacks.rhs_evaluations;
     if initial_callbacks.state_modified {
         recorder.record_callback(
             start,
@@ -816,6 +817,7 @@ where
                 )?
             };
             stats.callback_invocations += callbacks.invocations;
+            stats.rhs_evaluations += callbacks.rhs_evaluations;
             stats.accepted_steps += 1;
 
             let dense_recorded = if !options.save_at.is_empty() || options.retain_dense_output {

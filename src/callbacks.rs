@@ -9,10 +9,13 @@
 mod domain;
 mod iterative;
 mod manifold;
+mod steady_state;
 
 pub use domain::GeneralDomain;
 pub use iterative::IterativeCallback;
 pub use manifold::ManifoldProjection;
+pub(crate) use steady_state::SteadyStateCondition;
+pub use steady_state::TerminateSteadyState;
 
 use std::rc::Rc;
 

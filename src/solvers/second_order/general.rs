@@ -1,3 +1,4 @@
+use crate::callbacks::SteadyStateCondition;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -38,6 +39,7 @@ type PartitionedInterpolator<'a> =
 
 enum DiscreteTrigger<P> {
     Condition(Box<DiscreteCondition<P>>),
+    SteadyState(SteadyStateCondition),
     PresetTimes(PresetTimes),
     Periodic(PeriodicTimes),
     Iterative {
@@ -66,18 +68,28 @@ impl<P> DiscreteTrigger<P> {
         Ok(())
     }
 
-    fn is_triggered(&self, velocity: &[f64], position: &[f64], parameters: &P, time: f64) -> bool {
-        match self {
+    fn is_triggered(
+        &self,
+        velocity: &[f64],
+        position: &[f64],
+        parameters: &P,
+        time: f64,
+        evaluate: impl FnOnce(&mut [f64], &mut [f64]),
+    ) -> Result<bool, SolveError> {
+        Ok(match self {
+            Self::SteadyState(condition) => {
+                return condition.test(velocity, position, time, evaluate);
+            }
             Self::Condition(condition) => condition(velocity, position, parameters, time),
             Self::PresetTimes(times) => times.contains(time),
             Self::Periodic(times) => times.contains(time),
             Self::Iterative { times, .. } => times.contains(time),
-        }
+        })
     }
 
     fn preset_times(&self) -> Option<&[f64]> {
         match self {
-            Self::Condition(_) => None,
+            Self::Condition(_) | Self::SteadyState(_) => None,
             Self::PresetTimes(times) => Some(times.as_slice()),
             Self::Periodic(_) => None,
             Self::Iterative { .. } => None,
@@ -86,7 +98,7 @@ impl<P> DiscreteTrigger<P> {
 
     fn next_preset_time(&self, time: f64, direction: f64) -> Option<f64> {
         match self {
-            Self::Condition(_) => None,
+            Self::Condition(_) | Self::SteadyState(_) => None,
             Self::PresetTimes(times) => times.next(time, direction),
             Self::Periodic(times) => times.next(time, direction),
             Self::Iterative { times, .. } => times.next(time, direction),
@@ -315,6 +327,20 @@ impl<P> SecondOrderCallbackSet<P> {
                     initialize: Box::new(initialize),
                 },
                 affect: Box::new(affect),
+                save,
+            }));
+        self
+    }
+
+    pub(crate) fn with_steady_state(
+        mut self,
+        condition: SteadyStateCondition,
+        save: CallbackSave,
+    ) -> Self {
+        self.callbacks
+            .push(PartitionedCallback::Discrete(DiscreteCallback {
+                trigger: DiscreteTrigger::SteadyState(condition),
+                affect: Box::new(|_, _, _, _| Ok(CallbackAction::Terminate)),
                 save,
             }));
         self
@@ -1919,6 +1945,7 @@ where
     let mut recorder = PartitionedRecorder::new(&velocity, &position, start, options);
     let initial = apply_initial_callbacks(problem, &mut velocity, &mut position, start)?;
     stats.callback_invocations += initial.invocations;
+    stats.rhs_evaluations += initial.rhs_evaluations;
     if initial.state_modified {
         recorder.record_callback(
             start,
@@ -2110,6 +2137,7 @@ where
             None,
         )?;
         stats.callback_invocations += callback.invocations;
+        stats.rhs_evaluations += callback.rhs_evaluations;
         stats.accepted_steps += 1;
         recorder.record_step(
             &velocity,
@@ -2470,6 +2498,7 @@ where
     let mut recorder = PartitionedRecorder::new(&velocity, &position, start, options);
     let initial = apply_initial_callbacks(problem, &mut velocity, &mut position, start)?;
     stats.callback_invocations += initial.invocations;
+    stats.rhs_evaluations += initial.rhs_evaluations;
     if initial.state_modified {
         recorder.record_callback(
             start,
@@ -2609,6 +2638,7 @@ where
             None,
         )?;
         stats.callback_invocations += callback.invocations;
+        stats.rhs_evaluations += callback.rhs_evaluations;
         time = next_time;
         time_stops.accepted(time);
         std::mem::swap(&mut velocity, &mut workspace.candidate_velocity);
@@ -2705,6 +2735,7 @@ where
     let mut recorder = PartitionedRecorder::new(&velocity, &position, start, options);
     let initial = apply_initial_callbacks(problem, &mut velocity, &mut position, start)?;
     stats.callback_invocations += initial.invocations;
+    stats.rhs_evaluations += initial.rhs_evaluations;
     if initial.state_modified {
         recorder.record_callback(
             start,
@@ -2891,6 +2922,7 @@ where
                 )?
             };
             stats.callback_invocations += callback.invocations;
+            stats.rhs_evaluations += callback.rhs_evaluations;
             time = next_time;
             time_stops.accepted(time);
             std::mem::swap(&mut velocity, &mut workspace.candidate_velocity);
@@ -3209,6 +3241,7 @@ where
     let mut recorder = PartitionedRecorder::new(&velocity, &position, start, options);
     let initial = apply_initial_callbacks(problem, &mut velocity, &mut position, start)?;
     stats.callback_invocations += initial.invocations;
+    stats.rhs_evaluations += initial.rhs_evaluations;
     if initial.state_modified {
         recorder.record_callback(
             start,
@@ -3490,6 +3523,7 @@ where
             None,
         )?;
         stats.callback_invocations += callback.invocations;
+        stats.rhs_evaluations += callback.rhs_evaluations;
         time = next_time;
         time_stops.accepted(time);
         std::mem::swap(&mut velocity, &mut workspace.candidate_velocity);
@@ -3598,6 +3632,7 @@ where
     let mut recorder = PartitionedRecorder::new(&velocity, &position, start, options);
     let initial = apply_initial_callbacks(problem, &mut velocity, &mut position, start)?;
     stats.callback_invocations += initial.invocations;
+    stats.rhs_evaluations += initial.rhs_evaluations;
     if initial.state_modified {
         recorder.record_callback(
             start,
@@ -3705,6 +3740,7 @@ where
             None,
         )?;
         stats.callback_invocations += callback.invocations;
+        stats.rhs_evaluations += callback.rhs_evaluations;
         time = next_time;
         time_stops.accepted(time);
         std::mem::swap(&mut velocity, &mut workspace.candidate_velocity);
@@ -3954,7 +3990,10 @@ pub(super) fn apply_initial_callbacks<F, P>(
     velocity: &mut [f64],
     position: &mut [f64],
     time: f64,
-) -> Result<CallbackOutcome, SolveError> {
+) -> Result<CallbackOutcome, SolveError>
+where
+    F: Fn(&mut [f64], &[f64], &[f64], &P, f64),
+{
     let mut outcome = CallbackOutcome::default();
     for initialization in &problem.initializers {
         (initialization.hook)(velocity, position, &problem.parameters, time);
@@ -3968,10 +4007,18 @@ pub(super) fn apply_initial_callbacks<F, P>(
         callback
             .trigger
             .initialize(velocity, position, &problem.parameters, time)?;
-        if callback
-            .trigger
-            .is_triggered(velocity, position, &problem.parameters, time)
-        {
+        if callback.trigger.is_triggered(
+            velocity,
+            position,
+            &problem.parameters,
+            time,
+            |du, _| {
+                let (acceleration, rate) = du.split_at_mut(velocity.len());
+                (problem.acceleration)(acceleration, velocity, position, &problem.parameters, time);
+                rate.copy_from_slice(velocity);
+                outcome.rhs_evaluations += 1;
+            },
+        )? {
             outcome.register(callback.save);
             outcome.apply_action((callback.affect)(
                 velocity,
@@ -4014,7 +4061,10 @@ pub(super) fn apply_step_callbacks<F, P>(
     state_before_position: &mut [f64],
     event_tolerance: f64,
     mut interpolator: Option<&mut PartitionedInterpolator<'_>>,
-) -> Result<CallbackOutcome, SolveError> {
+) -> Result<CallbackOutcome, SolveError>
+where
+    F: Fn(&mut [f64], &[f64], &[f64], &P, f64),
+{
     if problem.callbacks.is_empty() {
         return Ok(CallbackOutcome::default());
     }
@@ -4174,10 +4224,24 @@ pub(super) fn apply_step_callbacks<F, P>(
             let PartitionedCallback::Discrete(callback) = callback else {
                 continue;
             };
-            if callback
-                .trigger
-                .is_triggered(velocity, position, &problem.parameters, *time)
-            {
+            if callback.trigger.is_triggered(
+                velocity,
+                position,
+                &problem.parameters,
+                *time,
+                |du, _| {
+                    let (acceleration, rate) = du.split_at_mut(velocity.len());
+                    (problem.acceleration)(
+                        acceleration,
+                        velocity,
+                        position,
+                        &problem.parameters,
+                        *time,
+                    );
+                    rate.copy_from_slice(velocity);
+                    outcome.rhs_evaluations += 1;
+                },
+            )? {
                 if outcome.invocations == 0 {
                     state_before_velocity.copy_from_slice(velocity);
                     state_before_position.copy_from_slice(position);

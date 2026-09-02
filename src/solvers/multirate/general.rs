@@ -339,6 +339,7 @@ where
     let mut recorder = TrajectoryRecorder::new(&state, start, options);
     let initial = problem.apply_initial_callbacks(&mut state, start)?;
     stats.callback_invocations += initial.invocations;
+    stats.rhs_evaluations += initial.rhs_evaluations;
     if initial.state_modified {
         recorder.record_callback(start, problem.initial_state(), &state, initial, true);
     }
@@ -448,6 +449,7 @@ where
                 Some(&mut interpolate),
             )?;
             stats.callback_invocations += callbacks.invocations;
+            stats.rhs_evaluations += callbacks.rhs_evaluations;
             stats.accepted_steps += 1;
             let dense_state = if callbacks.invocations == 0 {
                 &candidate

@@ -411,6 +411,27 @@ impl<FE, FI, P> SplitOdeProblem<FE, FI, P> {
         (self.implicit)(derivative, state, &self.parameters, time);
     }
 
+    fn discrete_is_triggered(
+        &self,
+        trigger: &DiscreteTrigger<P>,
+        state: &[f64],
+        time: f64,
+        evaluations: &mut usize,
+    ) -> Result<bool, SolveError>
+    where
+        FE: Fn(&mut [f64], &[f64], &P, f64),
+        FI: Fn(&mut [f64], &[f64], &P, f64),
+    {
+        trigger.is_triggered(state, &self.parameters, time, |du, work| {
+            self.evaluate_explicit(du, state, time);
+            self.evaluate_implicit(work, state, time);
+            *evaluations += 2;
+            for (du, implicit) in du.iter_mut().zip(work) {
+                *du += *implicit;
+            }
+        })
+    }
+
     pub(crate) fn evaluate_implicit_jacobian(
         &self,
         jacobian: &mut [f64],
@@ -428,7 +449,11 @@ impl<FE, FI, P> SplitOdeProblem<FE, FI, P> {
         &self,
         state: &mut [f64],
         time: f64,
-    ) -> Result<CallbackOutcome, SolveError> {
+    ) -> Result<CallbackOutcome, SolveError>
+    where
+        FE: Fn(&mut [f64], &[f64], &P, f64),
+        FI: Fn(&mut [f64], &[f64], &P, f64),
+    {
         let mut outcome = CallbackOutcome::default();
         for initialization in &self.initializers {
             (initialization.hook)(state, &self.parameters, time);
@@ -440,7 +465,12 @@ impl<FE, FI, P> SplitOdeProblem<FE, FI, P> {
                 continue;
             };
             callback.trigger.initialize(state, &self.parameters, time)?;
-            if callback.trigger.is_triggered(state, &self.parameters, time) {
+            if self.discrete_is_triggered(
+                &callback.trigger,
+                state,
+                time,
+                &mut outcome.rhs_evaluations,
+            )? {
                 outcome.register(callback.save);
                 outcome.apply_action((callback.affect)(state, &self.parameters, time)?)?;
                 ensure_finite_callback_state(state)?;
@@ -474,7 +504,11 @@ impl<FE, FI, P> SplitOdeProblem<FE, FI, P> {
         state_before_effect: &mut [f64],
         event_tolerance: f64,
         mut interpolator: Option<&mut StepInterpolator<'_>>,
-    ) -> Result<CallbackOutcome, SolveError> {
+    ) -> Result<CallbackOutcome, SolveError>
+    where
+        FE: Fn(&mut [f64], &[f64], &P, f64),
+        FI: Fn(&mut [f64], &[f64], &P, f64),
+    {
         if self.callbacks.is_empty() {
             return Ok(CallbackOutcome::default());
         }
@@ -611,10 +645,12 @@ impl<FE, FI, P> SplitOdeProblem<FE, FI, P> {
                 let Callback::Discrete(callback) = callback else {
                     continue;
                 };
-                if callback
-                    .trigger
-                    .is_triggered(state, &self.parameters, *time)
-                {
+                if self.discrete_is_triggered(
+                    &callback.trigger,
+                    state,
+                    *time,
+                    &mut outcome.rhs_evaluations,
+                )? {
                     if outcome.invocations == 0 {
                         state_before_effect.copy_from_slice(state);
                     }
@@ -1248,6 +1284,22 @@ impl<F, P> OdeProblem<F, P> {
         &self.parameters
     }
 
+    fn discrete_is_triggered(
+        &self,
+        trigger: &DiscreteTrigger<P>,
+        state: &[f64],
+        time: f64,
+        evaluations: &mut usize,
+    ) -> Result<bool, SolveError>
+    where
+        F: Fn(&mut [f64], &[f64], &P, f64),
+    {
+        trigger.is_triggered(state, &self.parameters, time, |du, _| {
+            (self.rhs)(du, state, &self.parameters, time);
+            *evaluations += 1;
+        })
+    }
+
     pub(crate) fn evaluate_jacobian(&self, jacobian: &mut [f64], state: &[f64], time: f64) -> bool {
         let Some(function) = &self.jacobian else {
             return false;
@@ -1260,7 +1312,10 @@ impl<F, P> OdeProblem<F, P> {
         &self,
         state: &mut [f64],
         time: f64,
-    ) -> Result<CallbackOutcome, SolveError> {
+    ) -> Result<CallbackOutcome, SolveError>
+    where
+        F: Fn(&mut [f64], &[f64], &P, f64),
+    {
         let mut outcome = CallbackOutcome::default();
         for initialization in &self.initializers {
             (initialization.hook)(state, &self.parameters, time);
@@ -1272,7 +1327,12 @@ impl<F, P> OdeProblem<F, P> {
                 continue;
             };
             callback.trigger.initialize(state, &self.parameters, time)?;
-            if callback.trigger.is_triggered(state, &self.parameters, time) {
+            if self.discrete_is_triggered(
+                &callback.trigger,
+                state,
+                time,
+                &mut outcome.rhs_evaluations,
+            )? {
                 outcome.register(callback.save);
                 outcome.apply_action((callback.affect)(state, &self.parameters, time)?)?;
                 ensure_finite_callback_state(state)?;
@@ -1306,7 +1366,10 @@ impl<F, P> OdeProblem<F, P> {
         state_before_effect: &mut [f64],
         event_tolerance: f64,
         mut interpolator: Option<&mut StepInterpolator<'_>>,
-    ) -> Result<CallbackOutcome, SolveError> {
+    ) -> Result<CallbackOutcome, SolveError>
+    where
+        F: Fn(&mut [f64], &[f64], &P, f64),
+    {
         if self.callbacks.is_empty() {
             return Ok(CallbackOutcome::default());
         }
@@ -1446,10 +1509,12 @@ impl<F, P> OdeProblem<F, P> {
                 let Callback::Discrete(callback) = callback else {
                     continue;
                 };
-                if callback
-                    .trigger
-                    .is_triggered(state, &self.parameters, *time)
-                {
+                if self.discrete_is_triggered(
+                    &callback.trigger,
+                    state,
+                    *time,
+                    &mut outcome.rhs_evaluations,
+                )? {
                     if outcome.invocations == 0 {
                         state_before_effect.copy_from_slice(state);
                     }

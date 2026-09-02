@@ -18,7 +18,7 @@ fn split_euler_advances_both_typed_components() {
     };
     let solution = solve_split_euler(&problem, SplitEuler, &options).unwrap();
     assert_eq!(solution.last_state(), &[2.882_812_5]);
-    assert_eq!(solution.stats().rhs_evaluations, 4);
+    assert_eq!(solution.stats().rhs_evaluations, 8);
 }
 
 #[test]

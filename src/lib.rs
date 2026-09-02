@@ -56,6 +56,8 @@
 //! - [`callbacks`] contains reusable integration-time policies. Its periodic
 //!   and iterative schedulers use constant memory; [`callbacks::IterativeCallback`]
 //!   chooses each next event from the state after the previous effect.
+//!   [`callbacks::TerminateSteadyState`] stops when the problem's derivatives
+//!   satisfy independent componentwise tolerances.
 //!   Its function-calling policy marks
 //!   read-only observations explicitly, and its step-size limiter applies
 //!   dynamic stability bounds without interfering with smaller adaptive steps.

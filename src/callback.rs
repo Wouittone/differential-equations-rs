@@ -2,6 +2,7 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use crate::SolveError;
+use crate::callbacks::SteadyStateCondition;
 use crate::event::times_are_representably_equal;
 
 /// The action requested after an ODE callback runs.
@@ -305,6 +306,7 @@ impl IterativeTimes {
 
 pub(crate) enum DiscreteTrigger<P> {
     Condition(Box<Condition<P>>),
+    SteadyState(SteadyStateCondition),
     PresetTimes(PresetTimes),
     Periodic(PeriodicTimes),
     Iterative {
@@ -753,6 +755,7 @@ impl<P> Default for CallbackSet<P> {
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub(crate) struct CallbackOutcome {
     pub invocations: usize,
+    pub rhs_evaluations: usize,
     pub terminate: bool,
     pub state_modified: bool,
     pub save_before: bool,
@@ -836,18 +839,25 @@ impl<P> DiscreteTrigger<P> {
         Ok(())
     }
 
-    pub(crate) fn is_triggered(&self, state: &[f64], parameters: &P, time: f64) -> bool {
-        match self {
+    pub(crate) fn is_triggered(
+        &self,
+        state: &[f64],
+        parameters: &P,
+        time: f64,
+        evaluate: impl FnOnce(&mut [f64], &mut [f64]),
+    ) -> Result<bool, SolveError> {
+        Ok(match self {
+            Self::SteadyState(condition) => return condition.test(state, &[], time, evaluate),
             Self::Condition(condition) => condition(state, parameters, time),
             Self::PresetTimes(times) => times.contains(time),
             Self::Periodic(times) => times.contains(time),
             Self::Iterative { times, .. } => times.contains(time),
-        }
+        })
     }
 
     pub(crate) fn preset_times(&self) -> Option<&[f64]> {
         match self {
-            Self::Condition(_) => None,
+            Self::Condition(_) | Self::SteadyState(_) => None,
             Self::PresetTimes(times) => Some(times.as_slice()),
             Self::Periodic(_) => None,
             Self::Iterative { .. } => None,
@@ -856,7 +866,7 @@ impl<P> DiscreteTrigger<P> {
 
     pub(crate) fn next_preset_time(&self, time: f64, direction: f64) -> Option<f64> {
         match self {
-            Self::Condition(_) => None,
+            Self::Condition(_) | Self::SteadyState(_) => None,
             Self::PresetTimes(times) => times.next(time, direction),
             Self::Periodic(times) => times.next(time, direction),
             Self::Iterative { times, .. } => times.next(time, direction),
