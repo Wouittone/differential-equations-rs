@@ -6,6 +6,7 @@ pub mod amf;
 pub mod general;
 mod rosenbrock_dense;
 pub mod rosenbrock_extended;
+mod tableaux;
 
 pub use amf::{
     AMF, AMFOperator, AmfFunction, AmfOperator, AmfProblem, build_amf_function, solve_amf,

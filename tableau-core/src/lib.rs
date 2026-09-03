@@ -4,6 +4,8 @@ mod symplectic;
 pub use symplectic::{SymplecticTableau, parse_symplectic_tableau};
 mod multistep;
 pub use multistep::{LinearMultistepTableau, parse_multistep_tableau};
+mod rosenbrock;
+pub use rosenbrock::{RosenbrockTableau, parse_rosenbrock_tableau};
 
 use serde::Deserialize;
 use std::fmt;

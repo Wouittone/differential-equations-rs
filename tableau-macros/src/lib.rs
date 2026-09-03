@@ -494,15 +494,8 @@ pub fn define_explicit_rk_tableau_from_file(input: TokenStream) -> TokenStream {
 #[proc_macro]
 pub fn define_multistep_tableau_from_file(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as StaticTableauInput);
-    let result = (|| {
-        let manifest_dir = std::env::var_os("CARGO_MANIFEST_DIR")
-            .map(PathBuf::from)
-            .ok_or("CARGO_MANIFEST_DIR is unavailable during macro expansion")?;
-        let path = manifest_dir.join(input.path.value());
-        let source = std::fs::read_to_string(&path)
-            .map_err(|error| format!("failed to read `{}`: {error}", path.display()))?;
-        expand_multistep_source(input, &source)
-    })();
+    let result =
+        read_static_resource(&input).and_then(|source| expand_multistep_source(input, &source));
     match result {
         Ok(tokens) => tokens.into(),
         Err(error) => syn::Error::new(proc_macro2::Span::call_site(), error)
@@ -517,33 +510,80 @@ fn expand_multistep_source(
 ) -> Result<TokenStream2, String> {
     parse_multistep_tableau(source, &input.method_name.value())
         .map_err(|error| format!("invalid tableau `{}`: {error}", input.path.value()))?;
+    Ok(emit_lazy_static(
+        input,
+        quote!(LazyMultistepTableau),
+        quote!(parse_multistep_tableau),
+    ))
+}
+
+/// Defines a lazy Rosenbrock tableau from canonical JSON, validated at compile time.
+///
+/// Accepts `visibility STATIC, "MethodName", "resource.json", crate = local_name`.
+/// Only source text is embedded; coefficient arrays are parsed on first use.
+#[proc_macro]
+pub fn define_rosenbrock_tableau_from_file(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as StaticTableauInput);
+    match read_static_resource(&input).and_then(|source| expand_rosenbrock_source(input, &source)) {
+        Ok(tokens) => tokens.into(),
+        Err(error) => syn::Error::new(proc_macro2::Span::call_site(), error)
+            .into_compile_error()
+            .into(),
+    }
+}
+
+fn expand_rosenbrock_source(
+    input: StaticTableauInput,
+    source: &str,
+) -> Result<TokenStream2, String> {
+    differential_equations_tableau_core::parse_rosenbrock_tableau(
+        source,
+        &input.method_name.value(),
+    )
+    .map_err(|error| format!("invalid tableau `{}`: {error}", input.path.value()))?;
+    Ok(emit_lazy_static(
+        input,
+        quote!(LazyRosenbrockTableau),
+        quote!(parse_rosenbrock_tableau),
+    ))
+}
+
+fn emit_lazy_static(
+    input: StaticTableauInput,
+    lazy_type: TokenStream2,
+    parser: TokenStream2,
+) -> TokenStream2 {
     let visibility = input.visibility;
     let static_name = input.static_name;
     let method_name = input.method_name;
     let source_path = input.path;
     let crate_path = input.crate_path;
-    Ok(quote! {
-        #[doc = concat!("Lazily parsed linear multistep formula `", #method_name, "`.")]
-        #visibility static #static_name: #crate_path::tableau::LazyMultistepTableau =
+    quote! {
+        #[doc = concat!("Lazily parsed tableau `", #method_name, "`.")]
+        #visibility static #static_name: #crate_path::tableau::#lazy_type =
             ::std::sync::LazyLock::new(|| {
-                #crate_path::tableau::parse_multistep_tableau(
+                #crate_path::tableau::#parser(
                     include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/", #source_path)),
                     #method_name,
                 )
             });
-    })
+    }
+}
+
+fn read_static_resource(input: &StaticTableauInput) -> Result<String, String> {
+    let manifest_dir = std::env::var_os("CARGO_MANIFEST_DIR")
+        .map(PathBuf::from)
+        .ok_or("CARGO_MANIFEST_DIR is unavailable during macro expansion")?;
+    let path = manifest_dir.join(input.path.value());
+    std::fs::read_to_string(&path)
+        .map_err(|error| format!("failed to read `{}`: {error}", path.display()))
 }
 
 fn expand_static(
     input: StaticTableauInput,
     expected_kind: RungeKuttaKind,
 ) -> Result<TokenStream2, String> {
-    let manifest_dir = std::env::var_os("CARGO_MANIFEST_DIR")
-        .map(PathBuf::from)
-        .ok_or("CARGO_MANIFEST_DIR is unavailable during macro expansion")?;
-    let path = manifest_dir.join(input.path.value());
-    let source = std::fs::read_to_string(&path)
-        .map_err(|error| format!("failed to read `{}`: {error}", path.display()))?;
+    let source = read_static_resource(&input)?;
     expand_static_source(input, &source, expected_kind)
 }
 
@@ -565,20 +605,11 @@ fn expand_static_source(
         ));
     }
 
-    let visibility = input.visibility;
-    let static_name = input.static_name;
-    let method_name = input.method_name;
-    let source_path = input.path;
-    let crate_path = input.crate_path;
-    Ok(quote! {
-        #visibility static #static_name: #crate_path::tableau::LazyTableau =
-            ::std::sync::LazyLock::new(|| {
-                #crate_path::tableau::parse_tableau(
-                    include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/", #source_path)),
-                    #method_name,
-                )
-            });
-    })
+    Ok(emit_lazy_static(
+        input,
+        quote!(LazyTableau),
+        quote!(parse_tableau),
+    ))
 }
 
 #[cfg(test)]
@@ -779,6 +810,7 @@ mod symplectic_tests {
 
 #[cfg(test)]
 mod multistep_tests {
+
     use super::*;
 
     const SOURCE: &str = r#"{"name":"AB2","description":"Macro test","kind":"linear-multistep","order":2,"alpha":[1,-1,0],"beta":[0,"3/2","-1/2"]}"#;
@@ -820,5 +852,46 @@ mod multistep_tests {
         let error = expand_multistep_source(input(), &invalid).unwrap_err();
         assert!(error.contains("formula.json"), "{error}");
         assert!(error.contains("NDF modifier"), "{error}");
+    }
+}
+
+#[cfg(test)]
+mod rosenbrock_tests {
+    use super::*;
+
+    const SOURCE: &str = r#"{"name":"Test","description":"Macro test","kind":"rosenbrock","order":2,"gamma":"1/2","A":[[0,0],[2,0]],"C":[[0,0],[-4,0]],"c":[0,1],"d":[0.5,-0.5],"b":[3,1],"btilde":[1,1],"H":[[1,0],[0,1]]}"#;
+
+    fn input() -> StaticTableauInput {
+        syn::parse_str("pub FORMULA, \"Test\", \"formula.json\", crate = renamed").unwrap()
+    }
+
+    #[test]
+    fn rosenbrock_expansion_embeds_only_source_and_the_shared_parser() {
+        let tokens = expand_rosenbrock_source(input(), SOURCE)
+            .unwrap()
+            .to_string();
+        assert!(tokens.contains("LazyRosenbrockTableau"));
+        assert!(tokens.contains("include_str"));
+        assert!(tokens.contains("parse_rosenbrock_tableau"));
+        assert!(tokens.contains("renamed"));
+        assert!(!tokens.contains("0.5"));
+        assert!(!tokens.contains("const "));
+    }
+
+    #[test]
+    fn rosenbrock_validation_fails_during_macro_expansion() {
+        for invalid in [
+            SOURCE.replace("\"1/2\"", "0"),
+            SOURCE.replace("\"1/2\"", "\"1/0\""),
+            SOURCE.replace("[2,0]", "[2,1]"),
+            SOURCE.replace("[0,1]]", "[0]]"),
+            SOURCE.replace("\"btilde\":[1,1]", "\"btilde\":[1]"),
+        ] {
+            let error = expand_rosenbrock_source(input(), &invalid).unwrap_err();
+            assert!(error.contains("formula.json"), "{error}");
+        }
+        let tokens =
+            expand_rosenbrock_source(input(), &SOURCE.replace(",\"btilde\":[1,1]", "")).unwrap();
+        assert!(tokens.to_string().contains("include_str"));
     }
 }

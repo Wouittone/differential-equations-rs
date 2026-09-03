@@ -4,7 +4,8 @@ Resource-backed method data lives below `src/tableau/resources` as JSON.
 Explicit and implicit Runge--Kutta resources use canonical Butcher matrices;
 symplectic compositions use paired drift/kick vectors. Specialized families
 also use this tree for typed method data, including canonical linear multistep
-formulas for fixed-step Adams and MRAB. Migration is not yet complete:
+formulas for fixed-step Adams and MRAB, and per-method Rosenbrock tableaus.
+Migration is not yet complete:
 legacy embedded coefficients remain in some multirate, multistep,
 exponential, and Rosenbrock implementations.
 
@@ -18,6 +19,60 @@ fields. The Runge--Kutta schema is
 The shared parser uses Serde and `serde_json`. String coefficients may contain
 numeric expressions parsed by `exmex`; accepted expressions are limited to
 numeric literals, parentheses, `+`, `-`, `*`, `/`, and `sqrt(...)`.
+JSON numeric tokens use `serde_json`'s accurate float-roundtrip parsing so
+decimal numbers and equivalent decimal strings produce the same `f64` bits.
+
+## Rosenbrock resources
+
+The general Rosenbrock/Rodas methods use independent files under
+`src/tableau/resources/rosenbrock`. Their `kind` is `rosenbrock`, with the
+fields `name`, `description`, `order`, `gamma`, `A`, `C`, `c`, `d`, `b`,
+optional `btilde`, and optional `H`. The representation follows SciML's
+[RodasTableau convention](https://github.com/SciML/OrdinaryDiffEq.jl/blob/211142263781255a9aa2f910f6760b9f18ec29c8/lib/OrdinaryDiffEqRosenbrockTableaus/src/rosenbrock_tableaus.jl).
+`A` and `C` are square and strictly lower triangular; unused trailing entries
+of upstream rectangular `C` matrices are padded with zeros.
+
+For stage increments `k[i]`, the numerical kernel uses:
+
+```text
+(I - h*gamma*J) k[i] = h*gamma*(f(u + sum(A[i,j]*k[j]), t + c[i]*h)
+                               + h*d[i]*f_t + sum(C[i,j]*k[j])/h)
+u_next = u + sum(b[i]*k[i])
+error  = sum(btilde[i]*k[i])
+```
+
+Stage sums use only `j < i`. These weights are not ordinary Butcher weights:
+in particular, `b` need not sum to one. Omit `btilde` (or use `null`) for a
+fixed-step formula; an all-zero embedded estimator is rejected. `H` holds
+two through four stiff dense-output correction rows, each with one entry per
+stage. Empty or omitted `H` selects the Hermite fallback. With
+`theta = (t - t_start)/h`, the correction to linear endpoint interpolation is
+`theta*(1-theta)*(H[0]*k + theta*(H[1]*k + ...))`.
+
+Use `tableau::define_rosenbrock_tableau_from_file!` to define a validated lazy
+static for a specialized kernel:
+
+```rust,ignore
+use differential_equations::tableau::{define_rosenbrock_tableau_from_file, load_tableau};
+
+define_rosenbrock_tableau_from_file!(pub ROS2, "Ros2", "resources/ros2.json");
+let tableau = load_tableau(&ROS2)?;
+```
+
+This macro defines data, not an `OdeAlgorithm`. It shares the core scalar
+expression parser and lazy-static expansion with the other tableau families;
+it emits no Rust coefficient arrays. Malformed fields, dimensions, triangular
+structure, non-finite expressions, or dense rows fail compilation. These are
+structural checks, not a proof of classical order or stability.
+
+Built-in methods expose `.tableau()` for inspection. Solving materializes only
+the selected method; repeat access is allocation-free. `Rodas5Pr` shares
+`Rodas5P`'s parsed coefficients and adds residual control. Controller policies
+are kept separate from classical method order, including the existing
+step-doubling estimator for `Ros34Pw1a`. `Scholz4_7`'s resource records its
+upstream classical order of three while preserving the existing controller.
+The low-order `Rosenbrock23`/`Rosenbrock32`/AMF specializations and the hybrid
+Tsit5DA specialization still await their resource migrations.
 
 ## Defining a downstream method
 

@@ -9,6 +9,7 @@
 use std::marker::PhantomData;
 
 use super::rosenbrock_dense::*;
+use super::tableaux::*;
 use crate::callback::CallbackOutcome;
 use crate::integrator::{
     ControllerConfig, KernelCapabilities, StepEstimate, StepKernel, integrate as drive_integration,
@@ -18,6 +19,7 @@ use crate::solution::{
     BorrowedHermiteSegment, BorrowedRungeKuttaSegment, BorrowedStiffSegment, HermiteSegment,
     RungeKuttaSegment, StiffSegment, TrajectoryRecorder,
 };
+use crate::tableau::{RosenbrockTableau, TableauError, load_tableau};
 use crate::{OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions, SolverStats};
 
 mod coefficient_data {
@@ -297,13 +299,11 @@ pub type Tsit5DA = HybridExplicitImplicitRK;
 #[allow(non_upper_case_globals)]
 pub const Tsit5DA: HybridExplicitImplicitRK = HybridExplicitImplicitRK;
 
-struct RodasTableau {
+// The hybrid Tsit5DA specialization is migrated separately from Rosenbrock stages.
+struct HybridTableau {
     stages: usize,
-    gamma: f64,
     a: &'static [f64],
-    c_matrix: &'static [f64],
     nodes: &'static [f64],
-    time_weights: &'static [f64],
     weights: &'static [f64],
     error_weights: &'static [f64],
 }
@@ -314,498 +314,10 @@ enum AdaptiveErrorEstimator {
     RichardsonStepDoubling { method_order: i32 },
 }
 
-// ROS2RodasTableau(T, T2) from
-// lib/OrdinaryDiffEqRosenbrockTableaus/src/rosenbrock_tableaus.jl.
-
-// OrdinaryDiffEq uses btilde directly for the embedded error estimate.
-
-const ROS2_TABLEAU: RodasTableau = RodasTableau {
-    stages: 2,
-    gamma: 1.7071067811865475,
-    a: ROS2_A,
-    c_matrix: ROS2_C,
-    nodes: ROS2_NODES,
-    time_weights: ROS2_D,
-    weights: ROS2_B,
-    error_weights: ROS2_E,
-};
-
-// Rodas3RodasTableau(T, T2) from
-// lib/OrdinaryDiffEqRosenbrockTableaus/src/rosenbrock_tableaus.jl.
-
-const RODAS3_TABLEAU: RodasTableau = RodasTableau {
-    stages: 4,
-    gamma: 0.5,
-    a: RODAS3_A,
-    c_matrix: RODAS3_C,
-    nodes: RODAS3_NODES,
-    time_weights: RODAS3_D,
-    weights: RODAS3_B,
-    error_weights: RODAS3_E,
-};
-
-// Rodas3dRodasTableau(T, T2) from
-// lib/OrdinaryDiffEqRosenbrockTableaus/src/rosenbrock_tableaus.jl at
-// OrdinaryDiffEq revision 211142263781255a9aa2f910f6760b9f18ec29c8.
-
-const RODAS3D_TABLEAU: RodasTableau = RodasTableau {
-    stages: 4,
-    gamma: 0.57281606,
-    a: RODAS3D_A,
-    c_matrix: RODAS3D_C,
-    nodes: RODAS3D_NODES,
-    time_weights: RODAS3D_D,
-    weights: RODAS3D_B,
-    error_weights: RODAS3D_E,
-};
-
-// ROS3RodasTableau(T, T2) from
-// lib/OrdinaryDiffEqRosenbrockTableaus/src/rosenbrock_tableaus.jl.
-
-const ROS3_TABLEAU: RodasTableau = RodasTableau {
-    stages: 3,
-    gamma: 0.435866521508459,
-    a: ROS3_A,
-    c_matrix: ROS3_C,
-    nodes: ROS3_NODES,
-    time_weights: ROS3_D,
-    weights: ROS3_B,
-    error_weights: ROS3_E,
-};
-
-// ROS3PRRodasTableau(T, T2) from
-// lib/OrdinaryDiffEqRosenbrockTableaus/src/rosenbrock_tableaus.jl.
-
-const ROS3PR_TABLEAU: RodasTableau = RodasTableau {
-    stages: 3,
-    gamma: 0.788675134594813,
-    a: ROS3PR_A,
-    c_matrix: ROS3PR_C,
-    nodes: ROS3PR_NODES,
-    time_weights: ROS3PR_D,
-    weights: ROS3PR_B,
-    error_weights: ROS3PR_E,
-};
-
-// ROS3PRLRodasTableau(T, T2) from
-// lib/OrdinaryDiffEqRosenbrockTableaus/src/rosenbrock_tableaus.jl.
-
-const ROS3PRL_TABLEAU: RodasTableau = RodasTableau {
-    stages: 4,
-    gamma: 0.435866521508459,
-    a: ROS3PRL_A,
-    c_matrix: ROS3PRL_C,
-    nodes: ROS3PRL_NODES,
-    time_weights: ROS3PRL_D,
-    weights: ROS3PRL_B,
-    error_weights: ROS3PRL_E,
-};
-
-// ROS3PRL2RodasTableau(T, T2) from
-// lib/OrdinaryDiffEqRosenbrockTableaus/src/rosenbrock_tableaus.jl at the
-// pinned OrdinaryDiffEq.jl revision.
-
-const ROS3PRL2_TABLEAU: RodasTableau = RodasTableau {
-    stages: 4,
-    gamma: 0.435866521508459,
-    a: ROS3PRL2_A,
-    c_matrix: ROS3PRL2_C,
-    nodes: ROS3PRL2_NODES,
-    time_weights: ROS3PRL2_D,
-    weights: ROS3PRL2_B,
-    error_weights: ROS3PRL2_E,
-};
-
-// ROS3PRodasTableau(T, T2) from
-// lib/OrdinaryDiffEqRosenbrockTableaus/src/rosenbrock_tableaus.jl.
-// The source computes these values from gamma = 1/2 + sqrt(3)/6. They are
-// written as literals here so the solve path remains allocation-free and
-// deterministic while retaining the upstream Float64 tableau.
-
-const ROS3P_TABLEAU: RodasTableau = RodasTableau {
-    stages: 3,
-    gamma: 0.7886751345948129,
-    a: ROS3P_A,
-    c_matrix: ROS3P_C,
-    nodes: ROS3P_NODES,
-    time_weights: ROS3P_D,
-    weights: ROS3P_B,
-    error_weights: ROS3P_E,
-};
-
-// ROS34PRwRodasTableau(T, T2) from
-// lib/OrdinaryDiffEqRosenbrockTableaus/src/rosenbrock_tableaus.jl.
-
-const ROS34PRW_TABLEAU: RodasTableau = RodasTableau {
-    stages: 4,
-    gamma: 0.435866521508459,
-    a: ROS34PRW_A,
-    c_matrix: ROS34PRW_C,
-    nodes: ROS34PRW_NODES,
-    time_weights: ROS34PRW_D,
-    weights: ROS34PRW_B,
-    error_weights: ROS34PRW_E,
-};
-
-// ROS34PW3RodasTableau(T, T2) from
-// lib/OrdinaryDiffEqRosenbrock/src/rosenbrock_tableaus.jl.
-
-const ROS34PW3_TABLEAU: RodasTableau = RodasTableau {
-    stages: 4,
-    gamma: 1.0685790213016289,
-    a: ROS34PW3_A,
-    c_matrix: ROS34PW3_C,
-    nodes: ROS34PW3_NODES,
-    time_weights: ROS34PW3_D,
-    weights: ROS34PW3_B,
-    error_weights: ROS34PW3_E,
-};
-
-// GRK4ARodasTableau(T, T2) from
-// lib/OrdinaryDiffEqRosenbrockTableaus/src/rosenbrock_tableaus.jl.
-
-const GRK4A_TABLEAU: RodasTableau = RodasTableau {
-    stages: 4,
-    gamma: 0.395,
-    a: GRK4A_A,
-    c_matrix: GRK4A_C,
-    nodes: GRK4A_NODES,
-    time_weights: GRK4A_D,
-    weights: GRK4A_B,
-    error_weights: GRK4A_E,
-};
-
-// GRK4TRodasTableau(T, T2) from
-// lib/OrdinaryDiffEqRosenbrockTableaus/src/rosenbrock_tableaus.jl.
-
-const GRK4T_TABLEAU: RodasTableau = RodasTableau {
-    stages: 4,
-    gamma: 0.231,
-    a: GRK4T_A,
-    c_matrix: GRK4T_C,
-    nodes: GRK4T_NODES,
-    time_weights: GRK4T_D,
-    weights: GRK4T_B,
-    error_weights: GRK4T_E,
-};
-
-// ROK4aRodasTableau(T, T2) from
-// lib/OrdinaryDiffEqRosenbrockTableaus/src/rosenbrock_tableaus.jl at
-// 211142263781255a9aa2f910f6760b9f18ec29c8.
-
-const ROK4A_TABLEAU: RodasTableau = RodasTableau {
-    stages: 4,
-    gamma: 0.572816062482135,
-    a: ROK4A_A,
-    c_matrix: ROK4A_C,
-    nodes: ROK4A_NODES,
-    time_weights: ROK4A_D,
-    weights: ROK4A_B,
-    error_weights: ROK4A_E,
-};
-
-// ROS34PW1bRodasTableau(T, T2) from
-// lib/OrdinaryDiffEqRosenbrockTableaus/src/rosenbrock_tableaus.jl at
-// 211142263781255a9aa2f910f6760b9f18ec29c8.
-
-const ROS34PW1B_TABLEAU: RodasTableau = RodasTableau {
-    stages: 4,
-    gamma: 0.435866521508459,
-    a: ROS34PW1B_A,
-    c_matrix: ROS34PW1B_C,
-    nodes: ROS34PW1B_NODES,
-    time_weights: ROS34PW1B_D,
-    weights: ROS34PW1B_B,
-    error_weights: ROS34PW1B_E,
-};
-
-// ROS34PW2RodasTableau(T, T2) from
-// lib/OrdinaryDiffEqRosenbrockTableaus/src/rosenbrock_tableaus.jl at
-// 211142263781255a9aa2f910f6760b9f18ec29c8.
-
-const ROS34PW2_TABLEAU: RodasTableau = RodasTableau {
-    stages: 4,
-    gamma: 0.435866521508459,
-    a: ROS34PW2_A,
-    c_matrix: ROS34PW2_C,
-    nodes: ROS34PW2_NODES,
-    time_weights: ROS34PW2_D,
-    weights: ROS34PW2_B,
-    error_weights: ROS34PW2_E,
-};
-
-const RODAS4_TABLEAU: RodasTableau = RodasTableau {
-    stages: 6,
-    gamma: 0.25,
-    a: RODAS4_A,
-    c_matrix: RODAS4_C,
-    nodes: RODAS4_NODES,
-    time_weights: RODAS4_D,
-    weights: RODAS4_B,
-    error_weights: RODAS4_E,
-};
-
-// Rodas42Tableau(T, T2) from
-// lib/OrdinaryDiffEqRosenbrockTableaus/src/rosenbrock_tableaus.jl.
-
-const RODAS42_TABLEAU: RodasTableau = RodasTableau {
-    stages: 6,
-    gamma: 0.25,
-    a: RODAS42_A,
-    c_matrix: RODAS42_C,
-    nodes: RODAS42_NODES,
-    time_weights: RODAS42_D,
-    weights: RODAS42_B,
-    error_weights: RODAS42_E,
-};
-
-// Rodas4PTableau(T, T2) from
-// lib/OrdinaryDiffEqRosenbrockTableaus/src/rosenbrock_tableaus.jl.
-
-const RODAS4P_TABLEAU: RodasTableau = RodasTableau {
-    stages: 6,
-    gamma: 0.25,
-    a: RODAS4P_A,
-    c_matrix: RODAS4P_C,
-    nodes: RODAS4P_NODES,
-    time_weights: RODAS4P_D,
-    weights: RODAS4P_B,
-    error_weights: RODAS4P_E,
-};
-
-// Rodas4P2Tableau(T, T2) from
-// lib/OrdinaryDiffEqRosenbrockTableaus/src/rosenbrock_tableaus.jl at
-// OrdinaryDiffEq revision 211142263781255a9aa2f910f6760b9f18ec29c8.
-
-const RODAS4P2_TABLEAU: RodasTableau = RodasTableau {
-    stages: 6,
-    gamma: 0.25,
-    a: RODAS4P2_A,
-    c_matrix: RODAS4P2_C,
-    nodes: RODAS4P2_NODES,
-    time_weights: RODAS4P2_D,
-    weights: RODAS4P2_B,
-    error_weights: RODAS4P2_E,
-};
-
-// Rodas4PWTableau(T, T2) from
-// lib/OrdinaryDiffEqRosenbrockTableaus/src/rosenbrock_tableaus.jl at
-// OrdinaryDiffEq revision 211142263781255a9aa2f910f6760b9f18ec29c8.
-
-const RODAS4PW_TABLEAU: RodasTableau = RodasTableau {
-    stages: 9,
-    gamma: 0.25,
-    a: RODAS4PW_A,
-    c_matrix: RODAS4PW_C,
-    nodes: RODAS4PW_NODES,
-    time_weights: RODAS4PW_D,
-    weights: RODAS4PW_B,
-    error_weights: RODAS4PW_E,
-};
-
-// Rodas5Tableau(T, T2) from
-// lib/OrdinaryDiffEqRosenbrockTableaus/src/rosenbrock_tableaus.jl at
-// 211142263781255a9aa2f910f6760b9f18ec29c8.
-
-const RODAS5_TABLEAU: RodasTableau = RodasTableau {
-    stages: 8,
-    gamma: 0.19,
-    a: RODAS5_A,
-    c_matrix: RODAS5_C,
-    nodes: RODAS5_NODES,
-    time_weights: RODAS5_D,
-    weights: RODAS5_B,
-    error_weights: RODAS5_E,
-};
-
-const RODAS5P_TABLEAU: RodasTableau = RodasTableau {
-    stages: 8,
-    gamma: 0.21193756319429014,
-    a: RODAS5P_A,
-    c_matrix: RODAS5P_C,
-    nodes: RODAS5P_NODES,
-    time_weights: RODAS5P_D,
-    weights: RODAS5P_B,
-    error_weights: RODAS5P_E,
-};
-
-// Rodas5PeTableau(T, T2) from
-// lib/OrdinaryDiffEqRosenbrock/src/rosenbrock_tableaus.jl. Rodas5Pe uses
-// Rodas5P's primary tableau with a custom embedded estimator.
-
-const RODAS5PE_TABLEAU: RodasTableau = RodasTableau {
-    stages: 8,
-    gamma: 0.21193756319429014,
-    a: RODAS5P_A,
-    c_matrix: RODAS5P_C,
-    nodes: RODAS5P_NODES,
-    time_weights: RODAS5P_D,
-    weights: RODAS5P_B,
-    error_weights: RODAS5PE_E,
-};
-// Rodas6PTableau(T, T2) from
-// lib/OrdinaryDiffEqRosenbrock/src/rosenbrock_tableaus.jl at
-// 211142263781255a9aa2f910f6760b9f18ec29c8.
-//
-// This is the regular ODE 19-stage sixth-order L-stable tableau. The
-// upstream dense-output H matrix is not needed by the shared recorder.
-
-const RODAS6P_TABLEAU: RodasTableau = RodasTableau {
-    stages: 19,
-    gamma: 0.26,
-    a: RODAS6P_A,
-    c_matrix: RODAS6P_C,
-    nodes: RODAS6P_NODES,
-    time_weights: RODAS6P_D,
-    weights: RODAS6P_B,
-    error_weights: RODAS6P_E,
-};
-
-const ROSENBROCK_W6S4OS_TABLEAU: RodasTableau = RodasTableau {
-    stages: 6,
-    gamma: 0.25,
-    a: ROSENBROCK_W6S4OS_A,
-    c_matrix: ROSENBROCK_W6S4OS_C,
-    nodes: ROSENBROCK_W6S4OS_NODES,
-    time_weights: ROSENBROCK_W6S4OS_D,
-    weights: ROSENBROCK_W6S4OS_B,
-    error_weights: ROSENBROCK_W6S4OS_E,
-};
-
-// Rodas23WRodasTableau(T, T2) from
-// lib/OrdinaryDiffEqRosenbrock/src/rosenbrock_tableaus.jl at
-// 211142263781255a9aa2f910f6760b9f18ec29c8.
-//
-// The upstream tableau is constructed in Julia using exact rational literals
-// for gamma and decimal coefficients for the remaining entries. Keeping the
-// same Float64 values here makes the regular-ODE stage path deterministic and
-// allocation-free. The upstream H matrix is only used for stiff-aware dense
-// interpolation; regular ODE trajectories use the shared recorder instead.
-
-const RODAS23W_TABLEAU: RodasTableau = RodasTableau {
-    stages: 5,
-    gamma: 1.0 / 3.0,
-    a: RODAS23W_A,
-    c_matrix: RODAS23W_C,
-    nodes: RODAS23W_NODES,
-    time_weights: RODAS23W_D,
-    weights: RODAS23W_B,
-    error_weights: RODAS23W_E,
-};
-
-// Rodas3PRodasTableau(T, T2), ROS2PRRodasTableau(T, T2), and the remaining
-// tableaus below are from the pinned OrdinaryDiffEq Rosenbrock sources.
-
-const RODAS3P_TABLEAU: RodasTableau = RodasTableau {
-    stages: 5,
-    gamma: 1.0 / 3.0,
-    a: RODAS3P_A,
-    c_matrix: RODAS3P_C,
-    nodes: RODAS3P_NODES,
-    time_weights: RODAS3P_D,
-    weights: RODAS3P_B,
-    error_weights: RODAS3P_E,
-};
-
-const ROS2PR_TABLEAU: RodasTableau = RodasTableau {
-    stages: 3,
-    gamma: 0.228155493653962,
-    a: ROS2PR_A,
-    c_matrix: ROS2PR_C,
-    nodes: ROS2PR_NODES,
-    time_weights: ROS2PR_D,
-    weights: ROS2PR_B,
-    error_weights: ROS2PR_E,
-};
-
-const ROS2S_TABLEAU: RodasTableau = RodasTableau {
-    stages: 3,
-    gamma: 0.292893218813452,
-    a: ROS2S_A,
-    c_matrix: ROS2S_C,
-    nodes: ROS2S_NODES,
-    time_weights: ROS2S_D,
-    weights: ROS2S_B,
-    error_weights: ROS2S_E,
-};
-
-const ROS34PW1A_TABLEAU: RodasTableau = RodasTableau {
-    stages: 4,
-    gamma: 0.435866521508459,
-    a: ROS34PW1A_A,
-    c_matrix: ROS34PW1A_C,
-    nodes: ROS34PW1A_NODES,
-    time_weights: ROS34PW1A_D,
-    weights: ROS34PW1A_B,
-    error_weights: ROS34PW1A_E,
-};
-
-const ROS4LSTAB_TABLEAU: RodasTableau = RodasTableau {
-    stages: 4,
-    gamma: 0.57282,
-    a: ROS4LSTAB_A,
-    c_matrix: ROS4LSTAB_C,
-    nodes: ROS4LSTAB_NODES,
-    time_weights: ROS4LSTAB_D,
-    weights: ROS4LSTAB_B,
-    error_weights: ROS4LSTAB_E,
-};
-
-const ROSSHAMP4_TABLEAU: RodasTableau = RodasTableau {
-    stages: 4,
-    gamma: 0.5,
-    a: ROSSHAMP4_A,
-    c_matrix: ROSSHAMP4_C,
-    nodes: ROSSHAMP4_NODES,
-    time_weights: ROSSHAMP4_D,
-    weights: ROSSHAMP4_B,
-    error_weights: ROSSHAMP4_E,
-};
-
-const SCHOLZ4_7_TABLEAU: RodasTableau = RodasTableau {
-    stages: 3,
-    gamma: 0.788675134594813,
-    a: SCHOLZ4_7_A,
-    c_matrix: SCHOLZ4_7_C,
-    nodes: SCHOLZ4_7_NODES,
-    time_weights: SCHOLZ4_7_D,
-    weights: SCHOLZ4_7_B,
-    error_weights: SCHOLZ4_7_E,
-};
-
-const VELDD4_TABLEAU: RodasTableau = RodasTableau {
-    stages: 4,
-    gamma: 0.2257081148225682,
-    a: VELDD4_A,
-    c_matrix: VELDD4_C,
-    nodes: VELDD4_NODES,
-    time_weights: VELDD4_D,
-    weights: VELDD4_B,
-    error_weights: VELDD4_E,
-};
-
-const VELDS4_TABLEAU: RodasTableau = RodasTableau {
-    stages: 4,
-    gamma: 0.5,
-    a: VELDS4_A,
-    c_matrix: VELDS4_C,
-    nodes: VELDS4_NODES,
-    time_weights: VELDS4_D,
-    weights: VELDS4_B,
-    error_weights: VELDS4_E,
-};
-
-// Tsit5DATableau(T, T2) reduced to the regular ODE path. The hybrid tableau
-// has an explicit A matrix and a lower-triangular Gamma matrix; the shared
-// Rosenbrock driver uses the same representation for its ODE specialization.
-
-const TSIT5DA_TABLEAU: RodasTableau = RodasTableau {
+const TSIT5DA_TABLEAU: HybridTableau = HybridTableau {
     stages: 12,
-    gamma: 0.15,
     a: TSIT5DA_A,
-    c_matrix: TSIT5DA_C,
     nodes: TSIT5DA_NODES,
-    time_weights: TSIT5DA_D,
     weights: TSIT5DA_B,
     error_weights: TSIT5DA_E,
 };
@@ -817,6 +329,10 @@ trait ExtendedRosenbrockMethod {
     const DENSE_H: &'static [f64] = &[];
     const DENSE_ORDER: usize = 0;
     const SPECIAL_DENSE: bool = false;
+
+    fn load_resource() -> Result<Option<&'static RosenbrockTableau>, SolveError> {
+        Ok(None)
+    }
 
     fn perform_step<F, P>(
         problem: &OdeProblem<F, P>,
@@ -846,7 +362,7 @@ macro_rules! algorithm {
                 drive_integration(
                     problem,
                     options,
-                    ExtendedRosenbrockKernel::<Self>::new(problem.initial_state().len()),
+                    ExtendedRosenbrockKernel::<Self>::new(problem.initial_state().len())?,
                 )
             }
         }
@@ -916,43 +432,39 @@ impl ExtendedRosenbrockMethod for Rosenbrock32 {
     }
 }
 
+macro_rules! resource_access {
+    ($name:ident, $tableau:ident) => {
+        impl $name {
+            /// Returns this method's shared, lazily parsed Rosenbrock tableau.
+            ///
+            pub fn tableau(&self) -> Result<&'static RosenbrockTableau, TableauError> {
+                load_tableau(&$tableau)
+            }
+        }
+    };
+}
+
 macro_rules! rodas_method {
-    ($name:ident, $order:literal, $tableau:ident, dense = $dense:ident, $dense_order:literal) => {
-        rodas_method!(@impl $name, $order, $tableau, false, AdaptiveErrorEstimator::Embedded,
-            $dense, $dense_order);
-    };
     ($name:ident, $order:literal, $tableau:ident) => {
-        rodas_method!(@impl $name, $order, $tableau, false,
-            AdaptiveErrorEstimator::Embedded, &[], 0);
+        rodas_method!(
+            $name,
+            $order,
+            $tableau,
+            false,
+            AdaptiveErrorEstimator::Embedded
+        );
     };
-    ($name:ident, $order:literal, $tableau:ident, $residual_control:expr) => {
-        rodas_method!(@impl $name, $order, $tableau, $residual_control,
-            AdaptiveErrorEstimator::Embedded, &[], 0);
-    };
-    (
-        $name:ident,
-        $order:literal,
-        $tableau:ident,
-        $residual_control:expr,
-        $adaptive_error_estimator:expr
-    ) => {
-        rodas_method!(@impl $name, $order, $tableau, $residual_control,
-            $adaptive_error_estimator, &[], 0);
-    };
-    (@impl
-        $name:ident,
-        $order:literal,
-        $tableau:ident,
-        $residual_control:expr,
-        $adaptive_error_estimator:expr,
-        $dense:expr,
-        $dense_order:literal
-    ) => {
+    ($name:ident, $order:literal, $tableau:ident, $residual_control:expr, $estimator:expr) => {
+        resource_access!($name, $tableau);
         impl ExtendedRosenbrockMethod for $name {
             const ERROR_ORDER: usize = $order;
             const ADAPTIVE: bool = true;
-            const DENSE_H: &'static [f64] = $dense;
-            const DENSE_ORDER: usize = $dense_order;
+
+            fn load_resource() -> Result<Option<&'static RosenbrockTableau>, SolveError> {
+                load_tableau(&$tableau)
+                    .map(Some)
+                    .map_err(|_| SolveError::InvalidTableau)
+            }
 
             fn perform_step<F, P>(
                 problem: &OdeProblem<F, P>,
@@ -974,9 +486,9 @@ macro_rules! rodas_method {
                     time,
                     step,
                     options,
-                    &$tableau,
+                    workspace.tableau.ok_or(SolveError::InvalidTableau)?,
                     $residual_control,
-                    $adaptive_error_estimator,
+                    $estimator,
                     workspace,
                     stats,
                 )
@@ -1000,17 +512,17 @@ rodas_method!(Grk4t, 4, GRK4T_TABLEAU);
 rodas_method!(Rok4a, 4, ROK4A_TABLEAU);
 rodas_method!(Ros34Pw1b, 3, ROS34PW1B_TABLEAU);
 rodas_method!(Ros34Pw2, 3, ROS34PW2_TABLEAU);
-rodas_method!(Rodas4, 4, RODAS4_TABLEAU, dense = RODAS4_H, 2);
-rodas_method!(Rodas42, 4, RODAS42_TABLEAU, dense = RODAS42_H, 2);
-rodas_method!(Rodas4P, 4, RODAS4P_TABLEAU, dense = RODAS4P_H, 2);
-rodas_method!(Rodas4P2, 4, RODAS4P2_TABLEAU, dense = RODAS4P2_H, 2);
-rodas_method!(Rodas4PW, 4, RODAS4PW_TABLEAU, dense = RODAS4PW_H, 2);
-rodas_method!(Rodas5, 5, RODAS5_TABLEAU, dense = RODAS5_H, 3);
-rodas_method!(Rodas5P, 5, RODAS5P_TABLEAU, dense = RODAS5P_H, 3);
-rodas_method!(Rodas5Pe, 5, RODAS5PE_TABLEAU, dense = RODAS5P_H, 3);
-rodas_method!(Rodas6P, 6, RODAS6P_TABLEAU, dense = RODAS6P_H, 4);
-rodas_method!(Rodas23W, 3, RODAS23W_TABLEAU, dense = RODAS23W_H, 3);
-rodas_method!(Rodas3P, 3, RODAS3P_TABLEAU, dense = RODAS3P_H, 3);
+rodas_method!(Rodas4, 4, RODAS4_TABLEAU);
+rodas_method!(Rodas42, 4, RODAS42_TABLEAU);
+rodas_method!(Rodas4P, 4, RODAS4P_TABLEAU);
+rodas_method!(Rodas4P2, 4, RODAS4P2_TABLEAU);
+rodas_method!(Rodas4PW, 4, RODAS4PW_TABLEAU);
+rodas_method!(Rodas5, 5, RODAS5_TABLEAU);
+rodas_method!(Rodas5P, 5, RODAS5P_TABLEAU);
+rodas_method!(Rodas5Pe, 5, RODAS5PE_TABLEAU);
+rodas_method!(Rodas6P, 6, RODAS6P_TABLEAU);
+rodas_method!(Rodas23W, 3, RODAS23W_TABLEAU);
+rodas_method!(Rodas3P, 3, RODAS3P_TABLEAU);
 rodas_method!(Ros2Pr, 2, ROS2PR_TABLEAU);
 rodas_method!(Ros2S, 2, ROS2S_TABLEAU);
 rodas_method!(
@@ -1051,45 +563,26 @@ impl ExtendedRosenbrockMethod for HybridExplicitImplicitRK {
     }
 }
 
-impl ExtendedRosenbrockMethod for Rodas5Pr {
-    const ERROR_ORDER: usize = 5;
-    const ADAPTIVE: bool = true;
-    const DENSE_H: &'static [f64] = RODAS5P_H;
-    const DENSE_ORDER: usize = 3;
+rodas_method!(
+    Rodas5Pr,
+    5,
+    RODAS5P_TABLEAU,
+    true,
+    AdaptiveErrorEstimator::Embedded
+);
 
-    fn perform_step<F, P>(
-        problem: &OdeProblem<F, P>,
-        state: &[f64],
-        time: f64,
-        step: f64,
-        candidate: &mut [f64],
-        options: &SolveOptions,
-        workspace: &mut Workspace,
-        stats: &mut SolverStats,
-    ) -> Result<f64, SolveError>
-    where
-        F: crate::OdeFunction<P>,
-    {
-        perform_rodas(
-            problem,
-            candidate,
-            state,
-            time,
-            step,
-            options,
-            &RODAS5P_TABLEAU,
-            true,
-            AdaptiveErrorEstimator::Embedded,
-            workspace,
-            stats,
-        )
-    }
-}
+resource_access!(RosenbrockW6S4OS, ROSENBROCK_W6S4OS_TABLEAU);
 
 impl ExtendedRosenbrockMethod for RosenbrockW6S4OS {
     const ERROR_ORDER: usize = 4;
     const ADAPTIVE: bool = false;
 
+    fn load_resource() -> Result<Option<&'static RosenbrockTableau>, SolveError> {
+        load_tableau(&ROSENBROCK_W6S4OS_TABLEAU)
+            .map(Some)
+            .map_err(|_| SolveError::InvalidTableau)
+    }
+
     fn perform_step<F, P>(
         problem: &OdeProblem<F, P>,
         state: &[f64],
@@ -1110,7 +603,7 @@ impl ExtendedRosenbrockMethod for RosenbrockW6S4OS {
             time,
             step,
             options,
-            &ROSENBROCK_W6S4OS_TABLEAU,
+            workspace.tableau.ok_or(SolveError::InvalidTableau)?,
             false,
             AdaptiveErrorEstimator::Embedded,
             workspace,
@@ -1120,6 +613,7 @@ impl ExtendedRosenbrockMethod for RosenbrockW6S4OS {
 }
 
 struct Workspace {
+    tableau: Option<&'static RosenbrockTableau>,
     current_derivative: Vec<f64>,
     perturbed_state: Vec<f64>,
     perturbed_derivative: Vec<f64>,
@@ -1139,8 +633,15 @@ struct Workspace {
 }
 
 impl Workspace {
-    fn new(dimension: usize) -> Self {
+    fn new(
+        dimension: usize,
+        tableau: Option<&'static RosenbrockTableau>,
+        fallback_stages: usize,
+    ) -> Self {
+        let stages = tableau.map_or(fallback_stages, RosenbrockTableau::stages);
+        let dense_order = tableau.map_or(3, |tableau| tableau.h().len());
         Self {
+            tableau,
             current_derivative: vec![0.0; dimension],
             perturbed_state: vec![0.0; dimension],
             perturbed_derivative: vec![0.0; dimension],
@@ -1149,10 +650,10 @@ impl Workspace {
             stage_derivative: vec![0.0; dimension],
             right_hand_side: vec![0.0; dimension],
             error: vec![0.0; dimension],
-            stages: vec![0.0; 19 * dimension],
+            stages: vec![0.0; stages * dimension],
             dense_endpoint_state: vec![0.0; dimension],
             dense_endpoint_derivative: vec![0.0; dimension],
-            dense_corrections: vec![0.0; 4 * dimension],
+            dense_corrections: vec![0.0; dense_order * dimension],
             jacobian: vec![0.0; dimension * dimension],
             factorization: vec![0.0; dimension * dimension],
             pivots: vec![0; dimension],
@@ -1167,13 +668,20 @@ struct ExtendedRosenbrockKernel<M> {
     method: PhantomData<M>,
 }
 
-impl<M> ExtendedRosenbrockKernel<M> {
-    fn new(dimension: usize) -> Self {
-        Self {
-            workspace: Workspace::new(dimension),
+impl<M: ExtendedRosenbrockMethod> ExtendedRosenbrockKernel<M> {
+    fn new(dimension: usize) -> Result<Self, SolveError> {
+        let tableau = M::load_resource()?;
+        Ok(Self {
+            workspace: Workspace::new(dimension, tableau, if M::SPECIAL_DENSE { 3 } else { 12 }),
             dense_endpoint_prepared: false,
             method: PhantomData,
-        }
+        })
+    }
+
+    fn dense_order(&self) -> usize {
+        self.workspace
+            .tableau
+            .map_or(M::DENSE_ORDER, |tableau| tableau.h().len())
     }
 
     fn prepare_stiff_corrections(&mut self)
@@ -1181,13 +689,18 @@ impl<M> ExtendedRosenbrockKernel<M> {
         M: ExtendedRosenbrockMethod,
     {
         let dimension = self.workspace.current_derivative.len();
-        let stages = M::DENSE_H.len() / M::DENSE_ORDER;
-        for row in 0..M::DENSE_ORDER {
+        for row in 0..self.dense_order() {
+            let coefficients = if let Some(tableau) = self.workspace.tableau {
+                &tableau.h()[row]
+            } else {
+                let stages = M::DENSE_H.len() / M::DENSE_ORDER;
+                &M::DENSE_H[row * stages..(row + 1) * stages]
+            };
             for component in 0..dimension {
                 let mut correction = 0.0;
-                for stage in 0..stages {
-                    correction += M::DENSE_H[row * stages + stage]
-                        * self.workspace.stages[stage * dimension + component];
+                for (stage, coefficient) in coefficients.iter().enumerate() {
+                    correction +=
+                        coefficient * self.workspace.stages[stage * dimension + component];
                 }
                 self.workspace.dense_corrections[row * dimension + component] = correction;
             }
@@ -1313,7 +826,7 @@ where
                 Some(&mut interpolate),
             );
         }
-        if M::DENSE_ORDER > 0 {
+        if self.dense_order() > 0 {
             self.prepare_stiff_corrections();
             let dimension = previous_state.len();
             let segment = BorrowedStiffSegment::new(
@@ -1321,8 +834,8 @@ where
                 attempted_time,
                 previous_state,
                 &self.workspace.dense_endpoint_state,
-                &self.workspace.dense_corrections[..M::DENSE_ORDER * dimension],
-                M::DENSE_ORDER,
+                &self.workspace.dense_corrections[..self.dense_order() * dimension],
+                self.dense_order(),
             )
             .map_err(|_| SolveError::NonFiniteDerivative)?;
             let mut interpolate = |sample_time: f64, output: &mut [f64]| {
@@ -1431,16 +944,16 @@ where
             }
             return Ok(true);
         }
-        if M::DENSE_ORDER > 0 {
+        if self.dense_order() > 0 {
             self.prepare_stiff_corrections();
-            let corrections = &self.workspace.dense_corrections[..M::DENSE_ORDER * dimension];
+            let corrections = &self.workspace.dense_corrections[..self.dense_order() * dimension];
             let segment = BorrowedStiffSegment::new(
                 previous_time,
                 attempted_time,
                 previous_state,
                 &self.workspace.dense_endpoint_state,
                 corrections,
-                M::DENSE_ORDER,
+                self.dense_order(),
             )
             .map_err(|_| SolveError::NonFiniteDerivative)?;
             recorder
@@ -1462,7 +975,7 @@ where
                         previous_state,
                         &self.workspace.dense_endpoint_state,
                         corrections,
-                        M::DENSE_ORDER,
+                        self.dense_order(),
                     )
                     .map_err(|_| SolveError::NonFiniteDerivative)?,
                 );
@@ -1661,7 +1174,7 @@ fn perform_rodas<F, P>(
     time: f64,
     step: f64,
     options: &SolveOptions,
-    tableau: &RodasTableau,
+    tableau: &'static RosenbrockTableau,
     residual_control: bool,
     adaptive_error_estimator: AdaptiveErrorEstimator,
     workspace: &mut Workspace,
@@ -1670,12 +1183,26 @@ fn perform_rodas<F, P>(
 where
     F: crate::OdeFunction<P>,
 {
+    if residual_control && tableau.h().len() != 3 {
+        return Err(SolveError::InvalidTableau);
+    }
+    if options.adaptive && tableau.btilde().is_none() {
+        return Err(SolveError::InvalidTableau);
+    }
     let dimension = state.len();
-    prepare_factorization(problem, state, time, step, tableau.gamma, workspace, stats)?;
-    for stage in 0..tableau.stages {
+    prepare_factorization(
+        problem,
+        state,
+        time,
+        step,
+        tableau.gamma(),
+        workspace,
+        stats,
+    )?;
+    for stage in 0..tableau.stages() {
         workspace.stage_state.copy_from_slice(state);
         for previous in 0..stage {
-            let coefficient = tableau.a[stage * tableau.stages + previous];
+            let coefficient = tableau.a()[stage][previous];
             if coefficient != 0.0 {
                 for component in 0..dimension {
                     workspace.stage_state[component] +=
@@ -1692,16 +1219,16 @@ where
                 problem,
                 &mut workspace.stage_derivative,
                 &workspace.stage_state,
-                time + tableau.nodes[stage] * step,
+                time + tableau.c()[stage] * step,
                 stats,
             )?;
         }
         for component in 0..dimension {
             workspace.right_hand_side[component] = workspace.stage_derivative[component]
-                + step * tableau.time_weights[stage] * workspace.time_derivative[component];
+                + step * tableau.d()[stage] * workspace.time_derivative[component];
         }
         for previous in 0..stage {
-            let coefficient = tableau.c_matrix[stage * tableau.stages + previous] / step;
+            let coefficient = tableau.coupling()[stage][previous] / step;
             if coefficient != 0.0 {
                 for component in 0..dimension {
                     workspace.right_hand_side[component] +=
@@ -1717,18 +1244,20 @@ where
         );
         for component in 0..dimension {
             workspace.stages[stage * dimension + component] =
-                step * tableau.gamma * workspace.right_hand_side[component];
+                step * tableau.gamma() * workspace.right_hand_side[component];
         }
         stats.linear_solves += 1;
     }
 
     candidate.copy_from_slice(state);
     workspace.error.fill(0.0);
-    for stage in 0..tableau.stages {
+    for stage in 0..tableau.stages() {
         for component in 0..dimension {
             let increment = workspace.stages[stage * dimension + component];
-            candidate[component] += tableau.weights[stage] * increment;
-            workspace.error[component] += tableau.error_weights[stage] * increment;
+            candidate[component] += tableau.b()[stage] * increment;
+            if let Some(error) = tableau.btilde() {
+                workspace.error[component] += error[stage] * increment;
+            }
         }
     }
     let mut error_estimate = if options.adaptive {
@@ -1766,11 +1295,11 @@ where
             workspace.error[component] = 0.0;
             workspace.stage_derivative[component] = 0.0;
             workspace.perturbed_derivative[component] = 0.0;
-            for stage in 0..tableau.stages {
+            for stage in 0..tableau.stages() {
                 let increment = workspace.stages[stage * dimension + component];
-                workspace.error[component] += RODAS5P_H[stage] * increment;
-                workspace.stage_derivative[component] += RODAS5P_H[8 + stage] * increment;
-                workspace.perturbed_derivative[component] += RODAS5P_H[16 + stage] * increment;
+                workspace.error[component] += tableau.h()[0][stage] * increment;
+                workspace.stage_derivative[component] += tableau.h()[1][stage] * increment;
+                workspace.perturbed_derivative[component] += tableau.h()[2][stage] * increment;
             }
             workspace.perturbed_state[component] = 0.5
                 * (state[component]
@@ -1894,7 +1423,7 @@ fn richardson_step_doubling<F, P>(
     time: f64,
     step: f64,
     options: &SolveOptions,
-    tableau: &RodasTableau,
+    tableau: &'static RosenbrockTableau,
     method_order: i32,
     workspace: &mut Workspace,
     stats: &mut SolverStats,
@@ -1906,7 +1435,7 @@ where
     let half_step = step / 2.0;
     let mut midpoint = vec![0.0; dimension];
     let mut refined_candidate = vec![0.0; dimension];
-    let mut refinement_workspace = Workspace::new(dimension);
+    let mut refinement_workspace = Workspace::new(dimension, Some(tableau), 0);
     let mut fixed_options = options.clone();
     fixed_options.adaptive = false;
 
