@@ -24,6 +24,26 @@ cargo bench --bench solver_performance -- --save-baseline main
 cargo bench --bench solver_performance -- --baseline main
 ```
 
+The `hybrid_workspace/tsit5da_matrix/{128,256,1024}` cases measure short
+Tsit5DA ODE solves with increasing matrix-state sizes, including workspace
+construction but excluding problem construction and initial tableau parsing.
+This specialization uses explicit stages and should not allocate dense
+Jacobian or factorization buffers. Run these cases alone with:
+
+```console
+cargo bench --locked --bench solver_performance -- hybrid_workspace
+```
+
+The `rosenbrock_resource_allocations` integration test also checks allocated
+bytes scale linearly when vector and non-square matrix states double in size,
+with fixed/adaptive stepping and dense output enabled/disabled. It checks the
+same decay ODE with scalar states and verifies numerical results and shapes.
+This deterministic allocation check complements the timing benchmarks:
+
+```console
+cargo test --locked --test rosenbrock_resource_allocations
+```
+
 ## Matched Rust/Julia matrix
 
 The matched 31-algorithm sources are in `benches/comparison`. Run timing and

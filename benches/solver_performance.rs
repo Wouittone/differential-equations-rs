@@ -1,10 +1,10 @@
 use std::time::Duration;
 
-use criterion::{Criterion, Throughput, black_box, criterion_group, criterion_main};
-use differential_equations::ndarray::{ArrayView2, ArrayViewMut2, array};
+use criterion::{BenchmarkId, Criterion, Throughput, black_box, criterion_group, criterion_main};
+use differential_equations::ndarray::{Array2, ArrayView2, ArrayViewMut2, array};
 use differential_equations::solve_ensemble_parallel;
 use differential_equations::solvers::explicit::Tsit5;
-use differential_equations::solvers::rosenbrock::Rodas5P;
+use differential_equations::solvers::rosenbrock::{Rodas5P, Tsit5DA};
 use differential_equations::{
     OdeProblem, SaveMode, SolveOptions, solve, solve_ensemble_sequential,
 };
@@ -119,6 +119,36 @@ fn dense_output(criterion: &mut Criterion) {
     group.finish();
 }
 
+fn hybrid_workspace_scaling(criterion: &mut Criterion) {
+    // Short solves expose workspace construction costs. Tableau parsing and
+    // problem construction are deliberately outside the measured iterations.
+    Tsit5DA.tableau().expect("built-in tableau must parse");
+    let options = fixed_options(0.01);
+    let mut group = criterion.benchmark_group("hybrid_workspace");
+    for dimension in [128, 256, 1024] {
+        let problem = OdeProblem::from_array(
+            |mut du: ArrayViewMut2<'_, f64>, u: ArrayView2<'_, f64>, _: &(), _| {
+                du.zip_mut_with(&u, |du, u| *du = -*u);
+            },
+            Array2::ones((8, dimension / 8)),
+            (0.0, 0.02),
+            (),
+        );
+        let probe = solve(&problem, Tsit5DA, &options).expect("benchmark problem must solve");
+        assert_eq!(probe.stats().accepted_steps, 2);
+        assert_eq!(probe.stats().linear_factorizations, 0);
+        group.throughput(Throughput::Elements(dimension as u64));
+        group.bench_function(BenchmarkId::new("tsit5da_matrix", dimension), |bencher| {
+            bencher.iter(|| {
+                let solution = solve(black_box(&problem), Tsit5DA, black_box(&options))
+                    .expect("benchmark problem must solve");
+                black_box(solution.last_state());
+            });
+        });
+    }
+    group.finish();
+}
+
 fn ensembles(criterion: &mut Criterion) {
     let cases: Vec<_> = (0..64)
         .map(|index| (1.0 + index as f64 / 64.0, -0.5 - index as f64 / 256.0))
@@ -171,6 +201,6 @@ criterion_group! {
         .sample_size(20)
         .warm_up_time(Duration::from_secs(2))
         .measurement_time(Duration::from_secs(5));
-    targets = solver_throughput, dense_output, ensembles
+    targets = solver_throughput, dense_output, hybrid_workspace_scaling, ensembles
 }
 criterion_main!(benchmarks);

@@ -613,23 +613,33 @@ impl Workspace {
     fn new(dimension: usize, tableau: Option<&'static RosenbrockTableau>) -> Self {
         let stages = tableau.map_or(3, RosenbrockTableau::stages);
         let dense_order = tableau.map_or(0, |tableau| tableau.h().len());
+        // The implemented hybrid ODE specialization is explicit. It never
+        // differentiates or solves a linear system, so n*n storage would be
+        // both unused and prohibitively expensive for large array states.
+        let linear_dimension = if tableau
+            .is_some_and(|tableau| tableau.kind() == RosenbrockKind::HybridExplicitImplicit)
+        {
+            0
+        } else {
+            dimension
+        };
         Self {
             tableau,
             current_derivative: vec![0.0; dimension],
-            perturbed_state: vec![0.0; dimension],
-            perturbed_derivative: vec![0.0; dimension],
-            time_derivative: vec![0.0; dimension],
+            perturbed_state: vec![0.0; linear_dimension],
+            perturbed_derivative: vec![0.0; linear_dimension],
+            time_derivative: vec![0.0; linear_dimension],
             stage_state: vec![0.0; dimension],
             stage_derivative: vec![0.0; dimension],
-            right_hand_side: vec![0.0; dimension],
+            right_hand_side: vec![0.0; linear_dimension],
             error: vec![0.0; dimension],
             stages: vec![0.0; stages * dimension],
             dense_endpoint_state: vec![0.0; dimension],
             dense_endpoint_derivative: vec![0.0; dimension],
             dense_corrections: vec![0.0; dense_order * dimension],
-            jacobian: vec![0.0; dimension * dimension],
-            factorization: vec![0.0; dimension * dimension],
-            pivots: vec![0; dimension],
+            jacobian: vec![0.0; linear_dimension * linear_dimension],
+            factorization: vec![0.0; linear_dimension * linear_dimension],
+            pivots: vec![0; linear_dimension],
             differentiation_valid: false,
         }
     }
@@ -1648,6 +1658,37 @@ mod tests {
     use crate::{CallbackAction, OdeProblem, SaveMode, SolveError, SolveOptions, solve};
 
     type TestRhs = fn(&mut [f64], &[f64], &(), f64);
+
+    #[test]
+    fn only_linearly_implicit_workspaces_allocate_linearization_storage() {
+        let dimension = 17;
+        for (tableau, linear_dimension) in [
+            (None, dimension),
+            (Some(Rodas5P.tableau().unwrap()), dimension),
+            (Some(super::Tsit5DA.tableau().unwrap()), 0),
+        ] {
+            let workspace = super::Workspace::new(dimension, tableau);
+            for buffer in [
+                &workspace.perturbed_state,
+                &workspace.perturbed_derivative,
+                &workspace.time_derivative,
+                &workspace.right_hand_side,
+            ] {
+                assert_eq!(buffer.len(), linear_dimension);
+            }
+            assert_eq!(workspace.pivots.len(), linear_dimension);
+            assert_eq!(
+                workspace.jacobian.len(),
+                linear_dimension * linear_dimension
+            );
+            assert_eq!(
+                workspace.factorization.len(),
+                linear_dimension * linear_dimension
+            );
+            assert_eq!(workspace.current_derivative.len(), dimension);
+            assert_eq!(workspace.stage_state.len(), dimension);
+        }
+    }
 
     fn stiff_problem(span: (f64, f64), initial: f64) -> OdeProblem<TestRhs, ()> {
         fn rhs(du: &mut [f64], u: &[f64], _: &(), time: f64) {
