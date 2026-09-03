@@ -9,7 +9,7 @@ use std::sync::LazyLock;
 
 #[doc(inline)]
 pub use differential_equations_tableau_core::{
-    FittedWeight, LazyDenseStage as ParsedLazyDenseStage, LinearMultistepTableau,
+    FittedWeight, LazyDenseStage as ParsedLazyDenseStage, LinearMultistepTableau, RosenbrockKind,
     RosenbrockTableau, RungeKuttaKind, RungeKuttaTableau, SymplecticTableau, TableauError,
     parse_multistep_tableau, parse_rosenbrock_tableau, parse_symplectic_tableau, parse_tableau,
 };

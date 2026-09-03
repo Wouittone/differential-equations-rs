@@ -1,7 +1,6 @@
-//! Pinned Rosenbrock/Rodas dense-output coefficient rows.
+//! Pinned low-order Rosenbrock dense-output coefficient rows.
 //!
-//! These are the `H` matrices from OrdinaryDiffEqRosenbrock and
-//! OrdinaryDiffEqRosenbrockTableaus at
+//! The specialized Rosenbrock23/32 polynomial from OrdinaryDiffEqRosenbrock at
 //! `211142263781255a9aa2f910f6760b9f18ec29c8`, stored row-major.
 
 pub(crate) const ROSENBROCK_SPECIAL_1: &[f64] = &[
@@ -13,42 +12,3 @@ pub(crate) const ROSENBROCK_SPECIAL_2: &[f64] = &[
     1.0 / (1.0 - 2.0 / (2.0 + std::f64::consts::SQRT_2)),
 ];
 pub(crate) const ROSENBROCK_SPECIAL: &[&[f64]] = &[ROSENBROCK_SPECIAL_1, ROSENBROCK_SPECIAL_2];
-
-pub(crate) const TSIT5DA_H: &[f64] = &[
-    0.8556749116393667,
-    -0.1165263061110306,
-    0.038120922841221455,
-    0.15789728749504028,
-    -0.54499490500098,
-    -1.0853086321284309,
-    2.2958098031370873,
-    -1.566895939698076,
-    -8.34587614295097,
-    0.4162190065087707,
-    8.314552638841711,
-    -0.41867264457370923,
-    -5.79723517059224,
-    -9.361429135834928,
-    3.062538663421373,
-    13.568052287784441,
-    -1.3736819148585004,
-    2.344366172070166,
-    -9.053170825304539,
-    7.042985092806263,
-    147.11116130708155,
-    1.0678265669046618,
-    -147.34646739130434,
-    -1.264945652173913,
-    7.347103241623678,
-    14.93483561943059,
-    -4.885847112946526,
-    -21.54749924818453,
-    5.148057565540175,
-    -8.136928580553082,
-    27.90674208255712,
-    -21.23889269084667,
-    -292.95889431249236,
-    0.20306256630643107,
-    293.11684782608694,
-    0.11141304347826086,
-];

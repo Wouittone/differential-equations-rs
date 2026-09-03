@@ -19,20 +19,8 @@ use crate::solution::{
     BorrowedHermiteSegment, BorrowedRungeKuttaSegment, BorrowedStiffSegment, HermiteSegment,
     RungeKuttaSegment, StiffSegment, TrajectoryRecorder,
 };
-use crate::tableau::{RosenbrockTableau, TableauError, load_tableau};
+use crate::tableau::{RosenbrockKind, RosenbrockTableau, TableauError, load_tableau};
 use crate::{OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions, SolverStats};
-
-mod coefficient_data {
-    use differential_equations_tableau_macros::define_tableau_data_from_file;
-
-    define_tableau_data_from_file!(
-        pub(super),
-        "src/tableau/resources/methods/rosenbrock/extended.json",
-        crate = crate
-    );
-}
-
-use coefficient_data::*;
 
 const ROSENBROCK_GAMMA: f64 = 1.0 / (2.0 + std::f64::consts::SQRT_2);
 const ROSENBROCK_C32: f64 = 6.0 + std::f64::consts::SQRT_2;
@@ -299,35 +287,17 @@ pub type Tsit5DA = HybridExplicitImplicitRK;
 #[allow(non_upper_case_globals)]
 pub const Tsit5DA: HybridExplicitImplicitRK = HybridExplicitImplicitRK;
 
-// The hybrid Tsit5DA specialization is migrated separately from Rosenbrock stages.
-struct HybridTableau {
-    stages: usize,
-    a: &'static [f64],
-    nodes: &'static [f64],
-    weights: &'static [f64],
-    error_weights: &'static [f64],
-}
-
 #[derive(Clone, Copy)]
 enum AdaptiveErrorEstimator {
     Embedded,
     RichardsonStepDoubling { method_order: i32 },
 }
 
-const TSIT5DA_TABLEAU: HybridTableau = HybridTableau {
-    stages: 12,
-    a: TSIT5DA_A,
-    nodes: TSIT5DA_NODES,
-    weights: TSIT5DA_B,
-    error_weights: TSIT5DA_E,
-};
-
 #[allow(clippy::too_many_arguments)]
 trait ExtendedRosenbrockMethod {
     const ERROR_ORDER: usize;
     const ADAPTIVE: bool;
-    const DENSE_H: &'static [f64] = &[];
-    const DENSE_ORDER: usize = 0;
+    const RESOURCE_KIND: RosenbrockKind = RosenbrockKind::Rosenbrock;
     const SPECIAL_DENSE: bool = false;
 
     fn load_resource() -> Result<Option<&'static RosenbrockTableau>, SolveError> {
@@ -538,11 +508,18 @@ rodas_method!(Scholz4_7, 4, SCHOLZ4_7_TABLEAU);
 rodas_method!(Veldd4, 4, VELDD4_TABLEAU);
 rodas_method!(Velds4, 4, VELDS4_TABLEAU);
 
+resource_access!(HybridExplicitImplicitRK, TSIT5DA_TABLEAU);
+
 impl ExtendedRosenbrockMethod for HybridExplicitImplicitRK {
     const ERROR_ORDER: usize = 5;
     const ADAPTIVE: bool = true;
-    const DENSE_H: &'static [f64] = TSIT5DA_H;
-    const DENSE_ORDER: usize = 3;
+    const RESOURCE_KIND: RosenbrockKind = RosenbrockKind::HybridExplicitImplicit;
+
+    fn load_resource() -> Result<Option<&'static RosenbrockTableau>, SolveError> {
+        load_tableau(&TSIT5DA_TABLEAU)
+            .map(Some)
+            .map_err(|_| SolveError::InvalidTableau)
+    }
 
     fn perform_step<F, P>(
         problem: &OdeProblem<F, P>,
@@ -633,13 +610,9 @@ struct Workspace {
 }
 
 impl Workspace {
-    fn new(
-        dimension: usize,
-        tableau: Option<&'static RosenbrockTableau>,
-        fallback_stages: usize,
-    ) -> Self {
-        let stages = tableau.map_or(fallback_stages, RosenbrockTableau::stages);
-        let dense_order = tableau.map_or(3, |tableau| tableau.h().len());
+    fn new(dimension: usize, tableau: Option<&'static RosenbrockTableau>) -> Self {
+        let stages = tableau.map_or(3, RosenbrockTableau::stages);
+        let dense_order = tableau.map_or(0, |tableau| tableau.h().len());
         Self {
             tableau,
             current_derivative: vec![0.0; dimension],
@@ -671,8 +644,15 @@ struct ExtendedRosenbrockKernel<M> {
 impl<M: ExtendedRosenbrockMethod> ExtendedRosenbrockKernel<M> {
     fn new(dimension: usize) -> Result<Self, SolveError> {
         let tableau = M::load_resource()?;
+        if let Some(tableau) = tableau {
+            if tableau.kind() != M::RESOURCE_KIND || (M::ADAPTIVE && tableau.btilde().is_none()) {
+                return Err(SolveError::InvalidTableau);
+            }
+        } else if !M::SPECIAL_DENSE {
+            return Err(SolveError::InvalidTableau);
+        }
         Ok(Self {
-            workspace: Workspace::new(dimension, tableau, if M::SPECIAL_DENSE { 3 } else { 12 }),
+            workspace: Workspace::new(dimension, tableau),
             dense_endpoint_prepared: false,
             method: PhantomData,
         })
@@ -681,21 +661,18 @@ impl<M: ExtendedRosenbrockMethod> ExtendedRosenbrockKernel<M> {
     fn dense_order(&self) -> usize {
         self.workspace
             .tableau
-            .map_or(M::DENSE_ORDER, |tableau| tableau.h().len())
+            .map_or(0, |tableau| tableau.h().len())
     }
 
     fn prepare_stiff_corrections(&mut self)
     where
         M: ExtendedRosenbrockMethod,
     {
+        let Some(tableau) = self.workspace.tableau else {
+            return;
+        };
         let dimension = self.workspace.current_derivative.len();
-        for row in 0..self.dense_order() {
-            let coefficients = if let Some(tableau) = self.workspace.tableau {
-                &tableau.h()[row]
-            } else {
-                let stages = M::DENSE_H.len() / M::DENSE_ORDER;
-                &M::DENSE_H[row * stages..(row + 1) * stages]
-            };
+        for (row, coefficients) in tableau.h().iter().enumerate() {
             for component in 0..dimension {
                 let mut correction = 0.0;
                 for (stage, coefficient) in coefficients.iter().enumerate() {
@@ -1354,13 +1331,14 @@ fn perform_tsit5da<F, P>(
 where
     F: crate::OdeFunction<P>,
 {
-    let tableau = &TSIT5DA_TABLEAU;
+    let tableau = workspace.tableau.ok_or(SolveError::InvalidTableau)?;
+    let error = tableau.btilde().ok_or(SolveError::InvalidTableau)?;
     let dimension = state.len();
 
-    for stage in 0..tableau.stages {
+    for stage in 0..tableau.stages() {
         workspace.stage_state.copy_from_slice(state);
         for previous in 0..stage {
-            let coefficient = tableau.a[stage * tableau.stages + previous];
+            let coefficient = tableau.a()[stage][previous];
             if coefficient != 0.0 {
                 for component in 0..dimension {
                     workspace.stage_state[component] +=
@@ -1378,7 +1356,7 @@ where
                 problem,
                 &mut workspace.stage_derivative,
                 &workspace.stage_state,
-                time + tableau.nodes[stage] * step,
+                time + tableau.c()[stage] * step,
                 stats,
             )?;
         }
@@ -1390,11 +1368,11 @@ where
 
     candidate.copy_from_slice(state);
     workspace.error.fill(0.0);
-    for stage in 0..tableau.stages {
+    for stage in 0..tableau.stages() {
         for component in 0..dimension {
             let increment = workspace.stages[stage * dimension + component];
-            candidate[component] += tableau.weights[stage] * increment;
-            workspace.error[component] += tableau.error_weights[stage] * increment;
+            candidate[component] += tableau.b()[stage] * increment;
+            workspace.error[component] += error[stage] * increment;
         }
     }
 
@@ -1435,7 +1413,7 @@ where
     let half_step = step / 2.0;
     let mut midpoint = vec![0.0; dimension];
     let mut refined_candidate = vec![0.0; dimension];
-    let mut refinement_workspace = Workspace::new(dimension, Some(tableau), 0);
+    let mut refinement_workspace = Workspace::new(dimension, Some(tableau));
     let mut fixed_options = options.clone();
     fixed_options.adaptive = false;
 

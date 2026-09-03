@@ -282,6 +282,8 @@ modifier per order, shared across fixed- and variable-order solvers.
 TR-BDF2 uses a canonical implicit RK resource, including its Newton predictors.
 General Rosenbrock/Rodas methods use per-method JSON resources that include
 their dense-output rows; `.tableau()` exposes the lazily parsed data.
+Tsit5DA's hybrid tableau uses the same parser and retains its full source
+metadata; its implemented solver remains the ordinary ODE specialization.
 All named symplectic compositions use individual resources and
 expose fallible `Method::tableau()` access with
 `a()`/`b()` coefficient slices. Some other specialized families still retain

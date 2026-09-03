@@ -35,6 +35,7 @@ fn rosenbrock_resources_are_individually_lazy_and_cached() {
         let region = Region::new(GLOBAL);
         black_box(Ros2);
         black_box(Rodas6P);
+        black_box(Tsit5DA);
         region.change().allocations
     });
     assert_eq!(construction, 0);
@@ -45,6 +46,9 @@ fn rosenbrock_resources_are_individually_lazy_and_cached() {
     let second = Region::new(GLOBAL);
     black_box(Rodas6P.tableau().unwrap());
     assert!(second.change().allocations > 0);
+    let hybrid = Region::new(GLOBAL);
+    black_box(Tsit5DA.tableau().unwrap());
+    assert!(hybrid.change().allocations > 0);
     let unrelated = Region::new(GLOBAL);
     black_box(Rk4.tableau().unwrap());
     assert!(unrelated.change().allocations > 0);
@@ -56,6 +60,7 @@ fn rosenbrock_resources_are_individually_lazy_and_cached() {
         for _ in 0..1000 {
             black_box(Ros2.tableau().unwrap());
             black_box(Rodas6P.tableau().unwrap());
+            black_box(HybridExplicitImplicitRK.tableau().unwrap());
             black_box(Rodas5Pr.tableau().unwrap()); // Shares Rodas5P.
         }
         region.change().allocations
@@ -103,6 +108,7 @@ fn rosenbrock_resources_are_individually_lazy_and_cached() {
         Scholz4_7,
         Veldd4,
         Velds4,
+        Tsit5DA,
         Rodas5Pr
     );
 }

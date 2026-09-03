@@ -1,10 +1,23 @@
 use serde::Deserialize;
 
-use super::{Scalar, TableauError, materialize_matrix, materialize_vector};
+use super::{Scalar, TableauError, approximately_equal, materialize_matrix, materialize_vector};
 
-/// A Rosenbrock tableau in the SciML `RodasTableau` convention.
+/// Stage-equation convention for a Rosenbrock-family tableau.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]
+#[serde(rename_all = "kebab-case")]
+pub enum RosenbrockKind {
+    /// SciML's transformed `RodasTableau` with strictly lower-triangular `C`.
+    Rosenbrock,
+    /// Explicit differential stages and raw lower-triangular `Gamma` in `C`.
+    ///
+    /// Its diagonal is `gamma`. The implicit coefficients describe the upstream
+    /// algebraic specialization; an ordinary ODE uses only `A`, `b`, and `c`.
+    HybridExplicitImplicit,
+}
+
+/// A Rosenbrock-family tableau using a declared SciML stage convention.
 ///
-/// With stage increments `k[i]`, the stage equations are:
+/// For [`RosenbrockKind::Rosenbrock`], the stage equations are:
 ///
 /// ```text
 /// (I - h*gamma*J) k[i] = h*gamma*(f(u + A[i]*k, t + c[i]*h)
@@ -15,9 +28,15 @@ use super::{Scalar, TableauError, materialize_matrix, materialize_vector};
 /// The solution is `u + sum(b[i]*k[i])`; `btilde` directly weights its
 /// embedded error. These are not ordinary Runge--Kutta weights.
 ///
+/// For [`RosenbrockKind::HybridExplicitImplicit`], ordinary ODE stages instead
+/// use `k[i] = h*f(u + A[i]*k, t + c[i]*h)`. The resource also retains the raw
+/// `Gamma` matrix in `C` and time-derivative weights `d` for the upstream algebraic
+/// specialization. Parsed hybrid metadata does not imply DAE solver support.
+///
 /// Parsing validates the representation, not the claimed order or stability.
 #[derive(Clone, Debug, PartialEq)]
 pub struct RosenbrockTableau {
+    kind: RosenbrockKind,
     name: String,
     description: String,
     order: usize,
@@ -32,6 +51,10 @@ pub struct RosenbrockTableau {
 }
 
 impl RosenbrockTableau {
+    /// Stage-equation and coupling-matrix convention.
+    pub fn kind(&self) -> RosenbrockKind {
+        self.kind
+    }
     /// Resource method name.
     pub fn name(&self) -> &str {
         &self.name
@@ -56,7 +79,10 @@ impl RosenbrockTableau {
     pub fn a(&self) -> &[Vec<f64>] {
         &self.a
     }
-    /// Strictly lower-triangular increment-coupling matrix `C`.
+    /// Increment-coupling matrix `C`, interpreted according to [`Self::kind`].
+    ///
+    /// Strictly lower triangular for Rosenbrock methods; a raw lower-triangular
+    /// `Gamma` with diagonal [`Self::gamma`] for hybrid methods.
     pub fn coupling(&self) -> &[Vec<f64>] {
         &self.coupling
     }
@@ -86,20 +112,13 @@ impl RosenbrockTableau {
 }
 
 #[derive(Deserialize)]
-#[serde(rename_all = "kebab-case")]
-enum Kind {
-    Rosenbrock,
-}
-
-#[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RawRosenbrockTableau {
     #[serde(rename = "$schema", default)]
     _schema: Option<String>,
     name: String,
     description: String,
-    #[serde(rename = "kind")]
-    _kind: Kind,
+    kind: RosenbrockKind,
     order: usize,
     gamma: Scalar,
     #[serde(rename = "A")]
@@ -120,6 +139,9 @@ struct RawRosenbrockTableau {
 /// stage matrices, matching vectors, an initial zero time node, nonzero
 /// solution/error weights, and rectangular dense-output rows. The stiff
 /// interpolant supports two through four correction rows (or none).
+/// Hybrid tableaus additionally require matching Gamma diagonals and consistent
+/// solution/error weight sums. Nodes `c` and time-derivative weights `d` are
+/// independent input vectors, checked for dimension and finiteness only.
 /// Neither classical order conditions nor stability are proved here.
 /// Called identically during macro expansion and lazy runtime initialization.
 pub fn parse_rosenbrock_tableau(
@@ -164,13 +186,15 @@ pub fn parse_rosenbrock_tableau(
                 "{label} must be square with {stages} stages"
             )));
         }
-        if matrix
-            .iter()
-            .enumerate()
-            .any(|(i, row)| row[i..].iter().any(|value| *value != 0.0))
-        {
+        let diagonal_allowed = label == "C" && raw.kind == RosenbrockKind::HybridExplicitImplicit;
+        if matrix.iter().enumerate().any(|(i, row)| {
+            row[i + usize::from(diagonal_allowed)..]
+                .iter()
+                .any(|value| *value != 0.0)
+        }) {
             return Err(TableauError::new(format!(
-                "{label} must be strictly lower triangular"
+                "{label} must be {}lower triangular",
+                if diagonal_allowed { "" } else { "strictly " }
             )));
         }
     }
@@ -183,6 +207,24 @@ pub fn parse_rosenbrock_tableau(
     }
     if c[0] != 0.0 {
         return Err(TableauError::new("the first stage node c[0] must be zero"));
+    }
+    if raw.kind == RosenbrockKind::HybridExplicitImplicit {
+        for (stage, row) in coupling.iter().enumerate() {
+            if row[stage] != gamma {
+                return Err(TableauError::new(format!(
+                    "hybrid C[{stage}][{stage}] must equal gamma"
+                )));
+            }
+        }
+        if !approximately_equal(b.iter().sum::<f64>(), 1.0)
+            || btilde
+                .as_ref()
+                .is_some_and(|error| !approximately_equal(error.iter().sum::<f64>(), 0.0))
+        {
+            return Err(TableauError::new(
+                "hybrid b must sum to one and btilde must sum to zero",
+            ));
+        }
     }
     if let Some(error) = &btilde {
         if error.len() != stages || error.iter().all(|value| *value == 0.0) {
@@ -197,6 +239,7 @@ pub fn parse_rosenbrock_tableau(
         ));
     }
     Ok(RosenbrockTableau {
+        kind: raw.kind,
         name: raw.name,
         description: raw.description,
         order: raw.order,
@@ -221,6 +264,7 @@ mod tests {
     fn parses_sci_ml_convention_with_shared_expressions() {
         let t = parse_rosenbrock_tableau(SOURCE, "Test").unwrap();
         assert_eq!(t.name(), "Test");
+        assert_eq!(t.kind(), RosenbrockKind::Rosenbrock);
         assert_eq!(t.description(), "Test Rosenbrock formula");
         assert_eq!(t.order(), 2);
         assert_eq!(t.stages(), 2);
@@ -243,6 +287,45 @@ mod tests {
                 .unwrap()
                 .btilde()
                 .is_none()
+        );
+    }
+
+    #[test]
+    fn hybrid_convention_preserves_independent_nodes_and_time_weights() {
+        let source = SOURCE
+            .replace("\"rosenbrock\"", "\"hybrid-explicit-implicit\"")
+            .replace("\"C\":[[0,0],[-4,0]]", "\"C\":[[0.5,0],[0,0.5]]")
+            .replace("\"b\":[3,1]", "\"b\":[0.5,0.5]")
+            .replace("\"btilde\":[1,1]", "\"btilde\":[1,-1]");
+        let t = parse_rosenbrock_tableau(&source, "Test").unwrap();
+        assert_eq!(t.kind(), RosenbrockKind::HybridExplicitImplicit);
+        assert_eq!(t.coupling()[1], [0.0, 0.5]);
+        // c and d are supplied independently, not silently recomputed from A/C.
+        assert_eq!(t.a()[1].iter().sum::<f64>(), 2.0);
+        assert_eq!(t.c()[1], 1.0);
+        assert_eq!(t.d()[1], -0.5);
+        for (from, to) in [
+            ("\"C\":[[0.5,0],[0,0.5]]", "\"C\":[[0.5,1],[0,0.5]]"),
+            ("\"C\":[[0.5,0],[0,0.5]]", "\"C\":[[0.5,0],[0,0]]"),
+            ("\"C\":[[0.5,0],[0,0.5]]", "\"C\":[[0.5,0],[0,\"1/0\"]]"),
+            ("\"b\":[0.5,0.5]", "\"b\":[0.5,1]"),
+            ("\"btilde\":[1,-1]", "\"btilde\":[1,1]"),
+            ("\"btilde\":[1,-1]", "\"btilde\":[1]"),
+            ("\"btilde\":[1,-1]", "\"btilde\":[0,0]"),
+            ("\"d\":[0.5,-0.5]", "\"d\":[0.5,\"1/0\"]"),
+        ] {
+            let invalid = source.replace(from, to);
+            assert!(
+                parse_rosenbrock_tableau(&invalid, "Test").is_err(),
+                "accepted {invalid}"
+            );
+        }
+        assert!(
+            parse_rosenbrock_tableau(
+                &source.replace("hybrid-explicit-implicit", "rosenbrock"),
+                "Test"
+            )
+            .is_err()
         );
     }
 

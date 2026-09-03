@@ -71,8 +71,34 @@ the selected method; repeat access is allocation-free. `Rodas5Pr` shares
 are kept separate from classical method order, including the existing
 step-doubling estimator for `Ros34Pw1a`. `Scholz4_7`'s resource records its
 upstream classical order of three while preserving the existing controller.
-The low-order `Rosenbrock23`/`Rosenbrock32`/AMF specializations and the hybrid
-Tsit5DA specialization still await their resource migrations.
+The low-order `Rosenbrock23`/`Rosenbrock32`/AMF specializations still await
+their resource migrations.
+
+### Hybrid explicit/implicit tableaus
+
+`Tsit5DA` and its `HybridExplicitImplicitRK` alias share a single lazy resource
+with `kind: "hybrid-explicit-implicit"`. It uses the same fields and parser as
+Rosenbrock resources, but `C` contains the raw lower-triangular Gamma matrix
+including its common `gamma` diagonal. `RosenbrockTableau::kind()` distinguishes
+these conventions; the driver rejects a resource of the wrong kind.
+Hybrid solution weights must sum to one and error weights to zero. The same
+compile-time checks cover finite values, dimensions, and dense-output rows.
+
+The ordinary ODE specialization evaluates explicit stages
+`k[i] = h*f(u + sum(A[i,j]*k[j]), t + c[i]*h)`, without requesting a Jacobian
+or performing linear solves. Gamma and `d` are retained as source metadata for
+the upstream algebraic specialization; this does **not** add DAE support.
+`H` remains in the upstream correction basis, with no duplicate polynomial
+coefficient representation or separate dense-output coefficient bank.
+
+The pinned source specifies nodes `c` and time-derivative weights `d`
+independently. They are not silently recomputed from row sums. In particular,
+zero-based `c[7]` is `0.9999990000000002` while its `A` row sums to `1`;
+`d[4]` is `0.2843274226367331` while its Gamma row sums to approximately
+`0.2843327428458331`. The Gamma row sum at index 6 also differs from `d[6]`
+by approximately `4e-10`. These pinned-source discrepancies are preserved
+for reproducibility and need a mathematical audit before stronger order or
+DAE claims. The resource validator proves structural validity, not those claims.
 
 ## Defining a downstream method
 

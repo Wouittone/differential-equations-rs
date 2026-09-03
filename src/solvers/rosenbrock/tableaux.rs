@@ -2,6 +2,9 @@
 
 use crate::tableau::define_rosenbrock_tableau_from_file;
 
+define_rosenbrock_tableau_from_file!(pub(super) TSIT5DA_TABLEAU, "Tsit5DA",
+    "src/tableau/resources/rosenbrock/tsit5da.json", crate = crate);
+
 define_rosenbrock_tableau_from_file!(pub(super) ROS2_TABLEAU, "Ros2",
     "src/tableau/resources/rosenbrock/ros2.json", crate = crate);
 define_rosenbrock_tableau_from_file!(pub(super) RODAS3_TABLEAU, "Rodas3",

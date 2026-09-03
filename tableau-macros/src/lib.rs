@@ -517,7 +517,7 @@ fn expand_multistep_source(
     ))
 }
 
-/// Defines a lazy Rosenbrock tableau from canonical JSON, validated at compile time.
+/// Defines a lazy Rosenbrock or hybrid tableau, validated at compile time.
 ///
 /// Accepts `visibility STATIC, "MethodName", "resource.json", crate = local_name`.
 /// Only source text is embedded; coefficient arrays are parsed on first use.
@@ -893,5 +893,24 @@ mod rosenbrock_tests {
         let tokens =
             expand_rosenbrock_source(input(), &SOURCE.replace(",\"btilde\":[1,1]", "")).unwrap();
         assert!(tokens.to_string().contains("include_str"));
+    }
+
+    #[test]
+    fn hybrid_validation_rejects_invalid_diagonals_at_compile_time() {
+        let source = SOURCE
+            .replace("\"rosenbrock\"", "\"hybrid-explicit-implicit\"")
+            .replace("\"C\":[[0,0],[-4,0]]", "\"C\":[[0.5,0],[0,0.5]]")
+            .replace("\"b\":[3,1]", "\"b\":[0.5,0.5]")
+            .replace("\"btilde\":[1,1]", "\"btilde\":[1,-1]");
+        let tokens = expand_rosenbrock_source(input(), &source)
+            .unwrap()
+            .to_string();
+        assert!(tokens.contains("include_str"));
+        assert!(!tokens.contains("0.5"));
+        assert!(!tokens.contains("const "));
+        let invalid = source.replace("\"C\":[[0.5,0],[0,0.5]]", "\"C\":[[0.5,0],[0,0]]");
+        let error = expand_rosenbrock_source(input(), &invalid).unwrap_err();
+        assert!(error.contains("formula.json"), "{error}");
+        assert!(error.contains("must equal gamma"), "{error}");
     }
 }
