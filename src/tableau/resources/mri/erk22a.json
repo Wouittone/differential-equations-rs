@@ -1,0 +1,18 @@
+{
+  "name"        : "MRIGARKERK22a",
+  "description" : "Explicit second-order MRI-GARK ERK22a coupling tableau ported from OrdinaryDiffEqMultirate.",
+  "order"       : 2,
+  "inner_order" : 2,
+  "dc"          : ["1 / 2", "1 / 2"],
+  "W0"          : [
+    ["1 / 2", 0],
+    ["-1 / 2", 1]
+  ],
+  "W1"          : [
+    [0, 0],
+    [0, 0]
+  ],
+  "embedded0"   : null,
+  "embedded1"   : null,
+  "gamma"       : [0, 0]
+}

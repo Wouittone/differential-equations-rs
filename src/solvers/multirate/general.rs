@@ -4,6 +4,7 @@
 //! component is its `explicit` half.  This matches `OrdinaryDiffEqMultirate`'s
 //! `SplitFunction(fast, slow)` convention.
 
+use super::tableaux::*;
 use crate::integrator::{TimeStopSchedule, callback_adjusted_step};
 use crate::linear::{factorize, solve_factorized};
 use crate::solution::{BorrowedHermiteSegment, DenseSegment, HermiteSegment, TrajectoryRecorder};
@@ -12,6 +13,7 @@ use crate::solver::{
 };
 use crate::solvers::explicit::split_euler::SplitOdeAlgorithm;
 use crate::solvers::multistep::tableaux::adams_bashforth;
+use crate::tableau::{MisTableau, MriTableau, TableauError, load_tableau};
 use crate::{Solution, SolveError, SolveOptions, SolverStats, SplitOdeProblem};
 
 const MAX_NEWTON_ITERATIONS: usize = 12;
@@ -116,6 +118,11 @@ impl Mis {
     pub const fn microsteps(&self) -> usize {
         self.m
     }
+
+    /// Returns the lazily parsed Knoth--Wolke coupling tableau.
+    pub fn tableau(&self) -> Result<&'static MisTableau, TableauError> {
+        load_tableau(&MIS_TABLEAU)
+    }
 }
 
 impl Default for Mis {
@@ -144,6 +151,11 @@ macro_rules! mri_algorithm {
             /// Returns the number of fast microsteps per macro step.
             pub const fn microsteps(&self) -> usize {
                 self.m
+            }
+
+            /// Returns this method's lazily parsed MRI-GARK coupling tableau.
+            pub fn tableau(&self) -> Result<&'static MriTableau, TableauError> {
+                load_tableau(&$tableau)
             }
         }
 
@@ -175,7 +187,7 @@ macro_rules! mri_algorithm {
                     options,
                     Method::Mri {
                         m: self.m,
-                        tableau: &$tableau,
+                        tableau: self.tableau().map_err(|_| SolveError::InvalidTableau)?,
                     },
                 )
             }
@@ -186,37 +198,37 @@ macro_rules! mri_algorithm {
 mri_algorithm!(
     MriGarkErk22a,
     MRIGARKERK22a,
-    ERK22A,
+    ERK22A_TABLEAU,
     "Explicit second-order MRI-GARK ERK22a."
 );
 mri_algorithm!(
     MriGarkErk22b,
     MRIGARKERK22b,
-    ERK22B,
+    ERK22B_TABLEAU,
     "Explicit second-order MRI-GARK ERK22b."
 );
 mri_algorithm!(
     MriGarkErk33a,
     MRIGARKERK33a,
-    ERK33A,
+    ERK33A_TABLEAU,
     "Explicit third-order MRI-GARK ERK33a."
 );
 mri_algorithm!(
     MriGarkErk45a,
     MRIGARKERK45a,
-    ERK45A,
+    ERK45A_TABLEAU,
     "Explicit fourth-order MRI-GARK ERK45a."
 );
 mri_algorithm!(
     MriGarkEsdirk34a,
     MRIGARKESDIRK34a,
-    ESDIRK34A,
+    ESDIRK34A_TABLEAU,
     "Third-order implicit-slow MRI-GARK ESDIRK34a."
 );
 mri_algorithm!(
     MriGarkIrk21a,
     MRIGARKIRK21a,
-    IRK21A,
+    IRK21A_TABLEAU,
     "Second-order implicit-slow MRI-GARK IRK21a."
 );
 
@@ -285,7 +297,14 @@ impl SplitOdeAlgorithm for Mis {
         if self.m == 0 {
             return Err(SolveError::InvalidMultistepOrder);
         }
-        integrate_multirate(problem, options, Method::Mis { m: self.m })
+        integrate_multirate(
+            problem,
+            options,
+            Method::Mis {
+                m: self.m,
+                tableau: self.tableau().map_err(|_| SolveError::InvalidTableau)?,
+            },
+        )
     }
 }
 
@@ -302,6 +321,7 @@ enum Method {
     },
     Mis {
         m: usize,
+        tableau: &'static MisTableau,
     },
     Mri {
         m: usize,
@@ -313,8 +333,8 @@ impl Method {
     fn controller_order(self) -> usize {
         match self {
             Self::Mreef { order, .. } | Self::Mrab { order, .. } => order,
-            Self::Mis { .. } => 3,
-            Self::Mri { tableau, .. } => tableau.order,
+            Self::Mis { tableau, .. } => tableau.order(),
+            Self::Mri { tableau, .. } => tableau.order(),
         }
     }
 }
@@ -609,7 +629,9 @@ where
         Method::Mrab { m, order } => {
             mrab_step(problem, state, time, step, candidate, m, order, stats)?
         }
-        Method::Mis { m } => mis_step(problem, state, time, step, candidate, m, stats)?,
+        Method::Mis { m, tableau } => {
+            mis_step(problem, state, time, step, candidate, m, tableau, stats)?
+        }
         Method::Mri { m, tableau } => {
             mri_step(problem, state, time, step, candidate, m, tableau, stats)?
         }
@@ -823,76 +845,47 @@ fn mis_step<FE, FI, P>(
     step: f64,
     candidate: &mut [f64],
     m: usize,
+    tableau: &'static MisTableau,
     stats: &mut SolverStats,
 ) -> Result<Vec<f64>, SolveError>
 where
     FE: crate::OdeFunction<P>,
     FI: crate::OdeFunction<P>,
 {
-    const ALPHA: [[f64; 4]; 4] = [
-        [0.0; 4],
-        [0.0; 4],
-        [0.0, 0.536_946_566_71, 0.0, 0.0],
-        [0.0, 0.480_892_968_551, 0.500_561_163_566, 0.0],
-    ];
-    const BETA: [[f64; 4]; 4] = [
-        [0.0; 4],
-        [0.126_848_494_553, 0.0, 0.0, 0.0],
-        [-0.784_838_278_826, 1.374_426_752_68, 0.0, 0.0],
-        [
-            -0.045_672_708_174_9,
-            -0.008_750_822_711_9,
-            0.524_775_788_629,
-            0.0,
-        ],
-    ];
-    const GAMMA: [[f64; 4]; 4] = [
-        [0.0; 4],
-        [0.0; 4],
-        [0.0, 0.652_465_126_004, 0.0, 0.0],
-        [0.0, -0.073_276_984_945_7, 0.144_902_430_42, 0.0],
-    ];
-    const D: [f64; 4] = [
-        0.0,
-        0.126_848_494_553,
-        0.589_588_473_854,
-        0.470_352_257_742_2,
-    ];
-    const C: [f64; 4] = [0.0, 0.126_848_494_553, 0.740_463_556_478_506_4, 1.0];
-    const CTILDE: [f64; 4] = [0.0, 0.0, 0.068_110_863_642_565_5, 0.431_647_848_510_917_2];
+    let stage_count = tableau.d().len();
     let dimension = state.len();
-    let mut stages = vec![vec![0.0; dimension]; 4];
-    let mut slow = vec![vec![0.0; dimension]; 4];
+    let mut stages = vec![vec![0.0; dimension]; stage_count];
+    let mut slow = vec![vec![0.0; dimension]; stage_count];
     stages[0].copy_from_slice(state);
     evaluate_slow(problem, state, time, &mut slow[0], stats)?;
     let mut fast = vec![0.0; dimension];
     let mut midpoint_fast = vec![0.0; dimension];
     let mut midpoint = vec![0.0; dimension];
-    for stage in 1..4 {
+    for stage in 1..stage_count {
         let mut value = state.to_vec();
         for (j, previous_stage) in stages.iter().take(stage).enumerate() {
             for index in 0..dimension {
-                value[index] += ALPHA[stage][j] * (previous_stage[index] - state[index]);
+                value[index] += tableau.alpha()[stage][j] * (previous_stage[index] - state[index]);
             }
         }
         let mut offset = vec![0.0; dimension];
         for (j, (previous_stage, previous_slow)) in stages.iter().zip(&slow).take(stage).enumerate()
         {
             for index in 0..dimension {
-                offset[index] += GAMMA[stage][j] / (D[stage] * step)
+                offset[index] += tableau.gamma()[stage][j] / (tableau.d()[stage] * step)
                     * (previous_stage[index] - state[index])
-                    + BETA[stage][j] / D[stage] * previous_slow[index];
+                    + tableau.beta()[stage][j] / tableau.d()[stage] * previous_slow[index];
             }
         }
-        let micro_count = ((m as f64 * D[stage]).ceil() as usize).max(1);
-        let h = D[stage] * step / micro_count as f64;
-        let slope = (C[stage] - CTILDE[stage]) / D[stage];
+        let micro_count = ((m as f64 * tableau.d()[stage]).ceil() as usize).max(1);
+        let h = tableau.d()[stage] * step / micro_count as f64;
+        let slope = (tableau.c()[stage] - tableau.c_tilde()[stage]) / tableau.d()[stage];
         for micro in 0..micro_count {
             let tau = micro as f64 * h;
             evaluate_fast(
                 problem,
                 &value,
-                time + CTILDE[stage] * step + slope * tau,
+                time + tableau.c_tilde()[stage] * step + slope * tau,
                 &mut fast,
                 stats,
             )?;
@@ -902,7 +895,7 @@ where
             evaluate_fast(
                 problem,
                 &midpoint,
-                time + CTILDE[stage] * step + slope * (tau + 0.5 * h),
+                time + tableau.c_tilde()[stage] * step + slope * (tau + 0.5 * h),
                 &mut midpoint_fast,
                 stats,
             )?;
@@ -914,28 +907,17 @@ where
         evaluate_slow(
             problem,
             &stages[stage],
-            time + C[stage] * step,
+            time + tableau.c()[stage] * step,
             &mut slow[stage],
             stats,
         )?;
     }
-    candidate.copy_from_slice(&stages[3]);
-    Ok(stages[3]
+    candidate.copy_from_slice(&stages[stage_count - 1]);
+    Ok(stages[stage_count - 1]
         .iter()
-        .zip(&stages[2])
+        .zip(&stages[stage_count - 2])
         .map(|(high, low)| high - low)
         .collect())
-}
-
-struct MriTableau {
-    dc: &'static [f64],
-    w0: &'static [&'static [f64]],
-    w1: &'static [&'static [f64]],
-    embedded0: Option<&'static [f64]>,
-    embedded1: Option<&'static [f64]>,
-    gamma: &'static [f64],
-    inner_order: usize,
-    order: usize,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -953,7 +935,7 @@ where
     FE: crate::OdeFunction<P>,
     FI: crate::OdeFunction<P>,
 {
-    let stages_count = tableau.dc.len();
+    let stages_count = tableau.dc().len();
     let dimension = state.len();
     let mut stages = vec![vec![0.0; dimension]; stages_count + 1];
     let mut slow = vec![vec![0.0; dimension]; stages_count];
@@ -967,7 +949,7 @@ where
             &mut slow[stage],
             stats,
         )?;
-        let gamma = tableau.gamma[stage];
+        let gamma = tableau.gamma()[stage];
         if gamma == 0.0 {
             stages[stage + 1] = mri_substage(
                 problem,
@@ -976,22 +958,22 @@ where
                 time,
                 step,
                 c_previous,
-                tableau.dc[stage],
-                tableau.w0[stage],
-                tableau.w1[stage],
+                tableau.dc()[stage],
+                &tableau.w0()[stage],
+                &tableau.w1()[stage],
                 m,
-                tableau.inner_order,
+                tableau.inner_order(),
                 stats,
             )?;
         } else {
             let mut base = stages[stage].clone();
             for (j, slow_stage) in slow.iter().enumerate().take(stage + 1) {
-                let weight = tableau.w0[stage][j] + 0.5 * tableau.w1[stage][j];
+                let weight = tableau.w0()[stage][j] + 0.5 * tableau.w1()[stage][j];
                 for index in 0..dimension {
                     base[index] += step * weight * slow_stage[index];
                 }
             }
-            let target_time = time + (c_previous + tableau.dc[stage]) * step;
+            let target_time = time + (c_previous + tableau.dc()[stage]) * step;
             stages[stage + 1] = implicit_slow_endpoint(
                 problem,
                 &base,
@@ -1001,22 +983,22 @@ where
                 stats,
             )?;
         }
-        c_previous += tableau.dc[stage];
+        c_previous += tableau.dc()[stage];
     }
     candidate.copy_from_slice(&stages[stages_count]);
-    let comparison = if let Some(weights0) = tableau.embedded0 {
+    let comparison = if let Some(weights0) = tableau.embedded0() {
         mri_substage(
             problem,
             &stages[stages_count - 1],
             &slow,
             time,
             step,
-            c_previous - tableau.dc[stages_count - 1],
-            tableau.dc[stages_count - 1],
+            c_previous - tableau.dc()[stages_count - 1],
+            tableau.dc()[stages_count - 1],
             weights0,
-            tableau.embedded1.unwrap_or(&ZERO5),
+            tableau.embedded1().ok_or(SolveError::InvalidTableau)?,
             m,
-            tableau.inner_order,
+            tableau.inner_order(),
             stats,
         )?
     } else {
@@ -1262,186 +1244,3 @@ where
     }
     Err(SolveError::NonlinearSolveFailed)
 }
-
-const ZERO2: [f64; 2] = [0.0; 2];
-const ZERO3: [f64; 3] = [0.0; 3];
-const ZERO5: [f64; 5] = [0.0; 5];
-const ZERO6: [f64; 6] = [0.0; 6];
-
-const ERK22A_W0_0: [f64; 2] = [0.5, 0.0];
-const ERK22A_W0_1: [f64; 2] = [-0.5, 1.0];
-const ERK22A_W0: [&[f64]; 2] = [&ERK22A_W0_0, &ERK22A_W0_1];
-const ZERO2_ROWS: [&[f64]; 2] = [&ZERO2, &ZERO2];
-const ERK22A: MriTableau = MriTableau {
-    dc: &[0.5, 0.5],
-    w0: &ERK22A_W0,
-    w1: &ZERO2_ROWS,
-    embedded0: None,
-    embedded1: None,
-    gamma: &ZERO2,
-    inner_order: 2,
-    order: 2,
-};
-
-const ERK22B_W0_0: [f64; 2] = [1.0, 0.0];
-const ERK22B_W0_1: [f64; 2] = [-0.5, 0.5];
-const ERK22B_W0: [&[f64]; 2] = [&ERK22B_W0_0, &ERK22B_W0_1];
-const ERK22B: MriTableau = MriTableau {
-    dc: &[1.0, 0.0],
-    w0: &ERK22B_W0,
-    w1: &ZERO2_ROWS,
-    embedded0: None,
-    embedded1: None,
-    gamma: &ZERO2,
-    inner_order: 2,
-    order: 2,
-};
-
-const ERK33_W0_0: [f64; 3] = [1.0 / 3.0, 0.0, 0.0];
-const ERK33_W0_1: [f64; 3] = [-1.0 / 3.0, 2.0 / 3.0, 0.0];
-const ERK33_W0_2: [f64; 3] = [0.0, -2.0 / 3.0, 1.0];
-const ERK33_W1_2: [f64; 3] = [0.5, 0.0, -0.5];
-const ERK33_W0: [&[f64]; 3] = [&ERK33_W0_0, &ERK33_W0_1, &ERK33_W0_2];
-const ERK33_W1: [&[f64]; 3] = [&ZERO3, &ZERO3, &ERK33_W1_2];
-const ERK33_EMBEDDED: [f64; 3] = [1.0 / 12.0, -1.0 / 3.0, 7.0 / 12.0];
-const ERK33A: MriTableau = MriTableau {
-    dc: &[1.0 / 3.0; 3],
-    w0: &ERK33_W0,
-    w1: &ERK33_W1,
-    embedded0: Some(&ERK33_EMBEDDED),
-    embedded1: Some(&ZERO3),
-    gamma: &ZERO3,
-    inner_order: 3,
-    order: 3,
-};
-
-const ERK45_W0_0: [f64; 5] = [1.0 / 5.0, 0.0, 0.0, 0.0, 0.0];
-const ERK45_W0_1: [f64; 5] = [-53.0 / 16.0, 281.0 / 80.0, 0.0, 0.0, 0.0];
-const ERK45_W0_2: [f64; 5] = [
-    -36_562_993.0 / 71_394_880.0,
-    34_903_117.0 / 17_848_720.0,
-    -88_770_499.0 / 71_394_880.0,
-    0.0,
-    0.0,
-];
-const ERK45_W0_3: [f64; 5] = [
-    -7_631_593.0 / 71_394_880.0,
-    -166_232_021.0 / 35_697_440.0,
-    6_068_517.0 / 1_519_040.0,
-    8_644_289.0 / 8_924_360.0,
-    0.0,
-];
-const ERK45_W0_4: [f64; 5] = [
-    277_061.0 / 303_808.0,
-    -209_323.0 / 1_139_280.0,
-    -1_360_217.0 / 1_139_280.0,
-    -148_789.0 / 56_964.0,
-    147_889.0 / 45_120.0,
-];
-const ERK45_W1_1: [f64; 5] = [503.0 / 80.0, -503.0 / 80.0, 0.0, 0.0, 0.0];
-const ERK45_W1_2: [f64; 5] = [
-    -1_365_537.0 / 35_697_440.0,
-    4_963_773.0 / 7_139_488.0,
-    -1_465_833.0 / 2_231_090.0,
-    0.0,
-    0.0,
-];
-const ERK45_W1_3: [f64; 5] = [
-    66_974_357.0 / 35_697_440.0,
-    21_445_367.0 / 7_139_488.0,
-    -3.0,
-    -8_388_609.0 / 4_462_180.0,
-    0.0,
-];
-const ERK45_W1_4: [f64; 5] = [-18_227.0 / 7_520.0, 2.0, 1.0, 5.0, -41_933.0 / 7_520.0];
-const ERK45_W0: [&[f64]; 5] = [
-    &ERK45_W0_0,
-    &ERK45_W0_1,
-    &ERK45_W0_2,
-    &ERK45_W0_3,
-    &ERK45_W0_4,
-];
-const ERK45_W1: [&[f64]; 5] = [&ZERO5, &ERK45_W1_1, &ERK45_W1_2, &ERK45_W1_3, &ERK45_W1_4];
-const ERK45_EMBEDDED0: [f64; 5] = [
-    -88_227.0 / 47_470.0,
-    756_870_829.0 / 340_217_490.0,
-    -713_704_111.0 / 1_360_869_960.0,
-    -31_967_827.0 / 340_217_490.0,
-    129_673.0 / 286_680.0,
-];
-const ERK45_EMBEDDED1: [f64; 5] = [6_213.0 / 1_880.0, -6_213.0 / 1_880.0, 0.0, 0.0, 0.0];
-const ERK45A: MriTableau = MriTableau {
-    dc: &[0.2; 5],
-    w0: &ERK45_W0,
-    w1: &ERK45_W1,
-    embedded0: Some(&ERK45_EMBEDDED0),
-    embedded1: Some(&ERK45_EMBEDDED1),
-    gamma: &ZERO5,
-    inner_order: 4,
-    order: 4,
-};
-
-const IRK21_W0_0: [f64; 2] = [1.0, 0.0];
-const IRK21_W0_1: [f64; 2] = [-0.5, 0.0];
-const IRK21_W0: [&[f64]; 2] = [&IRK21_W0_0, &IRK21_W0_1];
-const IRK21_GAMMA: [f64; 2] = [0.0, 0.5];
-const IRK21A: MriTableau = MriTableau {
-    dc: &[1.0, 0.0],
-    w0: &IRK21_W0,
-    w1: &ZERO2_ROWS,
-    embedded0: None,
-    embedded1: None,
-    gamma: &IRK21_GAMMA,
-    inner_order: 2,
-    order: 2,
-};
-
-const ESD_W0_0: [f64; 6] = [1.0 / 3.0, 0.0, 0.0, 0.0, 0.0, 0.0];
-const ESD_W0_1: [f64; 6] = [-0.435_866_521_508_459, 0.0, 0.0, 0.0, 0.0, 0.0];
-const ESD_W0_2: [f64; 6] = [
-    -0.304_579_061_194_450_5,
-    0.0,
-    0.637_912_394_527_783_8,
-    0.0,
-    0.0,
-    0.0,
-];
-const ESD_W0_3: [f64; 6] = [
-    0.211_691_310_564_026_66,
-    0.0,
-    -0.647_557_832_072_485_7,
-    0.0,
-    0.0,
-    0.0,
-];
-const ESD_W0_4: [f64; 6] = [
-    0.445_420_938_805_549_5,
-    0.0,
-    0.881_378_480_561_619_8,
-    0.0,
-    -0.993_466_086_033_836,
-    0.0,
-];
-const ESD_W0_5: [f64; 6] = [-0.435_866_521_508_459, 0.0, 0.0, 0.0, 0.0, 0.0];
-const ESD_W0: [&[f64]; 6] = [
-    &ESD_W0_0, &ESD_W0_1, &ESD_W0_2, &ESD_W0_3, &ESD_W0_4, &ESD_W0_5,
-];
-const ZERO6_ROWS: [&[f64]; 6] = [&ZERO6, &ZERO6, &ZERO6, &ZERO6, &ZERO6, &ZERO6];
-const ESD_GAMMA: [f64; 6] = [
-    0.0,
-    0.435_866_521_508_459,
-    0.0,
-    0.435_866_521_508_459,
-    0.0,
-    0.435_866_521_508_459,
-];
-const ESDIRK34A: MriTableau = MriTableau {
-    dc: &[1.0 / 3.0, 0.0, 1.0 / 3.0, 0.0, 1.0 / 3.0, 0.0],
-    w0: &ESD_W0,
-    w1: &ZERO6_ROWS,
-    embedded0: None,
-    embedded1: None,
-    gamma: &ESD_GAMMA,
-    inner_order: 3,
-    order: 3,
-};

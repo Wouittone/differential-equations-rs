@@ -3,7 +3,46 @@ use differential_equations::solvers::multirate::{
     MIS, MRAB, MREEF, MRIGARKERK22a, MRIGARKERK22b, MRIGARKERK33a, MRIGARKERK45a, MRIGARKESDIRK34a,
     MRIGARKIRK21a,
 };
+use differential_equations::tableau::{define_mri_tableau_from_file, load_tableau};
 use differential_equations::{CallbackAction, SaveMode, SolveOptions, SplitOdeProblem};
+
+use differential_equations as renamed;
+
+define_mri_tableau_from_file!(pub DOWNSTREAM_ERK22A, "MRIGARKERK22a",
+    "src/tableau/resources/mri/erk22a.json");
+define_mri_tableau_from_file!(pub RENAMED_ERK22A, "MRIGARKERK22a",
+    "src/tableau/resources/mri/erk22a.json", crate = renamed);
+differential_equations::tableau::define_mis_tableau_from_file!(pub DOWNSTREAM_MIS, "MIS",
+    "src/tableau/resources/mri/mis.json");
+
+#[test]
+fn mri_resources_are_inspectable_and_support_renamed_dependencies() {
+    let built_in = MRIGARKERK22a::new(4).tableau().unwrap();
+    assert_eq!(built_in.name(), "MRIGARKERK22a");
+    assert_eq!(built_in.order(), 2);
+    assert_eq!(built_in.inner_order(), 2);
+    assert_eq!(built_in.dc(), &[0.5, 0.5]);
+    assert_eq!(built_in.w0()[1], [-0.5, 1.0]);
+    assert_eq!(load_tableau(&DOWNSTREAM_ERK22A).unwrap(), built_in);
+    assert_eq!(load_tableau(&RENAMED_ERK22A).unwrap(), built_in);
+
+    let embedded = MRIGARKERK45a::new(4).tableau().unwrap();
+    assert_eq!(embedded.order(), 4);
+    assert_eq!(embedded.w0().len(), 5);
+    assert!(embedded.embedded0().is_some());
+    assert!(embedded.embedded1().is_some());
+
+    let implicit = MRIGARKESDIRK34a::new(4).tableau().unwrap();
+    assert_eq!(implicit.gamma().len(), 6);
+    assert!(implicit.gamma().iter().any(|value| *value != 0.0));
+
+    let mis = MIS::new(4).tableau().unwrap();
+    assert_eq!(mis.name(), "MIS");
+    assert_eq!(mis.order(), 3);
+    assert_eq!(mis.alpha().len(), 4);
+    assert_eq!(mis.c(), &[0.0, 0.126848494553, 0.7404635564785064, 1.0]);
+    assert_eq!(load_tableau(&DOWNSTREAM_MIS).unwrap(), mis);
+}
 
 fn endpoint<A: SplitOdeAlgorithm>(algorithm: A, step: f64) -> f64 {
     let problem = SplitOdeProblem::new(

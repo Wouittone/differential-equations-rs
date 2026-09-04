@@ -6,8 +6,8 @@ symplectic compositions use paired drift/kick vectors. Specialized families
 also use this tree for typed method data, including canonical linear multistep
 formulas for fixed-step Adams and MRAB, and per-method Rosenbrock tableaus.
 Migration is not yet complete:
-legacy embedded coefficients remain in some multirate, multistep, and
-exponential implementations.
+legacy embedded coefficients remain in some multistep and exponential
+implementations.
 
 Resources use a FracturedJson-style layout: object fields have stable ordering,
 scalar arrays stay on one line, and every matrix row occupies one line. This is
@@ -21,6 +21,25 @@ numeric expressions parsed by `exmex`; accepted expressions are limited to
 numeric literals, parentheses, `+`, `-`, `*`, `/`, and `sqrt(...)`.
 JSON numeric tokens use `serde_json`'s accurate float-roundtrip parsing so
 decimal numbers and equivalent decimal strings produce the same `f64` bits.
+
+## MRI-GARK resources
+
+MRI-GARK coupling data lives in independent files under
+`src/tableau/resources/mri`. Each resource contains `dc`, the square causal
+slow-forcing matrices `W0` and `W1`, the implicit-slow diagonal `gamma`, the
+outer and fast-inner orders, and an optional paired `embedded0`/`embedded1`
+estimator. The parser requires `dc` to sum to one and rejects mismatched,
+non-finite, non-causal, or half-specified embedded data.
+
+Use `tableau::define_mri_tableau_from_file!` to compile-time validate and embed
+one resource. It creates a `LazyMriTableau`, so the coefficients are parsed
+only when that method is inspected or solved. The six built-in MRI-GARK
+algorithms expose `.tableau()` and each owns an independent lazy resource.
+The Knoth--Wolke `MIS` method uses the companion `MisTableau` representation
+for its `alpha`, `beta`, and `gamma` coupling matrices and its `d`, `c`, and
+`c_tilde` vectors. `define_mis_tableau_from_file!` applies the same compile-time
+validation and lazy-loading policy. No multirate method coefficients remain in
+the Rust solver module.
 
 ## Rosenbrock resources
 

@@ -504,6 +504,48 @@ pub fn define_multistep_tableau_from_file(input: TokenStream) -> TokenStream {
     }
 }
 
+/// Defines a lazy MRI-GARK tableau validated from a JSON resource.
+#[proc_macro]
+pub fn define_mri_tableau_from_file(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as StaticTableauInput);
+    let result = read_static_resource(&input).and_then(|source| {
+        differential_equations_tableau_core::parse_mri_tableau(&source, &input.method_name.value())
+            .map_err(|error| format!("invalid tableau `{}`: {error}", input.path.value()))?;
+        Ok(emit_lazy_static(
+            input,
+            quote!(LazyMriTableau),
+            quote!(parse_mri_tableau),
+        ))
+    });
+    match result {
+        Ok(tokens) => tokens.into(),
+        Err(error) => syn::Error::new(proc_macro2::Span::call_site(), error)
+            .into_compile_error()
+            .into(),
+    }
+}
+
+/// Defines a lazy MIS coupling tableau validated from a JSON resource.
+#[proc_macro]
+pub fn define_mis_tableau_from_file(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as StaticTableauInput);
+    let result = read_static_resource(&input).and_then(|source| {
+        differential_equations_tableau_core::parse_mis_tableau(&source, &input.method_name.value())
+            .map_err(|error| format!("invalid tableau `{}`: {error}", input.path.value()))?;
+        Ok(emit_lazy_static(
+            input,
+            quote!(LazyMisTableau),
+            quote!(parse_mis_tableau),
+        ))
+    });
+    match result {
+        Ok(tokens) => tokens.into(),
+        Err(error) => syn::Error::new(proc_macro2::Span::call_site(), error)
+            .into_compile_error()
+            .into(),
+    }
+}
+
 fn expand_multistep_source(
     input: StaticTableauInput,
     source: &str,

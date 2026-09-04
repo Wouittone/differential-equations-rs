@@ -4,6 +4,8 @@ mod symplectic;
 pub use symplectic::{SymplecticTableau, parse_symplectic_tableau};
 mod multistep;
 pub use multistep::{LinearMultistepTableau, parse_multistep_tableau};
+mod mri;
+pub use mri::{MisTableau, MriTableau, parse_mis_tableau, parse_mri_tableau};
 mod rosenbrock;
 pub use rosenbrock::{RosenbrockKind, RosenbrockTableau, parse_rosenbrock_tableau};
 mod rosenbrock_pair;
