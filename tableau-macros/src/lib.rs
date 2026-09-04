@@ -532,6 +532,33 @@ pub fn define_rosenbrock_tableau_from_file(input: TokenStream) -> TokenStream {
     }
 }
 
+/// Defines the lazy low-storage Rosenbrock 2/3 pair from a JSON resource.
+///
+/// The resource is validated during macro expansion and embedded as source
+/// text, then materialized only when one of the pair's solvers is first used.
+#[proc_macro]
+pub fn define_rosenbrock_pair_tableau_from_file(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as StaticTableauInput);
+    let result = read_static_resource(&input).and_then(|source| {
+        differential_equations_tableau_core::parse_rosenbrock_pair_tableau(
+            &source,
+            &input.method_name.value(),
+        )
+        .map_err(|error| format!("invalid tableau `{}`: {error}", input.path.value()))?;
+        Ok(emit_lazy_static(
+            input,
+            quote!(LazyRosenbrockPairTableau),
+            quote!(parse_rosenbrock_pair_tableau),
+        ))
+    });
+    match result {
+        Ok(tokens) => tokens.into(),
+        Err(error) => syn::Error::new(proc_macro2::Span::call_site(), error)
+            .into_compile_error()
+            .into(),
+    }
+}
+
 fn expand_rosenbrock_source(
     input: StaticTableauInput,
     source: &str,

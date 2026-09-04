@@ -1,14 +1,13 @@
-use super::rosenbrock_dense::ROSENBROCK_SPECIAL;
+use super::tableaux::ROSENBROCK23_32_TABLEAU;
 use crate::callback::CallbackOutcome;
 use crate::integrator::{
     ControllerConfig, KernelCapabilities, StepEstimate, StepKernel, integrate as drive_integration,
 };
 use crate::linear::{factorize, solve_factorized};
 use crate::solution::{BorrowedRungeKuttaSegment, RungeKuttaSegment, TrajectoryRecorder};
+use crate::tableau::{RosenbrockPairTableau, TableauError, load_tableau};
 use crate::{OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions, SolverStats};
 
-const GAMMA: f64 = 1.0 / (2.0 + std::f64::consts::SQRT_2);
-const C32: f64 = 6.0 + std::f64::consts::SQRT_2;
 const SAFETY: f64 = 0.9;
 const MIN_FACTOR: f64 = 0.2;
 const MAX_FACTOR: f64 = 6.0;
@@ -16,6 +15,13 @@ const MAX_FACTOR: f64 = 6.0;
 /// The adaptive Rosenbrock 2/3 W-method for stiff ODEs.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Rosenbrock23;
+
+impl Rosenbrock23 {
+    /// Returns the shared, lazily parsed Rosenbrock 2/3 pair tableau.
+    pub fn tableau(self) -> Result<&'static RosenbrockPairTableau, TableauError> {
+        load_tableau(&ROSENBROCK23_32_TABLEAU)
+    }
+}
 
 struct Workspace {
     current_derivative: Vec<f64>,
@@ -73,22 +79,26 @@ impl OdeAlgorithm for Rosenbrock23 {
         drive_integration(
             problem,
             options,
-            Rosenbrock23Kernel::new(problem.initial_state().len()),
+            Rosenbrock23Kernel::new(problem.initial_state().len())?,
         )
     }
 }
 
 struct Rosenbrock23Kernel {
     workspace: Workspace,
+    tableau: &'static RosenbrockPairTableau,
     candidate_derivative_valid: bool,
 }
 
 impl Rosenbrock23Kernel {
-    fn new(dimension: usize) -> Self {
-        Self {
+    fn new(dimension: usize) -> Result<Self, SolveError> {
+        Ok(Self {
             workspace: Workspace::new(dimension),
+            tableau: Rosenbrock23
+                .tableau()
+                .map_err(|_| SolveError::InvalidTableau)?,
             candidate_derivative_valid: false,
-        }
+        })
     }
 }
 
@@ -159,6 +169,7 @@ where
             step,
             candidate,
             options,
+            self.tableau,
             &mut self.workspace,
             stats,
         )?;
@@ -188,7 +199,7 @@ where
             previous_state,
             &self.workspace.dense_endpoint_state,
             &self.workspace.dense_stages,
-            ROSENBROCK_SPECIAL,
+            self.tableau.dense(),
         )
         .map_err(|_| SolveError::NonFiniteDerivative)?;
         let mut interpolate = |sample_time: f64, output: &mut [f64]| {
@@ -224,7 +235,7 @@ where
             previous_state,
             &self.workspace.dense_endpoint_state,
             &self.workspace.dense_stages,
-            ROSENBROCK_SPECIAL,
+            self.tableau.dense(),
         )
         .map_err(|_| SolveError::NonFiniteDerivative)?;
         recorder
@@ -246,7 +257,7 @@ where
                     previous_state,
                     &self.workspace.dense_endpoint_state,
                     &self.workspace.dense_stages,
-                    ROSENBROCK_SPECIAL,
+                    self.tableau.dense(),
                 )
                 .map_err(|_| SolveError::NonFiniteDerivative)?,
             );
@@ -293,6 +304,7 @@ fn perform_step<F, P>(
     step: f64,
     candidate: &mut [f64],
     options: &SolveOptions,
+    tableau: &'static RosenbrockPairTableau,
     workspace: &mut Workspace,
     stats: &mut SolverStats,
 ) -> Result<f64, SolveError>
@@ -307,7 +319,7 @@ where
     for row in 0..dimension {
         for column in 0..dimension {
             workspace.factorization[row * dimension + column] = f64::from(row == column)
-                - GAMMA * step * workspace.jacobian[row * dimension + column];
+                - tableau.gamma() * step * workspace.jacobian[row * dimension + column];
         }
     }
     factorize(
@@ -318,8 +330,9 @@ where
     stats.linear_factorizations += 1;
 
     for index in 0..dimension {
-        workspace.right_hand_side[index] =
-            workspace.current_derivative[index] + GAMMA * step * workspace.time_derivative[index];
+        workspace.right_hand_side[index] = tableau.derivative()[0][0]
+            * workspace.current_derivative[index]
+            + tableau.time_derivative()[0] * step * workspace.time_derivative[index];
     }
     solve_factorized(
         &workspace.factorization,
@@ -331,19 +344,21 @@ where
     stats.linear_solves += 1;
 
     for (index, &value) in state.iter().enumerate() {
-        workspace.midpoint_state[index] = value + 0.5 * step * workspace.k1[index];
+        workspace.midpoint_state[index] =
+            value + tableau.state()[1][0] * step * workspace.k1[index];
     }
     evaluate(
         problem,
         &mut workspace.midpoint_derivative,
         &workspace.midpoint_state,
-        time + 0.5 * step,
+        time + tableau.nodes()[1] * step,
         stats,
     )?;
 
     for index in 0..dimension {
-        workspace.right_hand_side[index] =
-            workspace.midpoint_derivative[index] - workspace.k1[index];
+        workspace.right_hand_side[index] = tableau.derivative()[1][1]
+            * workspace.midpoint_derivative[index]
+            + tableau.stage()[1][0] * workspace.k1[index];
     }
     solve_factorized(
         &workspace.factorization,
@@ -352,8 +367,12 @@ where
         dimension,
     );
     for (index, &value) in state.iter().enumerate() {
-        workspace.k2[index] = workspace.right_hand_side[index] + workspace.k1[index];
-        candidate[index] = value + step * workspace.k2[index];
+        workspace.k2[index] =
+            workspace.right_hand_side[index] + tableau.post_solve()[1][0] * workspace.k1[index];
+        candidate[index] = value
+            + step
+                * (tableau.second_order()[0] * workspace.k1[index]
+                    + tableau.second_order()[1] * workspace.k2[index]);
     }
     stats.linear_solves += 1;
 
@@ -364,14 +383,17 @@ where
         problem,
         &mut workspace.candidate_derivative,
         candidate,
-        time + step,
+        time + tableau.nodes()[2] * step,
         stats,
     )?;
     for index in 0..dimension {
-        workspace.right_hand_side[index] = workspace.candidate_derivative[index]
-            - C32 * (workspace.k2[index] - workspace.midpoint_derivative[index])
-            - 2.0 * (workspace.k1[index] - workspace.current_derivative[index])
-            + step * workspace.time_derivative[index];
+        workspace.right_hand_side[index] = tableau.derivative()[2][0]
+            * workspace.current_derivative[index]
+            + tableau.derivative()[2][1] * workspace.midpoint_derivative[index]
+            + tableau.derivative()[2][2] * workspace.candidate_derivative[index]
+            + tableau.stage()[2][0] * workspace.k1[index]
+            + tableau.stage()[2][1] * workspace.k2[index]
+            + tableau.time_derivative()[2] * step * workspace.time_derivative[index];
     }
     solve_factorized(
         &workspace.factorization,
@@ -384,8 +406,10 @@ where
 
     let mut squared_norm = 0.0;
     for (index, &value) in state.iter().enumerate() {
-        let local_error =
-            (step / 6.0) * (workspace.k1[index] - 2.0 * workspace.k2[index] + workspace.k3[index]);
+        let local_error = step
+            * (tableau.error()[0] * workspace.k1[index]
+                + tableau.error()[1] * workspace.k2[index]
+                + tableau.error()[2] * workspace.k3[index]);
         let scale = options.absolute_tolerance
             + options.relative_tolerance * value.abs().max(candidate[index].abs());
         squared_norm += (local_error / scale).powi(2);

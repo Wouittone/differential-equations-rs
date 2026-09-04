@@ -8,7 +8,6 @@
 
 use std::marker::PhantomData;
 
-use super::rosenbrock_dense::*;
 use super::tableaux::*;
 use crate::callback::CallbackOutcome;
 use crate::integrator::{
@@ -19,11 +18,11 @@ use crate::solution::{
     BorrowedHermiteSegment, BorrowedRungeKuttaSegment, BorrowedStiffSegment, HermiteSegment,
     RungeKuttaSegment, StiffSegment, TrajectoryRecorder,
 };
-use crate::tableau::{RosenbrockKind, RosenbrockTableau, TableauError, load_tableau};
+use crate::tableau::{
+    RosenbrockKind, RosenbrockPairTableau, RosenbrockTableau, TableauError, load_tableau,
+};
 use crate::{OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions, SolverStats};
 
-const ROSENBROCK_GAMMA: f64 = 1.0 / (2.0 + std::f64::consts::SQRT_2);
-const ROSENBROCK_C32: f64 = 6.0 + std::f64::consts::SQRT_2;
 const SAFETY: f64 = 0.9;
 const MIN_FACTOR: f64 = 0.2;
 const MAX_FACTOR: f64 = 6.0;
@@ -31,6 +30,13 @@ const MAX_FACTOR: f64 = 6.0;
 /// The adaptive third-order Rosenbrock 3/2 W-method.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Rosenbrock32;
+
+impl Rosenbrock32 {
+    /// Returns the shared, lazily parsed Rosenbrock 2/3 pair tableau.
+    pub fn tableau(self) -> Result<&'static RosenbrockPairTableau, TableauError> {
+        load_tableau(&ROSENBROCK23_32_TABLEAU)
+    }
+}
 
 /// The adaptive second-order, two-stage L-stable Rosenbrock method.
 ///
@@ -591,6 +597,7 @@ impl ExtendedRosenbrockMethod for RosenbrockW6S4OS {
 
 struct Workspace {
     tableau: Option<&'static RosenbrockTableau>,
+    pair_tableau: Option<&'static RosenbrockPairTableau>,
     current_derivative: Vec<f64>,
     perturbed_state: Vec<f64>,
     perturbed_derivative: Vec<f64>,
@@ -610,7 +617,11 @@ struct Workspace {
 }
 
 impl Workspace {
-    fn new(dimension: usize, tableau: Option<&'static RosenbrockTableau>) -> Self {
+    fn new(
+        dimension: usize,
+        tableau: Option<&'static RosenbrockTableau>,
+        pair_tableau: Option<&'static RosenbrockPairTableau>,
+    ) -> Self {
         let stages = tableau.map_or(3, RosenbrockTableau::stages);
         let dense_order = tableau.map_or(0, |tableau| tableau.h().len());
         // The implemented hybrid ODE specialization is explicit. It never
@@ -625,6 +636,7 @@ impl Workspace {
         };
         Self {
             tableau,
+            pair_tableau,
             current_derivative: vec![0.0; dimension],
             perturbed_state: vec![0.0; linear_dimension],
             perturbed_derivative: vec![0.0; linear_dimension],
@@ -654,6 +666,10 @@ struct ExtendedRosenbrockKernel<M> {
 impl<M: ExtendedRosenbrockMethod> ExtendedRosenbrockKernel<M> {
     fn new(dimension: usize) -> Result<Self, SolveError> {
         let tableau = M::load_resource()?;
+        let pair_tableau = M::SPECIAL_DENSE
+            .then(|| load_tableau(&ROSENBROCK23_32_TABLEAU))
+            .transpose()
+            .map_err(|_| SolveError::InvalidTableau)?;
         if let Some(tableau) = tableau {
             if tableau.kind() != M::RESOURCE_KIND || (M::ADAPTIVE && tableau.btilde().is_none()) {
                 return Err(SolveError::InvalidTableau);
@@ -662,7 +678,7 @@ impl<M: ExtendedRosenbrockMethod> ExtendedRosenbrockKernel<M> {
             return Err(SolveError::InvalidTableau);
         }
         Ok(Self {
-            workspace: Workspace::new(dimension, tableau),
+            workspace: Workspace::new(dimension, tableau, pair_tableau),
             dense_endpoint_prepared: false,
             method: PhantomData,
         })
@@ -796,7 +812,10 @@ where
                 previous_state,
                 &self.workspace.dense_endpoint_state,
                 &self.workspace.stages[..2 * dimension],
-                ROSENBROCK_SPECIAL,
+                self.workspace
+                    .pair_tableau
+                    .ok_or(SolveError::InvalidTableau)?
+                    .dense(),
             )
             .map_err(|_| SolveError::NonFiniteDerivative)?;
             let mut interpolate = |sample_time: f64, output: &mut [f64]| {
@@ -902,7 +921,10 @@ where
                 previous_state,
                 &self.workspace.dense_endpoint_state,
                 &self.workspace.stages[..2 * dimension],
-                ROSENBROCK_SPECIAL,
+                self.workspace
+                    .pair_tableau
+                    .ok_or(SolveError::InvalidTableau)?
+                    .dense(),
             )
             .map_err(|_| SolveError::NonFiniteDerivative)?;
             recorder
@@ -924,7 +946,10 @@ where
                         previous_state,
                         &self.workspace.dense_endpoint_state,
                         &self.workspace.stages[..2 * dimension],
-                        ROSENBROCK_SPECIAL,
+                        self.workspace
+                            .pair_tableau
+                            .ok_or(SolveError::InvalidTableau)?
+                            .dense(),
                     )
                     .map_err(|_| SolveError::NonFiniteDerivative)?,
                 );
@@ -1061,21 +1086,21 @@ fn perform_rosenbrock32<F, P>(
 where
     F: crate::OdeFunction<P>,
 {
+    let tableau = workspace.pair_tableau.ok_or(SolveError::InvalidTableau)?;
     let dimension = state.len();
     prepare_factorization(
         problem,
         state,
         time,
         step,
-        ROSENBROCK_GAMMA,
+        tableau.gamma(),
         workspace,
         stats,
     )?;
-    let gamma_step = ROSENBROCK_GAMMA * step;
-
     for index in 0..dimension {
-        workspace.right_hand_side[index] =
-            workspace.current_derivative[index] + gamma_step * workspace.time_derivative[index];
+        workspace.right_hand_side[index] = tableau.derivative()[0][0]
+            * workspace.current_derivative[index]
+            + tableau.time_derivative()[0] * step * workspace.time_derivative[index];
     }
     solve_factorized(
         &workspace.factorization,
@@ -1087,18 +1112,20 @@ where
     stats.linear_solves += 1;
 
     for (index, &value) in state.iter().enumerate() {
-        workspace.stage_state[index] = value + 0.5 * step * workspace.stages[index];
+        workspace.stage_state[index] =
+            value + tableau.state()[1][0] * step * workspace.stages[index];
     }
     evaluate(
         problem,
         &mut workspace.stage_derivative,
         &workspace.stage_state,
-        time + 0.5 * step,
+        time + tableau.nodes()[1] * step,
         stats,
     )?;
     for index in 0..dimension {
-        workspace.right_hand_side[index] =
-            workspace.stage_derivative[index] - workspace.stages[index];
+        workspace.right_hand_side[index] = tableau.derivative()[1][1]
+            * workspace.stage_derivative[index]
+            + tableau.stage()[1][0] * workspace.stages[index];
     }
     solve_factorized(
         &workspace.factorization,
@@ -1108,8 +1135,9 @@ where
     );
     for (index, &value) in state.iter().enumerate() {
         workspace.stages[dimension + index] =
-            workspace.right_hand_side[index] + workspace.stages[index];
-        workspace.stage_state[index] = value + step * workspace.stages[dimension + index];
+            workspace.right_hand_side[index] + tableau.post_solve()[1][0] * workspace.stages[index];
+        workspace.stage_state[index] =
+            value + step * tableau.state()[2][1] * workspace.stages[dimension + index];
     }
     stats.linear_solves += 1;
 
@@ -1117,15 +1145,17 @@ where
         problem,
         &mut workspace.error,
         &workspace.stage_state,
-        time + step,
+        time + tableau.nodes()[2] * step,
         stats,
     )?;
     for index in 0..dimension {
-        workspace.right_hand_side[index] = workspace.error[index]
-            - ROSENBROCK_C32
-                * (workspace.stages[dimension + index] - workspace.stage_derivative[index])
-            - 2.0 * (workspace.stages[index] - workspace.current_derivative[index])
-            + step * workspace.time_derivative[index];
+        workspace.right_hand_side[index] = tableau.derivative()[2][0]
+            * workspace.current_derivative[index]
+            + tableau.derivative()[2][1] * workspace.stage_derivative[index]
+            + tableau.derivative()[2][2] * workspace.error[index]
+            + tableau.stage()[2][0] * workspace.stages[index]
+            + tableau.stage()[2][1] * workspace.stages[dimension + index]
+            + tableau.time_derivative()[2] * step * workspace.time_derivative[index];
     }
     solve_factorized(
         &workspace.factorization,
@@ -1138,13 +1168,14 @@ where
 
     for (index, &value) in state.iter().enumerate() {
         candidate[index] = value
-            + (step / 6.0)
-                * (workspace.stages[index]
-                    + 4.0 * workspace.stages[dimension + index]
-                    + workspace.stages[2 * dimension + index]);
-        workspace.error[index] = (step / 6.0)
-            * (workspace.stages[index] - 2.0 * workspace.stages[dimension + index]
-                + workspace.stages[2 * dimension + index]);
+            + step
+                * (tableau.third_order()[0] * workspace.stages[index]
+                    + tableau.third_order()[1] * workspace.stages[dimension + index]
+                    + tableau.third_order()[2] * workspace.stages[2 * dimension + index]);
+        workspace.error[index] = step
+            * (tableau.error()[0] * workspace.stages[index]
+                + tableau.error()[1] * workspace.stages[dimension + index]
+                + tableau.error()[2] * workspace.stages[2 * dimension + index]);
     }
     Ok(if options.adaptive {
         scaled_error_norm(state, candidate, &workspace.error, options)
@@ -1423,7 +1454,7 @@ where
     let half_step = step / 2.0;
     let mut midpoint = vec![0.0; dimension];
     let mut refined_candidate = vec![0.0; dimension];
-    let mut refinement_workspace = Workspace::new(dimension, Some(tableau));
+    let mut refinement_workspace = Workspace::new(dimension, Some(tableau), None);
     let mut fixed_options = options.clone();
     fixed_options.adaptive = false;
 
@@ -1667,7 +1698,7 @@ mod tests {
             (Some(Rodas5P.tableau().unwrap()), dimension),
             (Some(super::Tsit5DA.tableau().unwrap()), 0),
         ] {
-            let workspace = super::Workspace::new(dimension, tableau);
+            let workspace = super::Workspace::new(dimension, tableau, None);
             for buffer in [
                 &workspace.perturbed_state,
                 &workspace.perturbed_derivative,

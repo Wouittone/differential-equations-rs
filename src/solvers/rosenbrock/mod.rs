@@ -4,7 +4,6 @@
 pub mod amf;
 /// Core Rosenbrock23 method and kernel.
 pub mod general;
-mod rosenbrock_dense;
 pub mod rosenbrock_extended;
 mod tableaux;
 

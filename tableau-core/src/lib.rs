@@ -6,6 +6,8 @@ mod multistep;
 pub use multistep::{LinearMultistepTableau, parse_multistep_tableau};
 mod rosenbrock;
 pub use rosenbrock::{RosenbrockKind, RosenbrockTableau, parse_rosenbrock_tableau};
+mod rosenbrock_pair;
+pub use rosenbrock_pair::{RosenbrockPairTableau, parse_rosenbrock_pair_tableau};
 
 use serde::Deserialize;
 use std::fmt;

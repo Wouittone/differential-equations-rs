@@ -39,6 +39,16 @@ fn rosenbrock_resources_are_individually_lazy_and_cached() {
         region.change().allocations
     });
     assert_eq!(construction, 0);
+    let pair = Region::new(GLOBAL);
+    black_box(Rosenbrock23.tableau().unwrap());
+    assert!(pair.change().allocations > 0);
+    let pair_cached = Region::new(GLOBAL);
+    black_box(Rosenbrock32.tableau().unwrap());
+    assert_eq!(pair_cached.change().allocations, 0);
+    assert!(std::ptr::eq(
+        Rosenbrock23.tableau().unwrap(),
+        Rosenbrock32.tableau().unwrap()
+    ));
     let first = Region::new(GLOBAL);
     black_box(Ros2.tableau().unwrap());
     assert!(first.change().allocations > 0);

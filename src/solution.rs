@@ -141,6 +141,12 @@ impl From<&'static [&'static [f64]]> for RungeKuttaCoefficients {
     }
 }
 
+impl From<&'static [Vec<f64>]> for RungeKuttaCoefficients {
+    fn from(rows: &'static [Vec<f64>]) -> Self {
+        Self::Resource(rows)
+    }
+}
+
 /// Owning Runge--Kutta continuous extension retained after a solve.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct RungeKuttaSegment {

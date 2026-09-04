@@ -5,12 +5,10 @@ use crate::integrator::{
     ControllerConfig, KernelCapabilities, StepEstimate, StepKernel, integrate as drive_integration,
 };
 use crate::linear::{factorize, solve_factorized};
+use crate::tableau::RosenbrockPairTableau;
 use crate::{
     ConfigurationError, OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions, SolverStats,
 };
-
-const GAMMA: f64 = 1.0 / (2.0 + std::f64::consts::SQRT_2);
-const C32: f64 = 6.0 + std::f64::consts::SQRT_2;
 
 /// Ordered dense approximation of a Rosenbrock W operator.
 ///
@@ -233,7 +231,7 @@ impl OdeAlgorithm for AMF<Rosenbrock23> {
             factors[0].copy_from_slice(jacobian);
             Ok(())
         };
-        drive_integration(problem, options, AmfKernel::new(n, 1, evaluate))
+        drive_integration(problem, options, AmfKernel::new(n, 1, evaluate)?)
     }
 }
 
@@ -280,13 +278,14 @@ where
     drive_integration(
         &dummy,
         options,
-        AmfKernel::new(n, problem.factor_count(), evaluate),
+        AmfKernel::new(n, problem.factor_count(), evaluate)?,
     )
 }
 
 fn noop(_: &mut [f64], _: &[f64], _: &(), _: f64) {}
 
 struct AmfKernel<E> {
+    tableau: &'static RosenbrockPairTableau,
     n: usize,
     evaluate: E,
     derivative: Vec<f64>,
@@ -305,8 +304,11 @@ struct AmfKernel<E> {
 }
 
 impl<E> AmfKernel<E> {
-    fn new(n: usize, factor_count: usize, evaluate: E) -> Self {
-        Self {
+    fn new(n: usize, factor_count: usize, evaluate: E) -> Result<Self, SolveError> {
+        Ok(Self {
+            tableau: Rosenbrock23
+                .tableau()
+                .map_err(|_| SolveError::InvalidTableau)?,
             n,
             evaluate,
             derivative: vec![0.0; n],
@@ -327,7 +329,7 @@ impl<E> AmfKernel<E> {
             rhs: vec![0.0; n],
             candidate_valid: false,
             _marker: PhantomData,
-        }
+        })
     }
 }
 
@@ -436,16 +438,17 @@ where
         {
             *time_derivative = (shifted - derivative) / epsilon;
         }
-        self.operator.factorize(GAMMA * step)?;
+        self.operator.factorize(self.tableau.gamma() * step)?;
         stats.linear_factorizations += self.operator.factor_count();
         for k in 0..self.n {
-            self.rhs[k] = self.derivative[k] + GAMMA * step * self.time_derivative[k];
+            self.rhs[k] = self.tableau.derivative()[0][0] * self.derivative[k]
+                + self.tableau.time_derivative()[0] * step * self.time_derivative[k];
         }
         self.operator.solve_ordered(&mut self.rhs);
         stats.linear_solves += self.operator.factor_count();
         self.k1.copy_from_slice(&self.rhs);
         for ((midpoint, state), stage) in self.midpoint_state.iter_mut().zip(state).zip(&self.k1) {
-            *midpoint = state + 0.5 * step * stage;
+            *midpoint = state + self.tableau.state()[1][0] * step * stage;
         }
         let mut throw_jac = vec![0.0; self.n * self.n];
         let mut throw_factors = vec![vec![0.0; self.n * self.n]; self.operator.factor_count()];
@@ -454,17 +457,21 @@ where
             &mut throw_jac,
             &mut throw_factors,
             &self.midpoint_state,
-            time + 0.5 * step,
+            time + self.tableau.nodes()[1] * step,
             stats,
         )?;
         for k in 0..self.n {
-            self.rhs[k] = self.midpoint_derivative[k] - self.k1[k];
+            self.rhs[k] = self.tableau.derivative()[1][1] * self.midpoint_derivative[k]
+                + self.tableau.stage()[1][0] * self.k1[k];
         }
         self.operator.solve_ordered(&mut self.rhs);
         stats.linear_solves += self.operator.factor_count();
         for k in 0..self.n {
-            self.k2[k] = self.rhs[k] + self.k1[k];
-            candidate[k] = state[k] + step * self.k2[k];
+            self.k2[k] = self.rhs[k] + self.tableau.post_solve()[1][0] * self.k1[k];
+            candidate[k] = state[k]
+                + step
+                    * (self.tableau.second_order()[0] * self.k1[k]
+                        + self.tableau.second_order()[1] * self.k2[k]);
         }
         if !options.adaptive {
             self.candidate_valid = false;
@@ -475,14 +482,16 @@ where
             &mut throw_jac,
             &mut throw_factors,
             candidate,
-            time + step,
+            time + self.tableau.nodes()[2] * step,
             stats,
         )?;
         for k in 0..self.n {
-            self.rhs[k] = self.candidate_derivative[k]
-                - C32 * (self.k2[k] - self.midpoint_derivative[k])
-                - 2.0 * (self.k1[k] - self.derivative[k])
-                + step * self.time_derivative[k];
+            self.rhs[k] = self.tableau.derivative()[2][0] * self.derivative[k]
+                + self.tableau.derivative()[2][1] * self.midpoint_derivative[k]
+                + self.tableau.derivative()[2][2] * self.candidate_derivative[k]
+                + self.tableau.stage()[2][0] * self.k1[k]
+                + self.tableau.stage()[2][1] * self.k2[k]
+                + self.tableau.time_derivative()[2] * step * self.time_derivative[k];
         }
         self.operator.solve_ordered(&mut self.rhs);
         stats.linear_solves += self.operator.factor_count();
@@ -492,7 +501,10 @@ where
         for (((error, first), second), third) in
             error.iter_mut().zip(&self.k1).zip(&self.k2).zip(&self.k3)
         {
-            *error = step / 6.0 * (first - 2.0 * second + third);
+            *error = step
+                * (self.tableau.error()[0] * first
+                    + self.tableau.error()[1] * second
+                    + self.tableau.error()[2] * third);
         }
         Ok(StepEstimate::new(scaled_error(
             &error, state, candidate, options,

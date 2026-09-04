@@ -6,8 +6,8 @@ symplectic compositions use paired drift/kick vectors. Specialized families
 also use this tree for typed method data, including canonical linear multistep
 formulas for fixed-step Adams and MRAB, and per-method Rosenbrock tableaus.
 Migration is not yet complete:
-legacy embedded coefficients remain in some multirate, multistep,
-exponential, and Rosenbrock implementations.
+legacy embedded coefficients remain in some multirate, multistep, and
+exponential implementations.
 
 Resources use a FracturedJson-style layout: object fields have stable ordering,
 scalar arrays stay on one line, and every matrix row occupies one line. This is
@@ -64,6 +64,17 @@ expression parser and lazy-static expansion with the other tableau families;
 it emits no Rust coefficient arrays. Malformed fields, dimensions, triangular
 structure, non-finite expressions, or dense rows fail compilation. These are
 structural checks, not a proof of classical order or stability.
+
+The `Rosenbrock23/32` resource uses a dedicated representation of the shared
+three-stage, low-storage W-method pair. Its `state`, `derivative`, `stage`, and
+`post_solve` matrices describe the native stage equations; the resource also
+holds both solution formulas, the direct error weights, and one polynomial row
+for each of the two stages used by dense output. `Rosenbrock23`,
+`Rosenbrock32`, and `AMF<Rosenbrock23>` all
+consume this one lazy resource. Use
+`tableau::define_rosenbrock_pair_tableau_from_file!` for this specialized
+representation; it validates exactly three causal stages and the pair's
+required dimensions at compile time.
 
 Built-in methods expose `.tableau()` for inspection. Solving materializes only
 the selected method; repeat access is allocation-free. `Rodas5Pr` shares

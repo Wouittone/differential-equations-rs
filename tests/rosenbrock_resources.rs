@@ -3,12 +3,18 @@ use differential_equations::tableau::RosenbrockTableau;
 use differential_equations::{OdeAlgorithm, OdeProblem, SolveOptions, solve};
 
 use differential_equations as renamed;
-use differential_equations::tableau::{define_rosenbrock_tableau_from_file, load_tableau};
+use differential_equations::tableau::{
+    define_rosenbrock_pair_tableau_from_file, define_rosenbrock_tableau_from_file, load_tableau,
+};
 
 define_rosenbrock_tableau_from_file!(pub ORIGINAL_RESOURCE, "Ros2",
     "src/tableau/resources/rosenbrock/ros2.json");
 define_rosenbrock_tableau_from_file!(pub RENAMED_RESOURCE, "Ros2",
     "src/tableau/resources/rosenbrock/ros2.json", crate = renamed);
+define_rosenbrock_pair_tableau_from_file!(pub PAIR_RESOURCE, "Rosenbrock23/32",
+    "src/tableau/resources/rosenbrock/rosenbrock23_32.json");
+define_rosenbrock_pair_tableau_from_file!(pub RENAMED_PAIR_RESOURCE, "Rosenbrock23/32",
+    "src/tableau/resources/rosenbrock/rosenbrock23_32.json", crate = renamed);
 
 #[test]
 fn downstream_definitions_support_original_and_renamed_dependencies() {
@@ -20,6 +26,31 @@ fn downstream_definitions_support_original_and_renamed_dependencies() {
         load_tableau(&RENAMED_RESOURCE).unwrap(),
         Ros2.tableau().unwrap()
     );
+    assert_eq!(
+        load_tableau(&PAIR_RESOURCE).unwrap(),
+        Rosenbrock23.tableau().unwrap()
+    );
+    assert_eq!(
+        load_tableau(&RENAMED_PAIR_RESOURCE).unwrap(),
+        Rosenbrock32.tableau().unwrap()
+    );
+}
+
+#[test]
+fn low_order_pair_preserves_the_complete_stage_scheme() {
+    let tableau = Rosenbrock23.tableau().unwrap();
+    assert!(std::ptr::eq(tableau, Rosenbrock32.tableau().unwrap()));
+    assert_eq!(tableau.name(), "Rosenbrock23/32");
+    assert_eq!(tableau.orders(), [2, 3]);
+    assert_eq!(tableau.nodes(), &[0.0, 0.5, 1.0]);
+    assert_eq!(tableau.state()[1], [0.5, 0.0, 0.0]);
+    assert_eq!(tableau.derivative()[2][1], 6.0 + 2.0_f64.sqrt());
+    assert_eq!(tableau.stage()[2][1], -(6.0 + 2.0_f64.sqrt()));
+    assert_eq!(tableau.post_solve()[1], [1.0, 0.0, 0.0]);
+    assert_eq!(tableau.second_order(), &[0.0, 1.0, 0.0]);
+    assert_eq!(tableau.third_order(), &[1.0 / 6.0, 4.0 / 6.0, 1.0 / 6.0]);
+    assert_eq!(tableau.error(), &[1.0 / 6.0, -2.0 / 6.0, 1.0 / 6.0]);
+    assert_eq!(tableau.dense().len(), 2);
 }
 
 fn check_resource<A: OdeAlgorithm + Copy>(

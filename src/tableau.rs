@@ -10,8 +10,9 @@ use std::sync::LazyLock;
 #[doc(inline)]
 pub use differential_equations_tableau_core::{
     FittedWeight, LazyDenseStage as ParsedLazyDenseStage, LinearMultistepTableau, RosenbrockKind,
-    RosenbrockTableau, RungeKuttaKind, RungeKuttaTableau, SymplecticTableau, TableauError,
-    parse_multistep_tableau, parse_rosenbrock_tableau, parse_symplectic_tableau, parse_tableau,
+    RosenbrockPairTableau, RosenbrockTableau, RungeKuttaKind, RungeKuttaTableau, SymplecticTableau,
+    TableauError, parse_multistep_tableau, parse_rosenbrock_pair_tableau, parse_rosenbrock_tableau,
+    parse_symplectic_tableau, parse_tableau,
 };
 
 /// A lazily initialized, validated Runge--Kutta tableau.
@@ -27,6 +28,9 @@ pub type LazyMultistepTableau = LazyLock<Result<LinearMultistepTableau, TableauE
 
 /// A lazily initialized, validated Rosenbrock tableau.
 pub type LazyRosenbrockTableau = LazyLock<Result<RosenbrockTableau, TableauError>>;
+
+/// A lazily initialized, validated low-storage Rosenbrock 2/3 pair.
+pub type LazyRosenbrockPairTableau = LazyLock<Result<RosenbrockPairTableau, TableauError>>;
 
 /// Returns a parsed lazy tableau, preserving any validation error.
 pub fn load_tableau<T>(
@@ -48,6 +52,8 @@ pub use crate::solvers::explicit::general::{
 pub use differential_equations_tableau_macros::define_explicit_rk_from_file;
 #[doc(inline)]
 pub use differential_equations_tableau_macros::define_multistep_tableau_from_file;
+#[doc(inline)]
+pub use differential_equations_tableau_macros::define_rosenbrock_pair_tableau_from_file;
 #[doc(inline)]
 pub use differential_equations_tableau_macros::define_rosenbrock_tableau_from_file;
 #[doc(inline)]
