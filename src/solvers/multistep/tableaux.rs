@@ -1,7 +1,13 @@
 //! Shared constant-step formulas, parsed individually on first use.
 
 use crate::SolveError;
-use crate::tableau::{LinearMultistepTableau, define_multistep_tableau_from_file, load_tableau};
+use crate::tableau::{
+    LinearMultistepTableau, define_multistep_tableau_from_file,
+    define_variable_multistep_tableau_from_file, load_tableau,
+};
+
+define_variable_multistep_tableau_from_file!(pub(super) ABDF2_TABLEAU, "Abdf2",
+    "src/tableau/resources/multistep/abdf2.json", crate = crate);
 
 define_multistep_tableau_from_file!(pub(super) AB1, "Ab1", "src/tableau/resources/multistep/ab1.json", crate = crate);
 define_multistep_tableau_from_file!(pub(super) AB2, "Ab2", "src/tableau/resources/multistep/ab2.json", crate = crate);

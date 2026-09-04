@@ -164,7 +164,28 @@ pub fn parse_multistep_tableau(
     })
 }
 
-fn validate_order(alpha: &[f64], beta: &[f64], order: usize) -> Result<(), TableauError> {
+pub(super) fn validate_order(
+    alpha: &[f64],
+    beta: &[f64],
+    order: usize,
+) -> Result<(), TableauError> {
+    let nodes = (0..alpha.len())
+        .map(|lag| -(lag as f64))
+        .collect::<Vec<_>>();
+    validate_order_at_nodes(alpha, beta, &nodes, order)
+}
+
+pub(super) fn validate_order_at_nodes(
+    alpha: &[f64],
+    beta: &[f64],
+    nodes: &[f64],
+    order: usize,
+) -> Result<(), TableauError> {
+    if alpha.len() != beta.len() || alpha.len() != nodes.len() || alpha.is_empty() {
+        return Err(TableauError::new(
+            "multistep weights and nodes must have equal nonzero lengths",
+        ));
+    }
     // Normalize only the validation arithmetic, preserving resource bits in
     // the returned tableau. Small scalar multiples must not evade validation.
     let normalize = |values: &[f64]| {
@@ -180,24 +201,26 @@ fn validate_order(alpha: &[f64], beta: &[f64], order: usize) -> Result<(), Table
             "normalizing the multistep formula overflowed",
         ));
     }
-    let mut powers = vec![1.0; alpha.len()];
-    let mut previous_powers = vec![0.0; alpha.len()];
     for degree in 0..=order {
-        let left: f64 = alpha.iter().zip(&powers).map(|(a, p)| a * p).sum();
-        let right = degree as f64
-            * beta
-                .iter()
-                .zip(&previous_powers)
-                .map(|(b, p)| b * p)
-                .sum::<f64>();
+        let left = alpha
+            .iter()
+            .zip(nodes)
+            .map(|(coefficient, node)| coefficient * node.powi(degree as i32))
+            .sum::<f64>();
+        let right = if degree == 0 {
+            0.0
+        } else {
+            degree as f64
+                * beta
+                    .iter()
+                    .zip(nodes)
+                    .map(|(coefficient, node)| coefficient * node.powi(degree as i32 - 1))
+                    .sum::<f64>()
+        };
         if !approximately_equal(left, right) {
             return Err(TableauError::new(format!(
                 "multistep order condition {degree} failed: {left} != {right}"
             )));
-        }
-        previous_powers.copy_from_slice(&powers);
-        for (lag, power) in powers.iter_mut().enumerate() {
-            *power *= -(lag as f64);
         }
     }
     Ok(())

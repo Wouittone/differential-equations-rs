@@ -11,9 +11,10 @@ use std::sync::LazyLock;
 pub use differential_equations_tableau_core::{
     FittedWeight, LazyDenseStage as ParsedLazyDenseStage, LinearMultistepTableau, MisTableau,
     MriTableau, RosenbrockKind, RosenbrockPairTableau, RosenbrockTableau, RungeKuttaKind,
-    RungeKuttaTableau, SymplecticTableau, TableauError, parse_mis_tableau, parse_mri_tableau,
-    parse_multistep_tableau, parse_rosenbrock_pair_tableau, parse_rosenbrock_tableau,
-    parse_symplectic_tableau, parse_tableau,
+    RungeKuttaTableau, SymplecticTableau, TableauError, VariableMultistepTableau,
+    parse_mis_tableau, parse_mri_tableau, parse_multistep_tableau, parse_rosenbrock_pair_tableau,
+    parse_rosenbrock_tableau, parse_symplectic_tableau, parse_tableau,
+    parse_variable_multistep_tableau,
 };
 
 /// A lazily initialized, validated Runge--Kutta tableau.
@@ -26,6 +27,9 @@ pub type LazySymplecticTableau = LazyLock<Result<SymplecticTableau, TableauError
 
 /// A lazily initialized, validated constant-step linear multistep formula.
 pub type LazyMultistepTableau = LazyLock<Result<LinearMultistepTableau, TableauError>>;
+
+/// A lazily initialized, validated variable-step two-step formula.
+pub type LazyVariableMultistepTableau = LazyLock<Result<VariableMultistepTableau, TableauError>>;
 
 /// A lazily initialized, validated MRI-GARK coupling tableau.
 pub type LazyMriTableau = LazyLock<Result<MriTableau, TableauError>>;
@@ -69,3 +73,5 @@ pub use differential_equations_tableau_macros::define_rosenbrock_pair_tableau_fr
 pub use differential_equations_tableau_macros::define_rosenbrock_tableau_from_file;
 #[doc(inline)]
 pub use differential_equations_tableau_macros::define_symplectic_from_file;
+#[doc(inline)]
+pub use differential_equations_tableau_macros::define_variable_multistep_tableau_from_file;

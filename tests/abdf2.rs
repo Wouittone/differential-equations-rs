@@ -1,5 +1,13 @@
 use differential_equations::solvers::multistep::*;
+use differential_equations::tableau::{define_variable_multistep_tableau_from_file, load_tableau};
 use differential_equations::*;
+
+use differential_equations as renamed;
+
+define_variable_multistep_tableau_from_file!(pub DOWNSTREAM_ABDF2, "Abdf2",
+    "src/tableau/resources/multistep/abdf2.json");
+define_variable_multistep_tableau_from_file!(pub RENAMED_ABDF2, "Abdf2",
+    "src/tableau/resources/multistep/abdf2.json", crate = renamed);
 
 #[allow(clippy::type_complexity)]
 fn exponential(
@@ -20,6 +28,54 @@ fn fixed(step: f64) -> SolveOptions {
         initial_step: Some(step),
         save: SaveMode::Endpoints,
         ..SolveOptions::default()
+    }
+}
+
+#[test]
+fn canonical_tableau_is_public_and_supports_renamed_dependencies() {
+    let tableau = Abdf2.tableau().unwrap();
+    assert_eq!(tableau.name(), "Abdf2");
+    assert_eq!(tableau.order(), 2);
+    assert_eq!(tableau.steps(), 2);
+    assert!((tableau.alpha(1, 2.0).unwrap() + 7.0 / 3.0).abs() < 4.0 * f64::EPSILON);
+    assert_eq!(tableau.alpha(2, 2.0), Some(4.0 / 3.0));
+    assert_eq!(tableau.beta(1, 2.0), Some(-1.0 / 3.0));
+    assert_eq!(tableau.defect_weight(1, 2.0), Some(-3.0));
+    assert_eq!(tableau.defect_scale(2.0), Some(0.25));
+    assert_eq!(load_tableau(&DOWNSTREAM_ABDF2).unwrap(), tableau);
+    assert_eq!(load_tableau(&RENAMED_ABDF2).unwrap(), tableau);
+}
+
+#[test]
+fn one_decay_ode_preserves_scalar_vector_and_matrix_shapes() {
+    use differential_equations::ndarray::{ArrayD, ArrayViewD, ArrayViewMutD, arr0, array};
+
+    fn solve_array(initial_state: ArrayD<f64>) -> Solution {
+        let problem = OdeProblem::from_array(
+            |mut du: ArrayViewMutD<'_, f64>, u: ArrayViewD<'_, f64>, _: &(), _: f64| {
+                du.zip_mut_with(&u, |derivative, state| *derivative = -*state);
+            },
+            initial_state,
+            (0.0, 1.0),
+            (),
+        );
+        solve(&problem, Abdf2, &fixed(0.01)).unwrap()
+    }
+
+    let scalar = solve_array(arr0(1.0).into_dyn());
+    let vector = solve_array(array![1.0, 2.0].into_dyn());
+    let matrix = solve_array(array![[1.0, 2.0], [3.0, 4.0]].into_dyn());
+    assert_eq!(scalar.state_shape(), &[] as &[usize]);
+    assert_eq!(vector.state_shape(), &[2]);
+    assert_eq!(matrix.state_shape(), &[2, 2]);
+    for solution in [&scalar, &vector, &matrix] {
+        for (index, value) in solution.last_state().iter().enumerate() {
+            let expected = (index + 1) as f64 * (-1.0f64).exp();
+            assert!(
+                (*value - expected).abs() < 2.0e-4 * expected.max(1.0),
+                "state {index}: {value} != {expected}"
+            );
+        }
     }
 }
 

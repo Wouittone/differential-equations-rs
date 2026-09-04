@@ -10,21 +10,9 @@ use crate::integrator::{
     ControllerConfig, KernelCapabilities, StepEstimate, StepKernel, integrate as drive_integration,
 };
 use crate::linear::{DenseLu, LinearError, StateLayout, factorize, solve_factorized};
+use crate::solvers::multistep::tableaux::ABDF2_TABLEAU;
+use crate::tableau::{TableauError, VariableMultistepTableau, load_tableau};
 use crate::{OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions, SolverStats};
-
-mod coefficient_data {
-    use differential_equations_tableau_macros::define_tableau_data_from_file;
-
-    define_tableau_data_from_file!(
-        pub(super),
-        "src/tableau/resources/methods/multistep/abdf2.json",
-        crate = crate
-    );
-}
-
-use coefficient_data::{
-    ABDF2_ALPHA_HISTORY_SCALE, ABDF2_ALPHA_ONE_BASE, ABDF2_BETA_ONE_SCALE, ABDF2_BETA_ZERO,
-};
 
 const MAX_NEWTON_ITERATIONS: usize = 12;
 const NEWTON_TOLERANCE: f64 = 1.0e-12;
@@ -38,6 +26,13 @@ const CONTROLLER: ControllerConfig = ControllerConfig::proportional(2, 0.9, 0.2,
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Abdf2;
 
+impl Abdf2 {
+    /// Returns the lazily parsed variable-step BDF2 tableau.
+    pub fn tableau(&self) -> Result<&'static VariableMultistepTableau, TableauError> {
+        load_tableau(&ABDF2_TABLEAU)
+    }
+}
+
 impl OdeAlgorithm for Abdf2 {
     fn solve_validated<F, P>(
         &self,
@@ -47,10 +42,11 @@ impl OdeAlgorithm for Abdf2 {
     where
         F: crate::OdeFunction<P>,
     {
+        let tableau = self.tableau().map_err(|_| SolveError::InvalidTableau)?;
         drive_integration(
             problem,
             options,
-            Abdf2Kernel::new(problem.initial_state().len()),
+            Abdf2Kernel::new(problem.initial_state().len(), tableau),
         )
     }
 }
@@ -98,12 +94,14 @@ impl Workspace {
 
 struct Abdf2Kernel {
     workspace: Workspace,
+    tableau: &'static VariableMultistepTableau,
 }
 
 impl Abdf2Kernel {
-    fn new(dimension: usize) -> Self {
+    fn new(dimension: usize, tableau: &'static VariableMultistepTableau) -> Self {
         Self {
             workspace: Workspace::new(dimension),
+            tableau,
         }
     }
 }
@@ -177,15 +175,48 @@ where
             .workspace
             .last_step
             .map_or(1.0, |previous| step / previous);
-        let (alpha_one, alpha_two, beta_zero, beta_one) = if startup {
-            (1.0, 0.0, 1.0, 0.0)
-        } else {
-            // Pinned ABDF2 coefficients (bdf_perform_step.jl:30-47).
+        let (alpha_one, alpha_two, beta_zero, beta_one, beta_two) = if startup {
+            let alpha = self.tableau.startup_alpha();
+            let beta = self.tableau.startup_beta();
+            let leading = alpha[0];
             (
-                ABDF2_ALPHA_ONE_BASE + rho * rho * ABDF2_ALPHA_HISTORY_SCALE,
-                -rho * rho * ABDF2_ALPHA_HISTORY_SCALE,
-                ABDF2_BETA_ZERO,
-                ABDF2_BETA_ONE_SCALE * (rho - 1.0),
+                -alpha[1] / leading,
+                0.0,
+                beta[0] / leading,
+                beta[1] / leading,
+                0.0,
+            )
+        } else {
+            let alpha_zero = self
+                .tableau
+                .alpha(0, rho)
+                .ok_or(SolveError::InvalidTableau)?;
+            let alpha_one = self
+                .tableau
+                .alpha(1, rho)
+                .ok_or(SolveError::InvalidTableau)?;
+            let alpha_two = self
+                .tableau
+                .alpha(2, rho)
+                .ok_or(SolveError::InvalidTableau)?;
+            let beta_zero = self
+                .tableau
+                .beta(0, rho)
+                .ok_or(SolveError::InvalidTableau)?;
+            let beta_one = self
+                .tableau
+                .beta(1, rho)
+                .ok_or(SolveError::InvalidTableau)?;
+            let beta_two = self
+                .tableau
+                .beta(2, rho)
+                .ok_or(SolveError::InvalidTableau)?;
+            (
+                -alpha_one / alpha_zero,
+                -alpha_two / alpha_zero,
+                beta_zero / alpha_zero,
+                beta_one / alpha_zero,
+                beta_two / alpha_zero,
             )
         };
 
@@ -200,6 +231,7 @@ where
             alpha_two,
             beta_zero,
             beta_one,
+            beta_two,
             &mut self.workspace,
             stats,
         )?;
@@ -208,22 +240,39 @@ where
             return Ok(StepEstimate::new(0.0));
         }
         // Pinned ABDF2's fixed-leading-coefficient estimator is the derivative
-        // defect `(h_prev + h)/6 * (f_{n+1} - (1+rho)f_n + rho*f_{n-1})`.
-        // During implicit-Euler startup, use its Euler predictor defect.
+        // defect declared by the canonical tableau. During implicit-Euler
+        // startup, use its Euler predictor defect.
+        let defect_scale = if startup {
+            0.0
+        } else {
+            self.tableau
+                .defect_scale(rho)
+                .ok_or(SolveError::InvalidTableau)?
+        };
+        let defect_weights = if startup {
+            [0.0; 3]
+        } else {
+            [
+                self.tableau
+                    .defect_weight(0, rho)
+                    .ok_or(SolveError::InvalidTableau)?,
+                self.tableau
+                    .defect_weight(1, rho)
+                    .ok_or(SolveError::InvalidTableau)?,
+                self.tableau
+                    .defect_weight(2, rho)
+                    .ok_or(SolveError::InvalidTableau)?,
+            ]
+        };
         let mut squared_norm = 0.0;
         for index in 0..candidate.len() {
             let defect = if startup {
                 candidate[index] - (state[index] + step * self.workspace.current_derivative[index])
             } else {
-                let previous_step = self
-                    .workspace
-                    .last_step
-                    .ok_or(SolveError::InvalidMultistepHistory)?;
-                let rho = step / previous_step;
-                (previous_step + step) / 6.0
-                    * (self.workspace.evaluation_derivative[index]
-                        - (1.0 + rho) * self.workspace.current_derivative[index]
-                        + rho * self.workspace.previous_derivative[index])
+                step * defect_scale
+                    * (defect_weights[0] * self.workspace.evaluation_derivative[index]
+                        + defect_weights[1] * self.workspace.current_derivative[index]
+                        + defect_weights[2] * self.workspace.previous_derivative[index])
             };
             let scale = options.absolute_tolerance
                 + options.relative_tolerance * candidate[index].abs().max(state[index].abs());
@@ -281,6 +330,7 @@ fn newton_step<F, P>(
     alpha_two: f64,
     beta_zero: f64,
     beta_one: f64,
+    beta_two: f64,
     workspace: &mut Workspace,
     stats: &mut SolverStats,
 ) -> Result<(), SolveError>
@@ -306,7 +356,12 @@ where
             };
             let forcing = step
                 * (beta_zero * workspace.evaluation_derivative[index]
-                    + beta_one * workspace.current_derivative[index]);
+                    + beta_one * workspace.current_derivative[index]
+                    + if startup {
+                        0.0
+                    } else {
+                        beta_two * workspace.previous_derivative[index]
+                    });
             workspace.residual[index] =
                 candidate[index] - alpha_one * previous[index] - history - forcing;
             if !workspace.residual[index].is_finite() {

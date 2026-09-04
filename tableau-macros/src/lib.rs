@@ -504,6 +504,34 @@ pub fn define_multistep_tableau_from_file(input: TokenStream) -> TokenStream {
     }
 }
 
+/// Defines a lazy variable-step two-step tableau from a JSON resource.
+///
+/// Coefficient functions, the startup formula, and the local-defect estimator
+/// are validated during macro expansion. Only source text is embedded and the
+/// tableau is materialized on first inspection or use.
+#[proc_macro]
+pub fn define_variable_multistep_tableau_from_file(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as StaticTableauInput);
+    let result = read_static_resource(&input).and_then(|source| {
+        differential_equations_tableau_core::parse_variable_multistep_tableau(
+            &source,
+            &input.method_name.value(),
+        )
+        .map_err(|error| format!("invalid tableau `{}`: {error}", input.path.value()))?;
+        Ok(emit_lazy_static(
+            input,
+            quote!(LazyVariableMultistepTableau),
+            quote!(parse_variable_multistep_tableau),
+        ))
+    });
+    match result {
+        Ok(tokens) => tokens.into(),
+        Err(error) => syn::Error::new(proc_macro2::Span::call_site(), error)
+            .into_compile_error()
+            .into(),
+    }
+}
+
 /// Defines a lazy MRI-GARK tableau validated from a JSON resource.
 #[proc_macro]
 pub fn define_mri_tableau_from_file(input: TokenStream) -> TokenStream {

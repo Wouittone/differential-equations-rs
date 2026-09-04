@@ -101,8 +101,6 @@ the selected method; repeat access is allocation-free. `Rodas5Pr` shares
 are kept separate from classical method order, including the existing
 step-doubling estimator for `Ros34Pw1a`. `Scholz4_7`'s resource records its
 upstream classical order of three while preserving the existing controller.
-The low-order `Rosenbrock23`/`Rosenbrock32`/AMF specializations still await
-their resource migrations.
 
 ### Hybrid explicit/implicit tableaus
 
@@ -285,6 +283,24 @@ the corrector through `tableau()` and the shared explicit predictor through
 `predictor_tableau()`. MRAB loads lower-order startup formulas only as needed;
 fixed-step Adams startup reuses the ordinary Ralston or RK4 tableau. The
 upstream ABM32/ABM43 repeating-startup predictor behavior remains unchanged.
+
+### Variable-step two-step formulas
+
+`VariableMultistepTableau` represents canonical two-step formulas whose
+coefficients depend on `rho = current_step / previous_step`. Each `alpha` and
+`beta` entry is either an array of polynomial coefficients in ascending powers
+of `rho`, or an object containing numerator and denominator coefficient arrays.
+The same representation stores derivative-defect weights and their scale.
+A nested fixed `startup` formula covers the first step without a second,
+untyped coefficient bank.
+
+`define_variable_multistep_tableau_from_file!` validates the startup and the
+declared nonuniform-grid order conditions at compile time, then embeds only the
+JSON source for lazy loading. Runtime evaluation rejects nonpositive ratios,
+poles, and overflow. `Abdf2.tableau()` exposes the built-in resource; its solver
+evaluates the canonical `alpha`, `beta`, and defect formulas directly, without
+generated Rust constants. The editor schema is
+[`variable-multistep-schema.json`](../src/tableau/resources/variable-multistep-schema.json).
 
 ### Backward differentiation and NDF
 

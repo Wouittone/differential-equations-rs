@@ -279,6 +279,8 @@ explicit Runge--Kutta algorithm from their own JSON file with
 Fixed-step Adams methods and MRAB share lazily loaded `alpha`/`beta` multistep
 resources. BDF/NDF methods reuse that format with one base formula and NDF
 modifier per order, shared across fixed- and variable-order solvers.
+ABDF2 uses a typed variable-step tableau whose canonical weights and defect
+estimator are evaluated from the current/previous step ratio.
 TR-BDF2 uses a canonical implicit RK resource, including its Newton predictors.
 General Rosenbrock/Rodas methods use per-method JSON resources that include
 their dense-output rows; `.tableau()` exposes the lazily parsed data.
