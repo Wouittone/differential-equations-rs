@@ -4,10 +4,9 @@ Resource-backed method data lives below `src/tableau/resources` as JSON.
 Explicit and implicit Runge--Kutta resources use canonical Butcher matrices;
 symplectic compositions use paired drift/kick vectors. Specialized families
 also use this tree for typed method data, including canonical linear multistep
-formulas for fixed-step Adams and MRAB, and per-method Rosenbrock tableaus.
-Migration is not yet complete:
-legacy embedded coefficients remain in some multistep and exponential
-implementations.
+formulas for fixed-step Adams and MRAB and per-method Rosenbrock tableaus.
+Migration is not yet complete: generic coefficient banks remain in the
+second-order RKN/IRKN, low-storage RK, and stabilized-method implementations.
 
 Resources use a FracturedJson-style layout: object fields have stable ordering,
 scalar arrays stay on one line, and every matrix row occupies one line. This is
@@ -358,6 +357,29 @@ The exponential cache can snap proposed steps to its configured grid. After
 rejection, however, the controller's smaller step takes precedence, even below
 the lower cache bound. This prevents rounding a retry back to the same rejected
 step indefinitely. Cache clamping is a reuse preference, not an accuracy limit.
+
+## Runge--Kutta--Nyström target representation
+
+The remaining second-order migration must give every fixed and adaptive RKN
+method an independent resource under `src/tableau/resources/second_order`.
+Canonical fields are the position stage matrix `A`, position weights `b`,
+velocity weights `b_velocity`, and stage nodes `c`. Methods whose acceleration
+depends on velocity additionally provide `A_velocity`. Adaptive resources
+carry direct `error` weights and either `velocity_error` or
+`position_only_error`; paired `dense` and `velocity_dense` matrices describe
+dense-output polynomials.
+
+The typed RKN macro and parser must validate metadata, dimensions, explicit
+causality, row and weight sums, estimator policy, and dense-output endpoints at
+compile time. Each built-in RKN algorithm must expose fallible `.tableau()`
+inspection and load only its own resource on first inspection or solve.
+
+IRKN3 and IRKN4 need a companion typed representation for their two-step
+velocity history, internal nodes and stage coefficients, endpoint and
+internal-difference weights, bootstrap order, and endpoint seed policy. Their
+one-step startup must reuse the ordinary `Nystrom4VelocityIndependent`
+resource rather than duplicate its coefficients. The IRKN parser and macro
+must provide the same compile-time validation and lazy runtime behavior.
 
 ## Symplectic compositions
 

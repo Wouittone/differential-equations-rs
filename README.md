@@ -307,7 +307,8 @@ Cross-language compliance tests use the pinned `reference/OrdinaryDiffEq.jl`
 submodule and the Julia project in `tests/julia`; normal Cargo tests do not
 require Julia. Performance regression and matched Rust/Julia commands are in
 [the benchmarking guide](docs/BENCHMARKING.md). Package and publication checks
-are described in [the release guide](docs/RELEASING.md).
+and the remaining 1.0 roadmap are described in
+[the release guide](docs/RELEASING.md).
 
 ## License
 
