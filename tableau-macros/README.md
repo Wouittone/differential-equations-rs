@@ -9,8 +9,10 @@ Most users should depend on `differential-equations` and use its re-exported
 `define_explicit_rk_from_file!` or `define_symplectic_from_file!` macro for
 solver definitions, or `define_multistep_tableau_from_file!` for canonical
 linear multistep data. `define_rosenbrock_tableau_from_file!` provides canonical
-Rosenbrock data for specialized kernels. The schemas, publishing requirements, and examples are
-documented in the main crate's
+Rosenbrock data for specialized kernels. `define_rkn_from_file!` creates a
+second-order solver directly from a canonical RKN resource, while the RKN and
+IRKN tableau-only macros support specialized kernels. The schemas, publishing
+requirements, and examples are documented in the main crate's
 [tableau resource guide](https://docs.rs/differential-equations/latest/differential_equations/tableau/index.html).
 
 This implementation crate is versioned and released in lockstep with the main

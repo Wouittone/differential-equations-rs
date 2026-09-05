@@ -1,0 +1,13 @@
+{
+  "name"             : "FileIrkn",
+  "description"      : "A resource-defined improved RKN tableau.",
+  "kind"             : "improved-runge-kutta-nystrom",
+  "order"            : 3,
+  "bootstrap_order"  : 4,
+  "bootstrap_seed"   : "previous-endpoint",
+  "velocity_history" : ["3/2", "-1/2"],
+  "c"                : ["1/2"],
+  "A"                : ["1/8"],
+  "velocity_weights" : ["2/3", "5/6"],
+  "history_weights"  : ["1/3", "5/12"]
+}

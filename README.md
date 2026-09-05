@@ -286,6 +286,11 @@ General Rosenbrock/Rodas methods use per-method JSON resources that include
 their dense-output rows; `.tableau()` exposes the lazily parsed data.
 Tsit5DA's hybrid tableau uses the same parser and retains its full source
 metadata; its implemented solver remains the ordinary ODE specialization.
+Fixed and adaptive RKN methods and the IRKN history formulas likewise use one
+validated, lazily parsed JSON resource per algorithm and expose fallible
+`.tableau()` inspection. Downstream users can define an RKN solver with
+`define_rkn_from_file!`; IRKN startup reuses the ordinary
+`Nystrom4VelocityIndependent` resource instead of duplicating coefficients.
 All named symplectic compositions use individual resources and
 expose fallible `Method::tableau()` access with
 `a()`/`b()` coefficient slices. Some other specialized families still retain

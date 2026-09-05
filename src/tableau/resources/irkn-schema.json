@@ -1,0 +1,38 @@
+{
+  "$schema"              : "https://json-schema.org/draft/2020-12/schema",
+  "$id"                  : "https://github.com/Wouittone/differential-equations-rs/blob/main/src/tableau/resources/irkn-schema.json",
+  "title"                : "Improved Runge--Kutta--Nystrom tableau",
+  "type"                 : "object",
+  "additionalProperties" : false,
+  "required"             : [
+    "name",
+    "description",
+    "kind",
+    "order",
+    "bootstrap_order",
+    "bootstrap_seed",
+    "velocity_history",
+    "c",
+    "A",
+    "velocity_weights",
+    "history_weights"
+  ],
+  "properties"           : {
+    "$schema"          : { "type": ["string", "null"] },
+    "name"             : { "type": "string", "minLength": 1 },
+    "description"      : { "type": "string", "minLength": 1 },
+    "kind"             : { "const": "improved-runge-kutta-nystrom" },
+    "order"            : { "type": "integer", "minimum": 1 },
+    "bootstrap_order"  : { "type": "integer", "minimum": 1 },
+    "bootstrap_seed"   : { "enum": ["previous-endpoint", "new-endpoint"] },
+    "velocity_history" : { "$ref": "#/$defs/vector" },
+    "c"                : { "$ref": "#/$defs/vector" },
+    "A"                : { "$ref": "#/$defs/vector" },
+    "velocity_weights" : { "$ref": "#/$defs/vector" },
+    "history_weights"  : { "$ref": "#/$defs/vector" }
+  },
+  "$defs"                : {
+    "scalar" : { "oneOf": [{ "type": "number" }, { "type": "string", "minLength": 1 }] },
+    "vector" : { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/scalar" } }
+  }
+}

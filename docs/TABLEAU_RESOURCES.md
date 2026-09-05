@@ -5,8 +5,8 @@ Explicit and implicit Runge--Kutta resources use canonical Butcher matrices;
 symplectic compositions use paired drift/kick vectors. Specialized families
 also use this tree for typed method data, including canonical linear multistep
 formulas for fixed-step Adams and MRAB and per-method Rosenbrock tableaus.
-Migration is not yet complete: generic coefficient banks remain in the
-second-order RKN/IRKN, low-storage RK, and stabilized-method implementations.
+Migration is not yet complete: generic coefficient banks remain only in the
+low-storage RK and stabilized-method implementations.
 
 Resources use a FracturedJson-style layout: object fields have stable ordering,
 scalar arrays stay on one line, and every matrix row occupies one line. This is
@@ -358,28 +358,52 @@ rejection, however, the controller's smaller step takes precedence, even below
 the lower cache bound. This prevents rounding a retry back to the same rejected
 step indefinitely. Cache clamping is a reuse preference, not an accuracy limit.
 
-## Runge--Kutta--Nyström target representation
+## Runge--Kutta--Nyström resources
 
-The remaining second-order migration must give every fixed and adaptive RKN
-method an independent resource under `src/tableau/resources/second_order`.
+Every fixed and adaptive RKN method owns an independent resource under
+`src/tableau/resources/second_order`.
 Canonical fields are the position stage matrix `A`, position weights `b`,
 velocity weights `b_velocity`, and stage nodes `c`. Methods whose acceleration
 depends on velocity additionally provide `A_velocity`. Adaptive resources
 carry direct `error` weights and either `velocity_error` or
 `position_only_error`; paired `dense` and `velocity_dense` matrices describe
-dense-output polynomials.
+dense-output polynomials in ascending powers. The editor schema is
+[`rkn-schema.json`](../src/tableau/resources/rkn-schema.json).
 
-The typed RKN macro and parser must validate metadata, dimensions, explicit
+The typed RKN parser validates metadata, dimensions, explicit
 causality, row and weight sums, estimator policy, and dense-output endpoints at
-compile time. Each built-in RKN algorithm must expose fallible `.tableau()`
-inspection and load only its own resource on first inspection or solve.
+compile time. Each built-in RKN algorithm exposes fallible `.tableau()`
+inspection and loads only its own resource on first inspection or solve.
+`RungeKuttaNystromTableau` provides `a()`, `a_velocity()`, `b()`,
+`b_velocity()`, `c()`, estimator and dense-output accessors, plus method
+metadata.
 
-IRKN3 and IRKN4 need a companion typed representation for their two-step
-velocity history, internal nodes and stage coefficients, endpoint and
+`define_rkn_from_file!` is the downstream extension entry point. One invocation
+validates and embeds a resource, defines a zero-sized named algorithm, and
+implements `SecondOrderOdeAlgorithm` through the shared fixed or adaptive RKN
+driver:
+
+```rust,ignore
+use differential_equations::tableau::define_rkn_from_file;
+
+define_rkn_from_file!(pub FileRkn, "resources/file_rkn.json");
+```
+
+Specialized kernels can instead use `define_rkn_tableau_from_file!` to define
+only a `LazyRungeKuttaNystromTableau`, then call `load_tableau` explicitly.
+Both macros embed the original source with `include_str!`; neither emits Rust
+coefficient arrays. The optional `crate = local_name` argument supports renamed
+dependencies.
+
+IRKN3 and IRKN4 use the companion `IrknTableau` representation for their
+two-step velocity history, internal nodes and stage coefficients, endpoint and
 internal-difference weights, bootstrap order, and endpoint seed policy. Their
-one-step startup must reuse the ordinary `Nystrom4VelocityIndependent`
-resource rather than duplicate its coefficients. The IRKN parser and macro
-must provide the same compile-time validation and lazy runtime behavior.
+fallible `.tableau()` methods initialize only the selected history resource.
+The one-step startup reuses the ordinary `Nystrom4VelocityIndependent`
+resource rather than duplicating its coefficients.
+`define_irkn_tableau_from_file!` provides the same compile-time validation and
+lazy runtime behavior for specialized consumers; its editor schema is
+[`irkn-schema.json`](../src/tableau/resources/irkn-schema.json).
 
 ## Symplectic compositions
 

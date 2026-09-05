@@ -66,8 +66,9 @@
 //! - [`solvers::explicit`] is a good starting point for non-stiff problems,
 //!   [`solvers::rosenbrock`] contains linearly implicit stiff methods, and
 //!   [`solvers::automatic`] contains composite choices.
-//! - [`tableau`] exposes the stable extension surface for defining explicit
-//!   Runge--Kutta methods from compile-time-validated JSON resources.
+//! - [`tableau`] exposes the extension surface for defining explicit
+//!   Runge--Kutta and Runge--Kutta--Nyström methods from compile-time-validated
+//!   JSON resources, plus typed data for specialized solver families.
 //! - [`OdeProblem::from_array`] accepts ndarray scalar, vector, and matrix
 //!   states while numerical kernels retain contiguous flat workspaces.
 //!   [`OdeProblem::from_array_out_of_place`] accepts functions returning arrays;

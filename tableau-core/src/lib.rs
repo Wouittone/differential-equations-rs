@@ -12,6 +12,11 @@ mod rosenbrock;
 pub use rosenbrock::{RosenbrockKind, RosenbrockTableau, parse_rosenbrock_tableau};
 mod rosenbrock_pair;
 pub use rosenbrock_pair::{RosenbrockPairTableau, parse_rosenbrock_pair_tableau};
+mod second_order;
+pub use second_order::{
+    IrknBootstrapSeed, IrknTableau, RungeKuttaNystromKind, RungeKuttaNystromTableau,
+    parse_irkn_tableau, parse_rkn_tableau,
+};
 
 use serde::Deserialize;
 use std::fmt;

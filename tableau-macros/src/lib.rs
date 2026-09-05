@@ -1,8 +1,8 @@
 //! Compile-time validation and expansion of declarative solver tableau resources.
 
 use differential_equations_tableau_core::{
-    RungeKuttaKind, parse_multistep_tableau, parse_numeric_expression, parse_symplectic_tableau,
-    parse_tableau,
+    RungeKuttaKind, parse_irkn_tableau, parse_multistep_tableau, parse_numeric_expression,
+    parse_rkn_tableau, parse_symplectic_tableau, parse_tableau,
 };
 use proc_macro::TokenStream;
 use proc_macro2::{Literal, TokenStream as TokenStream2};
@@ -629,6 +629,143 @@ pub fn define_rosenbrock_pair_tableau_from_file(input: TokenStream) -> TokenStre
     }
 }
 
+/// Defines one lazily materialized RKN tableau from a validated JSON resource.
+///
+/// The resource is parsed during macro expansion for compile-time diagnostics.
+/// The expansion embeds only its source text and parses it once on first use.
+#[proc_macro]
+pub fn define_rkn_tableau_from_file(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as StaticTableauInput);
+    let result = read_static_resource(&input).and_then(|source| expand_rkn_source(input, &source));
+    match result {
+        Ok(tokens) => tokens.into(),
+        Err(error) => syn::Error::new(proc_macro2::Span::call_site(), error)
+            .into_compile_error()
+            .into(),
+    }
+}
+
+/// Defines one lazily materialized improved RKN tableau from validated JSON.
+#[proc_macro]
+pub fn define_irkn_tableau_from_file(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as StaticTableauInput);
+    let result = read_static_resource(&input).and_then(|source| expand_irkn_source(input, &source));
+    match result {
+        Ok(tokens) => tokens.into(),
+        Err(error) => syn::Error::new(proc_macro2::Span::call_site(), error)
+            .into_compile_error()
+            .into(),
+    }
+}
+
+/// Defines a named fixed or adaptive RKN solver from one JSON resource.
+///
+/// The generated zero-sized type implements `SecondOrderOdeAlgorithm` and
+/// exposes its independently lazy tableau through `tableau()`.
+#[proc_macro]
+pub fn define_rkn_from_file(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as MacroInput);
+    let manifest_dir = match std::env::var_os("CARGO_MANIFEST_DIR") {
+        Some(directory) => PathBuf::from(directory),
+        None => {
+            return syn::Error::new(
+                proc_macro2::Span::call_site(),
+                "CARGO_MANIFEST_DIR is unavailable during macro expansion",
+            )
+            .into_compile_error()
+            .into();
+        }
+    };
+    let path = manifest_dir.join(input.path.value());
+    let result = std::fs::read_to_string(&path)
+        .map_err(|error| format!("failed to read `{}`: {error}", path.display()))
+        .and_then(|source| expand_rkn_algorithm_source(input, &source));
+    match result {
+        Ok(tokens) => tokens.into(),
+        Err(error) => syn::Error::new(proc_macro2::Span::call_site(), error)
+            .into_compile_error()
+            .into(),
+    }
+}
+
+fn expand_rkn_algorithm_source(input: MacroInput, source: &str) -> Result<TokenStream2, String> {
+    let tableau = parse_rkn_tableau(source, &input.name.to_string())
+        .map_err(|error| format!("invalid tableau `{}`: {error}", input.path.value()))?;
+    let visibility = input.visibility;
+    let name = input.name;
+    let static_name = format_ident!("__{}_TABLEAU", name.to_string().to_uppercase());
+    let source_path = input.path;
+    let crate_path = input.crate_path;
+    let description = tableau.description();
+    Ok(quote! {
+        static #static_name: #crate_path::tableau::LazyRungeKuttaNystromTableau =
+            ::std::sync::LazyLock::new(|| {
+                #crate_path::tableau::parse_rkn_tableau(
+                    include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/", #source_path)),
+                    stringify!(#name),
+                )
+            });
+
+        #[doc = #description]
+        #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+        #visibility struct #name;
+
+        impl #name {
+            /// Returns the lazily initialized, compile-time-validated tableau.
+            #visibility fn tableau(
+                self,
+            ) -> ::std::result::Result<
+                &'static #crate_path::tableau::RungeKuttaNystromTableau,
+                #crate_path::tableau::TableauError,
+            > {
+                #crate_path::tableau::load_tableau(&#static_name)
+            }
+        }
+
+        impl #crate_path::solvers::second_order::SecondOrderOdeAlgorithm for #name {
+            fn solve_validated<F, P>(
+                &self,
+                problem: &#crate_path::solvers::second_order::SecondOrderOdeProblem<F, P>,
+                options: &#crate_path::SolveOptions,
+            ) -> ::std::result::Result<
+                #crate_path::solvers::second_order::SecondOrderSolution,
+                #crate_path::solvers::second_order::SecondOrderSolveError,
+            >
+            where
+                F: #crate_path::solvers::second_order::SecondOrderFunction<P>,
+            {
+                #crate_path::solvers::second_order::SecondOrderOdeAlgorithm::solve_validated(
+                    &#crate_path::solvers::second_order::ResourceRungeKuttaNystrom::new(
+                        &#static_name,
+                    ),
+                    problem,
+                    options,
+                )
+            }
+        }
+    })
+}
+
+fn expand_rkn_source(input: StaticTableauInput, source: &str) -> Result<TokenStream2, String> {
+    parse_rkn_tableau(source, &input.method_name.value())
+        .map_err(|error| format!("invalid tableau `{}`: {error}", input.path.value()))?;
+    Ok(emit_lazy_static(
+        input,
+        quote!(LazyRungeKuttaNystromTableau),
+        quote!(parse_rkn_tableau),
+    ))
+}
+
+fn expand_irkn_source(input: StaticTableauInput, source: &str) -> Result<TokenStream2, String> {
+    parse_irkn_tableau(source, &input.method_name.value())
+        .map_err(|error| format!("invalid tableau `{}`: {error}", input.path.value()))?;
+    Ok(emit_lazy_static(
+        input,
+        quote!(LazyIrknTableau),
+        quote!(parse_irkn_tableau),
+    ))
+}
+
 fn expand_rosenbrock_source(
     input: StaticTableauInput,
     source: &str,
@@ -1009,5 +1146,66 @@ mod rosenbrock_tests {
         let error = expand_rosenbrock_source(input(), &invalid).unwrap_err();
         assert!(error.contains("formula.json"), "{error}");
         assert!(error.contains("must equal gamma"), "{error}");
+    }
+}
+
+#[cfg(test)]
+mod second_order_tests {
+    use super::*;
+
+    const RKN: &str = r#"{"name":"TestRkn","description":"RKN macro test","kind":"fixed-runge-kutta-nystrom","order":2,"A":[[0,0],["1/8",0]],"b":["1/2",0],"b_velocity":[0,1],"c":[0,"1/2"]}"#;
+    const IRKN: &str = r#"{"name":"TestIrkn","description":"IRKN macro test","kind":"improved-runge-kutta-nystrom","order":3,"bootstrap_order":4,"bootstrap_seed":"previous-endpoint","velocity_history":["3/2","-1/2"],"c":["1/2"],"A":["1/8"],"velocity_weights":["2/3","5/6"],"history_weights":["1/3","5/12"]}"#;
+
+    fn input(name: &str) -> StaticTableauInput {
+        syn::parse_str(&format!(
+            "pub TABLEAU, \"{name}\", \"second-order.json\", crate = renamed"
+        ))
+        .unwrap()
+    }
+
+    #[test]
+    fn expansions_embed_only_source_and_use_the_shared_lazy_parsers() {
+        let rkn = expand_rkn_source(input("TestRkn"), RKN)
+            .unwrap()
+            .to_string();
+        assert!(rkn.contains("LazyRungeKuttaNystromTableau"));
+        assert!(rkn.contains("parse_rkn_tableau"));
+        assert!(rkn.contains("include_str"));
+        assert!(rkn.contains("renamed"));
+        assert!(!rkn.contains("0.125"));
+        assert!(!rkn.contains("const "));
+
+        let irkn = expand_irkn_source(input("TestIrkn"), IRKN)
+            .unwrap()
+            .to_string();
+        assert!(irkn.contains("LazyIrknTableau"));
+        assert!(irkn.contains("parse_irkn_tableau"));
+        assert!(irkn.contains("include_str"));
+        assert!(!irkn.contains("0.125"));
+        assert!(!irkn.contains("const "));
+
+        let algorithm_input: MacroInput =
+            syn::parse_str("pub TestRkn, \"second-order.json\", crate = renamed").unwrap();
+        let algorithm = expand_rkn_algorithm_source(algorithm_input, RKN)
+            .unwrap()
+            .to_string();
+        assert!(algorithm.contains("ResourceRungeKuttaNystrom"));
+        assert!(algorithm.contains("SecondOrderOdeAlgorithm"));
+        assert!(algorithm.contains("include_str"));
+        assert!(!algorithm.contains("0.125"));
+        assert!(!algorithm.contains("const "));
+    }
+
+    #[test]
+    fn malformed_second_order_resources_fail_during_expansion() {
+        let rkn = RKN.replace("[\"1/8\",0]", "[\"1/8\",1]");
+        let error = expand_rkn_source(input("TestRkn"), &rkn).unwrap_err();
+        assert!(error.contains("second-order.json"), "{error}");
+        assert!(error.contains("strictly lower triangular"), "{error}");
+
+        let irkn = IRKN.replace("\"c\":[\"1/2\"]", "\"c\":[]");
+        let error = expand_irkn_source(input("TestIrkn"), &irkn).unwrap_err();
+        assert!(error.contains("second-order.json"), "{error}");
+        assert!(error.contains("IRKN"), "{error}");
     }
 }

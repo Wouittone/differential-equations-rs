@@ -1,0 +1,14 @@
+{
+  "$schema"          : "../irkn-schema.json",
+  "name"             : "Irkn4",
+  "description"      : "Fourth-order fixed-step improved Runge--Kutta--Nystrom two-step method.",
+  "kind"             : "improved-runge-kutta-nystrom",
+  "order"            : 4,
+  "bootstrap_order"  : 4,
+  "bootstrap_seed"   : "new-endpoint",
+  "velocity_history" : ["3.0 / 2.0","-1.0 / 2.0"],
+  "c"                : ["1.0 / 4.0","3.0 / 4.0"],
+  "A"                : ["1.0 / 32.0","9.0 / 32.0"],
+  "velocity_weights" : ["19.0 / 18.0","-1.0 / 6.0","11.0 / 18.0"],
+  "history_weights"  : ["-1.0 / 18.0","7.0 / 24.0","1.0 / 8.0"]
+}

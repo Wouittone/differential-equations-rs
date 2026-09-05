@@ -1,0 +1,14 @@
+{
+  "$schema"          : "../irkn-schema.json",
+  "name"             : "Irkn3",
+  "description"      : "Third-order fixed-step improved Runge--Kutta--Nystrom two-step method.",
+  "kind"             : "improved-runge-kutta-nystrom",
+  "order"            : 3,
+  "bootstrap_order"  : 4,
+  "bootstrap_seed"   : "previous-endpoint",
+  "velocity_history" : ["3.0 / 2.0","-1.0 / 2.0"],
+  "c"                : ["1.0 / 2.0"],
+  "A"                : ["1.0 / 8.0"],
+  "velocity_weights" : ["2.0 / 3.0","5.0 / 6.0"],
+  "history_weights"  : ["1.0 / 3.0","5.0 / 12.0"]
+}

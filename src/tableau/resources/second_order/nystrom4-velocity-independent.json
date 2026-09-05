@@ -1,0 +1,15 @@
+{
+  "$schema"      : "../rkn-schema.json",
+  "name"         : "Nystrom4VelocityIndependent",
+  "description"  : "Fourth-order Runge--Kutta--Nystrom method for velocity-independent acceleration.",
+  "kind"         : "fixed-runge-kutta-nystrom",
+  "order"        : 4,
+  "A"            : [
+    [0,0,0],
+    ["1.0 / 8.0",0,0],
+    ["0.0","1.0 / 2.0",0]
+  ],
+  "b"            : ["1.0 / 6.0","2.0 / 6.0","0.0"],
+  "b_velocity"   : ["1.0 / 6.0","4.0 / 6.0","1.0 / 6.0"],
+  "c"            : ["0.0","1.0 / 2.0","1.0"]
+}

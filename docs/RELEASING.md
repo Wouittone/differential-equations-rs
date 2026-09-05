@@ -33,7 +33,7 @@ during macro expansion, embedded with `include_str!`, and parsed behind an
 independent `LazyLock` only when its method is used. Generated Rust arrays and
 generic named-constant banks are not acceptable final representations.
 
-- [ ] Complete the second-order RKN/IRKN migration, including fixed and
+- [x] Complete the second-order RKN/IRKN migration, including fixed and
   adaptive RKN methods, dense extensions, IRKN history data, shared RKN startup
   tableaus, independently lazy method resources, and fallible `.tableau()`
   inspection.
