@@ -1,0 +1,11 @@
+{
+  "$schema" : "../../src/tableau/resources/low-storage-rk-schema.json",
+  "name" : "FileLowStorage",
+  "description" : "A two-stage second-order 2N method defined downstream.",
+  "kind" : "low-storage-runge-kutta",
+  "layout" : "two-n",
+  "order" : 2,
+  "A" : ["-1/2"],
+  "b" : ["1/2",1],
+  "c" : ["1/2"]
+}

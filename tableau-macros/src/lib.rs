@@ -1,8 +1,8 @@
 //! Compile-time validation and expansion of declarative solver tableau resources.
 
 use differential_equations_tableau_core::{
-    RungeKuttaKind, parse_irkn_tableau, parse_multistep_tableau, parse_numeric_expression,
-    parse_rkn_tableau, parse_symplectic_tableau, parse_tableau,
+    RungeKuttaKind, parse_irkn_tableau, parse_low_storage_tableau, parse_multistep_tableau,
+    parse_numeric_expression, parse_rkn_tableau, parse_symplectic_tableau, parse_tableau,
 };
 use proc_macro::TokenStream;
 use proc_macro2::{Literal, TokenStream as TokenStream2};
@@ -658,6 +658,24 @@ pub fn define_irkn_tableau_from_file(input: TokenStream) -> TokenStream {
     }
 }
 
+/// Defines one lazily materialized low-storage Runge--Kutta tableau.
+///
+/// The resource is parsed and validated during macro expansion. The emitted
+/// static embeds only its source text and materializes coefficients on first
+/// inspection or use.
+#[proc_macro]
+pub fn define_low_storage_rk_tableau_from_file(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as StaticTableauInput);
+    let result = read_static_resource(&input)
+        .and_then(|source| expand_low_storage_rk_source(input, &source));
+    match result {
+        Ok(tokens) => tokens.into(),
+        Err(error) => syn::Error::new(proc_macro2::Span::call_site(), error)
+            .into_compile_error()
+            .into(),
+    }
+}
+
 /// Defines a named fixed or adaptive RKN solver from one JSON resource.
 ///
 /// The generated zero-sized type implements `SecondOrderOdeAlgorithm` and
@@ -665,20 +683,7 @@ pub fn define_irkn_tableau_from_file(input: TokenStream) -> TokenStream {
 #[proc_macro]
 pub fn define_rkn_from_file(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as MacroInput);
-    let manifest_dir = match std::env::var_os("CARGO_MANIFEST_DIR") {
-        Some(directory) => PathBuf::from(directory),
-        None => {
-            return syn::Error::new(
-                proc_macro2::Span::call_site(),
-                "CARGO_MANIFEST_DIR is unavailable during macro expansion",
-            )
-            .into_compile_error()
-            .into();
-        }
-    };
-    let path = manifest_dir.join(input.path.value());
-    let result = std::fs::read_to_string(&path)
-        .map_err(|error| format!("failed to read `{}`: {error}", path.display()))
+    let result = read_algorithm_resource(&input)
         .and_then(|source| expand_rkn_algorithm_source(input, &source));
     match result {
         Ok(tokens) => tokens.into(),
@@ -686,6 +691,85 @@ pub fn define_rkn_from_file(input: TokenStream) -> TokenStream {
             .into_compile_error()
             .into(),
     }
+}
+
+/// Defines a named low-storage Runge--Kutta solver from one JSON resource.
+///
+/// The generated zero-sized type implements [`OdeAlgorithm`](https://docs.rs/differential-equations/latest/differential_equations/trait.OdeAlgorithm.html)
+/// and exposes its independently lazy tableau through `tableau()`.
+#[proc_macro]
+pub fn define_low_storage_rk_from_file(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as MacroInput);
+    let result = read_algorithm_resource(&input)
+        .and_then(|source| expand_low_storage_rk_algorithm_source(input, &source));
+    match result {
+        Ok(tokens) => tokens.into(),
+        Err(error) => syn::Error::new(proc_macro2::Span::call_site(), error)
+            .into_compile_error()
+            .into(),
+    }
+}
+
+fn expand_low_storage_rk_algorithm_source(
+    input: MacroInput,
+    source: &str,
+) -> Result<TokenStream2, String> {
+    let tableau = parse_low_storage_tableau(source, &input.name.to_string())
+        .map_err(|error| format!("invalid tableau `{}`: {error}", input.path.value()))?;
+    let visibility = input.visibility;
+    let name = input.name;
+    let static_name = format_ident!("__{}_TABLEAU", name.to_string().to_uppercase());
+    let source_path = input.path;
+    let crate_path = input.crate_path;
+    let description = tableau.description();
+    Ok(quote! {
+        static #static_name: #crate_path::tableau::LazyLowStorageRungeKuttaTableau =
+            ::std::sync::LazyLock::new(|| {
+                #crate_path::tableau::parse_low_storage_tableau(
+                    include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/", #source_path)),
+                    stringify!(#name),
+                )
+            });
+
+        #[doc = #description]
+        #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+        #[allow(
+            non_camel_case_types,
+            reason = "preserve the published low-storage algorithm name"
+        )]
+        #visibility struct #name;
+
+        impl #name {
+            /// Returns the lazily initialized, compile-time-validated tableau.
+            #visibility fn tableau(
+                self,
+            ) -> ::std::result::Result<
+                &'static #crate_path::tableau::LowStorageRungeKuttaTableau,
+                #crate_path::tableau::TableauError,
+            > {
+                #crate_path::tableau::load_tableau(&#static_name)
+            }
+        }
+
+        impl #crate_path::OdeAlgorithm for #name {
+            fn solve_validated<F, P>(
+                &self,
+                problem: &#crate_path::OdeProblem<F, P>,
+                options: &#crate_path::SolveOptions,
+            ) -> ::std::result::Result<#crate_path::Solution, #crate_path::SolveError>
+            where
+                F: #crate_path::OdeFunction<P>,
+            {
+                #crate_path::OdeAlgorithm::solve_validated(
+                    &#crate_path::solvers::explicit::ResourceLowStorageRungeKutta::new(
+                        &#static_name,
+                    ),
+                    problem,
+                    options,
+                )
+            }
+        }
+    })
 }
 
 fn expand_rkn_algorithm_source(input: MacroInput, source: &str) -> Result<TokenStream2, String> {
@@ -766,6 +850,72 @@ fn expand_irkn_source(input: StaticTableauInput, source: &str) -> Result<TokenSt
     ))
 }
 
+fn expand_low_storage_rk_source(
+    input: StaticTableauInput,
+    source: &str,
+) -> Result<TokenStream2, String> {
+    parse_low_storage_tableau(source, &input.method_name.value())
+        .map_err(|error| format!("invalid tableau `{}`: {error}", input.path.value()))?;
+    Ok(emit_lazy_static(
+        input,
+        quote!(LazyLowStorageRungeKuttaTableau),
+        quote!(parse_low_storage_tableau),
+    ))
+}
+
+#[cfg(test)]
+mod low_storage_tests {
+    use super::*;
+
+    fn source() -> &'static str {
+        r#"{"name":"Test2N","description":"Macro test","kind":"low-storage-runge-kutta","layout":"two-n","order":2,"A":["-1/2"],"b":["1/2",1],"c":["1/2"]}"#
+    }
+
+    #[test]
+    fn static_expansion_embeds_only_validated_source() {
+        let input: StaticTableauInput =
+            syn::parse_str("pub TABLEAU, \"Test2N\", \"method.json\", crate = renamed").unwrap();
+        let tokens = expand_low_storage_rk_source(input, source())
+            .unwrap()
+            .to_string();
+        assert!(tokens.contains("LazyLowStorageRungeKuttaTableau"));
+        assert!(tokens.contains("include_str"));
+        assert!(tokens.contains("LazyLock"));
+        assert!(tokens.contains("renamed"));
+        assert!(!tokens.contains("0.5"));
+        assert!(!tokens.contains("const "));
+    }
+
+    #[test]
+    fn algorithm_expansion_is_one_resource_backed_solver_value() {
+        let input = MacroInput {
+            visibility: parse_quote!(pub),
+            name: parse_quote!(Test2N),
+            path: LitStr::new("method.json", proc_macro2::Span::call_site()),
+            crate_path: parse_quote!(renamed),
+        };
+        let tokens = expand_low_storage_rk_algorithm_source(input, source())
+            .unwrap()
+            .to_string();
+        assert!(tokens.contains("ResourceLowStorageRungeKutta"));
+        assert!(tokens.contains("include_str"));
+        assert!(tokens.contains("LazyLock"));
+        assert!(tokens.contains("renamed"));
+        assert!(!tokens.contains("0.5"));
+        assert!(!tokens.contains("const "));
+    }
+
+    #[test]
+    fn expansion_rejects_invalid_recurrence_with_resource_path() {
+        let input: StaticTableauInput =
+            syn::parse_str("TABLEAU, \"Test2N\", \"method.json\"").unwrap();
+        let invalid = source().replace("\"c\":[\"1/2\"]", "\"c\":[0]");
+        let error = expand_low_storage_rk_source(input, &invalid).unwrap_err();
+        assert!(error.contains("method.json"), "{error}");
+        assert!(error.contains("stage-row sum"), "{error}");
+    }
+}
+
 fn expand_rosenbrock_source(
     input: StaticTableauInput,
     source: &str,
@@ -805,6 +955,15 @@ fn emit_lazy_static(
 }
 
 fn read_static_resource(input: &StaticTableauInput) -> Result<String, String> {
+    let manifest_dir = std::env::var_os("CARGO_MANIFEST_DIR")
+        .map(PathBuf::from)
+        .ok_or("CARGO_MANIFEST_DIR is unavailable during macro expansion")?;
+    let path = manifest_dir.join(input.path.value());
+    std::fs::read_to_string(&path)
+        .map_err(|error| format!("failed to read `{}`: {error}", path.display()))
+}
+
+fn read_algorithm_resource(input: &MacroInput) -> Result<String, String> {
     let manifest_dir = std::env::var_os("CARGO_MANIFEST_DIR")
         .map(PathBuf::from)
         .ok_or("CARGO_MANIFEST_DIR is unavailable during macro expansion")?;

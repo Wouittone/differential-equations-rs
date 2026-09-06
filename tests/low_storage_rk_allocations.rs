@@ -35,7 +35,46 @@ fn allocations_for<A: OdeAlgorithm + Copy>(algorithm: A, step: f64) -> usize {
 }
 
 #[test]
-fn callback_free_low_storage_steps_do_not_allocate_per_step() {
+fn low_storage_resources_are_individually_lazy_and_steps_do_not_allocate() {
+    let construction = allocation_support::minimum_measurement(|| {
+        let region = Region::new(GLOBAL);
+        black_box(Ork256);
+        black_box(CFRLDDRK64);
+        black_box(RDPK3Sp35);
+        black_box(SHLDDRK_2N);
+        black_box(CKLLSRK43_2);
+        region.change().allocations
+    });
+    assert_eq!(construction, 0);
+
+    let first = Region::new(GLOBAL);
+    black_box(Ork256.tableau().unwrap());
+    assert!(first.change().allocations > 0);
+    let independent = Region::new(GLOBAL);
+    black_box(CFRLDDRK64.tableau().unwrap());
+    assert!(independent.change().allocations > 0);
+    let alternating = Region::new(GLOBAL);
+    black_box(SHLDDRK_2N.tableau().unwrap());
+    assert!(alternating.change().allocations > 0);
+    let three_s = Region::new(GLOBAL);
+    black_box(RDPK3Sp35.tableau().unwrap());
+    assert!(three_s.change().allocations > 0);
+    let pipeline = Region::new(GLOBAL);
+    black_box(CKLLSRK43_2.tableau().unwrap());
+    assert!(pipeline.change().allocations > 0);
+    let repeated = allocation_support::minimum_measurement(|| {
+        let region = Region::new(GLOBAL);
+        for _ in 0..1000 {
+            black_box(Ork256.tableau().unwrap());
+            black_box(CFRLDDRK64.tableau().unwrap());
+            black_box(SHLDDRK_2N.tableau().unwrap());
+            black_box(RDPK3Sp35.tableau().unwrap());
+            black_box(CKLLSRK43_2.tableau().unwrap());
+        }
+        region.change().allocations
+    });
+    assert_eq!(repeated, 0);
+
     let hundred_steps = allocations_for(CarpenterKennedy2N54, 0.01);
     let thousand_steps = allocations_for(CarpenterKennedy2N54, 0.001);
 
@@ -109,4 +148,34 @@ fn callback_free_low_storage_steps_do_not_allocate_per_step() {
         hundred_steps <= 7,
         "unexpected 3S205 low-storage solve allocation count: {hundred_steps}"
     );
+
+    for (label, hundred_steps, thousand_steps, maximum) in [
+        (
+            "2C",
+            allocations_for(CFRLDDRK64, 0.01),
+            allocations_for(CFRLDDRK64, 0.001),
+            7,
+        ),
+        (
+            "alternating 2N",
+            allocations_for(SHLDDRK_2N, 0.01),
+            allocations_for(SHLDDRK_2N, 0.001),
+            7,
+        ),
+        (
+            "register pipeline",
+            allocations_for(CKLLSRK43_2, 0.01),
+            allocations_for(CKLLSRK43_2, 0.001),
+            8,
+        ),
+    ] {
+        assert!(
+            thousand_steps <= hundred_steps,
+            "{label} allocations grew with step count: {hundred_steps} -> {thousand_steps}"
+        );
+        assert!(
+            hundred_steps <= maximum,
+            "unexpected {label} low-storage solve allocation count: {hundred_steps}"
+        );
+    }
 }

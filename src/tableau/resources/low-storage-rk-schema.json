@@ -1,0 +1,141 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://differential-equations-rs.dev/schemas/low-storage-rk.json",
+  "title": "Low-storage Runge--Kutta tableau",
+  "oneOf": [
+    { "$ref": "#/$defs/twoN" },
+    { "$ref": "#/$defs/twoC" },
+    { "$ref": "#/$defs/threeS" },
+    { "$ref": "#/$defs/alternatingTwoN" },
+    { "$ref": "#/$defs/registerPipeline" }
+  ],
+  "$defs": {
+    "scalar": {
+      "oneOf": [
+        { "type": "number" },
+        { "type": "string", "minLength": 1 }
+      ]
+    },
+    "vector": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/scalar" },
+      "minItems": 1
+    },
+    "postInitialVector": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/scalar" }
+    },
+    "consistencyTolerance": {
+      "description": "Positive relative validation tolerance, capped at 1e-6 by the parser; omitted resources use 1e-10.",
+      "oneOf": [
+        { "type": "number", "exclusiveMinimum": 0, "maximum": 0.000001 },
+        { "type": "string", "minLength": 1 }
+      ]
+    },
+    "matrix": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/vector" },
+      "minItems": 1
+    },
+    "twoN": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "description", "kind", "layout", "order", "A", "b", "c"],
+      "properties": {
+        "$schema": { "type": "string" },
+        "name": { "type": "string", "minLength": 1 },
+        "description": { "type": "string", "minLength": 1 },
+        "kind": { "const": "low-storage-runge-kutta" },
+        "layout": { "const": "two-n" },
+        "order": { "type": "integer", "minimum": 1 },
+        "consistency_tolerance": { "$ref": "#/$defs/consistencyTolerance" },
+        "node_policy": { "enum": ["derived", "independent"], "default": "derived" },
+        "A": { "$ref": "#/$defs/postInitialVector" },
+        "b": { "$ref": "#/$defs/vector" },
+        "c": { "$ref": "#/$defs/postInitialVector" }
+      }
+    },
+    "twoC": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "description", "kind", "layout", "order", "A", "b", "c"],
+      "properties": {
+        "$schema": { "type": "string" },
+        "name": { "type": "string", "minLength": 1 },
+        "description": { "type": "string", "minLength": 1 },
+        "kind": { "const": "low-storage-runge-kutta" },
+        "layout": { "const": "two-c" },
+        "order": { "type": "integer", "minimum": 1 },
+        "consistency_tolerance": { "$ref": "#/$defs/consistencyTolerance" },
+        "node_policy": { "enum": ["derived", "independent"], "default": "derived" },
+        "A": { "$ref": "#/$defs/postInitialVector" },
+        "b": { "$ref": "#/$defs/vector" },
+        "c": { "$ref": "#/$defs/postInitialVector" }
+      }
+    },
+    "threeS": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "description", "kind", "layout", "order", "gamma1", "gamma2", "gamma3", "delta", "beta1", "beta2", "c", "endpoint_evaluation"],
+      "properties": {
+        "$schema": { "type": "string" },
+        "name": { "type": "string", "minLength": 1 },
+        "description": { "type": "string", "minLength": 1 },
+        "kind": { "const": "low-storage-runge-kutta" },
+        "layout": { "const": "three-s" },
+        "order": { "type": "integer", "minimum": 1 },
+        "consistency_tolerance": { "$ref": "#/$defs/consistencyTolerance" },
+        "node_policy": { "enum": ["derived", "independent"], "default": "derived" },
+        "gamma1": { "$ref": "#/$defs/vector" },
+        "gamma2": { "$ref": "#/$defs/vector" },
+        "gamma3": { "$ref": "#/$defs/vector" },
+        "delta": { "$ref": "#/$defs/vector" },
+        "beta1": { "$ref": "#/$defs/scalar" },
+        "beta2": { "$ref": "#/$defs/vector" },
+        "c": { "$ref": "#/$defs/vector" },
+        "endpoint_evaluation": { "enum": ["omit", "evaluate"] }
+      }
+    },
+    "alternatingTwoN": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "description", "kind", "layout", "order", "A1", "b1", "c1", "A2", "b2", "c2"],
+      "properties": {
+        "$schema": { "type": "string" },
+        "name": { "type": "string", "minLength": 1 },
+        "description": { "type": "string", "minLength": 1 },
+        "kind": { "const": "low-storage-runge-kutta" },
+        "layout": { "const": "alternating-two-n" },
+        "order": { "type": "integer", "minimum": 1 },
+        "consistency_tolerance": { "$ref": "#/$defs/consistencyTolerance" },
+        "node_policy": { "enum": ["derived", "independent"], "default": "derived" },
+        "A1": { "$ref": "#/$defs/postInitialVector" },
+        "b1": { "$ref": "#/$defs/vector" },
+        "c1": { "$ref": "#/$defs/postInitialVector" },
+        "A2": { "$ref": "#/$defs/postInitialVector" },
+        "b2": { "$ref": "#/$defs/vector" },
+        "c2": { "$ref": "#/$defs/postInitialVector" }
+      }
+    },
+    "registerPipeline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "description", "kind", "layout", "order", "history_states", "A", "b", "b_final", "c"],
+      "properties": {
+        "$schema": { "type": "string" },
+        "name": { "type": "string", "minLength": 1 },
+        "description": { "type": "string", "minLength": 1 },
+        "kind": { "const": "low-storage-runge-kutta" },
+        "layout": { "const": "register-pipeline" },
+        "order": { "type": "integer", "minimum": 1 },
+        "consistency_tolerance": { "$ref": "#/$defs/consistencyTolerance" },
+        "node_policy": { "enum": ["derived", "independent"], "default": "derived" },
+        "history_states": { "type": "integer", "minimum": 1 },
+        "A": { "$ref": "#/$defs/matrix" },
+        "b": { "$ref": "#/$defs/vector" },
+        "b_final": { "$ref": "#/$defs/scalar" },
+        "c": { "$ref": "#/$defs/vector" }
+      }
+    }
+  }
+}

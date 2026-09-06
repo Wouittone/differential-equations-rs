@@ -1,0 +1,16 @@
+{
+  "$schema" : "../low-storage-rk-schema.json",
+  "name" : "ParsaniKetchesonDeconinck3S32",
+  "description" : "Three-stage, second-order 3S low-storage method optimized for spectral-difference wave propagation.",
+  "kind" : "low-storage-runge-kutta",
+  "layout" : "three-s",
+  "order" : 2,
+  "gamma1" : ["-1.2664395576322218e-1","1.1426980685848858e+0"],
+  "gamma2" : ["6.542778259940647e-1","-8.2869287683723744e-2"],
+  "gamma3" : ["0.0e+0","0.0e+0"],
+  "delta" : ["7.2196567116037724e-1","0.0e+0"],
+  "beta1" : "7.2366074728360086e-1",
+  "beta2" : ["3.4217876502651023e-1","3.6640216242653251e-1"],
+  "c" : ["7.2366074728360086e-1","5.9236433182015646e-1"],
+  "endpoint_evaluation" : "evaluate"
+}

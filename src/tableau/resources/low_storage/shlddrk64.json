@@ -1,0 +1,12 @@
+{
+  "$schema" : "../low-storage-rk-schema.json",
+  "name" : "Shlddrk64",
+  "description" : "Six-stage, fourth-order low-dissipation and low-dispersion method.",
+  "kind" : "low-storage-runge-kutta",
+  "layout" : "two-n",
+  "order" : 4,
+  "consistency_tolerance" : "1e-6",
+  "A" : ["-0.4919575","-0.8946264","-1.5526678","-3.4077973","-1.074264"],
+  "b" : ["0.1453095","0.4653797","0.4675397","0.7795279","0.3574327","0.15"],
+  "c" : ["0.1453095","0.3817422","0.6367813","0.7560744","0.9271047"]
+}

@@ -6,7 +6,7 @@ symplectic compositions use paired drift/kick vectors. Specialized families
 also use this tree for typed method data, including canonical linear multistep
 formulas for fixed-step Adams and MRAB and per-method Rosenbrock tableaus.
 Migration is not yet complete: generic coefficient banks remain only in the
-low-storage RK and stabilized-method implementations.
+stabilized-method implementation.
 
 Resources use a FracturedJson-style layout: object fields have stable ordering,
 scalar arrays stay on one line, and every matrix row occupies one line. This is
@@ -20,6 +20,61 @@ numeric expressions parsed by `exmex`; accepted expressions are limited to
 numeric literals, parentheses, `+`, `-`, `*`, `/`, and `sqrt(...)`.
 JSON numeric tokens use `serde_json`'s accurate float-roundtrip parsing so
 decimal numbers and equivalent decimal strings produce the same `f64` bits.
+
+## Low-storage Runge--Kutta resources
+
+Each built-in low-storage method has an independent resource under
+`src/tableau/resources/low_storage`. The tagged representation models the
+method's actual recurrence instead of expanding it into generated Rust
+constants:
+
+- `two-n` and `two-c` store their recurrence vectors `A`, `b`, and `c`;
+- `three-s` stores `gamma1`, `gamma2`, `gamma3`, `delta`, `beta1`, `beta2`,
+  `c`, and a typed `endpoint_evaluation` policy;
+- `alternating-two-n` stores the two complete recurrences used on alternating
+  accepted steps; and
+- `register-pipeline` stores its rolling-state count, coefficient matrix,
+  update weights, final weight, and nodes.
+
+The parser rejects irrelevant or missing layout fields, invalid dimensions,
+non-finite expressions or reconstructed stages, non-affine stage recurrences,
+and inconsistent final weights. Full-precision resources use a `1e-10`
+relative consistency tolerance. The three published decimal-only SHLDDRK
+formulas explicitly declare a bounded `consistency_tolerance` of `1e-6`
+because their source precision is limited; that relaxation does not weaken
+validation for other methods.
+Nodes use `node_policy: "derived"` by default and must match the reconstructed
+effective Runge--Kutta row. `node_policy: "independent"` is an explicit escape
+hatch for source formulas whose published stage times are independent; these
+methods should be treated as primarily autonomous. The pinned
+`CKLLSRK54_3C` source requires this policy because its fourth node does not
+equal the published recurrence row sum.
+
+Use `tableau::define_low_storage_rk_from_file!` to define a downstream solver
+with the same zero-sized public value, compile-time diagnostics, lazy loading,
+and fixed-step driver as the built-ins:
+
+```rust,ignore
+use differential_equations::tableau::define_low_storage_rk_from_file;
+
+define_low_storage_rk_from_file!(
+    pub FileLowStorage,
+    "resources/file_low_storage.json",
+);
+
+let tableau = FileLowStorage.tableau()?;
+assert_eq!(tableau.name(), "FileLowStorage");
+```
+
+For specialized integrations that already own an algorithm type,
+`define_low_storage_rk_tableau_from_file!` creates only a lazy static and
+`ResourceLowStorageRungeKutta::new` executes it. Runtime parse failures remain
+typed `TableauError` values during inspection and map to `InvalidTableau` when
+solving. All currently exposed low-storage methods remain fixed-step. The
+upstream RDPK 3S-plus and CKLL register-pipeline families also publish embedded
+estimators; representing those estimators and implementing genuine adaptive
+and FSAL behavior is tracked separately rather than pretending an endpoint
+evaluation is derivative reuse.
 
 ## MRI-GARK resources
 

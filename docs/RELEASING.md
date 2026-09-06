@@ -37,9 +37,12 @@ generic named-constant banks are not acceptable final representations.
   adaptive RKN methods, dense extensions, IRKN history data, shared RKN startup
   tableaus, independently lazy method resources, and fallible `.tableau()`
   inspection.
-- [ ] Model every low-storage RK recurrence explicitly. This includes the 2N,
+- [x] Model every low-storage RK recurrence explicitly. This includes the 2N,
   2C, 3S, alternating-register, and register-pipeline layouts; each resource
   must validate the invariants of its actual recurrence.
+- [ ] Add the upstream embedded estimators and genuine adaptive/FSAL lifecycle
+  for the RDPK 3S-plus and CKLL register-pipeline families. Preserve their
+  method-specific controller metadata without reintroducing Rust constants.
 - [ ] Replace the combined ROCK/SERK/ESERK bank with typed stabilized-method
   resources that do not parse or retain the entire catalogue for one selected
   method and degree.

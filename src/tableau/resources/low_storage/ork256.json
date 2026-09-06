@@ -1,0 +1,11 @@
+{
+  "$schema" : "../low-storage-rk-schema.json",
+  "name" : "Ork256",
+  "description" : "Five-stage, second-order low-storage method for wave propagation.",
+  "kind" : "low-storage-runge-kutta",
+  "layout" : "two-n",
+  "order" : 2,
+  "A" : ["-1.0","-1.55798","-1.0","-0.45031"],
+  "b" : ["0.2","0.83204","0.6","0.35394","0.2"],
+  "c" : ["0.2","0.2","0.8","0.8"]
+}

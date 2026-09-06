@@ -4,19 +4,23 @@
 //! procedural macros validate each document with the same parsers used here
 //! while compiling, then the selected tableau is materialized only on first
 //! use. This includes ordinary Runge--Kutta, Runge--Kutta--Nyström, improved
-//! RKN, multistep, Rosenbrock, multirate, and symplectic representations.
+//! RKN, low-storage Runge--Kutta, multistep, Rosenbrock, multirate, and
+//! symplectic representations.
 
 use std::sync::LazyLock;
 
 #[doc(inline)]
 pub use differential_equations_tableau_core::{
-    FittedWeight, IrknBootstrapSeed, IrknTableau, LazyDenseStage as ParsedLazyDenseStage,
-    LinearMultistepTableau, MisTableau, MriTableau, RosenbrockKind, RosenbrockPairTableau,
-    RosenbrockTableau, RungeKuttaKind, RungeKuttaNystromKind, RungeKuttaNystromTableau,
-    RungeKuttaTableau, SymplecticTableau, TableauError, VariableMultistepTableau,
-    parse_irkn_tableau, parse_mis_tableau, parse_mri_tableau, parse_multistep_tableau,
-    parse_rkn_tableau, parse_rosenbrock_pair_tableau, parse_rosenbrock_tableau,
-    parse_symplectic_tableau, parse_tableau, parse_variable_multistep_tableau,
+    AlternatingTwoNTableau, FittedWeight, IrknBootstrapSeed, IrknTableau,
+    LazyDenseStage as ParsedLazyDenseStage, LinearMultistepTableau, LowStorageAbcTableau,
+    LowStorageEndpointEvaluation, LowStorageNodePolicy, LowStorageRungeKuttaLayout,
+    LowStorageRungeKuttaTableau, MisTableau, MriTableau, RegisterPipelineTableau, RosenbrockKind,
+    RosenbrockPairTableau, RosenbrockTableau, RungeKuttaKind, RungeKuttaNystromKind,
+    RungeKuttaNystromTableau, RungeKuttaTableau, SymplecticTableau, TableauError, ThreeSTableau,
+    VariableMultistepTableau, parse_irkn_tableau, parse_low_storage_tableau, parse_mis_tableau,
+    parse_mri_tableau, parse_multistep_tableau, parse_rkn_tableau, parse_rosenbrock_pair_tableau,
+    parse_rosenbrock_tableau, parse_symplectic_tableau, parse_tableau,
+    parse_variable_multistep_tableau,
 };
 
 /// A lazily initialized, validated Runge--Kutta tableau.
@@ -51,6 +55,10 @@ pub type LazyRungeKuttaNystromTableau = LazyLock<Result<RungeKuttaNystromTableau
 /// A lazily initialized, validated improved RKN history tableau.
 pub type LazyIrknTableau = LazyLock<Result<IrknTableau, TableauError>>;
 
+/// A lazily initialized, validated low-storage Runge--Kutta recurrence.
+pub type LazyLowStorageRungeKuttaTableau =
+    LazyLock<Result<LowStorageRungeKuttaTableau, TableauError>>;
+
 /// Returns a parsed lazy tableau, preserving any validation error.
 pub fn load_tableau<T>(
     resource: &'static LazyLock<Result<T, TableauError>>,
@@ -71,6 +79,10 @@ pub use crate::solvers::explicit::general::{
 pub use differential_equations_tableau_macros::define_explicit_rk_from_file;
 #[doc(inline)]
 pub use differential_equations_tableau_macros::define_irkn_tableau_from_file;
+#[doc(inline)]
+pub use differential_equations_tableau_macros::define_low_storage_rk_from_file;
+#[doc(inline)]
+pub use differential_equations_tableau_macros::define_low_storage_rk_tableau_from_file;
 #[doc(inline)]
 pub use differential_equations_tableau_macros::define_mis_tableau_from_file;
 #[doc(inline)]

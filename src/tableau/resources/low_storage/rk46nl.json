@@ -1,0 +1,11 @@
+{
+  "$schema" : "../low-storage-rk-schema.json",
+  "name" : "RK46NL",
+  "description" : "Six-stage, fourth-order low-storage method with nonlinear stability properties.",
+  "kind" : "low-storage-runge-kutta",
+  "layout" : "two-n",
+  "order" : 4,
+  "A" : ["-0.737101392796","-1.634740794343","-0.74473900378","-1.469897351522","-2.813971388035"],
+  "b" : ["0.032918605146","0.8232569982","0.3815309489","0.200092213184","1.718581042715","0.27"],
+  "c" : ["0.032918605146","0.249351723343","0.466911705055","0.582030414044","0.847252983783"]
+}

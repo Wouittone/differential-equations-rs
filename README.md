@@ -291,6 +291,10 @@ validated, lazily parsed JSON resource per algorithm and expose fallible
 `.tableau()` inspection. Downstream users can define an RKN solver with
 `define_rkn_from_file!`; IRKN startup reuses the ordinary
 `Nystrom4VelocityIndependent` resource instead of duplicating coefficients.
+All low-storage RK algorithms use independent typed resources for their 2N,
+2C, 3S, alternating-register, or register-pipeline recurrence. Define another
+fixed-step method with `tableau::define_low_storage_rk_from_file!`; the same
+resource works through scalar, vector, and matrix ndarray problem adapters.
 All named symplectic compositions use individual resources and
 expose fallible `Method::tableau()` access with
 `a()`/`b()` coefficient slices. Some other specialized families still retain

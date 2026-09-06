@@ -1,0 +1,12 @@
+{
+  "$schema" : "../low-storage-rk-schema.json",
+  "name" : "SHLDDRK52",
+  "description" : "Five-stage, second-order low-dissipation and low-dispersion method.",
+  "kind" : "low-storage-runge-kutta",
+  "layout" : "two-n",
+  "order" : 2,
+  "consistency_tolerance" : "1e-6",
+  "A" : ["-0.6913065","-2.655155","-0.8147688","-0.6686587"],
+  "b" : ["0.1","0.75","0.7","0.479313","0.310392"],
+  "c" : ["0.1","0.3315201","0.4577796","0.8666528"]
+}
