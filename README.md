@@ -46,16 +46,25 @@ Stiff solvers can use an analytic Jacobian supplied through
 algorithms require adaptive stepping to be disabled and an initial step to be
 provided.
 
-## Features and current scope
+## Cargo features and current scope
 
-- `parallel` is enabled by default and provides Rayon-backed batch and ensemble
-  solves. Disable default features for a sequential-only dependency.
-- `allocation-metrics` is development instrumentation used by the comparison
-  benchmark; applications do not need it.
+The crate has exactly two Cargo features:
+
+| Feature | Default | Purpose |
+| --- | :---: | --- |
+| `parallel` | Yes | Rayon-backed batch and ensemble solves. |
+| `allocation-metrics` | No | Repository benchmark instrumentation; applications do not need it. |
+
+`--no-default-features` selects sequential ensemble execution. State shape is
+not a Cargo feature: ndarray scalar, vector, and matrix adapters are always
+available, and there are deliberately no `vector`, `matrix`, or `ndarray`
+feature flags.
+
 - First-order solvers keep contiguous `f64` workspaces. `OdeProblem::new`
   retains the original flat-vector API, while `OdeProblem::from_array` accepts
   ndarray scalars, vectors, and matrices and returns shape-aware solution
-  views without changing the numerical kernels.
+  views without changing the numerical kernels. This API remains available
+  with `default-features = false`.
 - The crate supports discrete, scalar continuous, vector continuous, and
   preset-time callbacks. Vector continuous callbacks group several event
   functions into one evaluation and report a signed crossing mask when one or
@@ -293,8 +302,11 @@ validated, lazily parsed JSON resource per algorithm and expose fallible
 `Nystrom4VelocityIndependent` resource instead of duplicating coefficients.
 All low-storage RK algorithms use independent typed resources for their 2N,
 2C, 3S, alternating-register, or register-pipeline recurrence. Define another
-fixed-step method with `tableau::define_low_storage_rk_from_file!`; the same
-resource works through scalar, vector, and matrix ndarray problem adapters.
+method with `tableau::define_low_storage_rk_from_file!`; the same resource works
+through scalar, vector, and matrix ndarray problem adapters. RDPK 3S-plus and
+CKLL register-pipeline resources include their embedded estimators and use
+adaptive stepping by default. Other low-storage methods require
+`adaptive = false` and an explicit initial step.
 All named symplectic compositions use individual resources and
 expose fallible `Method::tableau()` access with
 `a()`/`b()` coefficient slices. Some other specialized families still retain

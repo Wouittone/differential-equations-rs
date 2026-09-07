@@ -32,9 +32,13 @@ members = ["tableau-core", "tableau-macros"]
 resolver = "3"
 
 [features]
+# Shape-aware ndarray states are part of the core API and deliberately are not
+# gated by a `vector`, `matrix`, or `ndarray` feature. `--no-default-features`
+# disables only optional execution capabilities.
 default = ["parallel"]
-allocation-metrics = []
 parallel = ["dep:rayon"]
+# Repository benchmark instrumentation; not intended for application code.
+allocation-metrics = []
 
 [dependencies]
 differential-equations-tableau-macros = { version = "=0.1.0-beta.1", path = "tableau-macros" }

@@ -3,7 +3,7 @@ use std::time::Duration;
 use criterion::{BenchmarkId, Criterion, Throughput, black_box, criterion_group, criterion_main};
 use differential_equations::ndarray::{Array2, ArrayView2, ArrayViewMut2, array};
 use differential_equations::solve_ensemble_parallel;
-use differential_equations::solvers::explicit::Tsit5;
+use differential_equations::solvers::explicit::{CKLLSRK95_4M, RDPK3SpFSAL510, Tsit5};
 use differential_equations::solvers::rosenbrock::{Rodas5P, Tsit5DA};
 use differential_equations::{
     OdeProblem, SaveMode, SolveOptions, solve, solve_ensemble_sequential,
@@ -60,6 +60,10 @@ fn fixed_options(step: f64) -> SolveOptions {
 fn solver_throughput(criterion: &mut Criterion) {
     let explicit = explicit_problem();
     let stiff = stiff_problem();
+    RDPK3SpFSAL510
+        .tableau()
+        .expect("built-in tableau must parse");
+    CKLLSRK95_4M.tableau().expect("built-in tableau must parse");
     let matrix = OdeProblem::from_array(
         |mut derivative: ArrayViewMut2<'_, f64>, state: ArrayView2<'_, f64>, _: &(), _: f64| {
             derivative.zip_mut_with(&state, |derivative, state| *derivative = -*state);
@@ -74,6 +78,22 @@ fn solver_throughput(criterion: &mut Criterion) {
     group.bench_function("explicit/tsit5_lorenz", |bencher| {
         bencher.iter(|| {
             let solution = solve(black_box(&explicit), Tsit5, black_box(&options))
+                .expect("benchmark problem must solve");
+            black_box(solution.last_state()[0]);
+        });
+    });
+
+    group.bench_function("low_storage/rdpk3spfsal510_lorenz", |bencher| {
+        bencher.iter(|| {
+            let solution = solve(black_box(&explicit), RDPK3SpFSAL510, black_box(&options))
+                .expect("benchmark problem must solve");
+            black_box(solution.last_state()[0]);
+        });
+    });
+
+    group.bench_function("low_storage/ckllsrk95_4m_lorenz", |bencher| {
+        bencher.iter(|| {
+            let solution = solve(black_box(&explicit), CKLLSRK95_4M, black_box(&options))
                 .expect("benchmark problem must solve");
             black_box(solution.last_state()[0]);
         });

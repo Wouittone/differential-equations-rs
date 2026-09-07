@@ -1,6 +1,7 @@
 use std::alloc::System;
 use std::hint::black_box;
 
+use differential_equations::ndarray::{ArrayView2, ArrayViewMut2, array};
 use differential_equations::solvers::explicit::*;
 use differential_equations::*;
 use stats_alloc::{INSTRUMENTED_SYSTEM, Region, StatsAlloc};
@@ -30,6 +31,46 @@ fn allocations_for<A: OdeAlgorithm + Copy>(algorithm: A, step: f64) -> usize {
         let region = Region::new(GLOBAL);
         let solution = solve(&problem, algorithm, &options).unwrap();
         black_box(solution.last_state());
+        region.change().allocations
+    })
+}
+
+fn adaptive_allocations_for<A: OdeAlgorithm + Copy>(algorithm: A, tolerance: f64) -> usize {
+    let problem = OdeProblem::new(
+        |derivative: &mut [f64], state: &[f64], _: &(), _: f64| {
+            derivative[0] = state[0];
+        },
+        vec![1.0],
+        (0.0, 1.0),
+        (),
+    );
+    let options = SolveOptions::new()
+        .with_tolerances(tolerance, tolerance)
+        .with_save(SaveMode::Endpoints);
+    allocation_support::minimum_measurement(|| {
+        let region = Region::new(GLOBAL);
+        let solution = solve(&problem, algorithm, &options).unwrap();
+        black_box(solution.last_state());
+        region.change().allocations
+    })
+}
+
+fn adaptive_array_allocations_for<A: OdeAlgorithm + Copy>(algorithm: A, tolerance: f64) -> usize {
+    let problem = OdeProblem::from_array(
+        |mut derivative: ArrayViewMut2<'_, f64>, state: ArrayView2<'_, f64>, _: &(), _: f64| {
+            derivative.assign(&state);
+        },
+        array![[1.0, 2.0], [3.0, 4.0]],
+        (0.0, 1.0),
+        (),
+    );
+    let options = SolveOptions::new()
+        .with_tolerances(tolerance, tolerance)
+        .with_save(SaveMode::Endpoints);
+    allocation_support::minimum_measurement(|| {
+        let region = Region::new(GLOBAL);
+        let solution = solve(&problem, algorithm, &options).unwrap();
+        black_box(solution.last_state_array());
         region.change().allocations
     })
 }
@@ -176,6 +217,43 @@ fn low_storage_resources_are_individually_lazy_and_steps_do_not_allocate() {
         assert!(
             hundred_steps <= maximum,
             "unexpected {label} low-storage solve allocation count: {hundred_steps}"
+        );
+    }
+
+    for (label, loose, tight) in [
+        (
+            "adaptive 3S-plus",
+            adaptive_allocations_for(RDPK3SpFSAL510, 1.0e-5),
+            adaptive_allocations_for(RDPK3SpFSAL510, 1.0e-10),
+        ),
+        (
+            "adaptive register pipeline",
+            adaptive_allocations_for(CKLLSRK95_4M, 1.0e-5),
+            adaptive_allocations_for(CKLLSRK95_4M, 1.0e-10),
+        ),
+    ] {
+        assert!(
+            tight <= loose,
+            "{label} allocations grew with adaptive work: {loose} -> {tight}"
+        );
+        assert!(loose <= 8, "unexpected {label} allocation count: {loose}");
+    }
+
+    for (label, loose, tight) in [
+        (
+            "adaptive ndarray 3S-plus",
+            adaptive_array_allocations_for(RDPK3SpFSAL510, 1.0e-5),
+            adaptive_array_allocations_for(RDPK3SpFSAL510, 1.0e-10),
+        ),
+        (
+            "adaptive ndarray register pipeline",
+            adaptive_array_allocations_for(CKLLSRK95_4M, 1.0e-5),
+            adaptive_array_allocations_for(CKLLSRK95_4M, 1.0e-10),
+        ),
+    ] {
+        assert!(
+            tight <= loose,
+            "{label} allocations grew with adaptive work: {loose} -> {tight}"
         );
     }
 }

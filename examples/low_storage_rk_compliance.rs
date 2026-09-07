@@ -20,6 +20,14 @@ fn endpoint<A: OdeAlgorithm>(algorithm: A) -> f64 {
     solve(&problem(), algorithm, &options).unwrap().last_state()[0]
 }
 
+fn adaptive_endpoint<A: OdeAlgorithm>(algorithm: A) -> f64 {
+    let options = SolveOptions::new()
+        .with_initial_step(0.1)
+        .with_tolerances(1.0e-8, 1.0e-8)
+        .with_save(SaveMode::Endpoints);
+    solve(&problem(), algorithm, &options).unwrap().last_state()[0]
+}
+
 fn main() {
     println!("ork256,{:.17e}", endpoint(Ork256));
     println!(
@@ -92,4 +100,43 @@ fn main() {
     println!("shlddrk_2n,{:.17e}", endpoint(SHLDDRK_2N));
     println!("shlddrk52,{:.17e}", endpoint(SHLDDRK52));
     println!("tslddrk74,{:.17e}", endpoint(TSLDDRK74));
+    println!("adaptive_rdpk3sp35,{:.17e}", adaptive_endpoint(RDPK3Sp35));
+    println!("adaptive_rdpk3sp49,{:.17e}", adaptive_endpoint(RDPK3Sp49));
+    println!("adaptive_rdpk3sp510,{:.17e}", adaptive_endpoint(RDPK3Sp510));
+    println!(
+        "adaptive_rdpk3spfsal35,{:.17e}",
+        adaptive_endpoint(RDPK3SpFSAL35)
+    );
+    println!(
+        "adaptive_rdpk3spfsal49,{:.17e}",
+        adaptive_endpoint(RDPK3SpFSAL49)
+    );
+    println!(
+        "adaptive_rdpk3spfsal510,{:.17e}",
+        adaptive_endpoint(RDPK3SpFSAL510)
+    );
+    println!(
+        "adaptive_ckllsrk43_2,{:.17e}",
+        adaptive_endpoint(CKLLSRK43_2)
+    );
+    println!(
+        "adaptive_ckllsrk54_3m_3r,{:.17e}",
+        adaptive_endpoint(CKLLSRK54_3M_3R)
+    );
+    println!(
+        "adaptive_ckllsrk65_4m_4r,{:.17e}",
+        adaptive_endpoint(CKLLSRK65_4M_4R)
+    );
+    println!(
+        "adaptive_ckllsrk75_4m_5r,{:.17e}",
+        adaptive_endpoint(CKLLSRK75_4M_5R)
+    );
+    println!(
+        "adaptive_ckllsrk85_4m_3r,{:.17e}",
+        adaptive_endpoint(CKLLSRK85_4M_3R)
+    );
+    println!(
+        "adaptive_ckllsrk95_4m,{:.17e}",
+        adaptive_endpoint(CKLLSRK95_4M)
+    );
 }

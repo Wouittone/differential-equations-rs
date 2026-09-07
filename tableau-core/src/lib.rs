@@ -19,8 +19,9 @@ pub use second_order::{
 };
 mod low_storage;
 pub use low_storage::{
-    AlternatingTwoNTableau, LowStorageAbcTableau, LowStorageEndpointEvaluation,
-    LowStorageNodePolicy, LowStorageRungeKuttaLayout, LowStorageRungeKuttaTableau,
+    AlternatingTwoNTableau, LowStorageAbcTableau, LowStorageAdaptiveController,
+    LowStorageEmbeddedTableau, LowStorageEndpointEvaluation, LowStorageNodePolicy,
+    LowStoragePidController, LowStorageRungeKuttaLayout, LowStorageRungeKuttaTableau,
     RegisterPipelineTableau, ThreeSTableau, parse_low_storage_tableau,
 };
 

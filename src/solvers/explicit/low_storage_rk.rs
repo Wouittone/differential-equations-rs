@@ -1,9 +1,11 @@
-//! Fixed-step low-storage Runge--Kutta methods.
+//! Low-storage Runge--Kutta methods.
 //!
 //! Every built-in method owns one compile-time-validated JSON resource and
 //! materializes only its selected recurrence. The public algorithm values are
 //! zero-sized; [`ResourceLowStorageRungeKutta`] is the shared downstream
-//! execution surface.
+//! execution surface. RDPK 3S-plus and CKLL register-pipeline methods include
+//! their upstream embedded estimators and support adaptive stepping; the other
+//! recurrences remain fixed-step methods.
 
 mod kernels;
 

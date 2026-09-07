@@ -92,6 +92,10 @@ fn representative_methods_recover_every_claimed_design_order() {
         ("Ndblsrk124", observed_order(Ndblsrk124), 3.75),
         ("Ndblsrk134", observed_order(Ndblsrk134), 3.75),
         ("Ndblsrk144", observed_order(Ndblsrk144), 3.75),
+        ("RDPK3Sp35", observed_order(RDPK3Sp35), 2.8),
+        ("RDPK3SpFSAL510", observed_order(RDPK3SpFSAL510), 4.7),
+        ("CKLLSRK43_2", observed_order(CKLLSRK43_2), 2.8),
+        ("CKLLSRK95_4M", observed_order(CKLLSRK95_4M), 4.7),
     ] {
         assert!(
             observed > minimum,

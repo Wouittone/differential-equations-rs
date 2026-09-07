@@ -87,7 +87,23 @@ pub(crate) struct ControllerConfig {
     rejected_acceptance_maximum: f64,
     rejection_maximum: f64,
     failed_attempt_factor: f64,
-    integral_exponent: f64,
+    strategy: ControllerStrategy,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum ControllerStrategy {
+    Proportional {
+        integral_exponent: f64,
+    },
+    Pi {
+        beta1: f64,
+        beta2: f64,
+        initial_previous_error: f64,
+    },
+    Pid {
+        beta: [f64; 3],
+        acceptance_safety: f64,
+    },
 }
 
 impl ControllerConfig {
@@ -106,7 +122,9 @@ impl ControllerConfig {
             rejected_acceptance_maximum: 1.0,
             rejection_maximum: 1.0,
             failed_attempt_factor,
-            integral_exponent: 0.0,
+            strategy: ControllerStrategy::Proportional {
+                integral_exponent: 0.0,
+            },
         }
     }
 
@@ -114,8 +132,44 @@ impl ControllerConfig {
     /// Zero preserves the existing proportional controller exactly.
     #[allow(dead_code)]
     pub(crate) const fn with_integral_exponent(mut self, integral_exponent: f64) -> Self {
-        self.integral_exponent = integral_exponent;
+        self.strategy = ControllerStrategy::Proportional { integral_exponent };
         self
+    }
+
+    /// SciML's standard PI policy for an adaptive method of fixed order.
+    pub(crate) fn standard_pi(error_order: usize) -> Self {
+        let order = error_order as f64;
+        Self {
+            error_order,
+            safety: 0.9,
+            minimum_factor: 0.2,
+            maximum_factor: 10.0,
+            rejected_acceptance_maximum: 1.0,
+            rejection_maximum: 1.0,
+            failed_attempt_factor: 0.2,
+            strategy: ControllerStrategy::Pi {
+                beta1: 0.7 / order,
+                beta2: 0.4 / order,
+                initial_previous_error: 1.0e-4,
+            },
+        }
+    }
+
+    /// Smooth PID policy used by optimized low-storage embedded pairs.
+    pub(crate) const fn pid(error_order: usize, beta: [f64; 3], acceptance_safety: f64) -> Self {
+        Self {
+            error_order,
+            safety: 1.0,
+            minimum_factor: 0.0,
+            maximum_factor: f64::INFINITY,
+            rejected_acceptance_maximum: f64::INFINITY,
+            rejection_maximum: f64::INFINITY,
+            failed_attempt_factor: 0.2,
+            strategy: ControllerStrategy::Pid {
+                beta,
+                acceptance_safety,
+            },
+        }
     }
 
     const fn default_for_order(error_order: usize) -> Self {
@@ -748,7 +802,7 @@ where
             {
                 stats.rejected_steps += 1;
                 kernel.reject_step();
-                controller_state.rejected(1.0);
+                controller_state.rejected(1.0, capabilities.controller);
                 step = kernel
                     .modify_step(attempted_step * capabilities.controller.failed_attempt_factor);
                 previous_step_rejected = true;
@@ -760,7 +814,7 @@ where
             return Err(SolveError::NonFiniteDerivative);
         }
 
-        if estimate.error_norm <= 1.0 {
+        if controller_state.accepts(estimate.error_norm, capabilities.controller) {
             let previous_time = time;
             let mut next_time = time + attempted_step;
             if direction * (end - next_time) <= 0.0 {
@@ -922,6 +976,9 @@ where
                 controller_state.reset();
             }
             if callbacks.requested_step.is_some() {
+                if options.adaptive && !callbacks.state_modified {
+                    controller_state.accepted(estimate.error_norm, capabilities.controller);
+                }
                 step = kernel.modify_step(callback_adjusted_step(
                     callbacks,
                     step,
@@ -929,10 +986,12 @@ where
                     maximum_step,
                 ));
             } else if options.adaptive {
-                controller_state.accepted(estimate.error_norm);
                 let mut factor = estimate.proposed_factor.unwrap_or_else(|| {
                     controller_state.factor(estimate.error_norm, capabilities.controller)
                 });
+                if !callbacks.state_modified {
+                    controller_state.accepted(estimate.error_norm, capabilities.controller);
+                }
                 if previous_step_rejected {
                     factor = factor.min(capabilities.controller.rejected_acceptance_maximum);
                 }
@@ -955,13 +1014,13 @@ where
         } else {
             stats.rejected_steps += 1;
             kernel.reject_step();
-            controller_state.rejected(estimate.error_norm);
             let factor = estimate
                 .proposed_factor
                 .unwrap_or_else(|| {
-                    controller_state.factor(estimate.error_norm, capabilities.controller)
+                    controller_state.rejection_factor(estimate.error_norm, capabilities.controller)
                 })
                 .min(capabilities.controller.rejection_maximum);
+            controller_state.rejected(estimate.error_norm, capabilities.controller);
             step = kernel.modify_step(attempted_step * factor);
             previous_step_rejected = true;
         }
@@ -1006,7 +1065,10 @@ fn step_factor_with_history(
     controller: ControllerConfig,
 ) -> f64 {
     let proportional = step_factor(error, controller);
-    if controller.integral_exponent == 0.0 {
+    let ControllerStrategy::Proportional { integral_exponent } = controller.strategy else {
+        return proportional;
+    };
+    if integral_exponent == 0.0 {
         return proportional;
     }
     let Some(previous_error) = previous_error.filter(|value| value.is_finite() && *value > 0.0)
@@ -1016,32 +1078,114 @@ fn step_factor_with_history(
     if !error.is_finite() || error <= 0.0 {
         return proportional;
     }
-    (proportional * previous_error.powf(controller.integral_exponent))
+    (proportional * previous_error.powf(integral_exponent))
         .clamp(controller.minimum_factor, controller.maximum_factor)
 }
 
 #[allow(dead_code)]
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub(crate) struct ControllerState {
     previous_error: Option<f64>,
+    older_error: Option<f64>,
 }
 
 #[allow(dead_code)]
 impl ControllerState {
     pub(crate) fn factor(&self, error: f64, controller: ControllerConfig) -> f64 {
-        step_factor_with_history(error, self.previous_error, controller)
+        match controller.strategy {
+            ControllerStrategy::Proportional { .. } => {
+                step_factor_with_history(error, self.previous_error, controller)
+            }
+            ControllerStrategy::Pi {
+                beta1,
+                beta2,
+                initial_previous_error,
+            } => {
+                if error == 0.0 {
+                    return controller.maximum_factor;
+                }
+                if !error.is_finite() || error < 0.0 {
+                    return controller.minimum_factor;
+                }
+                let previous = self.previous_error.unwrap_or(initial_previous_error);
+                (controller.safety * error.powf(-beta1) * previous.powf(beta2))
+                    .clamp(controller.minimum_factor, controller.maximum_factor)
+            }
+            ControllerStrategy::Pid { beta, .. } => {
+                if !error.is_finite() || error < 0.0 {
+                    return 1.0 + (-1.0_f64).atan();
+                }
+                let error = error.max(f64::EPSILON);
+                let previous = self.previous_error.unwrap_or(1.0);
+                let older = self.older_error.unwrap_or(1.0);
+                let order = controller.error_order as f64;
+                let unlimited = error.powf(-beta[0] / order)
+                    * previous.powf(-beta[1] / order)
+                    * older.powf(-beta[2] / order);
+                1.0 + (unlimited - 1.0).atan()
+            }
+        }
     }
 
-    pub(crate) fn accepted(&mut self, error: f64) {
-        self.previous_error = error.is_finite().then_some(error.max(f64::MIN_POSITIVE));
+    pub(crate) fn rejection_factor(&self, error: f64, controller: ControllerConfig) -> f64 {
+        match controller.strategy {
+            ControllerStrategy::Pi { beta1, .. } => {
+                if error == 0.0 {
+                    return controller.maximum_factor;
+                }
+                if !error.is_finite() || error < 0.0 {
+                    return controller.minimum_factor;
+                }
+                (controller.safety * error.powf(-beta1))
+                    .clamp(controller.minimum_factor, controller.maximum_factor)
+            }
+            ControllerStrategy::Proportional { .. } | ControllerStrategy::Pid { .. } => {
+                self.factor(error, controller)
+            }
+        }
     }
 
-    pub(crate) fn rejected(&mut self, error: f64) {
-        self.previous_error = error.is_finite().then_some(error.max(f64::MIN_POSITIVE));
+    pub(crate) fn accepts(&self, error: f64, controller: ControllerConfig) -> bool {
+        if !error.is_finite() || error < 0.0 {
+            return false;
+        }
+        match controller.strategy {
+            ControllerStrategy::Pid {
+                acceptance_safety, ..
+            } => self.factor(error, controller) >= acceptance_safety,
+            ControllerStrategy::Proportional { .. } | ControllerStrategy::Pi { .. } => error <= 1.0,
+        }
+    }
+
+    pub(crate) fn accepted(&mut self, error: f64, controller: ControllerConfig) {
+        match controller.strategy {
+            ControllerStrategy::Pid { .. } => {
+                self.older_error = self.previous_error;
+                self.previous_error = error.is_finite().then_some(error.max(f64::EPSILON));
+            }
+            ControllerStrategy::Pi {
+                initial_previous_error,
+                ..
+            } => {
+                self.previous_error = error
+                    .is_finite()
+                    .then_some(error.max(initial_previous_error));
+            }
+            ControllerStrategy::Proportional { .. } => {
+                self.previous_error = error.is_finite().then_some(error.max(f64::MIN_POSITIVE));
+            }
+        }
+    }
+
+    pub(crate) fn rejected(&mut self, error: f64, controller: ControllerConfig) {
+        if matches!(controller.strategy, ControllerStrategy::Proportional { .. }) {
+            self.previous_error = error.is_finite().then_some(error.max(f64::MIN_POSITIVE));
+        }
     }
 
     pub(crate) fn reset(&mut self) {
         self.previous_error = None;
+        self.older_error = None;
     }
 }
 
@@ -1068,6 +1212,8 @@ mod tests {
         first_candidate: Option<*const f64>,
         second_candidate: Option<*const f64>,
         unexpected_candidate: bool,
+        attempted_steps: Vec<f64>,
+        controller: ControllerConfig,
     }
 
     impl MockKernel {
@@ -1088,7 +1234,14 @@ mod tests {
                 first_candidate: None,
                 second_candidate: None,
                 unexpected_candidate: false,
+                attempted_steps: Vec::new(),
+                controller: ControllerConfig::proportional(1, 0.9, 0.2, 10.0, 0.2),
             }
+        }
+
+        fn with_controller(mut self, controller: ControllerConfig) -> Self {
+            self.controller = controller;
+            self
         }
 
         fn with_failures(failures: Vec<Option<SolveError>>) -> Self {
@@ -1116,10 +1269,9 @@ mod tests {
         F: crate::OdeFunction<P>,
     {
         fn capabilities(&self) -> KernelCapabilities {
-            let capabilities = KernelCapabilities::with_controller(
-                true,
-                ControllerConfig::proportional(1, 0.9, 0.2, 10.0, self.failed_attempt_factor),
-            );
+            let mut controller = self.controller;
+            controller.failed_attempt_factor = self.failed_attempt_factor;
+            let capabilities = KernelCapabilities::with_controller(true, controller);
             if self.recover_failures {
                 capabilities.recover_nonlinear_and_singular_failures()
             } else {
@@ -1163,6 +1315,7 @@ mod tests {
             _: &mut SolverStats,
         ) -> Result<StepEstimate, SolveError> {
             self.observe_candidate(candidate.as_ptr());
+            self.attempted_steps.push(step);
             let attempt = self.attempts;
             self.attempts += 1;
             if let Some(error) = self.failures.get(attempt).copied().flatten() {
@@ -1496,10 +1649,72 @@ mod tests {
             step_factor(0.25, pi)
         );
         let mut state = ControllerState::default();
-        state.accepted(0.5);
+        state.accepted(0.5, pi);
         assert!(state.factor(0.25, pi) < step_factor(0.25, pi));
         state.reset();
         assert_eq!(state.factor(0.25, pi), step_factor(0.25, pi));
+    }
+
+    #[test]
+    fn standard_pi_uses_pre_accept_history_and_current_error_only_on_rejection() {
+        let controller = ControllerConfig::standard_pi(4);
+        let mut state = ControllerState::default();
+        let first = state.factor(0.25, controller);
+        let expected_first = 0.9 * 0.25_f64.powf(-0.7 / 4.0) * 1.0e-4_f64.powf(0.4 / 4.0);
+        assert!((first - expected_first).abs() < 1.0e-15);
+
+        state.accepted(0.5, controller);
+        let next = state.factor(0.25, controller);
+        let expected_next = 0.9 * 0.25_f64.powf(-0.7 / 4.0) * 0.5_f64.powf(0.4 / 4.0);
+        assert!((next - expected_next).abs() < 1.0e-15);
+
+        let rejection = state.rejection_factor(0.25, controller);
+        let expected_rejection = 0.9 * 0.25_f64.powf(-0.7 / 4.0);
+        assert!((rejection - expected_rejection).abs() < 1.0e-15);
+        state.rejected(0.25, controller);
+        assert_eq!(state.previous_error, Some(0.5));
+    }
+
+    #[test]
+    fn unmodified_step_request_still_commits_controller_history() {
+        let problem = unit_problem((0.0, 1.0), 0.0).with_preset_time_callback([0.25], |_, _, _| {
+            CallbackAction::ContinueUnmodifiedWithStepSize(0.25)
+        });
+        let controller = ControllerConfig::standard_pi(4);
+        let mut kernel = MockKernel::with_errors(vec![0.25]).with_controller(controller);
+        let options = SolveOptions {
+            initial_step: Some(0.25),
+            save: SaveMode::Endpoints,
+            ..SolveOptions::default()
+        };
+
+        integrate(&problem, &options, &mut kernel).unwrap();
+
+        let expected_factor = 0.9 * 0.25_f64.powf(-0.7 / 4.0) * 0.25_f64.powf(0.4 / 4.0);
+        assert!((kernel.attempted_steps[2] - 0.25 * expected_factor).abs() < 1.0e-14);
+    }
+
+    #[test]
+    fn pid_rejects_invalid_errors_and_shifts_only_accepted_history() {
+        let controller = ControllerConfig::pid(3, [0.64, -0.31, 0.04], 0.81);
+        let mut state = ControllerState::default();
+        assert!(!state.accepts(f64::NAN, controller));
+        assert!(!state.accepts(f64::INFINITY, controller));
+        assert!(!state.accepts(-1.0, controller));
+
+        let before = state.factor(0.25, controller);
+        state.rejected(0.25, controller);
+        assert_eq!(state, ControllerState::default());
+        assert_eq!(state.factor(0.25, controller), before);
+
+        state.accepted(0.25, controller);
+        assert_eq!(state.previous_error, Some(0.25));
+        assert_eq!(state.older_error, None);
+        state.accepted(0.0, controller);
+        assert_eq!(state.previous_error, Some(f64::EPSILON));
+        assert_eq!(state.older_error, Some(0.25));
+        state.reset();
+        assert_eq!(state, ControllerState::default());
     }
 
     #[test]

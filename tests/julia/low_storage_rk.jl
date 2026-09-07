@@ -86,6 +86,23 @@ function low_storage_reference(algorithm::SHLDDRK_2N)
     only(solution.u[end])
 end
 
+function adaptive_low_storage_reference(algorithm)
+    function nonautonomous!(du, u, _, t)
+        du[1] = u[1] + t
+    end
+    problem = ODEProblem(nonautonomous!, [1.0], (0.0, 1.0))
+    solution = solve(
+        problem,
+        algorithm;
+        adaptive = true,
+        dt = 0.1,
+        abstol = 1.0e-8,
+        reltol = 1.0e-8,
+        save_everystep = false,
+    )
+    only(solution.u[end])
+end
+
 @testset "Low-storage Runge--Kutta compliance" begin
     rust = rust_low_storage_endpoints()
     julia = Dict(
@@ -141,12 +158,28 @@ end
         "shlddrk_2n" => low_storage_reference(SHLDDRK_2N()),
         "shlddrk52" => low_storage_reference(SHLDDRK52()),
         "tslddrk74" => low_storage_reference(TSLDDRK74()),
+        "adaptive_rdpk3sp35" => adaptive_low_storage_reference(RDPK3Sp35()),
+        "adaptive_rdpk3sp49" => adaptive_low_storage_reference(RDPK3Sp49()),
+        "adaptive_rdpk3sp510" => adaptive_low_storage_reference(RDPK3Sp510()),
+        "adaptive_rdpk3spfsal35" => adaptive_low_storage_reference(RDPK3SpFSAL35()),
+        "adaptive_rdpk3spfsal49" => adaptive_low_storage_reference(RDPK3SpFSAL49()),
+        "adaptive_rdpk3spfsal510" => adaptive_low_storage_reference(RDPK3SpFSAL510()),
+        "adaptive_ckllsrk43_2" => adaptive_low_storage_reference(CKLLSRK43_2()),
+        "adaptive_ckllsrk54_3m_3r" => adaptive_low_storage_reference(CKLLSRK54_3M_3R()),
+        "adaptive_ckllsrk65_4m_4r" => adaptive_low_storage_reference(CKLLSRK65_4M_4R()),
+        "adaptive_ckllsrk75_4m_5r" => adaptive_low_storage_reference(CKLLSRK75_4M_5R()),
+        "adaptive_ckllsrk85_4m_3r" => adaptive_low_storage_reference(CKLLSRK85_4M_3R()),
+        "adaptive_ckllsrk95_4m" => adaptive_low_storage_reference(CKLLSRK95_4M()),
     )
 
     @test Set(keys(rust)) == Set(keys(julia))
     for name in keys(julia)
         @testset "$name nonautonomous endpoint" begin
-            @test rust[name] ≈ julia[name] rtol = 5.0e-13 atol = 5.0e-14
+            if startswith(name, "adaptive_")
+                @test rust[name] ≈ julia[name] rtol = 5.0e-6 atol = 5.0e-8
+            else
+                @test rust[name] ≈ julia[name] rtol = 5.0e-13 atol = 5.0e-14
+            end
         end
     end
 end

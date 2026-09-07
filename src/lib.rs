@@ -80,10 +80,16 @@
 //!
 //! # Features
 //!
-//! `parallel` is enabled by default and adds Rayon-backed independent solves.
-//! Disable default features for a sequential-only dependency. The optional
-//! `allocation-metrics` feature enables instrumentation used by repository
-//! benchmark targets; it is not needed by ordinary users.
+//! The public Cargo feature surface is intentionally small:
+//!
+//! - `parallel` is enabled by default and adds Rayon-backed independent solves.
+//! - `allocation-metrics` enables repository benchmark instrumentation and is
+//!   not needed by ordinary users.
+//!
+//! Disabling default features selects sequential ensemble execution. State
+//! shape is part of the core API, not a feature: ndarray scalar, vector, and
+//! matrix adapters remain available with `default-features = false`. There are
+//! no `vector`, `matrix`, or `ndarray` feature flags.
 //!
 //! # Errors and panics
 //!

@@ -36,6 +36,14 @@ constants:
 - `register-pipeline` stores its rolling-state count, coefficient matrix,
   update weights, final weight, and nodes.
 
+Adaptive methods also store their embedded estimator in the same resource.
+RDPK 3S-plus resources carry the directly published error weights and PID
+controller parameters. CKLL register-pipeline resources carry `b_hat` and
+`b_hat_final`; the parser converts them to error weights once when that
+method's lazy tableau is first requested. It validates the estimator order,
+dimensions, zero-sum consistency, and controller parameters. No embedded
+weights or controller constants are duplicated in Rust source.
+
 The parser rejects irrelevant or missing layout fields, invalid dimensions,
 non-finite expressions or reconstructed stages, non-affine stage recurrences,
 and inconsistent final weights. Full-precision resources use a `1e-10`
@@ -52,7 +60,7 @@ equal the published recurrence row sum.
 
 Use `tableau::define_low_storage_rk_from_file!` to define a downstream solver
 with the same zero-sized public value, compile-time diagnostics, lazy loading,
-and fixed-step driver as the built-ins:
+and shared fixed/adaptive driver as the built-ins:
 
 ```rust,ignore
 use differential_equations::tableau::define_low_storage_rk_from_file;
@@ -70,11 +78,20 @@ For specialized integrations that already own an algorithm type,
 `define_low_storage_rk_tableau_from_file!` creates only a lazy static and
 `ResourceLowStorageRungeKutta::new` executes it. Runtime parse failures remain
 typed `TableauError` values during inspection and map to `InvalidTableau` when
-solving. All currently exposed low-storage methods remain fixed-step. The
-upstream RDPK 3S-plus and CKLL register-pipeline families also publish embedded
-estimators; representing those estimators and implementing genuine adaptive
-and FSAL behavior is tracked separately rather than pretending an endpoint
-evaluation is derivative reuse.
+solving. RDPK 3S-plus and CKLL register-pipeline methods use their embedded
+estimators for adaptive stepping and retain their accepted endpoint derivative
+for the next attempt. Rejected attempts keep the unchanged start derivative;
+state- or parameter-mutating callbacks invalidate it, while explicitly
+observation-only callbacks preserve it. The driver reuses the same cached
+derivatives for Hermite dense output and `save_at` sampling, so additional
+adaptive work or output samples do not introduce per-step allocation growth.
+Other low-storage methods remain fixed-step because their resources do not
+publish an embedded estimator.
+
+The pinned SciML revision marks `CKLLSRK95_4C`'s convergence test as broken.
+Its coefficients are preserved exactly for source parity, but users who need
+the strongest adaptive accuracy should prefer another CKLL 5th-order variant
+until the upstream method data is corrected.
 
 ## MRI-GARK resources
 

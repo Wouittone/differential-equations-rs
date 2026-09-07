@@ -228,7 +228,66 @@ pub struct LowStorageRungeKuttaTableau {
     order: usize,
     consistency_tolerance: f64,
     node_policy: LowStorageNodePolicy,
+    embedded: Option<LowStorageEmbeddedTableau>,
     layout: LowStorageRungeKuttaLayout,
+}
+
+/// Embedded local-error formula attached to a low-storage recurrence.
+///
+/// The weights multiply derivative stages in evaluation order and already
+/// represent the difference used by the estimator. An endpoint derivative,
+/// when present, is the final entry.
+#[derive(Clone, Debug, PartialEq)]
+pub struct LowStorageEmbeddedTableau {
+    order: usize,
+    error: Vec<f64>,
+    controller: LowStorageAdaptiveController,
+}
+
+impl LowStorageEmbeddedTableau {
+    /// Order of the embedded companion formula.
+    pub fn order(&self) -> usize {
+        self.order
+    }
+
+    /// Error-difference weights in derivative-evaluation order.
+    pub fn error(&self) -> &[f64] {
+        &self.error
+    }
+
+    /// Step-size controller policy supplied by the resource.
+    pub fn controller(&self) -> LowStorageAdaptiveController {
+        self.controller
+    }
+}
+
+/// Adaptive controller policy for a low-storage embedded pair.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub enum LowStorageAdaptiveController {
+    /// Use the library's standard PI policy for the method order.
+    #[default]
+    StandardPi,
+    /// Use the resource's optimized PID policy.
+    Pid(LowStoragePidController),
+}
+
+/// Coefficients for a method-specific PID step-size controller.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct LowStoragePidController {
+    beta: [f64; 3],
+    acceptance_safety: f64,
+}
+
+impl LowStoragePidController {
+    /// PID filter coefficients before division by the method order.
+    pub fn beta(self) -> [f64; 3] {
+        self.beta
+    }
+
+    /// Minimum filtered step ratio for accepting an attempted step.
+    pub fn acceptance_safety(self) -> f64 {
+        self.acceptance_safety
+    }
 }
 
 impl LowStorageRungeKuttaTableau {
@@ -261,6 +320,23 @@ impl LowStorageRungeKuttaTableau {
         self.node_policy
     }
 
+    /// Returns the embedded local-error formula, when the method is adaptive.
+    pub fn embedded(&self) -> Option<&LowStorageEmbeddedTableau> {
+        self.embedded.as_ref()
+    }
+
+    /// Returns whether an accepted endpoint derivative can seed the next step.
+    pub fn fsal(&self) -> bool {
+        match &self.layout {
+            LowStorageRungeKuttaLayout::ThreeS(tableau) => {
+                tableau.endpoint_evaluation() == LowStorageEndpointEvaluation::Evaluate
+            }
+            LowStorageRungeKuttaLayout::AlternatingTwoN(_)
+            | LowStorageRungeKuttaLayout::RegisterPipeline(_) => true,
+            LowStorageRungeKuttaLayout::TwoN(_) | LowStorageRungeKuttaLayout::TwoC(_) => false,
+        }
+    }
+
     /// Validated recurrence coefficients.
     pub fn layout(&self) -> &LowStorageRungeKuttaLayout {
         &self.layout
@@ -286,6 +362,25 @@ enum RawNodePolicy {
 enum RawEndpointEvaluation {
     Omit,
     Evaluate,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawEmbedded {
+    order: usize,
+    error: Option<Vec<Scalar>>,
+    b_hat: Option<Vec<Scalar>>,
+    b_hat_final: Option<Scalar>,
+    controller: Option<RawAdaptiveController>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
+enum RawAdaptiveController {
+    Pid {
+        beta: Vec<Scalar>,
+        acceptance_safety: Scalar,
+    },
 }
 
 impl From<RawEndpointEvaluation> for LowStorageEndpointEvaluation {
@@ -358,6 +453,7 @@ struct RawTableau {
     c2: Option<Vec<Scalar>>,
     history_states: Option<usize>,
     b_final: Option<Scalar>,
+    embedded: Option<RawEmbedded>,
 }
 
 /// Parses and validates a canonical low-storage Runge--Kutta JSON resource.
@@ -479,13 +575,140 @@ pub fn parse_low_storage_tableau(
         ));
     }
 
+    let embedded = raw
+        .embedded
+        .map(|embedded| materialize_embedded(embedded, raw.order, &layout, consistency_tolerance))
+        .transpose()?;
+
     Ok(LowStorageRungeKuttaTableau {
         name: raw.name,
         description: raw.description,
         order: raw.order,
         consistency_tolerance,
         node_policy,
+        embedded,
         layout,
+    })
+}
+
+fn materialize_embedded(
+    raw: RawEmbedded,
+    primary_order: usize,
+    layout: &LowStorageRungeKuttaLayout,
+    consistency_tolerance: f64,
+) -> Result<LowStorageEmbeddedTableau, TableauError> {
+    if raw.order == 0 || raw.order >= primary_order {
+        return Err(TableauError::new(
+            "low-storage embedded order must be positive and lower than the primary order",
+        ));
+    }
+    if !matches!(
+        layout,
+        LowStorageRungeKuttaLayout::ThreeS(_) | LowStorageRungeKuttaLayout::RegisterPipeline(_)
+    ) {
+        return Err(TableauError::new(
+            "embedded error formulas are only supported by 3S-plus and register-pipeline layouts",
+        ));
+    }
+
+    let error = match layout {
+        LowStorageRungeKuttaLayout::ThreeS(_) => {
+            if raw.b_hat.is_some() || raw.b_hat_final.is_some() {
+                return Err(TableauError::new(
+                    "3S-plus embedded formulas require direct `error` weights",
+                ));
+            }
+            materialize_vector(
+                &raw.error.ok_or_else(|| {
+                    TableauError::new("3S-plus embedded formulas require `error` weights")
+                })?,
+                "embedded error",
+            )?
+        }
+        LowStorageRungeKuttaLayout::RegisterPipeline(tableau) => {
+            match (raw.error, raw.b_hat, raw.b_hat_final) {
+                (Some(error), None, None) => materialize_vector(&error, "embedded error")?,
+                (None, Some(b_hat), Some(b_hat_final)) => {
+                    let b_hat = materialize_vector(&b_hat, "embedded b_hat")?;
+                    if b_hat.len() != tableau.b().len() {
+                        return Err(TableauError::new(format!(
+                            "embedded b_hat needs {} weights",
+                            tableau.b().len()
+                        )));
+                    }
+                    let mut error = tableau
+                        .b()
+                        .iter()
+                        .zip(b_hat)
+                        .map(|(b, b_hat)| b - b_hat)
+                        .collect::<Vec<_>>();
+                    error.push(tableau.b_final() - b_hat_final.materialize()?);
+                    error
+                }
+                _ => {
+                    return Err(TableauError::new(
+                        "register-pipeline embedded formulas require either `error`, or both `b_hat` and `b_hat_final`",
+                    ));
+                }
+            }
+        }
+        LowStorageRungeKuttaLayout::TwoN(_)
+        | LowStorageRungeKuttaLayout::TwoC(_)
+        | LowStorageRungeKuttaLayout::AlternatingTwoN(_) => unreachable!(),
+    };
+    let stages = layout.stages();
+    let endpoint_available = matches!(
+        layout,
+        LowStorageRungeKuttaLayout::ThreeS(tableau)
+            if tableau.endpoint_evaluation() == LowStorageEndpointEvaluation::Evaluate
+    ) || matches!(layout, LowStorageRungeKuttaLayout::RegisterPipeline(_));
+    if error.len() != stages && !(endpoint_available && error.len() == stages + 1) {
+        return Err(TableauError::new(format!(
+            "embedded error needs {stages} stage weights{}",
+            if endpoint_available {
+                " or one additional endpoint weight"
+            } else {
+                ""
+            }
+        )));
+    }
+    let sum: f64 = error.iter().sum();
+    if !approximately_equal_recurrence(sum, 0.0, consistency_tolerance) {
+        return Err(TableauError::new(format!(
+            "embedded error weights must sum to zero; found {sum}"
+        )));
+    }
+
+    let controller = match raw.controller {
+        None => LowStorageAdaptiveController::StandardPi,
+        Some(RawAdaptiveController::Pid {
+            beta,
+            acceptance_safety,
+        }) => {
+            let beta = materialize_vector(&beta, "PID beta")?;
+            let beta: [f64; 3] = beta.try_into().map_err(|_| {
+                TableauError::new("low-storage PID controller requires exactly three beta values")
+            })?;
+            let acceptance_safety = acceptance_safety.materialize()?;
+            if !(acceptance_safety.is_finite()
+                && acceptance_safety > 0.0
+                && acceptance_safety <= 1.0)
+            {
+                return Err(TableauError::new(
+                    "low-storage PID acceptance_safety must be in (0, 1]",
+                ));
+            }
+            LowStorageAdaptiveController::Pid(LowStoragePidController {
+                beta,
+                acceptance_safety,
+            })
+        }
+    };
+
+    Ok(LowStorageEmbeddedTableau {
+        order: raw.order,
+        error,
+        controller,
     })
 }
 
@@ -1049,5 +1272,79 @@ mod tests {
                 "accepted {source}"
             );
         }
+    }
+
+    #[test]
+    fn parses_direct_and_embedded_weight_formulas() {
+        let pipeline = PIPELINE.replace(
+            "\"c\":[\"1/2\"]",
+            "\"c\":[\"1/2\"],\"embedded\":{\"order\":1,\"b_hat\":[1],\"b_hat_final\":0}",
+        );
+        let tableau = parse_low_storage_tableau(&pipeline, "Pipeline").unwrap();
+        let embedded = tableau.embedded().unwrap();
+        assert_eq!(embedded.order(), 1);
+        assert_eq!(embedded.error(), [-1.0, 1.0]);
+        assert_eq!(
+            embedded.controller(),
+            LowStorageAdaptiveController::StandardPi
+        );
+
+        let three_s = THREE_S
+            .replace("\"order\":1", "\"order\":2")
+            .replace(
+                "\"endpoint_evaluation\":\"omit\"",
+                "\"endpoint_evaluation\":\"omit\",\"embedded\":{\"order\":1,\"error\":[-1,1],\"controller\":{\"kind\":\"pid\",\"beta\":[\"0.7\",\"-0.2\",0],\"acceptance_safety\":\"0.81\"}}",
+            );
+        let tableau = parse_low_storage_tableau(&three_s, "Euler3S").unwrap();
+        let embedded = tableau.embedded().unwrap();
+        let LowStorageAdaptiveController::Pid(controller) = embedded.controller() else {
+            panic!("expected a PID controller")
+        };
+        assert_eq!(controller.beta(), [0.7, -0.2, 0.0]);
+        assert_eq!(controller.acceptance_safety(), 0.81);
+    }
+
+    #[test]
+    fn rejects_malformed_embedded_formulas_and_controllers() {
+        let embedded_pipeline = PIPELINE.replace(
+            "\"c\":[\"1/2\"]",
+            "\"c\":[\"1/2\"],\"embedded\":{\"order\":1,\"b_hat\":[1],\"b_hat_final\":0}",
+        );
+        let invalid = [
+            embedded_pipeline.replace("\"order\":1,\"b_hat\"", "\"order\":2,\"b_hat\""),
+            embedded_pipeline.replace(
+                "\"b_hat\":[1],\"b_hat_final\":0",
+                "\"b_hat\":[1]",
+            ),
+            embedded_pipeline.replace("\"b_hat\":[1]", "\"b_hat\":[1,0]"),
+            embedded_pipeline.replace(
+                "\"b_hat\":[1],\"b_hat_final\":0",
+                "\"error\":[-1,1],\"b_hat\":[1],\"b_hat_final\":0",
+            ),
+            embedded_pipeline.replace(
+                "\"b_hat\":[1],\"b_hat_final\":0",
+                "\"error\":[1,1]",
+            ),
+            embedded_pipeline.replace(
+                "\"b_hat\":[1],\"b_hat_final\":0",
+                "\"error\":[-1,1],\"controller\":{\"kind\":\"pid\",\"beta\":[1,0],\"acceptance_safety\":\"0.81\"}",
+            ),
+            embedded_pipeline.replace(
+                "\"b_hat\":[1],\"b_hat_final\":0",
+                "\"error\":[-1,1],\"controller\":{\"kind\":\"pid\",\"beta\":[1,0,0],\"acceptance_safety\":2}",
+            ),
+        ];
+        for source in invalid {
+            assert!(
+                parse_low_storage_tableau(&source, "Pipeline").is_err(),
+                "accepted {source}"
+            );
+        }
+
+        let fixed_layout = TWO_N.replace(
+            "\"c\":[\"1/2\"]",
+            "\"c\":[\"1/2\"],\"embedded\":{\"order\":1,\"error\":[-1,1]}",
+        );
+        assert!(parse_low_storage_tableau(&fixed_layout, "Williamson2").is_err());
     }
 }

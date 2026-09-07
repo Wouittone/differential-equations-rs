@@ -2058,7 +2058,7 @@ where
 
         if error > 1.0 {
             stats.rejected_steps += 1;
-            controller_state.rejected(error);
+            controller_state.rejected(error, controller);
             step_magnitude = step.abs() * controller_state.factor(error, controller).min(1.0);
             previous_attempt_rejected = true;
             continue;
@@ -2167,7 +2167,7 @@ where
             )
             .abs();
         } else if options.adaptive {
-            controller_state.accepted(error);
+            controller_state.accepted(error, controller);
             let mut factor = controller_state.factor(error, controller);
             if previous_attempt_rejected {
                 factor = factor.min(1.0);
@@ -2966,7 +2966,7 @@ where
                 previous_attempt_rejected = false;
             } else if options.adaptive {
                 let factor = controller_state.factor(error, controller);
-                controller_state.accepted(error);
+                controller_state.accepted(error, controller);
                 let factor = if previous_attempt_rejected {
                     factor.min(1.0)
                 } else {
@@ -2991,7 +2991,7 @@ where
             }
         } else {
             stats.rejected_steps += 1;
-            controller_state.rejected(error);
+            controller_state.rejected(error, controller);
             let factor = controller_state.factor(error, controller).min(1.0);
             step_magnitude = (step.abs() * factor).min(maximum_step);
             previous_attempt_rejected = true;

@@ -6,8 +6,8 @@ use differential_equations::ndarray::{
     ShapeBuilder, arr0, array,
 };
 use differential_equations::solvers::explicit::{
-    Anas5, CarpenterKennedy2N54, Euler, Frk65, SSPRKMSVS32, SplitEuler, SplitOdeAlgorithm,
-    SspRk432, Tsit5, solve_split,
+    Anas5, CKLLSRK95_4M, CarpenterKennedy2N54, Euler, Frk65, RDPK3SpFSAL510, SSPRKMSVS32,
+    SplitEuler, SplitOdeAlgorithm, SspRk432, Tsit5, solve_split,
 };
 use differential_equations::solvers::exponential::NorsettEuler;
 use differential_equations::solvers::extrapolation::ExtrapolationMidpointDeuflhard;
@@ -304,10 +304,53 @@ fn adaptive_returned_arrays_match_the_in_place_problem() {
             solve(&out, Rodas5P, &options).unwrap(),
             solve(&inplace, Rodas5P, &options).unwrap(),
         ),
+        (
+            solve(&out, RDPK3SpFSAL510, &options).unwrap(),
+            solve(&inplace, RDPK3SpFSAL510, &options).unwrap(),
+        ),
+        (
+            solve(&out, CKLLSRK95_4M, &options).unwrap(),
+            solve(&inplace, CKLLSRK95_4M, &options).unwrap(),
+        ),
     ] {
+        assert_eq!(actual.times(), expected.times());
         assert_eq!(actual.values(), expected.values());
         assert_eq!(actual.stats(), expected.stats());
     }
+}
+
+#[test]
+fn adaptive_low_storage_propagates_returned_array_shape_errors() {
+    fn check<A: OdeAlgorithm + Copy>(algorithm: A) {
+        let invalid_initial = OdeProblem::from_array_out_of_place(
+            |_: ArrayView1<'_, f64>, _: &(), _| array![0.0],
+            array![1.0, 2.0],
+            (0.0, 0.1),
+            (),
+        );
+        let invalid_stage = OdeProblem::from_array_out_of_place(
+            |u: ArrayView1<'_, f64>, _: &(), time| {
+                if time == 0.0 { -&u } else { array![0.0] }
+            },
+            array![1.0, 2.0],
+            (0.0, 0.1),
+            (),
+        );
+        let options = SolveOptions::new()
+            .with_initial_step(0.05)
+            .with_tolerances(1.0e-9, 1.0e-9)
+            .with_save(SaveMode::Endpoints);
+        assert_eq!(
+            solve(&invalid_initial, algorithm, &options),
+            Err(SolveError::DerivativeShapeMismatch)
+        );
+        assert_eq!(
+            solve(&invalid_stage, algorithm, &options),
+            Err(SolveError::DerivativeShapeMismatch)
+        );
+    }
+    check(RDPK3SpFSAL510);
+    check(CKLLSRK95_4M);
 }
 
 #[test]

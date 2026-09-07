@@ -13,7 +13,8 @@ use std::sync::LazyLock;
 pub use differential_equations_tableau_core::{
     AlternatingTwoNTableau, FittedWeight, IrknBootstrapSeed, IrknTableau,
     LazyDenseStage as ParsedLazyDenseStage, LinearMultistepTableau, LowStorageAbcTableau,
-    LowStorageEndpointEvaluation, LowStorageNodePolicy, LowStorageRungeKuttaLayout,
+    LowStorageAdaptiveController, LowStorageEmbeddedTableau, LowStorageEndpointEvaluation,
+    LowStorageNodePolicy, LowStoragePidController, LowStorageRungeKuttaLayout,
     LowStorageRungeKuttaTableau, MisTableau, MriTableau, RegisterPipelineTableau, RosenbrockKind,
     RosenbrockPairTableau, RosenbrockTableau, RungeKuttaKind, RungeKuttaNystromKind,
     RungeKuttaNystromTableau, RungeKuttaTableau, SymplecticTableau, TableauError, ThreeSTableau,

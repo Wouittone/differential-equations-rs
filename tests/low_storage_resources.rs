@@ -1,10 +1,15 @@
-use differential_equations::ndarray::{ArrayViewD, ArrayViewMutD, arr0, array};
+use differential_equations::ndarray::{
+    ArrayView0, ArrayView1, ArrayView2, ArrayViewD, ArrayViewMut0, ArrayViewMut1, ArrayViewMut2,
+    ArrayViewMutD, arr0, array,
+};
 use differential_equations::solvers::explicit::low_storage_rk::*;
 use differential_equations::tableau::{
-    LowStorageEndpointEvaluation, LowStorageNodePolicy, LowStorageRungeKuttaLayout,
-    LowStorageRungeKuttaTableau,
+    LowStorageAdaptiveController, LowStorageEndpointEvaluation, LowStorageNodePolicy,
+    LowStorageRungeKuttaLayout, LowStorageRungeKuttaTableau,
 };
-use differential_equations::{OdeAlgorithm, OdeProblem, SaveMode, SolveError, SolveOptions, solve};
+use differential_equations::{
+    CallbackAction, OdeAlgorithm, OdeProblem, SaveMode, SolveError, SolveOptions, solve,
+};
 
 const FNV_OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
 const FNV_PRIME: u64 = 0x0000_0100_0000_01b3;
@@ -48,6 +53,24 @@ fn fingerprint(hash: &mut u64, tableau: &LowStorageRungeKuttaTableau) {
             LowStorageNodePolicy::Independent => 1,
         }],
     );
+    match tableau.embedded() {
+        None => hash_raw_bytes(hash, &[0]),
+        Some(embedded) => {
+            hash_raw_bytes(hash, &[1]);
+            hash_usize(hash, embedded.order());
+            hash_vector(hash, embedded.error());
+            match embedded.controller() {
+                LowStorageAdaptiveController::StandardPi => hash_raw_bytes(hash, &[0]),
+                LowStorageAdaptiveController::Pid(controller) => {
+                    hash_raw_bytes(hash, &[1]);
+                    for beta in controller.beta() {
+                        hash_f64(hash, beta);
+                    }
+                    hash_f64(hash, controller.acceptance_safety());
+                }
+            }
+        }
+    }
     match tableau.layout() {
         LowStorageRungeKuttaLayout::TwoN(tableau) => {
             hash_raw_bytes(hash, &[0]);
@@ -331,7 +354,63 @@ fn all_builtin_resources_preserve_metadata_and_coefficient_bits() {
         (7, None)
     );
 
-    assert_eq!(hash, 0x9742_b4f4_f32b_ca01);
+    assert_eq!(hash, 0x978d_aaef_4d63_05eb);
+}
+
+#[test]
+fn embedded_family_metadata_has_expected_semantics() {
+    macro_rules! check_rdpk {
+        ($method:expr, $fsal:literal) => {{
+            let tableau = $method.tableau().unwrap();
+            let embedded = tableau.embedded().unwrap();
+            assert_eq!(embedded.order() + 1, tableau.order());
+            assert_eq!(tableau.fsal(), $fsal);
+            assert_eq!(
+                embedded.error().len(),
+                tableau.layout().stages() + usize::from($fsal)
+            );
+            assert!(matches!(
+                embedded.controller(),
+                LowStorageAdaptiveController::Pid(_)
+            ));
+        }};
+    }
+    check_rdpk!(RDPK3Sp35, false);
+    check_rdpk!(RDPK3Sp49, false);
+    check_rdpk!(RDPK3Sp510, false);
+    check_rdpk!(RDPK3SpFSAL35, true);
+    check_rdpk!(RDPK3SpFSAL49, true);
+    check_rdpk!(RDPK3SpFSAL510, true);
+
+    macro_rules! check_ckll {
+        ($method:expr) => {{
+            let tableau = $method.tableau().unwrap();
+            let embedded = tableau.embedded().unwrap();
+            assert_eq!(embedded.order() + 1, tableau.order());
+            assert!(tableau.fsal());
+            assert_eq!(embedded.error().len(), tableau.layout().stages());
+            assert_eq!(
+                embedded.controller(),
+                LowStorageAdaptiveController::StandardPi
+            );
+        }};
+    }
+    check_ckll!(CKLLSRK43_2);
+    check_ckll!(CKLLSRK54_3C);
+    check_ckll!(CKLLSRK95_4S);
+    check_ckll!(CKLLSRK95_4C);
+    check_ckll!(CKLLSRK95_4M);
+    check_ckll!(CKLLSRK54_3C_3R);
+    check_ckll!(CKLLSRK54_3M_3R);
+    check_ckll!(CKLLSRK54_3N_3R);
+    check_ckll!(CKLLSRK85_4C_3R);
+    check_ckll!(CKLLSRK85_4M_3R);
+    check_ckll!(CKLLSRK85_4P_3R);
+    check_ckll!(CKLLSRK54_3N_4R);
+    check_ckll!(CKLLSRK54_3M_4R);
+    check_ckll!(CKLLSRK65_4M_4R);
+    check_ckll!(CKLLSRK85_4FM_4R);
+    check_ckll!(CKLLSRK75_4M_5R);
 }
 
 fn fixed_options(step: f64) -> SolveOptions {
@@ -370,7 +449,294 @@ fn recurrence_layouts_preserve_endpoint_evaluation_semantics() {
     );
     let solution = solve(&problem, SHLDDRK_2N, &fixed_options(0.1)).unwrap();
     assert_eq!(solution.stats().accepted_steps, 2);
-    assert_eq!(solution.stats().rhs_evaluations, 13);
+    assert_eq!(solution.stats().rhs_evaluations, 12);
+}
+
+fn assert_adaptive_solution<A: OdeAlgorithm>(algorithm: A) {
+    let problem = OdeProblem::new(
+        |du: &mut [f64], u: &[f64], _: &(), _| du[0] = -u[0],
+        [1.0],
+        (0.0, 1.0),
+        (),
+    );
+    let options = SolveOptions::new()
+        .with_tolerances(1.0e-9, 1.0e-9)
+        .with_save(SaveMode::Endpoints);
+    let solution = solve(&problem, algorithm, &options).unwrap();
+    assert!(solution.stats().accepted_steps > 0);
+    let error = (solution.last_state()[0] - (-1.0_f64).exp()).abs();
+    assert!(
+        error < 1.0e-5,
+        "{} produced error {error:e} after {} accepted and {} rejected steps",
+        std::any::type_name::<A>(),
+        solution.stats().accepted_steps,
+        solution.stats().rejected_steps,
+    );
+}
+
+#[test]
+fn every_embedded_low_storage_method_supports_adaptive_stepping() {
+    assert_adaptive_solution(RDPK3Sp35);
+    assert_adaptive_solution(RDPK3Sp49);
+    assert_adaptive_solution(RDPK3Sp510);
+    assert_adaptive_solution(RDPK3SpFSAL35);
+    assert_adaptive_solution(RDPK3SpFSAL49);
+    assert_adaptive_solution(RDPK3SpFSAL510);
+    assert_adaptive_solution(CKLLSRK43_2);
+    assert_adaptive_solution(CKLLSRK54_3C);
+    assert_adaptive_solution(CKLLSRK95_4S);
+    assert_adaptive_solution(CKLLSRK95_4C);
+    assert_adaptive_solution(CKLLSRK95_4M);
+    assert_adaptive_solution(CKLLSRK54_3C_3R);
+    assert_adaptive_solution(CKLLSRK54_3M_3R);
+    assert_adaptive_solution(CKLLSRK54_3N_3R);
+    assert_adaptive_solution(CKLLSRK85_4C_3R);
+    assert_adaptive_solution(CKLLSRK85_4M_3R);
+    assert_adaptive_solution(CKLLSRK85_4P_3R);
+    assert_adaptive_solution(CKLLSRK54_3N_4R);
+    assert_adaptive_solution(CKLLSRK54_3M_4R);
+    assert_adaptive_solution(CKLLSRK65_4M_4R);
+    assert_adaptive_solution(CKLLSRK85_4FM_4R);
+    assert_adaptive_solution(CKLLSRK75_4M_5R);
+}
+
+#[test]
+fn fsal_reuses_endpoint_derivatives_and_callbacks_invalidate_them() {
+    let problem = OdeProblem::new(
+        |du: &mut [f64], u: &[f64], _: &(), time| du[0] = u[0] + time,
+        [1.0],
+        (0.0, 0.2),
+        (),
+    );
+    let options = fixed_options(0.1);
+    assert_eq!(
+        solve(&problem, RDPK3Sp35, &options)
+            .unwrap()
+            .stats()
+            .rhs_evaluations,
+        10
+    );
+    assert_eq!(
+        solve(&problem, RDPK3SpFSAL35, &options)
+            .unwrap()
+            .stats()
+            .rhs_evaluations,
+        11
+    );
+    assert_eq!(
+        solve(&problem, CKLLSRK43_2, &options)
+            .unwrap()
+            .stats()
+            .rhs_evaluations,
+        9
+    );
+
+    let observation_problem =
+        problem.with_preset_time_callback([0.1], |_, _, _| CallbackAction::ContinueUnmodified);
+    assert_eq!(
+        solve(&observation_problem, CKLLSRK43_2, &options)
+            .unwrap()
+            .stats()
+            .rhs_evaluations,
+        9
+    );
+
+    let callback_problem = OdeProblem::new(
+        |du: &mut [f64], u: &[f64], _: &(), time| du[0] = u[0] + time,
+        [1.0],
+        (0.0, 0.2),
+        (),
+    )
+    .with_preset_time_callback([0.1], |state, _, _| {
+        state[0] += 1.0;
+        CallbackAction::Continue
+    });
+    assert_eq!(
+        solve(&callback_problem, CKLLSRK43_2, &options)
+            .unwrap()
+            .stats()
+            .rhs_evaluations,
+        10
+    );
+}
+
+#[test]
+fn continuous_root_truncation_invalidates_the_attempted_endpoint_derivative() {
+    let problem = OdeProblem::new(
+        |du: &mut [f64], u: &[f64], _: &(), time| du[0] = u[0] + time,
+        [1.0],
+        (0.0, 0.15),
+        (),
+    )
+    .with_continuous_callback(
+        |_, _, time| time - 0.05,
+        |_, _, _| CallbackAction::ContinueUnmodified,
+    );
+    let solution = solve(&problem, CKLLSRK43_2, &fixed_options(0.1)).unwrap();
+    assert_eq!(solution.stats().accepted_steps, 2);
+    assert_eq!(solution.stats().callback_invocations, 1);
+    assert_eq!(solution.stats().rhs_evaluations, 10);
+}
+
+#[test]
+fn dense_retention_and_save_at_reuse_cached_endpoint_derivatives() {
+    let problem = OdeProblem::new(
+        |du: &mut [f64], u: &[f64], _: &(), time| du[0] = u[0] + time,
+        [1.0],
+        (0.0, 0.2),
+        (),
+    );
+    let baseline = solve(&problem, CKLLSRK43_2, &fixed_options(0.1)).unwrap();
+    let dense = solve(
+        &problem,
+        CKLLSRK43_2,
+        &fixed_options(0.1).with_dense_output(true),
+    )
+    .unwrap();
+    let sampled = solve(
+        &problem,
+        CKLLSRK43_2,
+        &fixed_options(0.1).with_save_at([0.05, 0.15]),
+    )
+    .unwrap();
+    assert_eq!(baseline.stats().rhs_evaluations, 9);
+    assert_eq!(
+        dense.stats().rhs_evaluations,
+        baseline.stats().rhs_evaluations
+    );
+    assert_eq!(
+        sampled.stats().rhs_evaluations,
+        baseline.stats().rhs_evaluations
+    );
+    for &time in &[0.05, 0.15] {
+        let index = sampled
+            .times()
+            .iter()
+            .position(|saved| *saved == time)
+            .expect("requested sample must be saved");
+        let exact = 2.0 * time.exp() - time - 1.0;
+        assert!((sampled.state(index).unwrap()[0] - exact).abs() < 2.0e-4);
+    }
+
+    let plain_non_fsal = solve(&problem, RDPK3Sp35, &fixed_options(0.1)).unwrap();
+    let dense_non_fsal = solve(
+        &problem,
+        RDPK3Sp35,
+        &fixed_options(0.1).with_dense_output(true),
+    )
+    .unwrap();
+    assert_eq!(plain_non_fsal.stats().rhs_evaluations, 10);
+    assert_eq!(dense_non_fsal.stats().rhs_evaluations, 11);
+}
+
+#[test]
+fn rejected_register_pipeline_attempts_reuse_the_start_derivative() {
+    let problem = OdeProblem::new(
+        |du: &mut [f64], u: &[f64], _: &(), _| du[0] = u[0],
+        [1.0],
+        (0.0, 1.0),
+        (),
+    );
+    let options = SolveOptions::new()
+        .with_initial_step(1.0)
+        .with_tolerances(1.0e-12, 1.0e-12)
+        .with_save(SaveMode::Endpoints);
+    let solution = solve(&problem, CKLLSRK43_2, &options).unwrap();
+    let stats = solution.stats();
+    assert!(stats.rejected_steps > 0);
+    assert_eq!(
+        stats.rhs_evaluations,
+        1 + 4 * (stats.accepted_steps + stats.rejected_steps)
+    );
+}
+
+#[test]
+fn rejected_three_s_pid_attempts_reuse_the_start_derivative() {
+    let problem = OdeProblem::new(
+        |du: &mut [f64], u: &[f64], _: &(), _| du[0] = u[0],
+        [1.0],
+        (0.0, 1.0),
+        (),
+    );
+    let options = SolveOptions::new()
+        .with_initial_step(1.0)
+        .with_tolerances(1.0e-12, 1.0e-12)
+        .with_save(SaveMode::Endpoints);
+    let solution = solve(&problem, RDPK3SpFSAL35, &options).unwrap();
+    let stats = solution.stats();
+    assert!(stats.rejected_steps > 0);
+    assert_eq!(
+        stats.rhs_evaluations,
+        1 + 5 * (stats.accepted_steps + stats.rejected_steps)
+    );
+}
+
+#[test]
+fn tighter_tolerances_increase_adaptive_work_and_reduce_error() {
+    let problem = OdeProblem::new(
+        |du: &mut [f64], u: &[f64], _: &(), _| du[0] = u[0],
+        [1.0],
+        (0.0, 2.0),
+        (),
+    );
+    let loose = solve(
+        &problem,
+        RDPK3SpFSAL510,
+        &SolveOptions::new()
+            .with_tolerances(1.0e-4, 1.0e-4)
+            .with_save(SaveMode::Endpoints),
+    )
+    .unwrap();
+    let tight = solve(
+        &problem,
+        RDPK3SpFSAL510,
+        &SolveOptions::new()
+            .with_tolerances(1.0e-10, 1.0e-10)
+            .with_save(SaveMode::Endpoints),
+    )
+    .unwrap();
+    let exact = 2.0_f64.exp();
+    let loose_error = (loose.last_state()[0] - exact).abs();
+    let tight_error = (tight.last_state()[0] - exact).abs();
+    assert!(tight.stats().accepted_steps > loose.stats().accepted_steps);
+    assert!(
+        tight_error < loose_error,
+        "tight={tight_error:e}, loose={loose_error:e}"
+    );
+}
+
+#[test]
+fn tighter_tolerances_increase_ckll_work_and_reduce_error() {
+    let problem = OdeProblem::new(
+        |du: &mut [f64], u: &[f64], _: &(), _| du[0] = u[0],
+        [1.0],
+        (0.0, 2.0),
+        (),
+    );
+    let loose = solve(
+        &problem,
+        CKLLSRK95_4M,
+        &SolveOptions::new()
+            .with_tolerances(1.0e-4, 1.0e-4)
+            .with_save(SaveMode::Endpoints),
+    )
+    .unwrap();
+    let tight = solve(
+        &problem,
+        CKLLSRK95_4M,
+        &SolveOptions::new()
+            .with_tolerances(1.0e-10, 1.0e-10)
+            .with_save(SaveMode::Endpoints),
+    )
+    .unwrap();
+    let exact = 2.0_f64.exp();
+    let loose_error = (loose.last_state()[0] - exact).abs();
+    let tight_error = (tight.last_state()[0] - exact).abs();
+    assert!(tight.stats().accepted_steps > loose.stats().accepted_steps);
+    assert!(
+        tight_error < loose_error,
+        "tight={tight_error:e}, loose={loose_error:e}"
+    );
 }
 
 fn solve_shapes<A: OdeAlgorithm + Copy>(algorithm: A) {
@@ -403,6 +769,138 @@ fn every_recurrence_layout_supports_scalar_vector_and_matrix_states() {
     solve_shapes(ParsaniKetchesonDeconinck3S32);
     solve_shapes(SHLDDRK_2N);
     solve_shapes(CKLLSRK43_2);
+}
+
+fn solve_adaptive_shapes<A: OdeAlgorithm + Copy>(algorithm: A) {
+    let options = SolveOptions::new()
+        .with_tolerances(1.0e-9, 1.0e-9)
+        .with_save(SaveMode::Endpoints);
+    let scalar = OdeProblem::from_array(
+        |mut du: ArrayViewMut0<'_, f64>, u: ArrayView0<'_, f64>, _: &(), _| {
+            du[[]] = -u[[]];
+        },
+        arr0(1.0),
+        (0.0, 0.1),
+        (),
+    );
+    let vector = OdeProblem::from_array(
+        |mut du: ArrayViewMut1<'_, f64>, u: ArrayView1<'_, f64>, _: &(), _| {
+            du.zip_mut_with(&u, |du, u| *du = -*u);
+        },
+        array![1.0, 1.0],
+        (0.0, 0.1),
+        (),
+    );
+    let matrix = OdeProblem::from_array(
+        |mut du: ArrayViewMut2<'_, f64>, u: ArrayView2<'_, f64>, _: &(), _| {
+            du.zip_mut_with(&u, |du, u| *du = -*u);
+        },
+        array![[1.0, 1.0], [1.0, 1.0]],
+        (0.0, 0.1),
+        (),
+    );
+
+    let scalar_solution = solve(&scalar, algorithm, &options).unwrap();
+    let vector_solution = solve(&vector, algorithm, &options).unwrap();
+    let matrix_solution = solve(&matrix, algorithm, &options).unwrap();
+    assert!(scalar_solution.state_shape().is_empty());
+    assert_eq!(vector_solution.state_shape(), &[2]);
+    assert_eq!(matrix_solution.state_shape(), &[2, 2]);
+    let expected = (-0.1_f64).exp();
+    for actual in scalar_solution
+        .last_state()
+        .iter()
+        .chain(vector_solution.last_state())
+        .chain(matrix_solution.last_state())
+    {
+        assert!((*actual - expected).abs() < 1.0e-7);
+    }
+}
+
+#[test]
+fn adaptive_low_storage_layouts_support_scalar_vector_and_matrix_states() {
+    solve_adaptive_shapes(RDPK3SpFSAL510);
+    solve_adaptive_shapes(CKLLSRK54_3M_3R);
+}
+
+#[test]
+fn adaptive_low_storage_methods_integrate_backward() {
+    let problem = OdeProblem::new(
+        |du: &mut [f64], u: &[f64], _: &(), _| du[0] = -u[0],
+        [(-1.0_f64).exp()],
+        (1.0, 0.0),
+        (),
+    );
+    let options = SolveOptions::new()
+        .with_tolerances(1.0e-9, 1.0e-9)
+        .with_save(SaveMode::Endpoints);
+    for endpoint in [
+        solve(&problem, RDPK3SpFSAL510, &options)
+            .unwrap()
+            .last_state()[0],
+        solve(&problem, CKLLSRK95_4M, &options)
+            .unwrap()
+            .last_state()[0],
+    ] {
+        assert!((endpoint - 1.0).abs() < 1.0e-7);
+    }
+}
+
+#[test]
+fn adaptive_low_storage_handles_nonautonomous_forward_and_backward() {
+    let exact = |time: f64| 2.0 * time.exp() - time - 1.0;
+    let forward = OdeProblem::new(
+        |du: &mut [f64], u: &[f64], _: &(), time| du[0] = u[0] + time,
+        [exact(0.0)],
+        (0.0, 1.0),
+        (),
+    );
+    let backward = OdeProblem::new(
+        |du: &mut [f64], u: &[f64], _: &(), time| du[0] = u[0] + time,
+        [exact(1.0)],
+        (1.0, 0.0),
+        (),
+    );
+    let options = SolveOptions::new()
+        .with_tolerances(1.0e-9, 1.0e-9)
+        .with_save(SaveMode::Endpoints);
+    macro_rules! check {
+        ($method:expr) => {{
+            let forward_solution = solve(&forward, $method, &options).unwrap();
+            let backward_solution = solve(&backward, $method, &options).unwrap();
+            assert!((forward_solution.last_state()[0] - exact(1.0)).abs() < 1.0e-6);
+            assert!((backward_solution.last_state()[0] - exact(0.0)).abs() < 1.0e-6);
+        }};
+    }
+    check!(RDPK3Sp35);
+    check!(RDPK3SpFSAL510);
+    check!(CKLLSRK43_2);
+    check!(CKLLSRK95_4M);
+}
+
+#[test]
+fn repeated_adaptive_solves_do_not_leak_controller_or_cache_state() {
+    let problem = OdeProblem::new(
+        |du: &mut [f64], u: &[f64], _: &(), time| du[0] = u[0] + time,
+        [1.0],
+        (0.0, 1.0),
+        (),
+    );
+    let options = SolveOptions::new()
+        .with_initial_step(0.2)
+        .with_tolerances(1.0e-9, 1.0e-9)
+        .with_save(SaveMode::EveryStep);
+    macro_rules! check {
+        ($method:expr) => {{
+            let first = solve(&problem, $method, &options).unwrap();
+            let second = solve(&problem, $method, &options).unwrap();
+            assert_eq!(first.times(), second.times());
+            assert_eq!(first.values(), second.values());
+            assert_eq!(first.stats(), second.stats());
+        }};
+    }
+    check!(RDPK3SpFSAL510);
+    check!(CKLLSRK95_4M);
 }
 
 #[test]

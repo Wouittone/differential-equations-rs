@@ -40,7 +40,7 @@ generic named-constant banks are not acceptable final representations.
 - [x] Model every low-storage RK recurrence explicitly. This includes the 2N,
   2C, 3S, alternating-register, and register-pipeline layouts; each resource
   must validate the invariants of its actual recurrence.
-- [ ] Add the upstream embedded estimators and genuine adaptive/FSAL lifecycle
+- [x] Add the upstream embedded estimators and genuine adaptive/FSAL lifecycle
   for the RDPK 3S-plus and CKLL register-pipeline families. Preserve their
   method-specific controller metadata without reintroducing Rust constants.
 - [ ] Replace the combined ROCK/SERK/ESERK bank with typed stabilized-method
@@ -49,10 +49,10 @@ generic named-constant banks are not acceptable final representations.
 - [ ] Remove `define_tableau_data_from_file!`, every legacy `coefficient_data`
   module, and their obsolete combined resource files after the final consumer
   is migrated.
-- [ ] Keep resource JSON consistently styled with stable field ordering,
+- [x] Keep resource JSON consistently styled with stable field ordering,
   compact scalar vectors, and one matrix row per line without adding a
   formatting build step.
-- [ ] Keep the schemas and tableau resource guide synchronized with the actual
+- [x] Keep the schemas and tableau resource guide synchronized with the actual
   migration status.
 
 ### Implement genuine in-flight automatic switching

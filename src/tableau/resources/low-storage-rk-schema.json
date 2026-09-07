@@ -37,6 +37,37 @@
       "items": { "$ref": "#/$defs/vector" },
       "minItems": 1
     },
+    "embedded": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["order"],
+      "properties": {
+        "order": { "type": "integer", "minimum": 1 },
+        "error": { "$ref": "#/$defs/vector" },
+        "b_hat": { "$ref": "#/$defs/vector" },
+        "b_hat_final": { "$ref": "#/$defs/scalar" },
+        "controller": { "$ref": "#/$defs/controller" }
+      },
+      "oneOf": [
+        { "required": ["error"], "not": { "anyOf": [{ "required": ["b_hat"] }, { "required": ["b_hat_final"] }] } },
+        { "required": ["b_hat", "b_hat_final"], "not": { "required": ["error"] } }
+      ]
+    },
+    "controller": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "beta", "acceptance_safety"],
+      "properties": {
+        "kind": { "const": "pid" },
+        "beta": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/scalar" },
+          "minItems": 3,
+          "maxItems": 3
+        },
+        "acceptance_safety": { "$ref": "#/$defs/scalar" }
+      }
+    },
     "twoN": {
       "type": "object",
       "additionalProperties": false,
@@ -93,7 +124,8 @@
         "beta1": { "$ref": "#/$defs/scalar" },
         "beta2": { "$ref": "#/$defs/vector" },
         "c": { "$ref": "#/$defs/vector" },
-        "endpoint_evaluation": { "enum": ["omit", "evaluate"] }
+        "endpoint_evaluation": { "enum": ["omit", "evaluate"] },
+        "embedded": { "$ref": "#/$defs/embedded" }
       }
     },
     "alternatingTwoN": {
@@ -134,7 +166,8 @@
         "A": { "$ref": "#/$defs/matrix" },
         "b": { "$ref": "#/$defs/vector" },
         "b_final": { "$ref": "#/$defs/scalar" },
-        "c": { "$ref": "#/$defs/vector" }
+        "c": { "$ref": "#/$defs/vector" },
+        "embedded": { "$ref": "#/$defs/embedded" }
       }
     }
   }
