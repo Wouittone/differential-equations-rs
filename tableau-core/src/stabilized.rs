@@ -1,6 +1,6 @@
 use serde::Deserialize;
 
-use super::{Scalar, TableauError, approximately_equal};
+use super::{Scalar, TableauError, approximately_equal, materialize_matrix, materialize_vector};
 
 /// One two-term stage in a ROCK polynomial recurrence.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -94,6 +94,71 @@ impl Rock2Tableau {
     }
 }
 
+/// One validated, degree-specific ROCK4 tableau.
+///
+/// The polynomial recurrence advances to a stable base state. The finishing
+/// tableau then supplies the fourth-order solution and a third-order embedded
+/// companion used for adaptive error estimation.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Rock4Tableau {
+    name: String,
+    description: String,
+    order: usize,
+    embedded_order: usize,
+    degree: usize,
+    recurrence: RockRecurrence,
+    finishing_a: Vec<Vec<f64>>,
+    b: Vec<f64>,
+    b_hat: Vec<f64>,
+}
+
+impl Rock4Tableau {
+    /// Resource method name.
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// Human-readable method description and coefficient provenance.
+    pub fn description(&self) -> &str {
+        &self.description
+    }
+
+    /// Classical order verified from the reconstructed full RK method.
+    pub fn order(&self) -> usize {
+        self.order
+    }
+
+    /// Order of the verified embedded companion.
+    pub fn embedded_order(&self) -> usize {
+        self.embedded_order
+    }
+
+    /// Polynomial degree represented by this resource.
+    pub fn degree(&self) -> usize {
+        self.degree
+    }
+
+    /// Validated ROCK recurrence coefficients.
+    pub fn recurrence(&self) -> &RockRecurrence {
+        &self.recurrence
+    }
+
+    /// Strictly lower-triangular rows of the four-stage finishing tableau.
+    pub fn finishing_a(&self) -> &[Vec<f64>] {
+        &self.finishing_a
+    }
+
+    /// Primary finishing weights.
+    pub fn b(&self) -> &[f64] {
+        &self.b
+    }
+
+    /// Embedded finishing weights, including the endpoint derivative weight.
+    pub fn b_hat(&self) -> &[f64] {
+        &self.b_hat
+    }
+}
+
 #[derive(Clone, Copy, Debug, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 enum RawKind {
@@ -128,6 +193,38 @@ struct RawRockRecurrence {
 struct RawRock2Finish {
     first: Scalar,
     second: Scalar,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawRock4Tableau {
+    /// Editor-only JSON Schema hint, deliberately discarded after parsing.
+    #[serde(rename = "$schema", default)]
+    _schema: Option<String>,
+    name: String,
+    description: String,
+    #[serde(rename = "kind")]
+    _kind: RawRock4Kind,
+    order: usize,
+    embedded_order: usize,
+    degree: usize,
+    recurrence: RawRockRecurrence,
+    finishing: RawRock4Finish,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+enum RawRock4Kind {
+    Rock4,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawRock4Finish {
+    #[serde(rename = "A")]
+    a: Vec<Vec<Scalar>>,
+    b: Vec<Scalar>,
+    b_hat: Vec<Scalar>,
 }
 
 /// Parses and validates one degree-specific ROCK2 JSON resource.
@@ -170,22 +267,53 @@ pub fn parse_rock2_tableau(
         return Err(TableauError::new("ROCK2 resources must declare order 2"));
     }
 
-    let expected_stages = raw.degree - 1;
-    if raw.recurrence.stages.len() != expected_stages {
+    let recurrence = materialize_rock_recurrence(raw.recurrence, raw.degree, "ROCK2")?;
+    let finish_first = raw
+        .finishing
+        .first
+        .materialize()
+        .map_err(|error| TableauError::new(format!("finishing.first: {error}")))?;
+    let finish_second = raw
+        .finishing
+        .second
+        .materialize()
+        .map_err(|error| TableauError::new(format!("finishing.second: {error}")))?;
+
+    validate_order_two(
+        recurrence.first_stage,
+        &recurrence.stages,
+        finish_first,
+        finish_second,
+    )?;
+
+    Ok(Rock2Tableau {
+        name: raw.name,
+        description: raw.description,
+        order: raw.order,
+        degree: raw.degree,
+        recurrence,
+        finish_first,
+        finish_second,
+    })
+}
+
+fn materialize_rock_recurrence(
+    raw: RawRockRecurrence,
+    degree: usize,
+    family: &str,
+) -> Result<RockRecurrence, TableauError> {
+    let expected_stages = degree.saturating_sub(1);
+    if raw.stages.len() != expected_stages {
         return Err(TableauError::new(format!(
-            "ROCK2 degree {} requires {expected_stages} recurrence stages; found {}",
-            raw.degree,
-            raw.recurrence.stages.len()
+            "{family} degree {degree} requires {expected_stages} recurrence stages; found {}",
+            raw.stages.len()
         )));
     }
-
     let first_stage = raw
-        .recurrence
         .first
         .materialize()
         .map_err(|error| TableauError::new(format!("recurrence.first: {error}")))?;
     let stages = raw
-        .recurrence
         .stages
         .into_iter()
         .enumerate()
@@ -200,31 +328,202 @@ pub fn parse_rock2_tableau(
             })
         })
         .collect::<Result<Vec<_>, TableauError>>()?;
-    let finish_first = raw
-        .finishing
-        .first
-        .materialize()
-        .map_err(|error| TableauError::new(format!("finishing.first: {error}")))?;
-    let finish_second = raw
-        .finishing
-        .second
-        .materialize()
-        .map_err(|error| TableauError::new(format!("finishing.second: {error}")))?;
+    Ok(RockRecurrence {
+        first_stage,
+        stages,
+    })
+}
 
-    validate_order_two(first_stage, &stages, finish_first, finish_second)?;
+/// Parses and validates one degree-specific ROCK4 JSON resource.
+///
+/// The polynomial recurrence and finishing tableau are reconstructed into one
+/// explicit RK method. Its primary fourth-order and embedded third-order
+/// conditions are verified before the value can be used.
+pub fn parse_rock4_tableau(
+    source: &str,
+    requested_name: &str,
+    requested_degree: usize,
+) -> Result<Rock4Tableau, TableauError> {
+    let raw: RawRock4Tableau = serde_json::from_str(source)
+        .map_err(|error| TableauError::new(format!("invalid ROCK4 tableau JSON: {error}")))?;
+    if raw.name != requested_name {
+        return Err(TableauError::new(format!(
+            "resource method `{}` does not match requested method `{requested_name}`",
+            raw.name
+        )));
+    }
+    if raw.name.trim().is_empty() {
+        return Err(TableauError::new("ROCK4 tableau name must not be empty"));
+    }
+    if raw.degree != requested_degree {
+        return Err(TableauError::new(format!(
+            "resource degree {} does not match requested degree {requested_degree}",
+            raw.degree
+        )));
+    }
+    if raw.description.trim().is_empty() {
+        return Err(TableauError::new(
+            "ROCK4 tableau description must not be empty",
+        ));
+    }
+    if raw.degree == 0 {
+        return Err(TableauError::new("ROCK4 degree must be positive"));
+    }
+    if raw.order != 4 || raw.embedded_order != 3 {
+        return Err(TableauError::new(
+            "ROCK4 resources must declare primary order 4 and embedded order 3",
+        ));
+    }
 
-    Ok(Rock2Tableau {
+    let recurrence = materialize_rock_recurrence(raw.recurrence, raw.degree, "ROCK4")?;
+    let finishing_a = materialize_matrix(&raw.finishing.a, "finishing.A")?;
+    if finishing_a.len() != 4
+        || finishing_a
+            .iter()
+            .enumerate()
+            .any(|(stage, row)| row.len() != stage)
+    {
+        return Err(TableauError::new(
+            "ROCK4 finishing A must contain rows of lengths 0, 1, 2, and 3",
+        ));
+    }
+    let b = materialize_vector(&raw.finishing.b, "finishing.b")?;
+    if b.len() != 4 {
+        return Err(TableauError::new(
+            "ROCK4 finishing b must contain four weights",
+        ));
+    }
+    let b_hat = materialize_vector(&raw.finishing.b_hat, "finishing.b_hat")?;
+    if b_hat.len() != 5 {
+        return Err(TableauError::new(
+            "ROCK4 finishing b_hat must contain five weights",
+        ));
+    }
+
+    validate_rock4_orders(&recurrence, &finishing_a, &b, &b_hat)?;
+    Ok(Rock4Tableau {
         name: raw.name,
         description: raw.description,
         order: raw.order,
+        embedded_order: raw.embedded_order,
         degree: raw.degree,
-        recurrence: RockRecurrence {
-            first_stage,
-            stages,
-        },
-        finish_first,
-        finish_second,
+        recurrence,
+        finishing_a,
+        b,
+        b_hat,
     })
+}
+
+fn reconstruct_rock_rows(recurrence: &RockRecurrence, stage_count: usize) -> Vec<Vec<f64>> {
+    let degree = recurrence.stages.len() + 1;
+    let mut a = vec![vec![0.0; stage_count]; stage_count];
+    a[1][0] = recurrence.first_stage;
+    for (offset, recurrence_stage) in recurrence.stages.iter().enumerate() {
+        let stage = offset + 2;
+        let (previous_rows, current_rows) = a.split_at_mut(stage);
+        let current = &mut current_rows[0];
+        for ((value, previous), previous_two) in current
+            .iter_mut()
+            .zip(&previous_rows[stage - 1])
+            .zip(&previous_rows[stage - 2])
+        {
+            *value =
+                (1.0 + recurrence_stage.kappa) * previous - recurrence_stage.kappa * previous_two;
+        }
+        current[stage - 1] += recurrence_stage.mu;
+    }
+    debug_assert!(degree < stage_count);
+    a
+}
+
+fn validate_rock4_orders(
+    recurrence: &RockRecurrence,
+    finishing_a: &[Vec<f64>],
+    b: &[f64],
+    b_hat: &[f64],
+) -> Result<(), TableauError> {
+    let degree = recurrence.stages.len() + 1;
+    let stage_count = degree + 5;
+    let mut a = reconstruct_rock_rows(recurrence, stage_count);
+    let base = a[degree].clone();
+    for (finishing_stage, coefficients) in finishing_a.iter().enumerate().take(4).skip(1) {
+        let stage = degree + finishing_stage;
+        a[stage].copy_from_slice(&base);
+        for (offset, coefficient) in coefficients.iter().enumerate() {
+            a[stage][degree + offset] += coefficient;
+        }
+    }
+
+    let mut primary = base.clone();
+    for (offset, weight) in b.iter().enumerate() {
+        primary[degree + offset] += weight;
+    }
+    a[degree + 4].copy_from_slice(&primary);
+
+    let mut embedded = base;
+    for (offset, weight) in b_hat.iter().enumerate() {
+        embedded[degree + offset] += weight;
+    }
+    validate_explicit_rk_order(&a, &primary, 4, "ROCK4 primary")?;
+    validate_explicit_rk_order(&a, &embedded, 3, "ROCK4 embedded")
+}
+
+fn validate_explicit_rk_order(
+    a: &[Vec<f64>],
+    b: &[f64],
+    order: usize,
+    label: &str,
+) -> Result<(), TableauError> {
+    let c = a
+        .iter()
+        .map(|row| row.iter().sum::<f64>())
+        .collect::<Vec<_>>();
+    let condition =
+        |value: f64, expected: f64, name: &str| {
+            approximately_equal(value, expected).then_some(()).ok_or_else(|| {
+            TableauError::new(format!(
+                "{label} violates order condition {name}: found {value}, expected {expected}"
+            ))
+        })
+        };
+    condition(b.iter().sum(), 1.0, "b·1")?;
+    if order < 2 {
+        return Ok(());
+    }
+    condition(dot(b, &c), 0.5, "b·c")?;
+    if order < 3 {
+        return Ok(());
+    }
+    let c_squared = c.iter().map(|value| value * value).collect::<Vec<_>>();
+    let a_c = matrix_vector(a, &c);
+    condition(dot(b, &c_squared), 1.0 / 3.0, "b·c²")?;
+    condition(dot(b, &a_c), 1.0 / 6.0, "b·A·c")?;
+    if order < 4 {
+        return Ok(());
+    }
+    let c_cubed = c_squared
+        .iter()
+        .zip(&c)
+        .map(|(squared, value)| squared * value)
+        .collect::<Vec<_>>();
+    let c_a_c = c.iter().zip(&a_c).map(|(c, ac)| c * ac).collect::<Vec<_>>();
+    let a_c_squared = matrix_vector(a, &c_squared);
+    let a_a_c = matrix_vector(a, &a_c);
+    condition(dot(b, &c_cubed), 0.25, "b·c³")?;
+    condition(dot(b, &c_a_c), 0.125, "b·C·A·c")?;
+    condition(dot(b, &a_c_squared), 1.0 / 12.0, "b·A·c²")?;
+    condition(dot(b, &a_a_c), 1.0 / 24.0, "b·A·A·c")
+}
+
+fn matrix_vector(matrix: &[Vec<f64>], vector: &[f64]) -> Vec<f64> {
+    matrix.iter().map(|row| dot(row, vector)).collect()
+}
+
+fn dot(left: &[f64], right: &[f64]) -> f64 {
+    left.iter()
+        .zip(right)
+        .map(|(left, right)| left * right)
+        .sum()
 }
 
 fn validate_order_two(
@@ -279,7 +578,7 @@ fn validate_order_two(
 
 #[cfg(test)]
 mod tests {
-    use super::parse_rock2_tableau;
+    use super::{parse_rock2_tableau, parse_rock4_tableau};
 
     const RESOURCE: &str = r#"{
         "name": "ROCK2",
@@ -292,6 +591,21 @@ mod tests {
             "stages": [["0.1268473641290642", "0.02103378190528467"]]
         },
         "finishing": { "first": "0.3889624104727243", "second": "0.4219428123056774" }
+    }"#;
+
+    const ROCK4_RESOURCE: &str = r#"{
+        "name":"ROCK4",
+        "description":"Degree-one ROCK4 test recurrence",
+        "kind":"rock4",
+        "order":4,
+        "embedded_order":3,
+        "degree":1,
+        "recurrence":{"first":"0.1762962957651941","stages":[]},
+        "finishing":{
+            "A":[[],["-0.149352078672699"],["0.629768962985252","-0.35520106157365"],["0.0146745996307541","-0.0558517281602565","0.590312931352706"]],
+            "b":["0.934502625489809","-0.426556402801135","-0.428612609028723","0.744370090574855"],
+            "b_hat":["1.1350997211054","-0.58433336098972","-0.319172911177732","0.482853558185876","0.109256697110981"]
+        }
     }"#;
 
     #[test]
@@ -383,5 +697,43 @@ mod tests {
     fn rejects_coefficients_that_break_order_two() {
         let inconsistent = RESOURCE.replace("0.3889624104727243", "0.4");
         assert!(parse_rock2_tableau(&inconsistent, "ROCK2", 2).is_err());
+    }
+
+    #[test]
+    fn parses_and_validates_a_complete_rock4_formula() {
+        let tableau = parse_rock4_tableau(ROCK4_RESOURCE, "ROCK4", 1).unwrap();
+        assert_eq!(tableau.name(), "ROCK4");
+        assert_eq!(tableau.order(), 4);
+        assert_eq!(tableau.embedded_order(), 3);
+        assert_eq!(tableau.degree(), 1);
+        assert!(tableau.recurrence().stages().is_empty());
+        assert_eq!(tableau.finishing_a()[3].len(), 3);
+        assert_eq!(tableau.b().len(), 4);
+        assert_eq!(tableau.b_hat().len(), 5);
+    }
+
+    #[test]
+    fn rejects_malformed_or_inconsistent_rock4_finishing_tableaus() {
+        for invalid in [
+            ROCK4_RESOURCE.replace(r#""degree":1"#, r#""degree":2"#),
+            ROCK4_RESOURCE.replace(r#""order":4"#, r#""order":3"#),
+            ROCK4_RESOURCE.replace(r#""embedded_order":3"#, r#""embedded_order":2"#),
+            ROCK4_RESOURCE.replace(r#"["-0.149352078672699"]"#, r#"["-0.149352078672699",0]"#),
+            ROCK4_RESOURCE.replace(
+                r#"["0.0146745996307541","-0.0558517281602565","0.590312931352706"]"#,
+                r#"["0.0146745996307541","-0.0558517281602565"]"#,
+            ),
+            ROCK4_RESOURCE.replace(r#","0.744370090574855"]"#, r#"]"#),
+            ROCK4_RESOURCE.replace(r#","0.109256697110981"]"#, r#"]"#),
+            ROCK4_RESOURCE.replace(
+                r#""description":"Degree-one ROCK4 test recurrence","#,
+                r#""description":"Degree-one ROCK4 test recurrence","unknown":true,"#,
+            ),
+            ROCK4_RESOURCE.replace(r#""finishing":{"#, r#""finishing":{"unknown":true,"#),
+            ROCK4_RESOURCE.replace("0.934502625489809", "0.9"),
+            ROCK4_RESOURCE.replace("0.109256697110981", "1e999"),
+        ] {
+            assert!(parse_rock4_tableau(&invalid, "ROCK4", 1).is_err());
+        }
     }
 }

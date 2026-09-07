@@ -1,26 +1,29 @@
 {
-  "$schema"              : "https://json-schema.org/draft/2020-12/schema",
-  "$id"                  : "https://github.com/Wouittone/differential-equations-rs/stabilized-schema.json",
-  "title"                : "Degree-specific stabilized solver tableau",
-  "type"                 : "object",
-  "additionalProperties" : false,
-  "required"             : ["name", "description", "kind", "order", "degree", "recurrence", "finishing"],
-  "properties"           : {
-    "$schema"     : { "type": "string" },
-    "name"        : { "const": "ROCK2" },
-    "description" : { "type": "string", "minLength": 1 },
-    "kind"        : { "const": "rock2" },
-    "order"       : { "const": 2 },
-    "degree"      : { "type": "integer", "minimum": 1 },
-    "recurrence"  : { "$ref": "#/$defs/rock_recurrence" },
-    "finishing"   : { "$ref": "#/$defs/rock2_finish" }
-  },
+  "$schema" : "https://json-schema.org/draft/2020-12/schema",
+  "$id"     : "https://github.com/Wouittone/differential-equations-rs/stabilized-schema.json",
+  "title"   : "Degree-specific stabilized solver tableau",
+  "oneOf"   : [
+    { "$ref": "#/$defs/rock2_tableau" },
+    { "$ref": "#/$defs/rock4_tableau" }
+  ],
   "$defs" : {
     "scalar" : {
       "oneOf" : [
         { "type": "number" },
         { "type": "string", "minLength": 1 }
       ]
+    },
+    "vector4" : {
+      "type"     : "array",
+      "minItems" : 4,
+      "maxItems" : 4,
+      "items"    : { "$ref": "#/$defs/scalar" }
+    },
+    "vector5" : {
+      "type"     : "array",
+      "minItems" : 5,
+      "maxItems" : 5,
+      "items"    : { "$ref": "#/$defs/scalar" }
     },
     "rock_recurrence_stage" : {
       "type"     : "array",
@@ -47,6 +50,58 @@
       "properties"           : {
         "first"  : { "$ref": "#/$defs/scalar" },
         "second" : { "$ref": "#/$defs/scalar" }
+      }
+    },
+    "rock4_a" : {
+      "type"        : "array",
+      "minItems"    : 4,
+      "maxItems"    : 4,
+      "prefixItems" : [
+        { "type": "array", "maxItems": 0 },
+        { "type": "array", "minItems": 1, "maxItems": 1, "items": { "$ref": "#/$defs/scalar" } },
+        { "type": "array", "minItems": 2, "maxItems": 2, "items": { "$ref": "#/$defs/scalar" } },
+        { "type": "array", "minItems": 3, "maxItems": 3, "items": { "$ref": "#/$defs/scalar" } }
+      ]
+    },
+    "rock4_finish" : {
+      "type"                 : "object",
+      "additionalProperties" : false,
+      "required"             : ["A", "b", "b_hat"],
+      "properties"           : {
+        "A"     : { "$ref": "#/$defs/rock4_a" },
+        "b"     : { "$ref": "#/$defs/vector4" },
+        "b_hat" : { "$ref": "#/$defs/vector5" }
+      }
+    },
+    "rock2_tableau" : {
+      "type"                 : "object",
+      "additionalProperties" : false,
+      "required"             : ["name", "description", "kind", "order", "degree", "recurrence", "finishing"],
+      "properties"           : {
+        "$schema"     : { "type": "string" },
+        "name"        : { "const": "ROCK2" },
+        "description" : { "type": "string", "minLength": 1 },
+        "kind"        : { "const": "rock2" },
+        "order"       : { "const": 2 },
+        "degree"      : { "type": "integer", "minimum": 1 },
+        "recurrence"  : { "$ref": "#/$defs/rock_recurrence" },
+        "finishing"   : { "$ref": "#/$defs/rock2_finish" }
+      }
+    },
+    "rock4_tableau" : {
+      "type"                 : "object",
+      "additionalProperties" : false,
+      "required"             : ["name", "description", "kind", "order", "embedded_order", "degree", "recurrence", "finishing"],
+      "properties"           : {
+        "$schema"        : { "type": "string" },
+        "name"           : { "const": "ROCK4" },
+        "description"    : { "type": "string", "minLength": 1 },
+        "kind"           : { "const": "rock4" },
+        "order"          : { "const": 4 },
+        "embedded_order" : { "const": 3 },
+        "degree"         : { "type": "integer", "minimum": 1 },
+        "recurrence"     : { "$ref": "#/$defs/rock_recurrence" },
+        "finishing"      : { "$ref": "#/$defs/rock4_finish" }
       }
     }
   }

@@ -2,8 +2,8 @@
 
 use differential_equations_tableau_core::{
     RungeKuttaKind, parse_irkn_tableau, parse_low_storage_tableau, parse_multistep_tableau,
-    parse_numeric_expression, parse_rkn_tableau, parse_rock2_tableau, parse_symplectic_tableau,
-    parse_tableau,
+    parse_numeric_expression, parse_rkn_tableau, parse_rock2_tableau, parse_rock4_tableau,
+    parse_symplectic_tableau, parse_tableau,
 };
 use proc_macro::TokenStream;
 use proc_macro2::{Literal, TokenStream as TokenStream2};
@@ -728,21 +728,8 @@ pub fn define_low_storage_rk_tableau_from_file(input: TokenStream) -> TokenStrea
 #[proc_macro]
 pub fn define_rock2_tableau_from_file(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DegreeStaticTableauInput);
-    let manifest_dir = match std::env::var_os("CARGO_MANIFEST_DIR") {
-        Some(directory) => PathBuf::from(directory),
-        None => {
-            return syn::Error::new(
-                proc_macro2::Span::call_site(),
-                "CARGO_MANIFEST_DIR is unavailable during macro expansion",
-            )
-            .into_compile_error()
-            .into();
-        }
-    };
-    let path = manifest_dir.join(input.path.value());
-    let result = std::fs::read_to_string(&path)
-        .map_err(|error| format!("failed to read `{}`: {error}", path.display()))
-        .and_then(|source| expand_rock2_source(input, &source));
+    let result =
+        read_degree_static_resource(&input).and_then(|source| expand_rock2_source(input, &source));
     match result {
         Ok(tokens) => tokens.into(),
         Err(error) => syn::Error::new(proc_macro2::Span::call_site(), error)
@@ -762,21 +749,79 @@ fn expand_rock2_source(
     parse_rock2_tableau(source, &input.method_name.value(), degree)
         .map_err(|error| format!("invalid tableau `{}`: {error}", input.path.value()))?;
 
+    Ok(emit_degree_lazy_static(
+        input,
+        degree,
+        quote!(LazyRock2Tableau),
+        quote!(parse_rock2_tableau),
+    ))
+}
+
+/// Defines one independently lazy, degree-specific ROCK4 tableau.
+///
+/// The shared parser validates the recurrence, finishing tableau, fourth-order
+/// primary method, and third-order embedded companion during macro expansion.
+#[proc_macro]
+pub fn define_rock4_tableau_from_file(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DegreeStaticTableauInput);
+    let result =
+        read_degree_static_resource(&input).and_then(|source| expand_rock4_source(input, &source));
+    match result {
+        Ok(tokens) => tokens.into(),
+        Err(error) => syn::Error::new(proc_macro2::Span::call_site(), error)
+            .into_compile_error()
+            .into(),
+    }
+}
+
+fn expand_rock4_source(
+    input: DegreeStaticTableauInput,
+    source: &str,
+) -> Result<TokenStream2, String> {
+    let degree = input
+        .degree
+        .base10_parse::<usize>()
+        .map_err(|error| format!("invalid ROCK4 degree: {error}"))?;
+    parse_rock4_tableau(source, &input.method_name.value(), degree)
+        .map_err(|error| format!("invalid tableau `{}`: {error}", input.path.value()))?;
+    Ok(emit_degree_lazy_static(
+        input,
+        degree,
+        quote!(LazyRock4Tableau),
+        quote!(parse_rock4_tableau),
+    ))
+}
+
+fn emit_degree_lazy_static(
+    input: DegreeStaticTableauInput,
+    degree: usize,
+    lazy_type: TokenStream2,
+    parser: TokenStream2,
+) -> TokenStream2 {
     let visibility = input.visibility;
     let static_name = input.static_name;
     let method_name = input.method_name;
     let source_path = input.path;
     let crate_path = input.crate_path;
-    Ok(quote! {
-        #visibility static #static_name: #crate_path::tableau::LazyRock2Tableau =
+    quote! {
+        #visibility static #static_name: #crate_path::tableau::#lazy_type =
             ::std::sync::LazyLock::new(|| {
-                #crate_path::tableau::parse_rock2_tableau(
+                #crate_path::tableau::#parser(
                     include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/", #source_path)),
                     #method_name,
                     #degree,
                 )
             });
-    })
+    }
+}
+
+fn read_degree_static_resource(input: &DegreeStaticTableauInput) -> Result<String, String> {
+    let manifest_dir = std::env::var_os("CARGO_MANIFEST_DIR")
+        .map(PathBuf::from)
+        .ok_or("CARGO_MANIFEST_DIR is unavailable during macro expansion")?;
+    let path = manifest_dir.join(input.path.value());
+    std::fs::read_to_string(&path)
+        .map_err(|error| format!("failed to read `{}`: {error}", path.display()))
 }
 
 #[cfg(test)]
@@ -831,6 +876,57 @@ mod rock2_tests {
             let error = expand_rock2_source(input(), &invalid).unwrap_err();
             assert!(error.contains("degree.json"), "{error}");
         }
+    }
+}
+
+#[cfg(test)]
+mod rock4_tests {
+    use super::*;
+
+    fn source() -> &'static str {
+        r#"{
+            "name":"ROCK4",
+            "description":"Macro test",
+            "kind":"rock4",
+            "order":4,
+            "embedded_order":3,
+            "degree":1,
+            "recurrence":{"first":"0.1762962957651941","stages":[]},
+            "finishing":{
+                "A":[[],["-0.149352078672699"],["0.629768962985252","-0.35520106157365"],["0.0146745996307541","-0.0558517281602565","0.590312931352706"]],
+                "b":["0.934502625489809","-0.426556402801135","-0.428612609028723","0.744370090574855"],
+                "b_hat":["1.1350997211054","-0.58433336098972","-0.319172911177732","0.482853558185876","0.109256697110981"]
+            }
+        }"#
+    }
+
+    fn input() -> DegreeStaticTableauInput {
+        syn::parse_str("pub TABLEAU, \"ROCK4\", 1, \"rock4.json\", crate = renamed").unwrap()
+    }
+
+    #[test]
+    fn expansion_uses_the_shared_lazy_parser_without_emitting_coefficients() {
+        let tokens = expand_rock4_source(input(), source()).unwrap().to_string();
+        for required in [
+            "LazyRock4Tableau",
+            "LazyLock",
+            "include_str",
+            "parse_rock4_tableau",
+            "renamed",
+        ] {
+            assert!(tokens.contains(required), "missing {required}: {tokens}");
+        }
+        assert!(!tokens.contains("0.1762962957651941"));
+        assert!(!tokens.contains("0.934502625489809"));
+        assert!(!tokens.contains("const "));
+    }
+
+    #[test]
+    fn expansion_rejects_an_invalid_order_formula_with_its_path() {
+        let invalid = source().replace("0.934502625489809", "0.9");
+        let error = expand_rock4_source(input(), &invalid).unwrap_err();
+        assert!(error.contains("rock4.json"), "{error}");
+        assert!(error.contains("order condition"), "{error}");
     }
 }
 

@@ -16,10 +16,12 @@
 use super::coefficient_data::{
     ESERK4_DEGREES, ESERK4_ERROR_COMBINATION, ESERK4_SOLUTION_COMBINATION, ESERK4_WEIGHTS,
     ESERK5_DEGREES, ESERK5_ERROR_COMBINATION, ESERK5_SOLUTION_COMBINATION, ESERK5_WEIGHTS,
-    ROCK4_DEGREES, ROCK4_FINISH_A, ROCK4_FINISH_B, ROCK4_FINISH_ERROR, ROCK4_RECURRENCE,
     SERK2_DEGREES, SERK2_WEIGHTS,
 };
-use super::resources::{rock2_available_degrees, rock2_tableau_for_degree};
+use super::resources::{
+    rock2_available_degrees, rock2_tableau_for_degree, rock4_available_degrees,
+    rock4_tableau_for_degree,
+};
 use crate::integrator::{
     KernelCapabilities, StepEstimate, StepKernel, integrate as drive_integration,
 };
@@ -104,18 +106,6 @@ impl StabilizedFamily {
 fn odd_stage_count(stages: usize) -> usize {
     let stages = stages.max(3);
     if stages % 2 == 0 { stages + 1 } else { stages }.min(MAX_POLYNOMIAL_STAGES - 1)
-}
-
-fn select_rock_degree(degrees: &[usize], requested: usize) -> (usize, usize, usize) {
-    let mut start = 0;
-    for (index, &degree) in degrees.iter().enumerate() {
-        if degree >= requested {
-            return (index, degree, start);
-        }
-        start += 2 * degree - 1;
-    }
-    let index = degrees.len() - 1;
-    (index, degrees[index], start - (2 * degrees[index] - 1))
 }
 
 fn select_serk_degree(degrees: &[usize], requested: usize) -> (usize, usize) {
@@ -528,8 +518,11 @@ impl StabilizedKernel {
         let requested_total =
             (((3.0 + scaled_radius) / 0.353).sqrt().floor() as usize + 1).clamp(1, 152);
         let requested_degree = requested_total.max(5) - 4;
-        let (degree_index, degree, start) = select_rock_degree(ROCK4_DEGREES, requested_degree);
-        let first_coefficient = ROCK4_RECURRENCE[start];
+        let tableau =
+            rock4_tableau_for_degree(requested_degree).map_err(|_| SolveError::InvalidTableau)?;
+        let degree = tableau.degree();
+        let recurrence = tableau.recurrence();
+        let first_coefficient = recurrence.first_stage();
         let mut recurrence_time = time + step * first_coefficient;
         let mut time_previous_two = recurrence_time;
         let mut time_previous_three = time;
@@ -545,10 +538,10 @@ impl StabilizedKernel {
         if degree == 1 {
             self.next_stage.copy_from_slice(&self.previous_one);
         } else {
-            for stage in 2..=degree {
-                let coefficient = start + (stage - 2) * 2 + 1;
-                let mu = ROCK4_RECURRENCE[coefficient];
-                let kappa = ROCK4_RECURRENCE[coefficient + 1];
+            for (stage_offset, recurrence_stage) in recurrence.stages().iter().enumerate() {
+                let stage = stage_offset + 2;
+                let mu = recurrence_stage.mu();
+                let kappa = recurrence_stage.kappa();
                 let nu = -1.0 - kappa;
                 Self::evaluate(
                     problem,
@@ -576,24 +569,24 @@ impl StabilizedKernel {
             }
         }
 
-        let a_offset = degree_index * 6;
-        let b_offset = degree_index * 4;
-        let error_offset = degree_index * 5;
-        let a21 = step * ROCK4_FINISH_A[a_offset];
-        let a31 = step * ROCK4_FINISH_A[a_offset + 1];
-        let a32 = step * ROCK4_FINISH_A[a_offset + 2];
-        let a41 = step * ROCK4_FINISH_A[a_offset + 3];
-        let a42 = step * ROCK4_FINISH_A[a_offset + 4];
-        let a43 = step * ROCK4_FINISH_A[a_offset + 5];
-        let b1 = step * ROCK4_FINISH_B[b_offset];
-        let b2 = step * ROCK4_FINISH_B[b_offset + 1];
-        let b3 = step * ROCK4_FINISH_B[b_offset + 2];
-        let b4 = step * ROCK4_FINISH_B[b_offset + 3];
-        let error1 = step * (ROCK4_FINISH_ERROR[error_offset] - ROCK4_FINISH_B[b_offset]);
-        let error2 = step * (ROCK4_FINISH_ERROR[error_offset + 1] - ROCK4_FINISH_B[b_offset + 1]);
-        let error3 = step * (ROCK4_FINISH_ERROR[error_offset + 2] - ROCK4_FINISH_B[b_offset + 2]);
-        let error4 = step * (ROCK4_FINISH_ERROR[error_offset + 3] - ROCK4_FINISH_B[b_offset + 3]);
-        let error5 = step * ROCK4_FINISH_ERROR[error_offset + 4];
+        let a = tableau.finishing_a();
+        let b = tableau.b();
+        let b_hat = tableau.b_hat();
+        let a21 = step * a[1][0];
+        let a31 = step * a[2][0];
+        let a32 = step * a[2][1];
+        let a41 = step * a[3][0];
+        let a42 = step * a[3][1];
+        let a43 = step * a[3][2];
+        let b1 = step * b[0];
+        let b2 = step * b[1];
+        let b3 = step * b[2];
+        let b4 = step * b[3];
+        let error1 = step * (b_hat[0] - b[0]);
+        let error2 = step * (b_hat[1] - b[1]);
+        let error3 = step * (b_hat[2] - b[2]);
+        let error4 = step * (b_hat[3] - b[3]);
+        let error5 = step * b_hat[4];
 
         Self::evaluate(
             problem,
@@ -1719,6 +1712,26 @@ implemented_method!(
     StabilizedFamily::Rock4,
     "Fourth-order orthogonal-polynomial ROCK method with a tabulated finishing procedure."
 );
+
+impl ROCK4 {
+    /// Returns the first available tableau whose degree is at least the
+    /// requested degree, clamping to the largest supported degree.
+    ///
+    /// The returned value is parsed only on its first inspection or use. Its
+    /// degree identifies the entry selected from the discrete built-in
+    /// catalogue.
+    pub fn tableau(
+        self,
+        requested_degree: usize,
+    ) -> Result<&'static crate::tableau::Rock4Tableau, crate::tableau::TableauError> {
+        rock4_tableau_for_degree(requested_degree)
+    }
+
+    /// Iterates over the supported polynomial degrees in ascending order.
+    pub fn available_degrees(self) -> impl ExactSizeIterator<Item = usize> {
+        rock4_available_degrees()
+    }
+}
 implemented_method!(
     SERK2,
     StabilizedFamily::Serk2,

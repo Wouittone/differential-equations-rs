@@ -25,7 +25,10 @@ pub use low_storage::{
     RegisterPipelineTableau, ThreeSTableau, parse_low_storage_tableau,
 };
 mod stabilized;
-pub use stabilized::{Rock2Tableau, RockRecurrence, RockRecurrenceStage, parse_rock2_tableau};
+pub use stabilized::{
+    Rock2Tableau, Rock4Tableau, RockRecurrence, RockRecurrenceStage, parse_rock2_tableau,
+    parse_rock4_tableau,
+};
 
 use serde::Deserialize;
 use std::fmt;

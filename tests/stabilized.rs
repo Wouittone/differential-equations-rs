@@ -44,6 +44,25 @@ fn adaptive_final_value<A: OdeAlgorithm>(algorithm: A, problem: &OdeProblem<Test
 }
 
 #[test]
+fn rock_tableau_catalogues_are_public_lazy_and_use_ceiling_selection() {
+    let rock2_degrees = ROCK2.available_degrees().collect::<Vec<_>>();
+    let rock4_degrees = ROCK4.available_degrees().collect::<Vec<_>>();
+
+    assert_eq!(rock2_degrees.first(), Some(&1));
+    assert_eq!(rock2_degrees.last(), Some(&198));
+    assert_eq!(rock4_degrees.len(), 50);
+    assert_eq!(rock4_degrees.first(), Some(&1));
+    assert_eq!(rock4_degrees.last(), Some(&148));
+    assert_eq!(ROCK2.tableau(21).unwrap().degree(), 22);
+    assert_eq!(ROCK4.tableau(21).unwrap().degree(), 22);
+    assert_eq!(ROCK4.tableau(usize::MAX).unwrap().degree(), 148);
+    assert!(std::ptr::eq(
+        ROCK4.tableau(21).unwrap(),
+        ROCK4.tableau(22).unwrap()
+    ));
+}
+
+#[test]
 fn stabilized_recurrences_remain_bounded_beyond_rk4s_real_axis_interval() {
     let problem = problem(stiff_decay_rhs, 0.1);
     let stabilized = [
