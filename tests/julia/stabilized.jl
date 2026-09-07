@@ -148,8 +148,16 @@ end
             rust_ratio = rust["$(name)_convergence_ratio"]
             julia_ratio = stabilized_convergence_ratio(mild_algorithm)
 
+            # Rust intentionally evaluates SERK2 at the abscissa of the state
+            # passed to the RHS. The pinned Julia implementation uses the
+            # would-be output-state node, which is one recurrence node ahead
+            # and drops to first order for nonautonomous equations. Keep exact
+            # solution checks for both implementations, but do not require
+            # their nonautonomous trajectories to reproduce that discrepancy.
             @test rust_fixed ≈ fixed rtol = 2.0e-10 atol = 2.0e-12
-            @test rust_adaptive ≈ adaptive rtol = 2.0e-4 atol = 2.0e-6
+            if name != "serk2"
+                @test rust_adaptive ≈ adaptive rtol = 2.0e-4 atol = 2.0e-6
+            end
             @test rust_fixed ≈ cos(1.0) rtol = order == 1 ? 2.0e-2 : 5.0e-3
             @test fixed ≈ cos(1.0) rtol = order == 1 ? 2.0e-2 : 5.0e-3
             @test rust_adaptive ≈ nonautonomous_exact rtol = 5.0e-4 atol = 5.0e-6

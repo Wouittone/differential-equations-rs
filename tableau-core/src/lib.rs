@@ -26,8 +26,8 @@ pub use low_storage::{
 };
 mod stabilized;
 pub use stabilized::{
-    Rock2Tableau, Rock4Tableau, RockRecurrence, RockRecurrenceStage, parse_rock2_tableau,
-    parse_rock4_tableau,
+    Rock2Tableau, Rock4Tableau, RockRecurrence, RockRecurrenceStage, Serk2Tableau,
+    parse_rock2_tableau, parse_rock4_tableau, parse_serk2_tableau,
 };
 
 use serde::Deserialize;

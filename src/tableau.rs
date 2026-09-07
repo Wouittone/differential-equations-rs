@@ -18,11 +18,11 @@ pub use differential_equations_tableau_core::{
     LowStorageRungeKuttaTableau, MisTableau, MriTableau, RegisterPipelineTableau, Rock2Tableau,
     Rock4Tableau, RockRecurrence, RockRecurrenceStage, RosenbrockKind, RosenbrockPairTableau,
     RosenbrockTableau, RungeKuttaKind, RungeKuttaNystromKind, RungeKuttaNystromTableau,
-    RungeKuttaTableau, SymplecticTableau, TableauError, ThreeSTableau, VariableMultistepTableau,
-    parse_irkn_tableau, parse_low_storage_tableau, parse_mis_tableau, parse_mri_tableau,
-    parse_multistep_tableau, parse_rkn_tableau, parse_rock2_tableau, parse_rock4_tableau,
-    parse_rosenbrock_pair_tableau, parse_rosenbrock_tableau, parse_symplectic_tableau,
-    parse_tableau, parse_variable_multistep_tableau,
+    RungeKuttaTableau, Serk2Tableau, SymplecticTableau, TableauError, ThreeSTableau,
+    VariableMultistepTableau, parse_irkn_tableau, parse_low_storage_tableau, parse_mis_tableau,
+    parse_mri_tableau, parse_multistep_tableau, parse_rkn_tableau, parse_rock2_tableau,
+    parse_rock4_tableau, parse_rosenbrock_pair_tableau, parse_rosenbrock_tableau,
+    parse_serk2_tableau, parse_symplectic_tableau, parse_tableau, parse_variable_multistep_tableau,
 };
 
 /// A lazily initialized, validated Runge--Kutta tableau.
@@ -67,6 +67,9 @@ pub type LazyRock2Tableau = LazyLock<Result<Rock2Tableau, TableauError>>;
 /// A lazily initialized, degree-specific ROCK4 recurrence and finishing pair.
 pub type LazyRock4Tableau = LazyLock<Result<Rock4Tableau, TableauError>>;
 
+/// A lazily initialized, degree-specific SERK2 recurrence and output weights.
+pub type LazySerk2Tableau = LazyLock<Result<Serk2Tableau, TableauError>>;
+
 /// Returns a parsed lazy tableau, preserving any validation error.
 pub fn load_tableau<T>(
     resource: &'static LazyLock<Result<T, TableauError>>,
@@ -109,6 +112,8 @@ pub use differential_equations_tableau_macros::define_rock4_tableau_from_file;
 pub use differential_equations_tableau_macros::define_rosenbrock_pair_tableau_from_file;
 #[doc(inline)]
 pub use differential_equations_tableau_macros::define_rosenbrock_tableau_from_file;
+#[doc(inline)]
+pub use differential_equations_tableau_macros::define_serk2_tableau_from_file;
 #[doc(inline)]
 pub use differential_equations_tableau_macros::define_symplectic_from_file;
 #[doc(inline)]

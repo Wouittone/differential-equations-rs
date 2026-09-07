@@ -9,18 +9,16 @@
 //!
 //! The two-step TSRKC recurrences keep their accepted-step history inside the
 //! kernel. ROCK2, ROCK4, SERK2, ESERK4, and ESERK5 select their full
-//! degree-indexed coefficient banks from the compile-time resources in
-//! `src/tableau/resources/methods/stabilized`. No degree subset or substitute
-//! recurrence is used.
+//! degree-indexed resources from the stabilized tableau resource tree. No
+//! degree subset or substitute recurrence is used.
 
 use super::coefficient_data::{
     ESERK4_DEGREES, ESERK4_ERROR_COMBINATION, ESERK4_SOLUTION_COMBINATION, ESERK4_WEIGHTS,
     ESERK5_DEGREES, ESERK5_ERROR_COMBINATION, ESERK5_SOLUTION_COMBINATION, ESERK5_WEIGHTS,
-    SERK2_DEGREES, SERK2_WEIGHTS,
 };
 use super::resources::{
     rock2_available_degrees, rock2_tableau_for_degree, rock4_available_degrees,
-    rock4_tableau_for_degree,
+    rock4_tableau_for_degree, serk2_available_degrees, serk2_tableau_for_degree,
 };
 use crate::integrator::{
     KernelCapabilities, StepEstimate, StepKernel, integrate as drive_integration,
@@ -690,18 +688,28 @@ impl StabilizedKernel {
         F: crate::OdeFunction<P>,
     {
         let requested = ((scaled_radius / 0.8).sqrt().floor() as usize + 1).min(250);
-        let (degree, start) = select_serk_degree(SERK2_DEGREES, requested);
-        let internal_degree = degree / 10;
+        let tableau =
+            serk2_tableau_for_degree(requested).map_err(|_| SolveError::InvalidTableau)?;
+        let degree = tableau.degree();
+        let subdivisions = tableau.subdivisions();
+        let internal_degree = tableau.internal_degree();
+        let weights = tableau.weights();
         let alpha = 2.5 / (degree * degree) as f64;
         self.previous_one.copy_from_slice(state);
         self.previous_two.copy_from_slice(state);
         for (sum, value) in self.perturbed_state.iter_mut().zip(state) {
-            *sum = SERK2_WEIGHTS[start] * value;
+            *sum = weights[0] * value;
         }
 
-        for block in 0..10 {
-            let first_time =
-                time + (1 + block * internal_degree * internal_degree) as f64 * alpha * step;
+        for block in 0..subdivisions {
+            let block_node = block * internal_degree * internal_degree;
+            // Each right-hand-side evaluation belongs to the state supplied as
+            // its input. Because the SERK recurrence state at stage `j - 1`
+            // has abscissa `(j - 1)^2`, using the output state's `j^2` node
+            // would reduce nonautonomous problems to first order. This is an
+            // intentional correction to the pinned SciML implementation; the
+            // forced multi-stage regression below locks in the order condition.
+            let first_time = time + block_node as f64 * alpha * step;
             Self::evaluate(
                 problem,
                 &mut self.derivative,
@@ -717,18 +725,17 @@ impl StabilizedKernel {
             {
                 *output = previous + alpha * step * derivative;
             }
-            let first_weight = start + block * internal_degree + 1;
+            let first_weight = block * internal_degree + 1;
             for (sum, value) in self.perturbed_state.iter_mut().zip(&self.next_stage) {
-                *sum += SERK2_WEIGHTS[first_weight] * value;
+                *sum += weights[first_weight] * value;
             }
             std::mem::swap(&mut self.previous_two, &mut self.previous_one);
             std::mem::swap(&mut self.previous_one, &mut self.next_stage);
 
             for stage in 2..=internal_degree {
-                let stage_time = time
-                    + (stage * stage + block * internal_degree * internal_degree) as f64
-                        * alpha
-                        * step;
+                let input_stage = stage - 1;
+                let stage_time =
+                    time + (input_stage * input_stage + block_node) as f64 * alpha * step;
                 Self::evaluate(
                     problem,
                     &mut self.derivative,
@@ -745,11 +752,11 @@ impl StabilizedKernel {
                 {
                     *output = 2.0 * previous - previous_two + 2.0 * alpha * step * derivative;
                 }
-                let weight = start + stage + block * internal_degree;
+                let weight = stage + block * internal_degree;
                 for (sum, value) in self.perturbed_state.iter_mut().zip(&self.next_stage) {
-                    *sum += SERK2_WEIGHTS[weight] * value;
+                    *sum += weights[weight] * value;
                 }
-                if stage < internal_degree || block < 9 {
+                if stage < internal_degree || block + 1 < subdivisions {
                     std::mem::swap(&mut self.previous_two, &mut self.previous_one);
                     std::mem::swap(&mut self.previous_one, &mut self.next_stage);
                 }
@@ -1737,6 +1744,24 @@ implemented_method!(
     StabilizedFamily::Serk2,
     "Second-order stabilized explicit Runge--Kutta method with tabulated finishing weights."
 );
+
+impl SERK2 {
+    /// Returns the first available tableau whose degree is at least the
+    /// requested degree, clamping to the largest supported degree.
+    ///
+    /// Only the selected degree is parsed on first inspection or use.
+    pub fn tableau(
+        self,
+        requested_degree: usize,
+    ) -> Result<&'static crate::tableau::Serk2Tableau, crate::tableau::TableauError> {
+        serk2_tableau_for_degree(requested_degree)
+    }
+
+    /// Iterates over the supported polynomial degrees in ascending order.
+    pub fn available_degrees(self) -> impl ExactSizeIterator<Item = usize> {
+        serk2_available_degrees()
+    }
+}
 implemented_method!(
     ESERK4,
     StabilizedFamily::Eserk4,
@@ -1785,8 +1810,10 @@ implemented_method!(
 
 #[cfg(test)]
 mod tests {
-    use super::{ESERK4, ESERK5, ROCK2, ROCK4, SERK2, TSRKC2, TSRKC3};
-    use crate::{OdeAlgorithm, OdeProblem, SaveMode, SolveOptions, solve};
+    use super::{
+        ESERK4, ESERK5, ROCK2, ROCK4, SERK2, StabilizedFamily, StabilizedKernel, TSRKC2, TSRKC3,
+    };
+    use crate::{OdeAlgorithm, OdeProblem, SaveMode, SolveOptions, SolverStats, solve};
 
     type ScalarRhs = fn(&mut [f64], &[f64], &(), f64);
 
@@ -1829,6 +1856,45 @@ mod tests {
         assert!(convergence_ratio(ROCK4).log2() > 3.5);
         assert!(convergence_ratio(ESERK4).log2() > 3.5);
         assert!(convergence_ratio(ESERK5).log2() > 4.5);
+    }
+
+    #[test]
+    fn serk2_recovers_order_two_on_a_nonautonomous_problem() {
+        fn rhs(du: &mut [f64], u: &[f64], _: &(), time: f64) {
+            du[0] = u[0] + time;
+        }
+        let problem = OdeProblem::new(rhs as ScalarRhs, vec![0.0], (0.0, 1.0), ());
+        let exact = std::f64::consts::E - 2.0;
+        let endpoint = |step| {
+            solve(&problem, SERK2, &fixed_options(step))
+                .expect("nonautonomous SERK2 convergence solve failed")
+                .last_state()[0]
+        };
+        let ratio = (endpoint(0.1) - exact).abs() / (endpoint(0.05) - exact).abs();
+        assert!(
+            ratio.log2() > 1.5,
+            "SERK2 observed order was {}",
+            ratio.log2()
+        );
+    }
+
+    #[test]
+    fn serk2_uses_input_state_nodes_in_a_multi_stage_recurrence() {
+        fn rhs(du: &mut [f64], _: &[f64], _: &(), time: f64) {
+            du[0] = time;
+        }
+        let problem = OdeProblem::new(rhs as ScalarRhs, vec![0.0], (0.0, 0.1), ());
+        let mut kernel = StabilizedKernel::new(StabilizedFamily::Serk2, 1);
+        let mut candidate = [0.0];
+        let mut stats = SolverStats::default();
+
+        // This radius requests degree 11 and therefore selects degree 20,
+        // whose internal degree is two. It exercises both SERK2 stage nodes.
+        kernel
+            .run_serk2(&problem, &[0.0], 0.0, 0.1, 80.0, &mut candidate, &mut stats)
+            .expect("multi-stage SERK2 step failed");
+
+        assert!((candidate[0] - 0.005).abs() < 2.0e-15);
     }
 
     #[test]

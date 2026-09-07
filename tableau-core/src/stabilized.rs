@@ -159,6 +159,59 @@ impl Rock4Tableau {
     }
 }
 
+/// One validated, degree-specific SERK2 tableau.
+///
+/// The method combines states from a second-order stabilized recurrence. The
+/// subdivision count controls the recurrence restarts; the output weights
+/// contain the initial-state coefficient followed by one coefficient for
+/// every generated stage.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Serk2Tableau {
+    name: String,
+    description: String,
+    order: usize,
+    degree: usize,
+    subdivisions: usize,
+    weights: Vec<f64>,
+}
+
+impl Serk2Tableau {
+    /// Resource method name.
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// Human-readable method description and coefficient provenance.
+    pub fn description(&self) -> &str {
+        &self.description
+    }
+
+    /// Classical order verified from the reconstructed recurrence.
+    pub fn order(&self) -> usize {
+        self.order
+    }
+
+    /// Total polynomial degree represented by this resource.
+    pub fn degree(&self) -> usize {
+        self.degree
+    }
+
+    /// Number of equal recurrence subdivisions.
+    pub fn subdivisions(&self) -> usize {
+        self.subdivisions
+    }
+
+    /// Polynomial degree within each recurrence subdivision.
+    pub fn internal_degree(&self) -> usize {
+        self.degree / self.subdivisions
+    }
+
+    /// Initial-state and generated-stage combination weights.
+    pub fn weights(&self) -> &[f64] {
+        &self.weights
+    }
+}
+
 #[derive(Clone, Copy, Debug, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 enum RawKind {
@@ -225,6 +278,28 @@ struct RawRock4Finish {
     a: Vec<Vec<Scalar>>,
     b: Vec<Scalar>,
     b_hat: Vec<Scalar>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawSerk2Tableau {
+    /// Editor-only JSON Schema hint, deliberately discarded after parsing.
+    #[serde(rename = "$schema", default)]
+    _schema: Option<String>,
+    name: String,
+    description: String,
+    #[serde(rename = "kind")]
+    _kind: RawSerk2Kind,
+    order: usize,
+    degree: usize,
+    subdivisions: usize,
+    weights: Vec<Scalar>,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+enum RawSerk2Kind {
+    Serk2,
 }
 
 /// Parses and validates one degree-specific ROCK2 JSON resource.
@@ -414,6 +489,120 @@ pub fn parse_rock4_tableau(
     })
 }
 
+/// Parses and validates one degree-specific SERK2 JSON resource.
+///
+/// Validation reconstructs the state recurrence and its equivalent autonomous
+/// explicit Runge--Kutta weights, including both second-order conditions.
+pub fn parse_serk2_tableau(
+    source: &str,
+    requested_name: &str,
+    requested_degree: usize,
+) -> Result<Serk2Tableau, TableauError> {
+    let raw: RawSerk2Tableau = serde_json::from_str(source)
+        .map_err(|error| TableauError::new(format!("invalid SERK2 tableau JSON: {error}")))?;
+    if raw.name != requested_name {
+        return Err(TableauError::new(format!(
+            "resource method `{}` does not match requested method `{requested_name}`",
+            raw.name
+        )));
+    }
+    if raw.name.trim().is_empty() {
+        return Err(TableauError::new("SERK2 tableau name must not be empty"));
+    }
+    if raw.degree != requested_degree {
+        return Err(TableauError::new(format!(
+            "resource degree {} does not match requested degree {requested_degree}",
+            raw.degree
+        )));
+    }
+    if raw.description.trim().is_empty() {
+        return Err(TableauError::new(
+            "SERK2 tableau description must not be empty",
+        ));
+    }
+    if raw.order != 2 {
+        return Err(TableauError::new("SERK2 resources must declare order 2"));
+    }
+    if raw.degree == 0 || raw.degree > 250 {
+        return Err(TableauError::new("SERK2 degree must be between 1 and 250"));
+    }
+    if raw.subdivisions == 0 || raw.degree % raw.subdivisions != 0 {
+        return Err(TableauError::new(
+            "SERK2 subdivisions must be positive and divide the degree",
+        ));
+    }
+
+    let weights = materialize_vector(&raw.weights, "weights")?;
+    if weights.len() != raw.degree + 1 {
+        return Err(TableauError::new(format!(
+            "SERK2 degree {} requires {} weights; found {}",
+            raw.degree,
+            raw.degree + 1,
+            weights.len()
+        )));
+    }
+    validate_serk2_order(raw.degree, raw.subdivisions, &weights)?;
+
+    Ok(Serk2Tableau {
+        name: raw.name,
+        description: raw.description,
+        order: raw.order,
+        degree: raw.degree,
+        subdivisions: raw.subdivisions,
+        weights,
+    })
+}
+
+fn validate_serk2_order(
+    degree: usize,
+    subdivisions: usize,
+    weights: &[f64],
+) -> Result<(), TableauError> {
+    let weight_sum = weights.iter().sum::<f64>();
+    if !approximately_equal(weight_sum, 1.0) {
+        return Err(TableauError::new(format!(
+            "SERK2 output weights must sum to one; found {weight_sum}"
+        )));
+    }
+
+    let alpha = 2.5 / (degree * degree) as f64;
+    let internal_degree = degree / subdivisions;
+    let mut stage_rows = Vec::with_capacity(degree + 1);
+    stage_rows.push(vec![0.0; degree]);
+    let mut previous_one = vec![0.0; degree];
+    let mut derivative = 0;
+    for _ in 0..subdivisions {
+        let mut next = previous_one.clone();
+        next[derivative] += alpha;
+        derivative += 1;
+        stage_rows.push(next.clone());
+        let mut previous_two = std::mem::replace(&mut previous_one, next);
+
+        for _ in 2..=internal_degree {
+            let mut next = previous_one
+                .iter()
+                .zip(&previous_two)
+                .map(|(previous, previous_two)| 2.0 * previous - previous_two)
+                .collect::<Vec<_>>();
+            next[derivative] += 2.0 * alpha;
+            derivative += 1;
+            stage_rows.push(next.clone());
+            previous_two = previous_one;
+            previous_one = next;
+        }
+    }
+    debug_assert_eq!(derivative, degree);
+    debug_assert_eq!(stage_rows.len(), degree + 1);
+
+    let mut equivalent_weights = vec![0.0; degree];
+    for (weight, row) in weights.iter().skip(1).zip(stage_rows.iter().skip(1)) {
+        for (equivalent, coefficient) in equivalent_weights.iter_mut().zip(row) {
+            *equivalent += weight * coefficient;
+        }
+    }
+    validate_explicit_rk_order(&stage_rows[..degree], &equivalent_weights, 2, "SERK2")
+}
+
 fn reconstruct_rock_rows(recurrence: &RockRecurrence, stage_count: usize) -> Vec<Vec<f64>> {
     let degree = recurrence.stages.len() + 1;
     let mut a = vec![vec![0.0; stage_count]; stage_count];
@@ -578,7 +767,7 @@ fn validate_order_two(
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_rock2_tableau, parse_rock4_tableau};
+    use super::{parse_rock2_tableau, parse_rock4_tableau, parse_serk2_tableau};
 
     const RESOURCE: &str = r#"{
         "name": "ROCK2",
@@ -606,6 +795,16 @@ mod tests {
             "b":["0.934502625489809","-0.426556402801135","-0.428612609028723","0.744370090574855"],
             "b_hat":["1.1350997211054","-0.58433336098972","-0.319172911177732","0.482853558185876","0.109256697110981"]
         }
+    }"#;
+
+    const SERK2_RESOURCE: &str = r#"{
+        "name":"SERK2",
+        "description":"Degree-two SERK2 test recurrence",
+        "kind":"serk2",
+        "order":2,
+        "degree":2,
+        "subdivisions":1,
+        "weights":["1.32","-0.96","0.64"]
     }"#;
 
     #[test]
@@ -734,6 +933,75 @@ mod tests {
             ROCK4_RESOURCE.replace("0.109256697110981", "1e999"),
         ] {
             assert!(parse_rock4_tableau(&invalid, "ROCK4", 1).is_err());
+        }
+    }
+
+    #[test]
+    fn parses_and_validates_a_serk2_recurrence() {
+        let tableau = parse_serk2_tableau(SERK2_RESOURCE, "SERK2", 2).unwrap();
+        assert_eq!(tableau.name(), "SERK2");
+        assert_eq!(tableau.description(), "Degree-two SERK2 test recurrence");
+        assert_eq!(tableau.order(), 2);
+        assert_eq!(tableau.degree(), 2);
+        assert_eq!(tableau.subdivisions(), 1);
+        assert_eq!(tableau.internal_degree(), 2);
+        assert_eq!(tableau.weights(), [1.32, -0.96, 0.64]);
+    }
+
+    #[test]
+    fn rejects_malformed_or_inconsistent_serk2_resources() {
+        for (invalid, requested_name, requested_degree) in [
+            (
+                SERK2_RESOURCE.replace(r#""name":"SERK2""#, r#""name":"OTHER""#),
+                "SERK2",
+                2,
+            ),
+            (
+                SERK2_RESOURCE.replace(r#""degree":2"#, r#""degree":3"#),
+                "SERK2",
+                2,
+            ),
+            (
+                SERK2_RESOURCE.replace(r#""kind":"serk2""#, r#""kind":"rock2""#),
+                "SERK2",
+                2,
+            ),
+            (
+                SERK2_RESOURCE.replace(r#""order":2"#, r#""order":1"#),
+                "SERK2",
+                2,
+            ),
+            (
+                SERK2_RESOURCE.replace(r#""subdivisions":1"#, r#""subdivisions":0"#),
+                "SERK2",
+                2,
+            ),
+            (
+                SERK2_RESOURCE.replace(r#""subdivisions":1"#, r#""subdivisions":3"#),
+                "SERK2",
+                2,
+            ),
+            (SERK2_RESOURCE.replace(r#","0.64"]"#, r#"]"#), "SERK2", 2),
+            (
+                SERK2_RESOURCE.replace(
+                    r#""description":"Degree-two SERK2 test recurrence""#,
+                    r#""description":" ""#,
+                ),
+                "SERK2",
+                2,
+            ),
+            (
+                SERK2_RESOURCE.replace(r#""weights":["#, r#""unexpected":true,"weights":["#),
+                "SERK2",
+                2,
+            ),
+            (SERK2_RESOURCE.replace("1.32", "1e999"), "SERK2", 2),
+            (SERK2_RESOURCE.replace("0.64", "0.63"), "SERK2", 2),
+        ] {
+            assert!(
+                parse_serk2_tableau(&invalid, requested_name, requested_degree).is_err(),
+                "accepted invalid resource: {invalid}"
+            );
         }
     }
 }

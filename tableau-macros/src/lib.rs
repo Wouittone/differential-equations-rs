@@ -3,7 +3,7 @@
 use differential_equations_tableau_core::{
     RungeKuttaKind, parse_irkn_tableau, parse_low_storage_tableau, parse_multistep_tableau,
     parse_numeric_expression, parse_rkn_tableau, parse_rock2_tableau, parse_rock4_tableau,
-    parse_symplectic_tableau, parse_tableau,
+    parse_serk2_tableau, parse_symplectic_tableau, parse_tableau,
 };
 use proc_macro::TokenStream;
 use proc_macro2::{Literal, TokenStream as TokenStream2};
@@ -792,6 +792,42 @@ fn expand_rock4_source(
     ))
 }
 
+/// Defines one independently lazy, degree-specific SERK2 tableau.
+///
+/// The shared parser reconstructs the recurrence and validates its second-order
+/// conditions during macro expansion. The emitted static embeds only the JSON
+/// source and parses it on first use.
+#[proc_macro]
+pub fn define_serk2_tableau_from_file(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DegreeStaticTableauInput);
+    let result =
+        read_degree_static_resource(&input).and_then(|source| expand_serk2_source(input, &source));
+    match result {
+        Ok(tokens) => tokens.into(),
+        Err(error) => syn::Error::new(proc_macro2::Span::call_site(), error)
+            .into_compile_error()
+            .into(),
+    }
+}
+
+fn expand_serk2_source(
+    input: DegreeStaticTableauInput,
+    source: &str,
+) -> Result<TokenStream2, String> {
+    let degree = input
+        .degree
+        .base10_parse::<usize>()
+        .map_err(|error| format!("invalid SERK2 degree: {error}"))?;
+    parse_serk2_tableau(source, &input.method_name.value(), degree)
+        .map_err(|error| format!("invalid tableau '{}': {error}", input.path.value()))?;
+    Ok(emit_degree_lazy_static(
+        input,
+        degree,
+        quote!(LazySerk2Tableau),
+        quote!(parse_serk2_tableau),
+    ))
+}
+
 fn emit_degree_lazy_static(
     input: DegreeStaticTableauInput,
     degree: usize,
@@ -927,6 +963,56 @@ mod rock4_tests {
         let error = expand_rock4_source(input(), &invalid).unwrap_err();
         assert!(error.contains("rock4.json"), "{error}");
         assert!(error.contains("order condition"), "{error}");
+    }
+}
+
+#[cfg(test)]
+mod serk2_tests {
+    use super::*;
+
+    fn source() -> &'static str {
+        r#"{
+            "name":"SERK2",
+            "description":"Macro test",
+            "kind":"serk2",
+            "order":2,
+            "degree":2,
+            "subdivisions":1,
+            "weights":["1.32","-0.96","0.64"]
+        }"#
+    }
+
+    fn input() -> DegreeStaticTableauInput {
+        syn::parse_str("pub TABLEAU, \"SERK2\", 2, \"serk2.json\", crate = renamed").unwrap()
+    }
+
+    #[test]
+    fn expansion_uses_the_shared_lazy_parser_without_emitting_coefficients() {
+        let tokens = expand_serk2_source(input(), source()).unwrap().to_string();
+        for required in [
+            "LazySerk2Tableau",
+            "LazyLock",
+            "include_str",
+            "parse_serk2_tableau",
+            "renamed",
+        ] {
+            assert!(tokens.contains(required), "missing {required}: {tokens}");
+        }
+        assert!(!tokens.contains("1.32"));
+        assert!(!tokens.contains("- 0.96"));
+        assert!(!tokens.contains("const "));
+    }
+
+    #[test]
+    fn expansion_rejects_invalid_metadata_and_order_conditions() {
+        for invalid in [
+            source().replace(r#""degree":2"#, r#""degree":3"#),
+            source().replace(r#""name":"SERK2""#, r#""name":"OTHER""#),
+            source().replace("0.64", "0.63"),
+        ] {
+            let error = expand_serk2_source(input(), &invalid).unwrap_err();
+            assert!(error.contains("serk2.json"), "{error}");
+        }
     }
 }
 

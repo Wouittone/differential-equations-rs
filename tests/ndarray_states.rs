@@ -6,7 +6,7 @@ use differential_equations::ndarray::{
 use differential_equations::solvers::explicit::Tsit5;
 use differential_equations::solvers::explicit::split_euler::{SplitEuler, solve_split};
 use differential_equations::solvers::rosenbrock::Rodas5P;
-use differential_equations::solvers::stabilized::{ROCK2, ROCK4};
+use differential_equations::solvers::stabilized::{ROCK2, ROCK4, SERK2};
 use differential_equations::{
     CallbackAction, OdeAlgorithm, OdeProblem, SaveMode, SolveOptions, solve,
 };
@@ -18,7 +18,7 @@ fn options() -> SolveOptions {
         .with_dense_output(true)
 }
 
-fn assert_decay_is_shape_invariant<A>(algorithm: impl Fn() -> A)
+fn assert_decay_is_shape_invariant<A>(algorithm: impl Fn() -> A, shape_tolerance: f64)
 where
     A: OdeAlgorithm,
 {
@@ -66,17 +66,20 @@ where
         .chain(matrix_solution.last_state())
         .zip([1.0, 2.0, 1.0, 2.0, 3.0, 4.0])
     {
-        assert!((*endpoint - initial * scalar_endpoint).abs() < 1.0e-12);
+        assert!((*endpoint - initial * scalar_endpoint).abs() < shape_tolerance);
     }
     assert!((scalar_endpoint - (-1.0_f64).exp()).abs() < 1.0e-4);
 }
 
 #[test]
 fn one_decay_ode_is_shape_invariant_for_explicit_and_stiff_solvers() {
-    assert_decay_is_shape_invariant(|| Tsit5);
-    assert_decay_is_shape_invariant(|| Rodas5P);
-    assert_decay_is_shape_invariant(|| ROCK2);
-    assert_decay_is_shape_invariant(|| ROCK4);
+    assert_decay_is_shape_invariant(|| Tsit5, 1.0e-12);
+    assert_decay_is_shape_invariant(|| Rodas5P, 1.0e-12);
+    assert_decay_is_shape_invariant(|| ROCK2, 1.0e-12);
+    assert_decay_is_shape_invariant(|| ROCK4, 1.0e-12);
+    // SERK2 combines stages with large alternating weights, so equivalent
+    // component scalings accumulate more floating-point cancellation.
+    assert_decay_is_shape_invariant(|| SERK2, 1.0e-9);
 }
 
 #[test]

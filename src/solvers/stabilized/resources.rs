@@ -1,6 +1,7 @@
 use crate::tableau::{
-    LazyRock2Tableau, LazyRock4Tableau, Rock2Tableau, Rock4Tableau, TableauError,
-    define_rock2_tableau_from_file, define_rock4_tableau_from_file, load_tableau,
+    LazyRock2Tableau, LazyRock4Tableau, LazySerk2Tableau, Rock2Tableau, Rock4Tableau, Serk2Tableau,
+    TableauError, define_rock2_tableau_from_file, define_rock4_tableau_from_file,
+    define_serk2_tableau_from_file, load_tableau,
 };
 
 define_rock2_tableau_from_file!(
@@ -526,11 +527,62 @@ pub(super) fn rock4_available_degrees() -> impl ExactSizeIterator<Item = usize> 
     ROCK4_RESOURCES.iter().map(|(degree, _)| *degree)
 }
 
+macro_rules! define_serk2_resources {
+    ($(($degree:literal, $static_name:ident, $path:literal)),+ $(,)?) => {
+        $(
+            define_serk2_tableau_from_file!(
+                pub(super) $static_name,
+                "SERK2",
+                $degree,
+                $path,
+                crate = crate
+            );
+        )+
+
+        static SERK2_RESOURCES: &[(usize, &LazySerk2Tableau)] = &[
+            $(($degree, &$static_name),)+
+        ];
+    };
+}
+
+#[rustfmt::skip]
+define_serk2_resources!(
+    (10, SERK2_010, "src/tableau/resources/methods/stabilized/serk2/degree-010.json"),
+    (20, SERK2_020, "src/tableau/resources/methods/stabilized/serk2/degree-020.json"),
+    (30, SERK2_030, "src/tableau/resources/methods/stabilized/serk2/degree-030.json"),
+    (40, SERK2_040, "src/tableau/resources/methods/stabilized/serk2/degree-040.json"),
+    (50, SERK2_050, "src/tableau/resources/methods/stabilized/serk2/degree-050.json"),
+    (60, SERK2_060, "src/tableau/resources/methods/stabilized/serk2/degree-060.json"),
+    (80, SERK2_080, "src/tableau/resources/methods/stabilized/serk2/degree-080.json"),
+    (100, SERK2_100, "src/tableau/resources/methods/stabilized/serk2/degree-100.json"),
+    (150, SERK2_150, "src/tableau/resources/methods/stabilized/serk2/degree-150.json"),
+    (200, SERK2_200, "src/tableau/resources/methods/stabilized/serk2/degree-200.json"),
+    (250, SERK2_250, "src/tableau/resources/methods/stabilized/serk2/degree-250.json"),
+);
+
+pub(super) fn serk2_tableau_for_degree(
+    requested_degree: usize,
+) -> Result<&'static Serk2Tableau, TableauError> {
+    load_tableau(serk2_resource_for_degree(requested_degree))
+}
+
+fn serk2_resource_for_degree(requested_degree: usize) -> &'static LazySerk2Tableau {
+    let index = SERK2_RESOURCES
+        .partition_point(|(degree, _)| *degree < requested_degree)
+        .min(SERK2_RESOURCES.len() - 1);
+    SERK2_RESOURCES[index].1
+}
+
+pub(super) fn serk2_available_degrees() -> impl ExactSizeIterator<Item = usize> {
+    SERK2_RESOURCES.iter().map(|(degree, _)| *degree)
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        ROCK2_RESOURCES, ROCK4_RESOURCES, rock2_resource_for_degree, rock2_tableau_for_degree,
-        rock4_resource_for_degree, rock4_tableau_for_degree,
+        ROCK2_RESOURCES, ROCK4_RESOURCES, SERK2_RESOURCES, rock2_resource_for_degree,
+        rock2_tableau_for_degree, rock4_resource_for_degree, rock4_tableau_for_degree,
+        serk2_resource_for_degree, serk2_tableau_for_degree,
     };
 
     fn hash_word(hash: &mut u64, word: u64) {
@@ -683,5 +735,69 @@ mod tests {
             }
         }
         assert_eq!(hash, 0x9ace_59aa_6696_f261);
+    }
+
+    #[test]
+    fn serk2_registry_is_sorted_unique_and_matches_resources() {
+        assert_eq!(SERK2_RESOURCES.len(), 11);
+        assert_eq!(SERK2_RESOURCES.first().unwrap().0, 10);
+        assert_eq!(SERK2_RESOURCES.last().unwrap().0, 250);
+        assert!(SERK2_RESOURCES.windows(2).all(|pair| pair[0].0 < pair[1].0));
+        for &(degree, _) in SERK2_RESOURCES {
+            let tableau = serk2_tableau_for_degree(degree).unwrap();
+            assert_eq!(tableau.degree(), degree);
+            assert_eq!(tableau.order(), 2);
+            assert_eq!(tableau.subdivisions(), 10);
+            assert_eq!(tableau.internal_degree(), degree / 10);
+            assert_eq!(tableau.weights().len(), degree + 1);
+        }
+    }
+
+    #[test]
+    fn serk2_selection_uses_ceiling_degree_and_clamps() {
+        for (requested, selected) in [
+            (0, 10),
+            (10, 10),
+            (11, 20),
+            (20, 20),
+            (21, 30),
+            (60, 60),
+            (61, 80),
+            (100, 100),
+            (101, 150),
+            (250, 250),
+            (251, 250),
+            (usize::MAX, 250),
+        ] {
+            assert_eq!(
+                serk2_tableau_for_degree(requested).unwrap().degree(),
+                selected
+            );
+        }
+
+        for requested in 0..=251 {
+            let expected = SERK2_RESOURCES
+                .iter()
+                .find(|(degree, _)| *degree >= requested)
+                .unwrap_or_else(|| SERK2_RESOURCES.last().unwrap());
+            assert!(std::ptr::eq(
+                serk2_resource_for_degree(requested),
+                expected.1
+            ));
+        }
+    }
+
+    #[test]
+    fn serk2_resources_match_the_pinned_coefficient_fingerprint() {
+        let mut hash = 0xcbf2_9ce4_8422_2325;
+        for &(degree, _) in SERK2_RESOURCES {
+            let tableau = serk2_tableau_for_degree(degree).unwrap();
+            hash_word(&mut hash, degree as u64);
+            hash_word(&mut hash, tableau.subdivisions() as u64);
+            for coefficient in tableau.weights() {
+                hash_word(&mut hash, coefficient.to_bits());
+            }
+        }
+        assert_eq!(hash, 0x29c2_b5e7_c195_dff7);
     }
 }

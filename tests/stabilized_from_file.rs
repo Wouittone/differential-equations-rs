@@ -1,5 +1,6 @@
 use diffeq::tableau::{
-    define_rock2_tableau_from_file, define_rock4_tableau_from_file, load_tableau,
+    define_rock2_tableau_from_file, define_rock4_tableau_from_file, define_serk2_tableau_from_file,
+    load_tableau,
 };
 use differential_equations as diffeq;
 
@@ -16,6 +17,14 @@ define_rock4_tableau_from_file!(
     "ROCK4",
     1,
     "tests/resources/file_rock4.json",
+    crate = diffeq
+);
+
+define_serk2_tableau_from_file!(
+    pub FILE_SERK2_DEGREE_2,
+    "SERK2",
+    2,
+    "tests/resources/file_serk2.json",
     crate = diffeq
 );
 
@@ -60,4 +69,18 @@ fn renamed_dependency_path_loads_a_degree_specific_rock4_tableau() {
     );
     assert_eq!(first.b()[0].to_bits(), 0.934502625489809_f64.to_bits());
     assert_eq!(first.b_hat()[4].to_bits(), 0.109256697110981_f64.to_bits());
+}
+
+#[test]
+fn renamed_dependency_path_loads_a_degree_specific_serk2_tableau() {
+    let first = load_tableau(&FILE_SERK2_DEGREE_2).unwrap();
+    let second = load_tableau(&FILE_SERK2_DEGREE_2).unwrap();
+
+    assert!(std::ptr::eq(first, second));
+    assert_eq!(first.name(), "SERK2");
+    assert_eq!(first.order(), 2);
+    assert_eq!(first.degree(), 2);
+    assert_eq!(first.subdivisions(), 1);
+    assert_eq!(first.internal_degree(), 2);
+    assert_eq!(first.weights(), [1.32, -0.96, 0.64]);
 }

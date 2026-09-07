@@ -1,0 +1,10 @@
+{
+  "$schema"      : "../../../stabilized-schema.json",
+  "name"         : "SERK2",
+  "description"  : "Second-order stabilized explicit Runge--Kutta weights from OrdinaryDiffEqStabilizedRK commit 211142263781255a9aa2f910f6760b9f18ec29c8.",
+  "kind"         : "serk2",
+  "order"        : 2,
+  "degree"       : 10,
+  "subdivisions" : 10,
+  "weights"      : ["-0.9636276040086823", "-1.4460040681830764", "45.708735805471825", "21.776665544402007", "-347.4880591186425", "-85.13943254169654", "927.1233146966854", "119.26005393567274", "-1013.540028141199", "-54.02407949187814", "389.732460983376"]
+}

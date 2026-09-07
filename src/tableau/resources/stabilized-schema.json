@@ -4,7 +4,8 @@
   "title"   : "Degree-specific stabilized solver tableau",
   "oneOf"   : [
     { "$ref": "#/$defs/rock2_tableau" },
-    { "$ref": "#/$defs/rock4_tableau" }
+    { "$ref": "#/$defs/rock4_tableau" },
+    { "$ref": "#/$defs/serk2_tableau" }
   ],
   "$defs" : {
     "scalar" : {
@@ -23,6 +24,11 @@
       "type"     : "array",
       "minItems" : 5,
       "maxItems" : 5,
+      "items"    : { "$ref": "#/$defs/scalar" }
+    },
+    "vector" : {
+      "type"     : "array",
+      "minItems" : 2,
       "items"    : { "$ref": "#/$defs/scalar" }
     },
     "rock_recurrence_stage" : {
@@ -102,6 +108,21 @@
         "degree"         : { "type": "integer", "minimum": 1 },
         "recurrence"     : { "$ref": "#/$defs/rock_recurrence" },
         "finishing"      : { "$ref": "#/$defs/rock4_finish" }
+      }
+    },
+    "serk2_tableau" : {
+      "type"                 : "object",
+      "additionalProperties" : false,
+      "required"             : ["name", "description", "kind", "order", "degree", "subdivisions", "weights"],
+      "properties"           : {
+        "$schema"      : { "type": "string" },
+        "name"         : { "const": "SERK2" },
+        "description"  : { "type": "string", "minLength": 1 },
+        "kind"         : { "const": "serk2" },
+        "order"        : { "const": 2 },
+        "degree"       : { "type": "integer", "minimum": 1, "maximum": 250 },
+        "subdivisions" : { "type": "integer", "minimum": 1 },
+        "weights"      : { "$ref": "#/$defs/vector" }
       }
     }
   }

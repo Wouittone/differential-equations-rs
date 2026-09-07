@@ -2,7 +2,8 @@ use std::alloc::System;
 use std::hint::black_box;
 
 use diffeq::tableau::{
-    define_rock2_tableau_from_file, define_rock4_tableau_from_file, load_tableau,
+    define_rock2_tableau_from_file, define_rock4_tableau_from_file, define_serk2_tableau_from_file,
+    load_tableau,
 };
 use differential_equations as diffeq;
 use stats_alloc::{INSTRUMENTED_SYSTEM, Region, StatsAlloc};
@@ -15,6 +16,20 @@ define_rock2_tableau_from_file!(
     "ROCK2",
     1,
     "src/tableau/resources/methods/stabilized/rock2/degree-001.json",
+    crate = diffeq
+);
+define_serk2_tableau_from_file!(
+    SERK2_DEGREE_10,
+    "SERK2",
+    10,
+    "src/tableau/resources/methods/stabilized/serk2/degree-010.json",
+    crate = diffeq
+);
+define_serk2_tableau_from_file!(
+    SERK2_DEGREE_100,
+    "SERK2",
+    100,
+    "src/tableau/resources/methods/stabilized/serk2/degree-100.json",
     crate = diffeq
 );
 define_rock4_tableau_from_file!(
@@ -75,6 +90,27 @@ fn stabilized_degree_resources_initialize_independently_and_cache() {
     for _ in 0..1_000 {
         black_box(load_tableau(&ROCK4_DEGREE_1).unwrap());
         black_box(load_tableau(&ROCK4_DEGREE_22).unwrap());
+    }
+    assert_eq!(cached.change().allocations, 0);
+
+    let references = Region::new(GLOBAL);
+    black_box(&SERK2_DEGREE_10);
+    black_box(&SERK2_DEGREE_100);
+    assert_eq!(references.change().allocations, 0);
+
+    let first = Region::new(GLOBAL);
+    black_box(load_tableau(&SERK2_DEGREE_10).unwrap());
+    assert!(first.change().allocations > 0);
+
+    // Loading degree 10 must not initialize degree 100.
+    let independent = Region::new(GLOBAL);
+    black_box(load_tableau(&SERK2_DEGREE_100).unwrap());
+    assert!(independent.change().allocations > 0);
+
+    let cached = Region::new(GLOBAL);
+    for _ in 0..1_000 {
+        black_box(load_tableau(&SERK2_DEGREE_10).unwrap());
+        black_box(load_tableau(&SERK2_DEGREE_100).unwrap());
     }
     assert_eq!(cached.change().allocations, 0);
 }
