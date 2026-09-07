@@ -6,6 +6,7 @@ use differential_equations::ndarray::{
 use differential_equations::solvers::explicit::Tsit5;
 use differential_equations::solvers::explicit::split_euler::{SplitEuler, solve_split};
 use differential_equations::solvers::rosenbrock::Rodas5P;
+use differential_equations::solvers::stabilized::ROCK2;
 use differential_equations::{
     CallbackAction, OdeAlgorithm, OdeProblem, SaveMode, SolveOptions, solve,
 };
@@ -68,6 +69,7 @@ where
 fn one_decay_ode_is_shape_invariant_for_explicit_and_stiff_solvers() {
     assert_decay_is_shape_invariant(|| Tsit5);
     assert_decay_is_shape_invariant(|| Rodas5P);
+    assert_decay_is_shape_invariant(|| ROCK2);
 }
 
 #[test]

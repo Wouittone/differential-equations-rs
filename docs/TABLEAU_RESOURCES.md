@@ -5,8 +5,8 @@ Explicit and implicit Runge--Kutta resources use canonical Butcher matrices;
 symplectic compositions use paired drift/kick vectors. Specialized families
 also use this tree for typed method data, including canonical linear multistep
 formulas for fixed-step Adams and MRAB and per-method Rosenbrock tableaus.
-Migration is not yet complete: generic coefficient banks remain only in the
-stabilized-method implementation.
+Migration is not yet complete: ROCK2 now uses degree-specific typed resources,
+while generic coefficient banks remain for ROCK4, SERK2, ESERK4, and ESERK5.
 
 Resources use a FracturedJson-style layout: object fields have stable ordering,
 scalar arrays stay on one line, and every matrix row occupies one line. This is
@@ -87,6 +87,43 @@ derivatives for Hermite dense output and `save_at` sampling, so additional
 adaptive work or output samples do not introduce per-step allocation growth.
 Other low-storage methods remain fixed-step because their resources do not
 publish an embedded estimator.
+
+## Stabilized ROCK resources
+
+ROCK recurrences are not ordinary Butcher matrices, so their resource model
+stores the published polynomial recurrence directly. Each ROCK2 polynomial
+degree has its own JSON document under
+`src/tableau/resources/methods/stabilized/rock2`. A document contains one
+initial coefficient, exactly `degree - 1` `[mu, kappa]` recurrence rows, and
+the two finishing coefficients. Derived recurrence multipliers, flat-bank
+offsets, and duplicated coefficient constants are not stored.
+
+The shared parser reconstructs the equivalent RK weights and nodes and checks
+both order conditions in addition to resource identity, degree, dimensions,
+unknown fields, and finite coefficients. The procedural macro repeats this
+validation during compilation, embeds the original JSON with `include_str!`,
+and gives every degree an independent `LazyLock`. Selecting degree 22 therefore
+does not parse or retain the other 45 ROCK2 resources.
+
+Applications can inspect the same catalogue used by the solver:
+
+```rust
+use differential_equations::solvers::stabilized::ROCK2;
+
+let selected = ROCK2.tableau(21)?;
+assert_eq!(selected.degree(), 22);
+assert_eq!(selected.recurrence().stages().len(), 21);
+assert_eq!(ROCK2.available_degrees().count(), 46);
+# Ok::<(), differential_equations::tableau::TableauError>(())
+```
+
+For a degree-specific downstream resource,
+`tableau::define_rock2_tableau_from_file!` provides the same compile-time
+validation and lazy typed static. Its arguments include the expected method
+name and degree, preventing a valid file from being wired to the wrong
+catalogue entry. The remaining stabilized families will adopt equivalent
+family-specific representations before the transitional generic bank and its
+legacy macro are removed.
 
 The pinned SciML revision marks `CKLLSRK95_4C`'s convergence test as broken.
 Its coefficients are preserved exactly for source parity, but users who need

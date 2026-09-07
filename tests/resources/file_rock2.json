@@ -1,0 +1,15 @@
+{
+  "$schema"     : "../../src/tableau/resources/stabilized-schema.json",
+  "name"        : "ROCK2",
+  "description" : "Degree-2 ROCK2 fixture for downstream macro coverage.",
+  "kind"        : "rock2",
+  "order"       : 2,
+  "degree"      : 2,
+  "recurrence"  : {
+    "first"  : "0.09326607661089206",
+    "stages" : [
+      ["0.1268473641290642", "0.02103378190528467"]
+    ]
+  },
+  "finishing" : { "first": "0.3889624104727243", "second": "0.4219428123056774" }
+}

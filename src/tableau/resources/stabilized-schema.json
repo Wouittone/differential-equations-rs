@@ -1,0 +1,53 @@
+{
+  "$schema"              : "https://json-schema.org/draft/2020-12/schema",
+  "$id"                  : "https://github.com/Wouittone/differential-equations-rs/stabilized-schema.json",
+  "title"                : "Degree-specific stabilized solver tableau",
+  "type"                 : "object",
+  "additionalProperties" : false,
+  "required"             : ["name", "description", "kind", "order", "degree", "recurrence", "finishing"],
+  "properties"           : {
+    "$schema"     : { "type": "string" },
+    "name"        : { "const": "ROCK2" },
+    "description" : { "type": "string", "minLength": 1 },
+    "kind"        : { "const": "rock2" },
+    "order"       : { "const": 2 },
+    "degree"      : { "type": "integer", "minimum": 1 },
+    "recurrence"  : { "$ref": "#/$defs/rock_recurrence" },
+    "finishing"   : { "$ref": "#/$defs/rock2_finish" }
+  },
+  "$defs" : {
+    "scalar" : {
+      "oneOf" : [
+        { "type": "number" },
+        { "type": "string", "minLength": 1 }
+      ]
+    },
+    "rock_recurrence_stage" : {
+      "type"     : "array",
+      "minItems" : 2,
+      "maxItems" : 2,
+      "items"    : { "$ref": "#/$defs/scalar" }
+    },
+    "rock_recurrence" : {
+      "type"                 : "object",
+      "additionalProperties" : false,
+      "required"             : ["first", "stages"],
+      "properties"           : {
+        "first"  : { "$ref": "#/$defs/scalar" },
+        "stages" : {
+          "type"  : "array",
+          "items" : { "$ref": "#/$defs/rock_recurrence_stage" }
+        }
+      }
+    },
+    "rock2_finish" : {
+      "type"                 : "object",
+      "additionalProperties" : false,
+      "required"             : ["first", "second"],
+      "properties"           : {
+        "first"  : { "$ref": "#/$defs/scalar" },
+        "second" : { "$ref": "#/$defs/scalar" }
+      }
+    }
+  }
+}

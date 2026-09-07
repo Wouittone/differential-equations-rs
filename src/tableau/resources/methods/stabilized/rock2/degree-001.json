@@ -1,0 +1,13 @@
+{
+  "$schema"     : "../../../stabilized-schema.json",
+  "name"        : "ROCK2",
+  "description" : "ROCK2 degree-1 recurrence from pinned OrdinaryDiffEqStabilizedRK at 211142263781255a9aa2f910f6760b9f18ec29c8.",
+  "kind"        : "rock2",
+  "order"       : 2,
+  "degree"      : 1,
+  "recurrence"  : {
+    "first"  : "0.1794612899156781",
+    "stages" : []
+  },
+  "finishing" : { "first": "0.4102693550421609", "second": "0.4495196112243335" }
+}

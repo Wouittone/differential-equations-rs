@@ -2,7 +2,7 @@
 //!
 //! The compact polynomial recurrences in this module are recovered from
 //! OrdinaryDiffEqStabilizedRK at commit
-//! `34a1983869d1235e8fb5680aafc47cd41da428b3`.  Each implemented method
+//! `211142263781255a9aa2f910f6760b9f18ec29c8`. Each implemented method
 //! estimates the Jacobian spectral radius by a matrix-free power iteration,
 //! chooses a stage count from its own stability bound, and advances with its
 //! method-specific Chebyshev, Legendre, or Gegenbauer recurrence.
@@ -16,10 +16,10 @@
 use super::coefficient_data::{
     ESERK4_DEGREES, ESERK4_ERROR_COMBINATION, ESERK4_SOLUTION_COMBINATION, ESERK4_WEIGHTS,
     ESERK5_DEGREES, ESERK5_ERROR_COMBINATION, ESERK5_SOLUTION_COMBINATION, ESERK5_WEIGHTS,
-    ROCK2_DEGREES, ROCK2_FINISH_FIRST, ROCK2_FINISH_SECOND, ROCK2_RECURRENCE, ROCK4_DEGREES,
-    ROCK4_FINISH_A, ROCK4_FINISH_B, ROCK4_FINISH_ERROR, ROCK4_RECURRENCE, SERK2_DEGREES,
-    SERK2_WEIGHTS,
+    ROCK4_DEGREES, ROCK4_FINISH_A, ROCK4_FINISH_B, ROCK4_FINISH_ERROR, ROCK4_RECURRENCE,
+    SERK2_DEGREES, SERK2_WEIGHTS,
 };
+use super::resources::{rock2_available_degrees, rock2_tableau_for_degree};
 use crate::integrator::{
     KernelCapabilities, StepEstimate, StepKernel, integrate as drive_integration,
 };
@@ -421,9 +421,11 @@ impl StabilizedKernel {
         let requested_total = (((1.5 + scaled_radius) / 0.811).sqrt().floor() as usize + 1)
             .clamp(1, MAX_POLYNOMIAL_STAGES);
         let requested_degree = requested_total.max(3) - 2;
-        let (degree_index, degree, start) = select_rock_degree(ROCK2_DEGREES, requested_degree);
-
-        let first_coefficient = ROCK2_RECURRENCE[start];
+        let tableau =
+            rock2_tableau_for_degree(requested_degree).map_err(|_| SolveError::InvalidTableau)?;
+        let degree = tableau.degree();
+        let recurrence = tableau.recurrence();
+        let first_coefficient = recurrence.first_stage();
         let mut time_previous = time + step * first_coefficient;
         let mut time_previous_two = time_previous;
         let mut time_previous_three = time;
@@ -440,10 +442,10 @@ impl StabilizedKernel {
         if degree == 1 {
             self.next_stage.copy_from_slice(&self.previous_one);
         } else {
-            for stage in 2..=degree {
-                let coefficient = start + (stage - 2) * 2 + 1;
-                let mu = ROCK2_RECURRENCE[coefficient];
-                let kappa = ROCK2_RECURRENCE[coefficient + 1];
+            for (stage_index, coefficients) in recurrence.stages().iter().enumerate() {
+                let stage = stage_index + 2;
+                let mu = coefficients.mu();
+                let kappa = coefficients.kappa();
                 let nu = -1.0 - kappa;
                 Self::evaluate(
                     problem,
@@ -471,8 +473,8 @@ impl StabilizedKernel {
             }
         }
 
-        let finish_first = step * ROCK2_FINISH_FIRST[degree_index];
-        let finish_second = step * ROCK2_FINISH_SECOND[degree_index];
+        let finish_first = step * tableau.finish_first();
+        let finish_second = step * tableau.finish_second();
         Self::evaluate(
             problem,
             &mut self.derivative,
@@ -1692,6 +1694,26 @@ implemented_method!(
     StabilizedFamily::Rock2,
     "Second-order orthogonal-polynomial ROCK method with a tabulated finishing procedure."
 );
+
+impl ROCK2 {
+    /// Returns the first available tableau whose degree is at least
+    /// `requested_degree`, clamping to the largest supported degree.
+    ///
+    /// The returned value is parsed only on its first inspection or use. Read
+    /// [`Rock2Tableau::degree`](crate::tableau::Rock2Tableau::degree) to inspect
+    /// the degree selected from the discrete built-in catalogue.
+    pub fn tableau(
+        self,
+        requested_degree: usize,
+    ) -> Result<&'static crate::tableau::Rock2Tableau, crate::tableau::TableauError> {
+        rock2_tableau_for_degree(requested_degree)
+    }
+
+    /// Iterates over the supported polynomial degrees in ascending order.
+    pub fn available_degrees(self) -> impl ExactSizeIterator<Item = usize> {
+        rock2_available_degrees()
+    }
+}
 implemented_method!(
     ROCK4,
     StabilizedFamily::Rock4,

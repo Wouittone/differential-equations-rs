@@ -24,6 +24,8 @@ pub use low_storage::{
     LowStoragePidController, LowStorageRungeKuttaLayout, LowStorageRungeKuttaTableau,
     RegisterPipelineTableau, ThreeSTableau, parse_low_storage_tableau,
 };
+mod stabilized;
+pub use stabilized::{Rock2Tableau, RockRecurrence, RockRecurrenceStage, parse_rock2_tableau};
 
 use serde::Deserialize;
 use std::fmt;

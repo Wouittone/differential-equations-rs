@@ -4,8 +4,8 @@
 //! procedural macros validate each document with the same parsers used here
 //! while compiling, then the selected tableau is materialized only on first
 //! use. This includes ordinary Runge--Kutta, Runge--Kutta--Nyström, improved
-//! RKN, low-storage Runge--Kutta, multistep, Rosenbrock, multirate, and
-//! symplectic representations.
+//! RKN, low-storage and stabilized Runge--Kutta, multistep, Rosenbrock,
+//! multirate, and symplectic representations.
 
 use std::sync::LazyLock;
 
@@ -15,11 +15,12 @@ pub use differential_equations_tableau_core::{
     LazyDenseStage as ParsedLazyDenseStage, LinearMultistepTableau, LowStorageAbcTableau,
     LowStorageAdaptiveController, LowStorageEmbeddedTableau, LowStorageEndpointEvaluation,
     LowStorageNodePolicy, LowStoragePidController, LowStorageRungeKuttaLayout,
-    LowStorageRungeKuttaTableau, MisTableau, MriTableau, RegisterPipelineTableau, RosenbrockKind,
-    RosenbrockPairTableau, RosenbrockTableau, RungeKuttaKind, RungeKuttaNystromKind,
-    RungeKuttaNystromTableau, RungeKuttaTableau, SymplecticTableau, TableauError, ThreeSTableau,
-    VariableMultistepTableau, parse_irkn_tableau, parse_low_storage_tableau, parse_mis_tableau,
-    parse_mri_tableau, parse_multistep_tableau, parse_rkn_tableau, parse_rosenbrock_pair_tableau,
+    LowStorageRungeKuttaTableau, MisTableau, MriTableau, RegisterPipelineTableau, Rock2Tableau,
+    RockRecurrence, RockRecurrenceStage, RosenbrockKind, RosenbrockPairTableau, RosenbrockTableau,
+    RungeKuttaKind, RungeKuttaNystromKind, RungeKuttaNystromTableau, RungeKuttaTableau,
+    SymplecticTableau, TableauError, ThreeSTableau, VariableMultistepTableau, parse_irkn_tableau,
+    parse_low_storage_tableau, parse_mis_tableau, parse_mri_tableau, parse_multistep_tableau,
+    parse_rkn_tableau, parse_rock2_tableau, parse_rosenbrock_pair_tableau,
     parse_rosenbrock_tableau, parse_symplectic_tableau, parse_tableau,
     parse_variable_multistep_tableau,
 };
@@ -60,6 +61,9 @@ pub type LazyIrknTableau = LazyLock<Result<IrknTableau, TableauError>>;
 pub type LazyLowStorageRungeKuttaTableau =
     LazyLock<Result<LowStorageRungeKuttaTableau, TableauError>>;
 
+/// A lazily initialized, degree-specific ROCK2 recurrence.
+pub type LazyRock2Tableau = LazyLock<Result<Rock2Tableau, TableauError>>;
+
 /// Returns a parsed lazy tableau, preserving any validation error.
 pub fn load_tableau<T>(
     resource: &'static LazyLock<Result<T, TableauError>>,
@@ -94,6 +98,8 @@ pub use differential_equations_tableau_macros::define_multistep_tableau_from_fil
 pub use differential_equations_tableau_macros::define_rkn_from_file;
 #[doc(inline)]
 pub use differential_equations_tableau_macros::define_rkn_tableau_from_file;
+#[doc(inline)]
+pub use differential_equations_tableau_macros::define_rock2_tableau_from_file;
 #[doc(inline)]
 pub use differential_equations_tableau_macros::define_rosenbrock_pair_tableau_from_file;
 #[doc(inline)]

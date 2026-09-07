@@ -3,6 +3,7 @@
 pub mod general;
 /// Implicit Runge--Kutta--Chebyshev solver for split problems.
 pub mod irkc;
+mod resources;
 
 mod coefficient_data {
     #![allow(clippy::excessive_precision)]

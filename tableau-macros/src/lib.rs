@@ -2,7 +2,8 @@
 
 use differential_equations_tableau_core::{
     RungeKuttaKind, parse_irkn_tableau, parse_low_storage_tableau, parse_multistep_tableau,
-    parse_numeric_expression, parse_rkn_tableau, parse_symplectic_tableau, parse_tableau,
+    parse_numeric_expression, parse_rkn_tableau, parse_rock2_tableau, parse_symplectic_tableau,
+    parse_tableau,
 };
 use proc_macro::TokenStream;
 use proc_macro2::{Literal, TokenStream as TokenStream2};
@@ -31,6 +32,49 @@ struct StaticTableauInput {
     method_name: LitStr,
     path: LitStr,
     crate_path: SynPath,
+}
+
+struct DegreeStaticTableauInput {
+    visibility: Visibility,
+    static_name: Ident,
+    method_name: LitStr,
+    degree: syn::LitInt,
+    path: LitStr,
+    crate_path: SynPath,
+}
+
+impl Parse for DegreeStaticTableauInput {
+    fn parse(input: ParseStream<'_>) -> syn::Result<Self> {
+        let visibility = input.parse()?;
+        let static_name = input.parse()?;
+        input.parse::<Token![,]>()?;
+        let method_name = input.parse()?;
+        input.parse::<Token![,]>()?;
+        let degree = input.parse()?;
+        input.parse::<Token![,]>()?;
+        let path = input.parse()?;
+        let crate_path = if input.peek(Token![,]) {
+            input.parse::<Token![,]>()?;
+            input.parse::<Token![crate]>()?;
+            input.parse::<Token![=]>()?;
+            input.parse()?
+        } else {
+            parse_quote!(::differential_equations)
+        };
+        if !input.is_empty() {
+            return Err(input.error(
+                "expected `visibility STATIC_NAME, \"MethodName\", degree, \"path/to/tableau.json\"` with optional `, crate = path`",
+            ));
+        }
+        Ok(Self {
+            visibility,
+            static_name,
+            method_name,
+            degree,
+            path,
+            crate_path,
+        })
+    }
 }
 
 impl Parse for StaticTableauInput {
@@ -673,6 +717,120 @@ pub fn define_low_storage_rk_tableau_from_file(input: TokenStream) -> TokenStrea
         Err(error) => syn::Error::new(proc_macro2::Span::call_site(), error)
             .into_compile_error()
             .into(),
+    }
+}
+
+/// Defines one independently lazy, degree-specific ROCK2 tableau.
+///
+/// The JSON resource is fully parsed and validated during macro expansion.
+/// The expansion embeds the original source with `include_str!` and parses it
+/// once, only when this particular degree is inspected or selected.
+#[proc_macro]
+pub fn define_rock2_tableau_from_file(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DegreeStaticTableauInput);
+    let manifest_dir = match std::env::var_os("CARGO_MANIFEST_DIR") {
+        Some(directory) => PathBuf::from(directory),
+        None => {
+            return syn::Error::new(
+                proc_macro2::Span::call_site(),
+                "CARGO_MANIFEST_DIR is unavailable during macro expansion",
+            )
+            .into_compile_error()
+            .into();
+        }
+    };
+    let path = manifest_dir.join(input.path.value());
+    let result = std::fs::read_to_string(&path)
+        .map_err(|error| format!("failed to read `{}`: {error}", path.display()))
+        .and_then(|source| expand_rock2_source(input, &source));
+    match result {
+        Ok(tokens) => tokens.into(),
+        Err(error) => syn::Error::new(proc_macro2::Span::call_site(), error)
+            .into_compile_error()
+            .into(),
+    }
+}
+
+fn expand_rock2_source(
+    input: DegreeStaticTableauInput,
+    source: &str,
+) -> Result<TokenStream2, String> {
+    let degree = input
+        .degree
+        .base10_parse::<usize>()
+        .map_err(|error| format!("invalid ROCK2 degree: {error}"))?;
+    parse_rock2_tableau(source, &input.method_name.value(), degree)
+        .map_err(|error| format!("invalid tableau `{}`: {error}", input.path.value()))?;
+
+    let visibility = input.visibility;
+    let static_name = input.static_name;
+    let method_name = input.method_name;
+    let source_path = input.path;
+    let crate_path = input.crate_path;
+    Ok(quote! {
+        #visibility static #static_name: #crate_path::tableau::LazyRock2Tableau =
+            ::std::sync::LazyLock::new(|| {
+                #crate_path::tableau::parse_rock2_tableau(
+                    include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/", #source_path)),
+                    #method_name,
+                    #degree,
+                )
+            });
+    })
+}
+
+#[cfg(test)]
+mod rock2_tests {
+    use super::*;
+
+    fn source() -> &'static str {
+        r#"{
+            "name":"ROCK2",
+            "description":"Macro test",
+            "kind":"rock2",
+            "order":2,
+            "degree":2,
+            "recurrence":{
+                "first":"0.09326607661089206",
+                "stages":[["0.1268473641290642","0.02103378190528467"]]
+            },
+            "finishing":{
+                "first":"0.3889624104727243",
+                "second":"0.4219428123056774"
+            }
+        }"#
+    }
+
+    fn input() -> DegreeStaticTableauInput {
+        syn::parse_str("pub TABLEAU, \"ROCK2\", 2, \"degree.json\", crate = renamed").unwrap()
+    }
+
+    #[test]
+    fn expansion_embeds_only_the_validated_source() {
+        let tokens = expand_rock2_source(input(), source()).unwrap().to_string();
+        assert!(tokens.contains("LazyRock2Tableau"));
+        assert!(tokens.contains("LazyLock"));
+        assert!(tokens.contains("include_str"));
+        assert!(tokens.contains("parse_rock2_tableau"));
+        assert!(tokens.contains("renamed"));
+        assert!(!tokens.contains("0.09326607661089206"));
+        assert!(!tokens.contains("0.3889624104727243"));
+        assert!(!tokens.contains("const "));
+    }
+
+    #[test]
+    fn expansion_reports_resource_identity_and_shape_errors() {
+        for invalid in [
+            source().replace(r#""degree":2"#, r#""degree":3"#),
+            source().replace(r#""name":"ROCK2""#, r#""name":"ROCK4""#),
+            source().replace(
+                r#"["0.1268473641290642","0.02103378190528467"]"#,
+                r#"["0.1268473641290642"]"#,
+            ),
+        ] {
+            let error = expand_rock2_source(input(), &invalid).unwrap_err();
+            assert!(error.contains("degree.json"), "{error}");
+        }
     }
 }
 
