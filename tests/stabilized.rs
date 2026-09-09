@@ -48,6 +48,8 @@ fn stabilized_tableau_catalogues_are_public_lazy_and_use_ceiling_selection() {
     let rock2_degrees = ROCK2.available_degrees().collect::<Vec<_>>();
     let rock4_degrees = ROCK4.available_degrees().collect::<Vec<_>>();
     let serk2_degrees = SERK2.available_degrees().collect::<Vec<_>>();
+    let eserk4_degrees = ESERK4.available_degrees().collect::<Vec<_>>();
+    let eserk5_degrees = ESERK5.available_degrees().collect::<Vec<_>>();
 
     assert_eq!(rock2_degrees.first(), Some(&1));
     assert_eq!(rock2_degrees.last(), Some(&198));
@@ -58,11 +60,21 @@ fn stabilized_tableau_catalogues_are_public_lazy_and_use_ceiling_selection() {
         serk2_degrees,
         [10, 20, 30, 40, 50, 60, 80, 100, 150, 200, 250]
     );
+    assert_eq!(eserk4_degrees.len(), 46);
+    assert_eq!(eserk4_degrees.first(), Some(&2));
+    assert_eq!(eserk4_degrees.last(), Some(&4_000));
+    assert_eq!(eserk5_degrees.len(), 49);
+    assert_eq!(eserk5_degrees.first(), Some(&1));
+    assert_eq!(eserk5_degrees.last(), Some(&2_000));
     assert_eq!(ROCK2.tableau(21).unwrap().degree(), 22);
     assert_eq!(ROCK4.tableau(21).unwrap().degree(), 22);
     assert_eq!(ROCK4.tableau(usize::MAX).unwrap().degree(), 148);
     assert_eq!(SERK2.tableau(61).unwrap().degree(), 80);
     assert_eq!(SERK2.tableau(usize::MAX).unwrap().degree(), 250);
+    assert_eq!(ESERK4.tableau(21).unwrap().degree(), 30);
+    assert_eq!(ESERK4.tableau(usize::MAX).unwrap().degree(), 4_000);
+    assert_eq!(ESERK5.tableau(21).unwrap().degree(), 25);
+    assert_eq!(ESERK5.tableau(usize::MAX).unwrap().degree(), 2_000);
     assert!(std::ptr::eq(
         ROCK4.tableau(21).unwrap(),
         ROCK4.tableau(22).unwrap()
@@ -70,6 +82,14 @@ fn stabilized_tableau_catalogues_are_public_lazy_and_use_ceiling_selection() {
     assert!(std::ptr::eq(
         SERK2.tableau(61).unwrap(),
         SERK2.tableau(80).unwrap()
+    ));
+    assert!(std::ptr::eq(
+        ESERK4.tableau(21).unwrap(),
+        ESERK4.tableau(30).unwrap()
+    ));
+    assert!(std::ptr::eq(
+        ESERK5.tableau(21).unwrap(),
+        ESERK5.tableau(25).unwrap()
     ));
 }
 

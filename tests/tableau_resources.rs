@@ -35,5 +35,10 @@ fn compile_time_tableau_resources_are_valid() {
             "{} retains an obsolete schema version",
             path.display()
         );
+        assert!(
+            !source.contains("\"constants\""),
+            "{} is a generic named-constant bank instead of a typed tableau",
+            path.display()
+        );
     }
 }

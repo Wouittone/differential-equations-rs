@@ -5,9 +5,8 @@ Explicit and implicit Runge--Kutta resources use canonical Butcher matrices;
 symplectic compositions use paired drift/kick vectors. Specialized families
 also use this tree for typed method data, including canonical linear multistep
 formulas for fixed-step Adams and MRAB and per-method Rosenbrock tableaus.
-Migration is not yet complete: ROCK2, ROCK4, and SERK2 now use
-degree-specific typed resources, while generic coefficient banks remain for
-ESERK4 and ESERK5.
+Every built-in coefficient catalogue now uses a typed method representation;
+there are no generic named-constant banks or generated coefficient arrays.
 
 Resources use a FracturedJson-style layout: object fields have stable ordering,
 scalar arrays stay on one line, and every matrix row occupies one line. This is
@@ -103,27 +102,32 @@ flat-bank offsets, error-vector differences, and duplicated coefficient
 constants are not stored.
 
 SERK2 likewise stores one resource per supported degree. Each document owns
-its subdivision count and the initial-state/stage combination weights. The
-fixed recurrence formula and its scale are algorithm structure, so they are
-implemented once rather than repeated as coefficients. The parser reconstructs
-the equivalent explicit Runge--Kutta rows and verifies both second-order
-conditions. The kernel evaluates each derivative at the node of its input
-state, retaining second order for nonautonomous equations as well as
-autonomous stability problems.
+its recurrence scale, subdivision count, and initial-state/stage combination
+weights. The parser reconstructs the equivalent explicit Runge--Kutta rows
+and verifies both second-order conditions. The kernel evaluates each
+derivative at the node of its input state, retaining second order for
+nonautonomous equations as well as autonomous stability problems.
 
-The shared parser reconstructs the equivalent RK rows and weights and checks
-the declared primary and embedded order conditions in addition to resource
-identity, degree, dimensions, unknown fields, and finite coefficients. The
-procedural macros repeat this validation during compilation, embed the
-original JSON with `include_str!`, and give every degree an independent
-`LazyLock`. Selecting degree 22 therefore does not parse or materialize the
-other ROCK2, ROCK4, or SERK2 resources at runtime; their source text remains
-embedded in the binary by `include_str!`.
+ESERK4 and ESERK5 use one resource per supported degree as well. Each owns the
+recurrence scale and restart interval, primary and embedded extrapolation
+combinations, their shared divisor, and the complete base-recurrence weights.
+The parser checks the base method's constant and linear moments and verifies
+all inverse-power cancellation moments required for fourth- or fifth-order
+Richardson extrapolation. The recurrence clock uses input-state nodes across
+restarts, including for nonautonomous right-hand sides.
+
+The family parsers apply the corresponding recurrence and order checks in
+addition to resource identity, degree, dimensions, unknown fields, and finite
+coefficients. The procedural macros repeat this validation during compilation,
+embed the original JSON with `include_str!`, and give every degree an
+independent `LazyLock`. Selecting degree 22 therefore does not parse or
+materialize the other ROCK2, ROCK4, SERK2, ESERK4, or ESERK5 resources at
+runtime; their source text remains embedded in the binary by `include_str!`.
 
 Applications can inspect the same catalogue used by the solver:
 
 ```rust
-use differential_equations::solvers::stabilized::{ROCK2, ROCK4, SERK2};
+use differential_equations::solvers::stabilized::{ESERK4, ESERK5, ROCK2, ROCK4, SERK2};
 
 let selected = ROCK2.tableau(21)?;
 assert_eq!(selected.degree(), 22);
@@ -139,6 +143,16 @@ let selected = SERK2.tableau(61)?;
 assert_eq!(selected.degree(), 80);
 assert_eq!(selected.subdivisions(), 10);
 assert_eq!(SERK2.available_degrees().count(), 11);
+
+let selected = ESERK4.tableau(21)?;
+assert_eq!(selected.degree(), 30);
+assert_eq!(selected.order(), 4);
+assert_eq!(ESERK4.available_degrees().count(), 46);
+
+let selected = ESERK5.tableau(21)?;
+assert_eq!(selected.degree(), 25);
+assert_eq!(selected.embedded_order(), 4);
+assert_eq!(ESERK5.available_degrees().count(), 49);
 # Ok::<(), differential_equations::tableau::TableauError>(())
 ```
 
@@ -148,9 +162,10 @@ For a degree-specific downstream resource, the
 compile-time validation and lazy typed static. Their arguments include the
 expected method name and degree, preventing a valid file from being wired to
 the wrong catalogue entry. SERK2 provides the parallel
-`tableau::define_serk2_tableau_from_file!` entry point. The remaining ESERK
-families will adopt equivalent family-specific representations before the
-transitional generic bank and its legacy macro are removed.
+`tableau::define_serk2_tableau_from_file!` entry point. ESERK4 and ESERK5 share
+`tableau::define_eserk_tableau_from_file!`, whose arguments additionally name
+the expected order. All four macros validate at compile time and expand to an
+independent `LazyLock` over the embedded source rather than coefficient code.
 
 The pinned SciML revision marks `CKLLSRK95_4C`'s convergence test as broken.
 Its coefficients are preserved exactly for source parity, but users who need

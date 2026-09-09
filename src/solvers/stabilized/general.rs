@@ -12,13 +12,11 @@
 //! degree-indexed resources from the stabilized tableau resource tree. No
 //! degree subset or substitute recurrence is used.
 
-use super::coefficient_data::{
-    ESERK4_DEGREES, ESERK4_ERROR_COMBINATION, ESERK4_SOLUTION_COMBINATION, ESERK4_WEIGHTS,
-    ESERK5_DEGREES, ESERK5_ERROR_COMBINATION, ESERK5_SOLUTION_COMBINATION, ESERK5_WEIGHTS,
-};
 use super::resources::{
-    rock2_available_degrees, rock2_tableau_for_degree, rock4_available_degrees,
-    rock4_tableau_for_degree, serk2_available_degrees, serk2_tableau_for_degree,
+    eserk4_available_degrees, eserk4_tableau_for_degree, eserk5_available_degrees,
+    eserk5_tableau_for_degree, rock2_available_degrees, rock2_tableau_for_degree,
+    rock4_available_degrees, rock4_tableau_for_degree, serk2_available_degrees,
+    serk2_tableau_for_degree,
 };
 use crate::integrator::{
     KernelCapabilities, StepEstimate, StepKernel, integrate as drive_integration,
@@ -104,18 +102,6 @@ impl StabilizedFamily {
 fn odd_stage_count(stages: usize) -> usize {
     let stages = stages.max(3);
     if stages % 2 == 0 { stages + 1 } else { stages }.min(MAX_POLYNOMIAL_STAGES - 1)
-}
-
-fn select_serk_degree(degrees: &[usize], requested: usize) -> (usize, usize) {
-    let mut start = 0;
-    for &degree in degrees {
-        if degree >= requested {
-            return (degree, start);
-        }
-        start += degree + 1;
-    }
-    let degree = degrees[degrees.len() - 1];
-    (degree, start - degree - 1)
 }
 
 struct StabilizedKernel {
@@ -690,11 +676,10 @@ impl StabilizedKernel {
         let requested = ((scaled_radius / 0.8).sqrt().floor() as usize + 1).min(250);
         let tableau =
             serk2_tableau_for_degree(requested).map_err(|_| SolveError::InvalidTableau)?;
-        let degree = tableau.degree();
         let subdivisions = tableau.subdivisions();
         let internal_degree = tableau.internal_degree();
         let weights = tableau.weights();
-        let alpha = 2.5 / (degree * degree) as f64;
+        let alpha = tableau.alpha();
         self.previous_one.copy_from_slice(state);
         self.previous_two.copy_from_slice(state);
         for (sum, value) in self.perturbed_state.iter_mut().zip(state) {
@@ -776,55 +761,30 @@ impl StabilizedKernel {
         scaled_radius: f64,
         candidate: &mut [f64],
         stats: &mut SolverStats,
-        fifth_order: bool,
     ) -> Result<(), SolveError>
     where
         F: crate::OdeFunction<P>,
     {
-        let (degrees, solution_combination, error_combination, weights, requested, subdivisions) =
-            if fifth_order {
-                (
-                    ESERK5_DEGREES,
-                    ESERK5_SOLUTION_COMBINATION,
-                    ESERK5_ERROR_COMBINATION,
-                    ESERK5_WEIGHTS,
-                    ((scaled_radius / 0.98).sqrt().floor() as usize + 1).min(2_000),
-                    5,
-                )
-            } else {
-                (
-                    ESERK4_DEGREES,
-                    ESERK4_SOLUTION_COMBINATION,
-                    ESERK4_ERROR_COMBINATION,
-                    ESERK4_WEIGHTS,
-                    (scaled_radius.sqrt().floor() as usize + 1).min(4_000),
-                    4,
-                )
-            };
-        let (degree, start) = select_serk_degree(degrees, requested);
-        let internal_degree = if fifth_order {
-            match degree {
-                0..=20 => 2,
-                21..=50 => 5,
-                51..=100 => 10,
-                101..=500 => 50,
-                501..=1_000 => 100,
-                _ => 200,
+        let tableau = match self.family {
+            StabilizedFamily::Eserk4 => {
+                let requested = (scaled_radius.sqrt().floor() as usize + 1).min(4_000);
+                eserk4_tableau_for_degree(requested)
             }
-        } else {
-            match degree {
-                0..=20 => 2,
-                21..=100 => 10,
-                101..=500 => 25,
-                501..=1_000 => 100,
-                _ => 200,
+            StabilizedFamily::Eserk5 => {
+                let requested = ((scaled_radius / 0.98).sqrt().floor() as usize + 1).min(2_000);
+                eserk5_tableau_for_degree(requested)
             }
-        };
-        let alpha = if fifth_order {
-            100.0 / (49 * degree * degree) as f64
-        } else {
-            2.0 / (degree * degree) as f64
-        };
+            _ => return Err(SolveError::InvalidTableau),
+        }
+        .map_err(|_| SolveError::InvalidTableau)?;
+        let degree = tableau.degree();
+        let internal_degree = tableau.internal_degree();
+        let alpha = tableau.alpha();
+        let subdivisions = tableau.subdivisions();
+        let solution_combination = tableau.solution_combination();
+        let error_combination = tableau.error_combination();
+        let combination_denominator = tableau.combination_denominator();
+        let weights = tableau.weights();
         candidate.fill(0.0);
         self.eigenvector.fill(0.0);
 
@@ -839,10 +799,20 @@ impl StabilizedKernel {
                 });
                 self.previous_two.fill(0.0);
                 for (sum, value) in self.perturbed_state.iter_mut().zip(&self.previous_one) {
-                    *sum = weights[start] * value;
+                    *sum = weights[0] * value;
                 }
-                let mut stage_time = substep_time;
-                for stage in 1..=degree {
+                for (stage, &weight) in weights.iter().enumerate().take(degree + 1).skip(1) {
+                    // The supplied recurrence state is at the input node of
+                    // this stage. The pinned SciML implementation advances
+                    // this clock to the output node instead, which loses the
+                    // advertised order on nonautonomous equations.
+                    let block = (stage - 1) / internal_degree;
+                    let local_stage = (stage - 1) % internal_degree;
+                    let stage_time = substep_time
+                        + alpha
+                            * (block * internal_degree * internal_degree
+                                + local_stage * local_stage) as f64
+                            * substep;
                     Self::evaluate(
                         problem,
                         &mut self.derivative,
@@ -871,13 +841,8 @@ impl StabilizedKernel {
                                 2.0 * previous - previous_two + 2.0 * alpha * substep * derivative;
                         }
                     }
-                    let block = stage / internal_degree;
-                    stage_time = substep_time
-                        + alpha
-                            * (stage * stage + block * internal_degree * internal_degree) as f64
-                            * substep;
                     for (sum, value) in self.perturbed_state.iter_mut().zip(&self.next_stage) {
-                        *sum += weights[start + stage] * value;
+                        *sum += weight * value;
                     }
                     if stage < degree {
                         std::mem::swap(&mut self.previous_two, &mut self.previous_one);
@@ -899,10 +864,9 @@ impl StabilizedKernel {
                 *error += error_factor * sum;
             }
         }
-        let denominator = if fifth_order { 24.0 } else { 6.0 };
         for (output, error) in candidate.iter_mut().zip(self.eigenvector.iter_mut()) {
-            *output /= denominator;
-            *error /= denominator;
+            *output /= combination_denominator;
+            *error /= combination_denominator;
         }
         self.derivative.copy_from_slice(&self.eigenvector);
         Ok(())
@@ -1435,26 +1399,9 @@ where
             StabilizedFamily::Serk2 => {
                 self.run_serk2(problem, state, time, step, scaled_radius, candidate, stats)?
             }
-            StabilizedFamily::Eserk4 => self.run_eserk(
-                problem,
-                state,
-                time,
-                step,
-                scaled_radius,
-                candidate,
-                stats,
-                false,
-            )?,
-            StabilizedFamily::Eserk5 => self.run_eserk(
-                problem,
-                state,
-                time,
-                step,
-                scaled_radius,
-                candidate,
-                stats,
-                true,
-            )?,
+            StabilizedFamily::Eserk4 | StabilizedFamily::Eserk5 => {
+                self.run_eserk(problem, state, time, step, scaled_radius, candidate, stats)?
+            }
             StabilizedFamily::Tsrkc2 => {
                 self.run_tsrkc2(problem, state, time, step, scaled_radius, candidate, stats)?
             }
@@ -1767,11 +1714,47 @@ implemented_method!(
     StabilizedFamily::Eserk4,
     "Fourth-order extrapolated stabilized explicit Runge--Kutta method."
 );
+
+impl ESERK4 {
+    /// Returns the first available tableau whose degree is at least the
+    /// requested degree, clamping to the largest supported degree.
+    ///
+    /// Only the selected degree is parsed on first inspection or use.
+    pub fn tableau(
+        self,
+        requested_degree: usize,
+    ) -> Result<&'static crate::tableau::EserkTableau, crate::tableau::TableauError> {
+        eserk4_tableau_for_degree(requested_degree)
+    }
+
+    /// Iterates over the supported polynomial degrees in ascending order.
+    pub fn available_degrees(self) -> impl ExactSizeIterator<Item = usize> {
+        eserk4_available_degrees()
+    }
+}
 implemented_method!(
     ESERK5,
     StabilizedFamily::Eserk5,
     "Fifth-order extrapolated stabilized explicit Runge--Kutta method."
 );
+
+impl ESERK5 {
+    /// Returns the first available tableau whose degree is at least the
+    /// requested degree, clamping to the largest supported degree.
+    ///
+    /// Only the selected degree is parsed on first inspection or use.
+    pub fn tableau(
+        self,
+        requested_degree: usize,
+    ) -> Result<&'static crate::tableau::EserkTableau, crate::tableau::TableauError> {
+        eserk5_tableau_for_degree(requested_degree)
+    }
+
+    /// Iterates over the supported polynomial degrees in ascending order.
+    pub fn available_degrees(self) -> impl ExactSizeIterator<Item = usize> {
+        eserk5_available_degrees()
+    }
+}
 implemented_method!(
     TSRKC2,
     StabilizedFamily::Tsrkc2,
@@ -1843,6 +1826,21 @@ mod tests {
         (endpoint(0.1) - exact).abs() / (endpoint(0.05) - exact).abs()
     }
 
+    fn problem_convergence_ratio<A: OdeAlgorithm + Copy>(
+        problem: &OdeProblem<ScalarRhs, ()>,
+        algorithm: A,
+        exact: f64,
+        coarse: f64,
+        fine: f64,
+    ) -> f64 {
+        let endpoint = |step| {
+            solve(problem, algorithm, &fixed_options(step))
+                .expect("convergence solve failed")
+                .last_state()[0]
+        };
+        (endpoint(coarse) - exact).abs() / (endpoint(fine) - exact).abs()
+    }
+
     #[test]
     fn two_step_methods_recover_their_formal_orders() {
         assert!(convergence_ratio(TSRKC2).log2() > 1.5);
@@ -1895,6 +1893,44 @@ mod tests {
             .expect("multi-stage SERK2 step failed");
 
         assert!((candidate[0] - 0.005).abs() < 2.0e-15);
+    }
+
+    #[test]
+    fn eserk_methods_use_input_state_nodes_across_recurrence_restarts() {
+        fn rhs(du: &mut [f64], _: &[f64], _: &(), time: f64) {
+            du[0] = time;
+        }
+        let problem = OdeProblem::new(rhs as ScalarRhs, vec![0.0], (0.0, 0.1), ());
+
+        for family in [StabilizedFamily::Eserk4, StabilizedFamily::Eserk5] {
+            let mut kernel = StabilizedKernel::new(family, 1);
+            let mut candidate = [0.0];
+            let mut stats = SolverStats::default();
+
+            // A radius of nine selects degree four in both catalogues. With
+            // internal degree two, the step crosses a recurrence restart.
+            kernel
+                .run_eserk(&problem, &[0.0], 0.0, 0.1, 9.0, &mut candidate, &mut stats)
+                .expect("multi-stage ESERK step failed");
+
+            assert!(
+                (candidate[0] - 0.005).abs() < 2.0e-14,
+                "{family:?} produced {}",
+                candidate[0]
+            );
+        }
+    }
+
+    #[test]
+    fn eserk_methods_recover_their_orders_on_a_nonautonomous_problem() {
+        fn rhs(du: &mut [f64], u: &[f64], _: &(), time: f64) {
+            du[0] = u[0] + time;
+        }
+        let problem = OdeProblem::new(rhs as ScalarRhs, vec![0.0], (0.0, 1.0), ());
+        let exact = std::f64::consts::E - 2.0;
+
+        assert!(problem_convergence_ratio(&problem, ESERK4, exact, 0.1, 0.05).log2() > 3.5);
+        assert!(problem_convergence_ratio(&problem, ESERK5, exact, 0.2, 0.1).log2() > 4.5);
     }
 
     #[test]

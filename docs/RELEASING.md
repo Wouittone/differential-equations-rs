@@ -43,10 +43,10 @@ generic named-constant banks are not acceptable final representations.
 - [x] Add the upstream embedded estimators and genuine adaptive/FSAL lifecycle
   for the RDPK 3S-plus and CKLL register-pipeline families. Preserve their
   method-specific controller metadata without reintroducing Rust constants.
-- [ ] Replace the combined ROCK/SERK/ESERK bank with typed stabilized-method
+- [x] Replace the combined ROCK/SERK/ESERK bank with typed stabilized-method
   resources that do not parse or retain the entire catalogue for one selected
   method and degree.
-- [ ] Remove `define_tableau_data_from_file!`, every legacy `coefficient_data`
+- [x] Remove `define_tableau_data_from_file!`, every legacy `coefficient_data`
   module, and their obsolete combined resource files after the final consumer
   is migrated.
 - [x] Keep resource JSON consistently styled with stable field ordering,
@@ -116,15 +116,15 @@ cost, allocations, and both explicit-only and stiff-only baselines.
 
 | Milestone | Estimated focused effort |
 | --- | ---: |
-| Remaining tableau migrations and legacy-loader removal | 8–13 development days |
+| Remaining tableau migrations and legacy-loader removal | Completed |
 | In-flight automatic switching and verification | 5–10 development days |
 | Module decomposition and public API hardening | 5–10 development days |
 | Numerical audit, downstream testing, and release preparation | 5–10 development days |
 
-A credible 1.0 release is approximately four to seven focused weeks away. The
-stabilized resource migration, automatic-switching architecture, and numerical
-audit carry the most uncertainty. Parallel review can reduce calendar time,
-but every integrated release gate below must still pass.
+A credible 1.0 release still requires the automatic-switching architecture,
+module and API hardening, and the numerical audit. Those remaining items carry
+the most uncertainty. Parallel review can reduce calendar time, but every
+integrated release gate below must still pass.
 
 ### Definition of done
 

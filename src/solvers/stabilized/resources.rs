@@ -4,6 +4,12 @@ use crate::tableau::{
     define_serk2_tableau_from_file, load_tableau,
 };
 
+mod eserk4;
+mod eserk5;
+
+pub(super) use eserk4::{eserk4_available_degrees, eserk4_tableau_for_degree};
+pub(super) use eserk5::{eserk5_available_degrees, eserk5_tableau_for_degree};
+
 define_rock2_tableau_from_file!(
     pub(super) ROCK2_001,
     "ROCK2",
@@ -579,10 +585,13 @@ pub(super) fn serk2_available_degrees() -> impl ExactSizeIterator<Item = usize> 
 
 #[cfg(test)]
 mod tests {
+    use super::eserk4::{RESOURCES as ESERK4_RESOURCES, resource_for_degree as eserk4_resource};
+    use super::eserk5::{RESOURCES as ESERK5_RESOURCES, resource_for_degree as eserk5_resource};
     use super::{
-        ROCK2_RESOURCES, ROCK4_RESOURCES, SERK2_RESOURCES, rock2_resource_for_degree,
-        rock2_tableau_for_degree, rock4_resource_for_degree, rock4_tableau_for_degree,
-        serk2_resource_for_degree, serk2_tableau_for_degree,
+        ROCK2_RESOURCES, ROCK4_RESOURCES, SERK2_RESOURCES, eserk4_tableau_for_degree,
+        eserk5_tableau_for_degree, rock2_resource_for_degree, rock2_tableau_for_degree,
+        rock4_resource_for_degree, rock4_tableau_for_degree, serk2_resource_for_degree,
+        serk2_tableau_for_degree,
     };
 
     fn hash_word(hash: &mut u64, word: u64) {
@@ -747,6 +756,7 @@ mod tests {
             let tableau = serk2_tableau_for_degree(degree).unwrap();
             assert_eq!(tableau.degree(), degree);
             assert_eq!(tableau.order(), 2);
+            assert_eq!(tableau.alpha(), 2.5 / (degree * degree) as f64);
             assert_eq!(tableau.subdivisions(), 10);
             assert_eq!(tableau.internal_degree(), degree / 10);
             assert_eq!(tableau.weights().len(), degree + 1);
@@ -793,11 +803,161 @@ mod tests {
         for &(degree, _) in SERK2_RESOURCES {
             let tableau = serk2_tableau_for_degree(degree).unwrap();
             hash_word(&mut hash, degree as u64);
+            hash_word(&mut hash, tableau.alpha().to_bits());
             hash_word(&mut hash, tableau.subdivisions() as u64);
             for coefficient in tableau.weights() {
                 hash_word(&mut hash, coefficient.to_bits());
             }
         }
-        assert_eq!(hash, 0x29c2_b5e7_c195_dff7);
+        assert_eq!(hash, 0xea2b_b5b4_ce6d_aa22);
+    }
+
+    fn assert_eserk_registry(
+        resources: &'static [(usize, &'static crate::tableau::LazyEserkTableau)],
+        order: usize,
+        first_degree: usize,
+        last_degree: usize,
+    ) {
+        assert_eq!(resources.first().unwrap().0, first_degree);
+        assert_eq!(resources.last().unwrap().0, last_degree);
+        assert!(resources.windows(2).all(|pair| pair[0].0 < pair[1].0));
+        for &(degree, resource) in resources {
+            let tableau = crate::tableau::load_tableau(resource).unwrap();
+            let (
+                expected_internal_degree,
+                expected_alpha,
+                expected_solution,
+                expected_error,
+                expected_denominator,
+            ): (usize, f64, &[i32], &[i32], f64) = if order == 4 {
+                let internal = match degree {
+                    0..=20 => 2,
+                    21..=100 => 10,
+                    101..=500 => 25,
+                    501..=1_000 => 100,
+                    _ => 200,
+                };
+                (
+                    internal,
+                    2.0 / (degree * degree) as f64,
+                    &[-1, 24, -81, 64],
+                    &[-1, 12, -27, 16],
+                    6.0,
+                )
+            } else {
+                let internal = match degree {
+                    0..=20 => 2,
+                    21..=50 => 5,
+                    51..=100 => 10,
+                    101..=500 => 50,
+                    501..=1_000 => 100,
+                    _ => 200,
+                };
+                (
+                    internal,
+                    100.0 / (49 * degree * degree) as f64,
+                    &[1, -64, 486, -1024, 625],
+                    &[1, -32, 162, -256, 125],
+                    24.0,
+                )
+            };
+            assert_eq!(tableau.degree(), degree);
+            assert_eq!(tableau.order(), order);
+            assert_eq!(tableau.embedded_order(), order - 1);
+            assert_eq!(tableau.subdivisions(), order);
+            assert_eq!(tableau.internal_degree(), expected_internal_degree);
+            assert_eq!(tableau.alpha().to_bits(), expected_alpha.to_bits());
+            assert_eq!(tableau.solution_combination(), expected_solution);
+            assert_eq!(tableau.error_combination(), expected_error);
+            assert_eq!(tableau.combination_denominator(), expected_denominator);
+            assert_eq!(tableau.solution_combination().len(), order);
+            assert_eq!(tableau.error_combination().len(), order);
+            assert_eq!(tableau.weights().len(), degree + 1);
+        }
+    }
+
+    #[test]
+    fn eserk_registries_are_sorted_unique_and_match_resources() {
+        assert_eq!(ESERK4_RESOURCES.len(), 46);
+        assert_eq!(ESERK5_RESOURCES.len(), 49);
+        assert_eserk_registry(ESERK4_RESOURCES, 4, 2, 4_000);
+        assert_eserk_registry(ESERK5_RESOURCES, 5, 1, 2_000);
+    }
+
+    #[test]
+    fn eserk_selection_uses_ceiling_degree_and_clamps() {
+        for (requested, selected) in [
+            (0, 2),
+            (2, 2),
+            (3, 4),
+            (20, 20),
+            (21, 30),
+            (1_001, 1_200),
+            (4_000, 4_000),
+            (usize::MAX, 4_000),
+        ] {
+            assert_eq!(
+                eserk4_tableau_for_degree(requested).unwrap().degree(),
+                selected
+            );
+        }
+        for (requested, selected) in [
+            (0, 1),
+            (1, 1),
+            (20, 20),
+            (21, 25),
+            (1_001, 1_200),
+            (2_000, 2_000),
+            (usize::MAX, 2_000),
+        ] {
+            assert_eq!(
+                eserk5_tableau_for_degree(requested).unwrap().degree(),
+                selected
+            );
+        }
+        for requested in 0..=4_001 {
+            let expected = ESERK4_RESOURCES
+                .iter()
+                .find(|(degree, _)| *degree >= requested)
+                .unwrap_or_else(|| ESERK4_RESOURCES.last().unwrap());
+            assert!(std::ptr::eq(eserk4_resource(requested), expected.1));
+        }
+        for requested in 0..=2_001 {
+            let expected = ESERK5_RESOURCES
+                .iter()
+                .find(|(degree, _)| *degree >= requested)
+                .unwrap_or_else(|| ESERK5_RESOURCES.last().unwrap());
+            assert!(std::ptr::eq(eserk5_resource(requested), expected.1));
+        }
+    }
+
+    fn eserk_fingerprint(
+        resources: &'static [(usize, &'static crate::tableau::LazyEserkTableau)],
+    ) -> u64 {
+        let mut hash = 0xcbf2_9ce4_8422_2325;
+        for &(degree, resource) in resources {
+            let tableau = crate::tableau::load_tableau(resource).unwrap();
+            hash_word(&mut hash, degree as u64);
+            hash_word(&mut hash, tableau.internal_degree() as u64);
+            hash_word(&mut hash, tableau.alpha().to_bits());
+            hash_word(&mut hash, tableau.subdivisions() as u64);
+            for &coefficient in tableau.solution_combination() {
+                hash_word(&mut hash, coefficient as u32 as u64);
+            }
+            for &coefficient in tableau.error_combination() {
+                hash_word(&mut hash, coefficient as u32 as u64);
+            }
+            hash_word(&mut hash, tableau.combination_denominator().to_bits());
+            for coefficient in tableau.weights() {
+                hash_word(&mut hash, coefficient.to_bits());
+            }
+        }
+        hash
+    }
+
+    #[test]
+    fn eserk_resources_match_pinned_coefficient_fingerprints() {
+        assert_eq!(eserk_fingerprint(ESERK4_RESOURCES), 0x91fd_2411_206a_082a);
+        assert_eq!(eserk_fingerprint(ESERK5_RESOURCES), 0x7cce_0916_0981_5847);
     }
 }

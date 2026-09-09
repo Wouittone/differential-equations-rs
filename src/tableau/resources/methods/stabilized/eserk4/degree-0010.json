@@ -1,0 +1,16 @@
+{
+  "$schema"                : "../../../stabilized-schema.json",
+  "name"                   : "ESERK4",
+  "description"            : "ESERK4 degree-10 extrapolated stabilized recurrence from pinned OrdinaryDiffEqStabilizedRK at 211142263781255a9aa2f910f6760b9f18ec29c8.",
+  "kind"                   : "eserk",
+  "order"                  : 4,
+  "embedded_order"         : 3,
+  "degree"                 : 10,
+  "internal_degree"        : 2,
+  "alpha"                  : "2 / 100",
+  "subdivisions"           : 4,
+  "solution_combination"   : [-1, 24, -81, 64],
+  "error_combination"      : [-1, 12, -27, 16],
+  "combination_denominator": "6",
+  "weights"                : ["-0.06672847322803867", "0.2523294030201195", "1.1618884569876828", "0.30350571523961684", "0.5016405449181092", "-2.7931536927570666", "-4.529578025365716", "-0.6718836335172962", "-0.3802848447674536", "3.5211542882361178", "3.7011102612339237"]
+}

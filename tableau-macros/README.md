@@ -11,8 +11,10 @@ solver definitions, or `define_multistep_tableau_from_file!` for canonical
 linear multistep data. `define_rosenbrock_tableau_from_file!` provides canonical
 Rosenbrock data for specialized kernels. `define_rkn_from_file!` creates a
 second-order solver directly from a canonical RKN resource, while the RKN and
-IRKN tableau-only macros support specialized kernels. The schemas, publishing
-requirements, and examples are documented in the main crate's
+IRKN tableau-only macros support specialized kernels. ROCK2, ROCK4, SERK2, and
+ESERK degree-specific resources have corresponding compile-validating lazy
+tableau macros. The schemas, publishing requirements, and examples are
+documented in the main crate's
 [tableau resource guide](https://docs.rs/differential-equations/latest/differential_equations/tableau/index.html).
 
 This implementation crate is versioned and released in lockstep with the main

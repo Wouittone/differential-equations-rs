@@ -61,8 +61,12 @@ fn print_result<A: OdeAlgorithm + Copy>(name: &str, algorithm: A) {
     let adaptive = solve(&nonautonomous(), algorithm, &adaptive_options())
         .expect("adaptive stabilized compliance solve failed")
         .last_state()[0];
+    let autonomous = solve(&exponential(), algorithm, &fixed_options(0.05))
+        .expect("autonomous stabilized compliance solve failed")
+        .last_state()[0];
     println!("{name}_fixed_stiff,{fixed:.17e}");
     println!("{name}_adaptive_nonautonomous,{adaptive:.17e}");
+    println!("{name}_fixed_autonomous,{autonomous:.17e}");
     println!(
         "{name}_convergence_ratio,{:.17e}",
         convergence_ratio(algorithm)

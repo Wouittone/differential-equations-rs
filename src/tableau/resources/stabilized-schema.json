@@ -5,7 +5,8 @@
   "oneOf"   : [
     { "$ref": "#/$defs/rock2_tableau" },
     { "$ref": "#/$defs/rock4_tableau" },
-    { "$ref": "#/$defs/serk2_tableau" }
+    { "$ref": "#/$defs/serk2_tableau" },
+    { "$ref": "#/$defs/eserk_tableau" }
   ],
   "$defs" : {
     "scalar" : {
@@ -30,6 +31,12 @@
       "type"     : "array",
       "minItems" : 2,
       "items"    : { "$ref": "#/$defs/scalar" }
+    },
+    "integer_vector" : {
+      "type"     : "array",
+      "minItems" : 4,
+      "maxItems" : 5,
+      "items"    : { "type": "integer" }
     },
     "rock_recurrence_stage" : {
       "type"     : "array",
@@ -113,7 +120,7 @@
     "serk2_tableau" : {
       "type"                 : "object",
       "additionalProperties" : false,
-      "required"             : ["name", "description", "kind", "order", "degree", "subdivisions", "weights"],
+      "required"             : ["name", "description", "kind", "order", "degree", "alpha", "subdivisions", "weights"],
       "properties"           : {
         "$schema"      : { "type": "string" },
         "name"         : { "const": "SERK2" },
@@ -121,8 +128,30 @@
         "kind"         : { "const": "serk2" },
         "order"        : { "const": 2 },
         "degree"       : { "type": "integer", "minimum": 1, "maximum": 250 },
+        "alpha"        : { "$ref": "#/$defs/scalar" },
         "subdivisions" : { "type": "integer", "minimum": 1 },
         "weights"      : { "$ref": "#/$defs/vector" }
+      }
+    },
+    "eserk_tableau" : {
+      "type"                 : "object",
+      "additionalProperties" : false,
+      "required"             : ["name", "description", "kind", "order", "embedded_order", "degree", "internal_degree", "alpha", "subdivisions", "solution_combination", "error_combination", "combination_denominator", "weights"],
+      "properties"           : {
+        "$schema"                : { "type": "string" },
+        "name"                   : { "enum": ["ESERK4", "ESERK5"] },
+        "description"            : { "type": "string", "minLength": 1 },
+        "kind"                   : { "const": "eserk" },
+        "order"                  : { "type": "integer", "minimum": 4, "maximum": 5 },
+        "embedded_order"         : { "type": "integer", "minimum": 3, "maximum": 4 },
+        "degree"                 : { "type": "integer", "minimum": 1, "maximum": 4000 },
+        "internal_degree"        : { "type": "integer", "minimum": 1, "maximum": 200 },
+        "alpha"                  : { "$ref": "#/$defs/scalar" },
+        "subdivisions"           : { "type": "integer", "minimum": 4, "maximum": 5 },
+        "solution_combination"   : { "$ref": "#/$defs/integer_vector" },
+        "error_combination"      : { "$ref": "#/$defs/integer_vector" },
+        "combination_denominator": { "$ref": "#/$defs/scalar" },
+        "weights"                : { "$ref": "#/$defs/vector" }
       }
     }
   }

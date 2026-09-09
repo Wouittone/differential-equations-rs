@@ -134,7 +134,7 @@ end
     )
     nonautonomous_exact = 2.0 * exp(1.0) - 2.0
 
-    @test length(rust) == 3 * length(algorithms)
+    @test length(rust) == 4 * length(algorithms)
     for (name, (stiff_algorithm, mild_algorithm, order)) in algorithms
         @testset "$name" begin
             fixed = stabilized_fixed_endpoint(
@@ -145,19 +145,27 @@ end
             adaptive = stabilized_adaptive_endpoint(mild_algorithm)
             rust_fixed = rust["$(name)_fixed_stiff"]
             rust_adaptive = rust["$(name)_adaptive_nonautonomous"]
+            rust_autonomous = rust["$(name)_fixed_autonomous"]
             rust_ratio = rust["$(name)_convergence_ratio"]
             julia_ratio = stabilized_convergence_ratio(mild_algorithm)
+            julia_autonomous = stabilized_fixed_endpoint(
+                mild_algorithm,
+                stabilized_exponential();
+                step = 0.05,
+            )
 
-            # Rust intentionally evaluates SERK2 at the abscissa of the state
-            # passed to the RHS. The pinned Julia implementation uses the
-            # would-be output-state node, which is one recurrence node ahead
-            # and drops to first order for nonautonomous equations. Keep exact
-            # solution checks for both implementations, but do not require
-            # their nonautonomous trajectories to reproduce that discrepancy.
-            @test rust_fixed ≈ fixed rtol = 2.0e-10 atol = 2.0e-12
-            if name != "serk2"
+            # Rust evaluates SERK2 and ESERK stages at the abscissa of the
+            # state supplied to the RHS. The pinned Julia implementations use
+            # the would-be output-state node, which is one recurrence node
+            # ahead and loses order on nonautonomous equations. Keep exact
+            # solution checks for both implementations and compare their
+            # autonomous trajectories, where the clock discrepancy vanishes.
+            corrected_clock = name in ("serk2", "eserk4", "eserk5")
+            if !corrected_clock
+                @test rust_fixed ≈ fixed rtol = 2.0e-10 atol = 2.0e-12
                 @test rust_adaptive ≈ adaptive rtol = 2.0e-4 atol = 2.0e-6
             end
+            @test rust_autonomous ≈ julia_autonomous rtol = 2.0e-10 atol = 2.0e-12
             @test rust_fixed ≈ cos(1.0) rtol = order == 1 ? 2.0e-2 : 5.0e-3
             @test fixed ≈ cos(1.0) rtol = order == 1 ? 2.0e-2 : 5.0e-3
             @test rust_adaptive ≈ nonautonomous_exact rtol = 5.0e-4 atol = 5.0e-6

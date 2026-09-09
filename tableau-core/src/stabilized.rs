@@ -2,6 +2,9 @@ use serde::Deserialize;
 
 use super::{Scalar, TableauError, approximately_equal, materialize_matrix, materialize_vector};
 
+mod eserk;
+pub use eserk::{EserkTableau, parse_eserk_tableau};
+
 /// One two-term stage in a ROCK polynomial recurrence.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct RockRecurrenceStage {
@@ -171,6 +174,7 @@ pub struct Serk2Tableau {
     description: String,
     order: usize,
     degree: usize,
+    alpha: f64,
     subdivisions: usize,
     weights: Vec<f64>,
 }
@@ -194,6 +198,11 @@ impl Serk2Tableau {
     /// Total polynomial degree represented by this resource.
     pub fn degree(&self) -> usize {
         self.degree
+    }
+
+    /// Recurrence step coefficient applied to each derivative.
+    pub fn alpha(&self) -> f64 {
+        self.alpha
     }
 
     /// Number of equal recurrence subdivisions.
@@ -292,6 +301,7 @@ struct RawSerk2Tableau {
     _kind: RawSerk2Kind,
     order: usize,
     degree: usize,
+    alpha: Scalar,
     subdivisions: usize,
     weights: Vec<Scalar>,
 }
@@ -532,6 +542,13 @@ pub fn parse_serk2_tableau(
         ));
     }
 
+    let alpha = raw
+        .alpha
+        .materialize()
+        .map_err(|error| TableauError::new(format!("alpha: {error}")))?;
+    if alpha <= 0.0 {
+        return Err(TableauError::new("SERK2 alpha must be positive"));
+    }
     let weights = materialize_vector(&raw.weights, "weights")?;
     if weights.len() != raw.degree + 1 {
         return Err(TableauError::new(format!(
@@ -541,13 +558,14 @@ pub fn parse_serk2_tableau(
             weights.len()
         )));
     }
-    validate_serk2_order(raw.degree, raw.subdivisions, &weights)?;
+    validate_serk2_order(raw.degree, raw.subdivisions, alpha, &weights)?;
 
     Ok(Serk2Tableau {
         name: raw.name,
         description: raw.description,
         order: raw.order,
         degree: raw.degree,
+        alpha,
         subdivisions: raw.subdivisions,
         weights,
     })
@@ -556,6 +574,7 @@ pub fn parse_serk2_tableau(
 fn validate_serk2_order(
     degree: usize,
     subdivisions: usize,
+    alpha: f64,
     weights: &[f64],
 ) -> Result<(), TableauError> {
     let weight_sum = weights.iter().sum::<f64>();
@@ -565,7 +584,6 @@ fn validate_serk2_order(
         )));
     }
 
-    let alpha = 2.5 / (degree * degree) as f64;
     let internal_degree = degree / subdivisions;
     let mut stage_rows = Vec::with_capacity(degree + 1);
     stage_rows.push(vec![0.0; degree]);
@@ -803,6 +821,7 @@ mod tests {
         "kind":"serk2",
         "order":2,
         "degree":2,
+        "alpha":"2.5 / 4",
         "subdivisions":1,
         "weights":["1.32","-0.96","0.64"]
     }"#;

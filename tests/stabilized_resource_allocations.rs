@@ -2,8 +2,8 @@ use std::alloc::System;
 use std::hint::black_box;
 
 use diffeq::tableau::{
-    define_rock2_tableau_from_file, define_rock4_tableau_from_file, define_serk2_tableau_from_file,
-    load_tableau,
+    define_eserk_tableau_from_file, define_rock2_tableau_from_file, define_rock4_tableau_from_file,
+    define_serk2_tableau_from_file, load_tableau,
 };
 use differential_equations as diffeq;
 use stats_alloc::{INSTRUMENTED_SYSTEM, Region, StatsAlloc};
@@ -16,6 +16,38 @@ define_rock2_tableau_from_file!(
     "ROCK2",
     1,
     "src/tableau/resources/methods/stabilized/rock2/degree-001.json",
+    crate = diffeq
+);
+define_eserk_tableau_from_file!(
+    ESERK4_DEGREE_2,
+    "ESERK4",
+    4,
+    2,
+    "src/tableau/resources/methods/stabilized/eserk4/degree-0002.json",
+    crate = diffeq
+);
+define_eserk_tableau_from_file!(
+    ESERK4_DEGREE_4000,
+    "ESERK4",
+    4,
+    4000,
+    "src/tableau/resources/methods/stabilized/eserk4/degree-4000.json",
+    crate = diffeq
+);
+define_eserk_tableau_from_file!(
+    ESERK5_DEGREE_1,
+    "ESERK5",
+    5,
+    1,
+    "src/tableau/resources/methods/stabilized/eserk5/degree-0001.json",
+    crate = diffeq
+);
+define_eserk_tableau_from_file!(
+    ESERK5_DEGREE_2000,
+    "ESERK5",
+    5,
+    2000,
+    "src/tableau/resources/methods/stabilized/eserk5/degree-2000.json",
     crate = diffeq
 );
 define_serk2_tableau_from_file!(
@@ -111,6 +143,38 @@ fn stabilized_degree_resources_initialize_independently_and_cache() {
     for _ in 0..1_000 {
         black_box(load_tableau(&SERK2_DEGREE_10).unwrap());
         black_box(load_tableau(&SERK2_DEGREE_100).unwrap());
+    }
+    assert_eq!(cached.change().allocations, 0);
+
+    let references = Region::new(GLOBAL);
+    black_box(&ESERK4_DEGREE_2);
+    black_box(&ESERK4_DEGREE_4000);
+    black_box(&ESERK5_DEGREE_1);
+    black_box(&ESERK5_DEGREE_2000);
+    assert_eq!(references.change().allocations, 0);
+
+    let first = Region::new(GLOBAL);
+    black_box(load_tableau(&ESERK4_DEGREE_2).unwrap());
+    assert!(first.change().allocations > 0);
+
+    let independent = Region::new(GLOBAL);
+    black_box(load_tableau(&ESERK4_DEGREE_4000).unwrap());
+    assert!(independent.change().allocations > 0);
+
+    let first = Region::new(GLOBAL);
+    black_box(load_tableau(&ESERK5_DEGREE_1).unwrap());
+    assert!(first.change().allocations > 0);
+
+    let independent = Region::new(GLOBAL);
+    black_box(load_tableau(&ESERK5_DEGREE_2000).unwrap());
+    assert!(independent.change().allocations > 0);
+
+    let cached = Region::new(GLOBAL);
+    for _ in 0..1_000 {
+        black_box(load_tableau(&ESERK4_DEGREE_2).unwrap());
+        black_box(load_tableau(&ESERK4_DEGREE_4000).unwrap());
+        black_box(load_tableau(&ESERK5_DEGREE_1).unwrap());
+        black_box(load_tableau(&ESERK5_DEGREE_2000).unwrap());
     }
     assert_eq!(cached.change().allocations, 0);
 }

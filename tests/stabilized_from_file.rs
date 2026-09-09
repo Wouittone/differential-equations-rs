@@ -1,6 +1,6 @@
 use diffeq::tableau::{
-    define_rock2_tableau_from_file, define_rock4_tableau_from_file, define_serk2_tableau_from_file,
-    load_tableau,
+    define_eserk_tableau_from_file, define_rock2_tableau_from_file, define_rock4_tableau_from_file,
+    define_serk2_tableau_from_file, load_tableau,
 };
 use differential_equations as diffeq;
 
@@ -25,6 +25,24 @@ define_serk2_tableau_from_file!(
     "SERK2",
     2,
     "tests/resources/file_serk2.json",
+    crate = diffeq
+);
+
+define_eserk_tableau_from_file!(
+    pub FILE_ESERK4_DEGREE_2,
+    "ESERK4",
+    4,
+    2,
+    "src/tableau/resources/methods/stabilized/eserk4/degree-0002.json",
+    crate = diffeq
+);
+
+define_eserk_tableau_from_file!(
+    pub FILE_ESERK5_DEGREE_1,
+    "ESERK5",
+    5,
+    1,
+    "src/tableau/resources/methods/stabilized/eserk5/degree-0001.json",
     crate = diffeq
 );
 
@@ -80,7 +98,31 @@ fn renamed_dependency_path_loads_a_degree_specific_serk2_tableau() {
     assert_eq!(first.name(), "SERK2");
     assert_eq!(first.order(), 2);
     assert_eq!(first.degree(), 2);
+    assert_eq!(first.alpha(), 0.625);
     assert_eq!(first.subdivisions(), 1);
     assert_eq!(first.internal_degree(), 2);
     assert_eq!(first.weights(), [1.32, -0.96, 0.64]);
+}
+
+#[test]
+fn renamed_dependency_path_loads_degree_specific_eserk_tableaus() {
+    let fourth = load_tableau(&FILE_ESERK4_DEGREE_2).unwrap();
+    let fifth = load_tableau(&FILE_ESERK5_DEGREE_1).unwrap();
+
+    assert_eq!(
+        (fourth.name(), fourth.order(), fourth.degree()),
+        ("ESERK4", 4, 2)
+    );
+    assert_eq!(
+        (fifth.name(), fifth.order(), fifth.degree()),
+        ("ESERK5", 5, 1)
+    );
+    assert_eq!(fourth.embedded_order(), 3);
+    assert_eq!(fifth.embedded_order(), 4);
+    assert_eq!(fourth.weights().len(), 3);
+    assert_eq!(fifth.weights().len(), 2);
+    assert!(std::ptr::eq(
+        fourth,
+        load_tableau(&FILE_ESERK4_DEGREE_2).unwrap()
+    ));
 }

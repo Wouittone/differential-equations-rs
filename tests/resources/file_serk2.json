@@ -5,6 +5,7 @@
   "kind"         : "serk2",
   "order"        : 2,
   "degree"       : 2,
+  "alpha"        : "2.5 / 4",
   "subdivisions" : 1,
   "weights"      : ["1.32", "-0.96", "0.64"]
 }
