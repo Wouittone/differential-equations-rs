@@ -7,7 +7,7 @@
 //! intentionally exposes the regular ODE state/update only; Julia's stage and
 //! step limiter callbacks are outside the current `OdeProblem` interface.
 
-crate::define_explicit_rk_from_file!(
+crate::tableau::define_explicit_rk_from_file!(
     pub Kyk2014DgSsprk3S2,
     "src/tableau/resources/explicit/kyk2014_dg_ssprk3_s2.json",
     crate = crate

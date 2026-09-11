@@ -160,16 +160,16 @@ where
 
 macro_rules! fixed_ssprk {
     ($algorithm:ident, $path:literal) => {
-        crate::define_explicit_rk_from_file!(pub $algorithm, $path, crate = crate);
+        crate::tableau::define_explicit_rk_from_file!(pub $algorithm, $path, crate = crate);
     };
 }
 
-crate::define_explicit_rk_from_file!(
+crate::tableau::define_explicit_rk_from_file!(
     pub SspRk432,
     "src/tableau/resources/explicit/ssp_rk432.json",
     crate = crate
 );
-crate::define_explicit_rk_from_file!(
+crate::tableau::define_explicit_rk_from_file!(
     pub SspRk932,
     "src/tableau/resources/explicit/ssp_rk932.json",
     crate = crate

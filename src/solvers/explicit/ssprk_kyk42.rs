@@ -5,7 +5,7 @@
 //! equivalent four-stage Butcher tableau.  Stage and step limiter callbacks
 //! are intentionally not exposed because they are not part of `OdeProblem`.
 
-crate::define_explicit_rk_from_file!(
+crate::tableau::define_explicit_rk_from_file!(
     pub KykSsprk42,
     "src/tableau/resources/explicit/kyk_ssprk42.json",
     crate = crate

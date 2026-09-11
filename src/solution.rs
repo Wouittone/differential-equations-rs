@@ -115,27 +115,18 @@ pub(crate) struct BorrowedRungeKuttaSegment<'a> {
     coefficients: RungeKuttaCoefficients,
 }
 
-/// Process-lifetime continuous-extension rows from either legacy static
-/// tableaus or lazily materialized resource tableaus.
+/// Process-lifetime continuous-extension rows from a lazily materialized
+/// resource tableau.
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub(crate) enum RungeKuttaCoefficients {
-    Static(&'static [&'static [f64]]),
-    Resource(&'static [Vec<f64>]),
-}
+pub(crate) struct RungeKuttaCoefficients(&'static [Vec<f64>]);
 
 impl RungeKuttaCoefficients {
     fn len(self) -> usize {
-        match self {
-            Self::Static(rows) => rows.len(),
-            Self::Resource(rows) => rows.len(),
-        }
+        self.0.len()
     }
 
     fn row(self, index: usize) -> &'static [f64] {
-        match self {
-            Self::Static(rows) => rows[index],
-            Self::Resource(rows) => &rows[index],
-        }
+        &self.0[index]
     }
 
     fn rows_are_valid(self) -> bool {
@@ -146,15 +137,9 @@ impl RungeKuttaCoefficients {
     }
 }
 
-impl From<&'static [&'static [f64]]> for RungeKuttaCoefficients {
-    fn from(rows: &'static [&'static [f64]]) -> Self {
-        Self::Static(rows)
-    }
-}
-
 impl From<&'static [Vec<f64>]> for RungeKuttaCoefficients {
     fn from(rows: &'static [Vec<f64>]) -> Self {
-        Self::Resource(rows)
+        Self(rows)
     }
 }
 

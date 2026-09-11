@@ -741,6 +741,31 @@ mod tests {
     }
 
     #[test]
+    fn secondary_estimators_and_dense_rows_are_structurally_validated() {
+        let embedded = RESOURCE.replace(
+            "\"order\": 2,",
+            "\"order\": 2, \"embedded_order\": 1, \"error\": [\"-1/2\", \"1/2\"],",
+        );
+        for invalid in [
+            RESOURCE.replace("\"c\": [0, 1]", "\"c\": [0, 1], \"second_error\": [0, 0]"),
+            embedded.replace("\"c\": [0, 1]", "\"c\": [0, 1], \"second_error\": [0]"),
+            RESOURCE.replace(
+                "\"c\": [0, 1]",
+                "\"c\": [0, 1], \"dense\": [[\"1/2\"], []]",
+            ),
+            RESOURCE.replace(
+                "\"c\": [0, 1]",
+                "\"c\": [0, 1], \"dense\": [[1], [\"1/2\"], [0]]",
+            ),
+        ] {
+            assert!(
+                parse_tableau(&invalid, "Heun").is_err(),
+                "accepted {invalid}"
+            );
+        }
+    }
+
+    #[test]
     fn implicit_companions_and_stage_predictors_are_validated() {
         // First-order endpoint update with a second-order trapezoidal companion.
         let source = r#"{"name":"Pair","description":"Implicit pair","kind":"implicit-runge-kutta","order":1,"embedded_order":2,"A":[[0,0],["1/2","1/2"]],"b":[0,1],"c":[0,1],"error":["-1/2","1/2"],"stage_predictors":[[],[1]]}"#;

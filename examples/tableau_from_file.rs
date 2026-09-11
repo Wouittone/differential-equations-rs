@@ -1,6 +1,9 @@
-use differential_equations::{OdeProblem, SolveOptions, define_explicit_rk_from_file, solve};
+use differential_equations::{OdeProblem, SolveOptions, solve};
 
-define_explicit_rk_from_file!(pub FileHeun, "examples/resources/file_heun.json");
+differential_equations::tableau::define_explicit_rk_from_file!(
+    pub FileHeun,
+    "examples/resources/file_heun.json"
+);
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let problem = OdeProblem::new(

@@ -308,9 +308,15 @@ Runge--Kutta data is stored as compile-time JSON resources below
 `src/tableau/resources`. Resources are validated while compiling and parsed
 lazily when their method is first used. Downstream crates can define an
 explicit Runge--Kutta algorithm from their own JSON file with
-`define_explicit_rk_from_file!`, or a drift/kick composition with
-`tableau::define_symplectic_from_file!`. Embedded Runge--Kutta pairs may specify
-`b_hat` instead of precomputed error weights; RKIP uses this same resource format.
+`differential_equations::tableau::define_explicit_rk_from_file!`, or a
+drift/kick composition with
+`differential_equations::tableau::define_symplectic_from_file!`. Embedded
+Runge--Kutta pairs may specify `b_hat` instead of precomputed error weights;
+RKIP uses this same resource format.
+The JSON resource is the canonical extension point: downstream methods do not
+need Rust coefficient constants or a hand-written tableau implementation. Each
+generated zero-sized algorithm owns an independent lazy tableau, so defining
+many methods does not parse or retain all of them at startup.
 Fixed-step Adams methods and MRAB share lazily loaded `alpha`/`beta` multistep
 resources. BDF/NDF methods reuse that format with one base formula and NDF
 modifier per order, shared across fixed- and variable-order solvers.
@@ -324,8 +330,9 @@ metadata; its implemented solver remains the ordinary ODE specialization.
 Fixed and adaptive RKN methods and the IRKN history formulas likewise use one
 validated, lazily parsed JSON resource per algorithm and expose fallible
 `.tableau()` inspection. Downstream users can define an RKN solver with
-`define_rkn_from_file!`; IRKN startup reuses the ordinary
-`Nystrom4VelocityIndependent` resource instead of duplicating coefficients.
+`differential_equations::tableau::define_rkn_from_file!`; IRKN startup reuses
+the ordinary `Nystrom4VelocityIndependent` resource instead of duplicating
+coefficients.
 All low-storage RK algorithms use independent typed resources for their 2N,
 2C, 3S, alternating-register, or register-pipeline recurrence. Define another
 method with `tableau::define_low_storage_rk_from_file!`; the same resource works

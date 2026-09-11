@@ -148,4 +148,3 @@ pub use solution::{InterpolationError, Solution, SolverStats};
 pub use solver::{
     AutomaticPairIncompatibility, OdeAlgorithm, SaveMode, SolveError, SolveOptions, solve,
 };
-pub use tableau::define_explicit_rk_from_file;

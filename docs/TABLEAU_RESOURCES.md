@@ -7,6 +7,11 @@ also use this tree for typed method data, including canonical linear multistep
 formulas for fixed-step Adams and MRAB and per-method Rosenbrock tableaus.
 Every built-in coefficient catalogue now uses a typed method representation;
 there are no generic named-constant banks or generated coefficient arrays.
+The same JSON-resource path is the canonical extension API for downstream
+methods: authors provide method data, then select the matching macro from
+`differential_equations::tableau`. They do not need to declare coefficient
+constants or implement a tableau trait. Each generated algorithm parses only
+its own embedded resource on first inspection or use.
 
 Resources use a FracturedJson-style layout: object fields have stable ordering,
 scalar arrays stay on one line, and every matrix row occupies one line. This is
@@ -298,14 +303,16 @@ DAE claims. The resource validator proves structural validity, not those claims.
 ```
 
 The format has no schema-version field while the crate is pre-1.0. Define the
-solver with a path relative to the downstream package manifest:
+solver with the macro re-exported from `differential_equations::tableau` and a
+path relative to the downstream package manifest:
 
 ```rust
-use differential_equations::{
-    OdeProblem, SolveOptions, define_explicit_rk_from_file, solve,
-};
+use differential_equations::{OdeProblem, SolveOptions, solve};
 
-define_explicit_rk_from_file!(pub FileHeun, "resources/file_heun.json");
+differential_equations::tableau::define_explicit_rk_from_file!(
+    pub FileHeun,
+    "resources/file_heun.json"
+);
 
 # fn main() -> Result<(), Box<dyn std::error::Error>> {
 let problem = OdeProblem::new(
@@ -328,7 +335,16 @@ and inconsistent FSAL metadata fail the build with a resource-path diagnostic.
 The expansion embeds the original text with `include_str!` and materializes the
 tableau behind a `LazyLock` only when that method is first used. Runtime parsing
 errors are typed values rather than panics. `FileHeun.tableau()` exposes the
-materialized tableau for inspection.
+materialized tableau for inspection. This resource-backed definition is the
+complete extension mechanism; no parallel Rust coefficient representation is
+required.
+
+For code written against the pre-resource API, replace a `ButcherTableau`
+marker and `ExplicitRK::<Method>::new()` with one canonical JSON document and a
+`tableau::define_explicit_rk_from_file!` invocation. The former crate-root
+`define_explicit_rk_from_file!` alias is also removed; use the same macro under
+`differential_equations::tableau` (or the renamed dependency's `tableau`
+module). Pass the generated zero-sized algorithm value directly to `solve`.
 
 `A` must be square, and an explicit method must be strictly lower triangular.
 `fsal` requires a zero first stage row at `c = 0` and a final stage at `c = 1`
@@ -366,7 +382,7 @@ a driver must explicitly support it to use custom predictors.
 If the dependency is renamed, pass its local crate path:
 
 ```rust,ignore
-define_explicit_rk_from_file!(
+diffeq::tableau::define_explicit_rk_from_file!(
     pub FileHeun,
     "resources/file_heun.json",
     crate = diffeq,

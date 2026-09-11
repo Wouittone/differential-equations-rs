@@ -84,12 +84,8 @@ pub fn load_tableau<T>(
     }
 }
 
-// Transitional reexports while all legacy marker tableaus are migrated to
-// resource-backed solver values.
 #[doc(inline)]
-pub use crate::solvers::explicit::general::{
-    ButcherTableau, ExplicitRK, ExplicitRungeKutta, LazyDenseStage, ResourceExplicitRungeKutta,
-};
+pub use crate::solvers::explicit::general::ResourceExplicitRungeKutta;
 #[doc(inline)]
 pub use differential_equations_tableau_macros::define_eserk_tableau_from_file;
 #[doc(inline)]

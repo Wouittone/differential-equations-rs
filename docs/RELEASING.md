@@ -49,6 +49,9 @@ generic named-constant banks are not acceptable final representations.
 - [x] Remove `define_tableau_data_from_file!`, every legacy `coefficient_data`
   module, and their obsolete combined resource files after the final consumer
   is migrated.
+- [x] Remove the public const-tableau marker API and the crate-root explicit-RK
+  macro alias; downstream methods use validated JSON resources through the
+  `tableau` namespace.
 - [x] Keep resource JSON consistently styled with stable field ordering,
   compact scalar vectors, and one matrix row per line without adding a
   formatting build step.
