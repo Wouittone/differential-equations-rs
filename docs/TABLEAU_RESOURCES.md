@@ -344,6 +344,10 @@ and `b_hat`. Derived errors and coefficient sums are checked for overflow;
 `embedded_order` describes the companion formula: it must be lower than the
 primary order for explicit resources, while implicit resources can use a
 higher-order companion (TR-BDF2 uses orders two and three).
+Explicit resources can provide `real_stability_radius`, the positive finite
+extent of the primary method's stability interval along the negative real
+axis. `tableau.real_stability_radius()` returns this resource metadata as
+`Some(radius)`, or `None` when the resource does not supply it.
 `lazy_dense_stages` can add sparse stages used only by continuous output.
 Parametric primary weights can use `fitted_weights`, whose numerator and
 denominator vectors are stored in ascending powers of the solver's fit

@@ -300,9 +300,10 @@ enum AdaptiveErrorEstimator {
 }
 
 #[allow(clippy::too_many_arguments)]
-trait ExtendedRosenbrockMethod {
+pub(crate) trait ExtendedRosenbrockMethod {
     const ERROR_ORDER: usize;
     const ADAPTIVE: bool;
+    const HAS_STIFFNESS_ESTIMATE: bool = true;
     const RESOURCE_KIND: RosenbrockKind = RosenbrockKind::Rosenbrock;
     const SPECIAL_DENSE: bool = false;
 
@@ -519,6 +520,7 @@ resource_access!(HybridExplicitImplicitRK, TSIT5DA_TABLEAU);
 impl ExtendedRosenbrockMethod for HybridExplicitImplicitRK {
     const ERROR_ORDER: usize = 5;
     const ADAPTIVE: bool = true;
+    const HAS_STIFFNESS_ESTIMATE: bool = false;
     const RESOURCE_KIND: RosenbrockKind = RosenbrockKind::HybridExplicitImplicit;
 
     fn load_resource() -> Result<Option<&'static RosenbrockTableau>, SolveError> {
@@ -595,7 +597,7 @@ impl ExtendedRosenbrockMethod for RosenbrockW6S4OS {
     }
 }
 
-struct Workspace {
+pub(crate) struct Workspace {
     tableau: Option<&'static RosenbrockTableau>,
     pair_tableau: Option<&'static RosenbrockPairTableau>,
     current_derivative: Vec<f64>,
@@ -657,14 +659,14 @@ impl Workspace {
     }
 }
 
-struct ExtendedRosenbrockKernel<M> {
+pub(crate) struct ExtendedRosenbrockKernel<M> {
     workspace: Workspace,
     dense_endpoint_prepared: bool,
     method: PhantomData<M>,
 }
 
 impl<M: ExtendedRosenbrockMethod> ExtendedRosenbrockKernel<M> {
-    fn new(dimension: usize) -> Result<Self, SolveError> {
+    pub(crate) fn new(dimension: usize) -> Result<Self, SolveError> {
         let tableau = M::load_resource()?;
         let pair_tableau = M::SPECIAL_DENSE
             .then(|| load_tableau(&ROSENBROCK23_32_TABLEAU))
@@ -688,6 +690,28 @@ impl<M: ExtendedRosenbrockMethod> ExtendedRosenbrockKernel<M> {
         self.workspace
             .tableau
             .map_or(0, |tableau| tableau.h().len())
+    }
+
+    /// Returns a conservative infinity-norm estimate of the current Jacobian.
+    ///
+    /// Rosenbrock attempts already form this matrix for their linear solves,
+    /// so automatic composites can reuse it without another right-hand-side
+    /// evaluation or Jacobian allocation.
+    pub(crate) fn stiffness_estimate(&self) -> Option<f64> {
+        let dimension = self.workspace.current_derivative.len();
+        if dimension == 0 || self.workspace.jacobian.len() != dimension * dimension {
+            return None;
+        }
+
+        let mut estimate = 0.0_f64;
+        for row in self.workspace.jacobian.chunks_exact(dimension) {
+            let row_sum = row.iter().map(|value| value.abs()).sum::<f64>();
+            if !row_sum.is_finite() {
+                return Some(row_sum);
+            }
+            estimate = estimate.max(row_sum);
+        }
+        Some(estimate)
     }
 
     fn prepare_stiff_corrections(&mut self)

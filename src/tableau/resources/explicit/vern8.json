@@ -5,6 +5,7 @@
   "kind"              : "explicit-runge-kutta",
   "order"             : 8,
   "embedded_order"    : 7,
+  "real_stability_radius": 5.8641,
   "fsal"              : false,
   "A"                 : [
     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],

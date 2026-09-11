@@ -59,6 +59,28 @@ jobs:
       - run: cargo check --locked --workspace --all-targets --all-features
       - run: cargo check --locked --workspace --all-targets --no-default-features
 
+  julia-compliance:
+    name: Pinned Julia SciML comparisons
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      RUSTUP_TOOLCHAIN: "1.85"
+      JULIA_PKG_PRECOMPILE_AUTO: "0"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          submodules: recursive
+      - uses: dtolnay/rust-toolchain@85c23e28f7ccc75a9a153d45d385d94a85464876 # 1.85
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      - uses: julia-actions/setup-julia@fa02766e078afaaf09b14210362cee14137e6a32 # v3.0.2
+        with:
+          version: "1.12.6"
+      - name: Instantiate the pinned Julia environment
+        run: julia --project=tests/julia --startup-file=no -e 'using Pkg; Pkg.instantiate()'
+      - name: Compare against pinned SciML solvers
+        run: julia --project=tests/julia --startup-file=no tests/julia/runtests.jl
+
   platform-smoke:
     name: ${{ matrix.os }} smoke tests
     strategy:

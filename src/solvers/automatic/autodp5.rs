@@ -1,41 +1,52 @@
+use super::switching::solve_automatic;
+use super::{AutoSwitchConfig, AutoSwitchConfigError, AutomaticStiffAlgorithm};
 use crate::solvers::explicit::general::Dp5;
 use crate::{OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions};
 
 /// Automatic low-order Dormand--Prince composite.
 ///
-/// OrdinaryDiffEq defines `AutoDP5(stiff_alg)` as
-/// `AutoAlgSwitch(DP5(), stiff_alg)`, which dynamically switches between the
-/// non-stiff DP5 method and the supplied stiff method. The regular ODE driver
-/// does not yet expose the state needed for an in-flight algorithm switch, so
-/// this implementation uses a deterministic fallback instead: it first runs
-/// DP5 and, if DP5 reports a numerical failure that can indicate stiffness,
-/// restarts the problem from its initial state with the configured stiff
-/// algorithm.
-///
-/// The fallback is attempted for [`SolveError::NonFiniteDerivative`],
-/// [`SolveError::StepSizeUnderflow`], and [`SolveError::MaxStepsExceeded`].
-/// Configuration and callback errors are returned directly. A fallback is a
-/// full restart, so right-hand-side functions and callbacks with external side
-/// effects can be evaluated again.
+/// `AutoDp5` begins with DP5 by default and changes branches at the current
+/// accepted state when the shared stiffness policy accumulates enough
+/// evidence. The integration driver, callback lifecycle, saved trajectory,
+/// dense output, step budget, and statistics remain continuous across every
+/// transition; the problem is never restarted or replayed.
 #[derive(Clone, Debug, PartialEq)]
 pub struct AutoDp5<A> {
-    /// The stiff component requested by the upstream composite constructor.
-    pub stiff_algorithm: A,
+    stiff_algorithm: A,
+    switch_config: AutoSwitchConfig,
 }
 
 impl<A> AutoDp5<A> {
-    /// Constructs an AutoDP5 facade around a stiff component.
+    /// Constructs an automatic DP5 pair with the default switching policy.
     pub const fn new(stiff_algorithm: A) -> Self {
-        Self { stiff_algorithm }
+        Self {
+            stiff_algorithm,
+            switch_config: AutoSwitchConfig::new(),
+        }
     }
 
     /// Returns the configured stiff component.
     pub const fn stiff_algorithm(&self) -> &A {
         &self.stiff_algorithm
     }
+
+    /// Returns the inspectable switching policy.
+    pub const fn switch_config(&self) -> &AutoSwitchConfig {
+        &self.switch_config
+    }
+
+    /// Replaces the switching policy after validating all invariants.
+    pub fn with_switch_config(
+        mut self,
+        switch_config: AutoSwitchConfig,
+    ) -> Result<Self, AutoSwitchConfigError> {
+        switch_config.validate()?;
+        self.switch_config = switch_config;
+        Ok(self)
+    }
 }
 
-impl<A: OdeAlgorithm> OdeAlgorithm for AutoDp5<A> {
+impl<A: AutomaticStiffAlgorithm> OdeAlgorithm for AutoDp5<A> {
     fn solve_validated<F, P>(
         &self,
         problem: &OdeProblem<F, P>,
@@ -44,22 +55,15 @@ impl<A: OdeAlgorithm> OdeAlgorithm for AutoDp5<A> {
     where
         F: crate::OdeFunction<P>,
     {
-        match Dp5.solve(problem, options) {
-            Err(error) if should_retry_with_stiff(error) => {
-                self.stiff_algorithm.solve(problem, options)
-            }
-            result => result,
-        }
+        let tableau = Dp5.tableau().map_err(|_| SolveError::InvalidTableau)?;
+        solve_automatic(
+            problem,
+            options,
+            tableau,
+            self.stiff_algorithm,
+            self.switch_config,
+        )
     }
-}
-
-fn should_retry_with_stiff(error: SolveError) -> bool {
-    matches!(
-        error,
-        SolveError::NonFiniteDerivative
-            | SolveError::StepSizeUnderflow
-            | SolveError::MaxStepsExceeded
-    )
 }
 
 /// Uppercase acronym spelling used by the pinned Julia algorithm name.

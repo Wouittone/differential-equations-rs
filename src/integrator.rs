@@ -187,6 +187,7 @@ impl ControllerConfig {
 enum AttemptFailurePolicy {
     Terminal,
     NonlinearOrSingular,
+    NonFiniteDerivative,
 }
 
 impl AttemptFailurePolicy {
@@ -196,7 +197,7 @@ impl AttemptFailurePolicy {
             (
                 Self::NonlinearOrSingular,
                 SolveError::NonlinearSolveFailed | SolveError::SingularLinearSystem
-            )
+            ) | (Self::NonFiniteDerivative, SolveError::NonFiniteDerivative)
         )
     }
 }
@@ -207,6 +208,44 @@ pub(crate) struct KernelCapabilities {
     adaptive: bool,
     controller: ControllerConfig,
     attempt_failure_policy: AttemptFailurePolicy,
+}
+
+/// One-shot changes requested by a kernel after an attempt lifecycle hook.
+///
+/// This keeps algorithm transitions out of the common driver's numerical
+/// interface: kernels can change their capabilities internally, discard the
+/// old controller history, and scale the next proposal without changing the
+/// signature of every step hook.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct KernelTransition {
+    pub(crate) step_multiplier: f64,
+    pub(crate) reset_controller: bool,
+}
+
+/// Why the shared driver rejected the most recent candidate or attempt.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum RejectionReason {
+    /// A recoverable numerical attempt failed before producing a candidate.
+    AttemptFailure(SolveError),
+    /// The candidate violated a user-supplied domain policy.
+    Domain,
+    /// The adaptive error estimate exceeded the active controller threshold.
+    ErrorEstimate(f64),
+}
+
+impl KernelTransition {
+    pub(crate) const fn identity() -> Self {
+        Self {
+            step_multiplier: 1.0,
+            reset_controller: false,
+        }
+    }
+}
+
+impl Default for KernelTransition {
+    fn default() -> Self {
+        Self::identity()
+    }
 }
 
 impl KernelCapabilities {
@@ -228,6 +267,15 @@ impl KernelCapabilities {
 
     pub(crate) const fn recover_nonlinear_and_singular_failures(mut self) -> Self {
         self.attempt_failure_policy = AttemptFailurePolicy::NonlinearOrSingular;
+        self
+    }
+
+    /// Lets a composite retry an explicit-stage numerical blow-up with a
+    /// different kernel. Standalone explicit solvers keep such failures
+    /// terminal, so invalid user right-hand sides retain their existing error
+    /// behavior.
+    pub(crate) const fn recover_non_finite_derivatives(mut self) -> Self {
+        self.attempt_failure_policy = AttemptFailurePolicy::NonFiniteDerivative;
         self
     }
 }
@@ -268,6 +316,35 @@ where
     F: crate::OdeFunction<P>,
 {
     fn capabilities(&self) -> KernelCapabilities;
+
+    /// Prepares the active numerical cache before the driver queries its
+    /// capabilities for the next attempt.
+    ///
+    /// Automatic composites use this hook to allocate and initialize a newly
+    /// selected branch at the current accepted state. Ordinary kernels are
+    /// already initialized before entering the loop and keep the default.
+    fn prepare_attempt(
+        &mut self,
+        _: &OdeProblem<F, P>,
+        _: &[f64],
+        _: f64,
+        _: &mut SolverStats,
+    ) -> Result<(), SolveError> {
+        Ok(())
+    }
+
+    /// Drains a one-shot transition requested by the most recent lifecycle
+    /// hook. Kernels without automatic switching keep the identity default.
+    fn take_transition(&mut self) -> KernelTransition {
+        KernelTransition::default()
+    }
+
+    /// Records algorithm-specific accepted-step statistics before an early
+    /// callback termination can leave the numerical cache uncommitted.
+    fn note_accepted_step(&mut self, _: &mut SolverStats) {}
+
+    /// Adds kernel-specific terminal statistics to a successful solution.
+    fn finalize_stats(&self, _: &mut SolverStats) {}
 
     /// Reports whether the effective problem representation has callbacks.
     /// Typed adapters that drive through a callback-free placeholder problem
@@ -478,6 +555,12 @@ where
     ) -> Result<(), SolveError>;
 
     fn reject_step(&mut self);
+
+    /// Rejects the current attempt while preserving its reason for composite
+    /// policies. Existing kernels delegate to their ordinary rejection hook.
+    fn reject_step_with_reason(&mut self, _: RejectionReason) {
+        self.reject_step();
+    }
 }
 
 struct DefaultDenseState {
@@ -669,8 +752,7 @@ where
 {
     crate::solver::validate_ode_problem(problem, options)?;
 
-    let capabilities = kernel.capabilities();
-    if options.adaptive && !capabilities.adaptive {
+    if options.adaptive && !kernel.capabilities().adaptive {
         return Err(SolveError::AdaptiveStepUnsupported);
     }
     if !options.adaptive && options.initial_step.is_none() {
@@ -760,6 +842,11 @@ where
         if attempted_steps == options.max_steps {
             return Err(SolveError::MaxStepsExceeded);
         }
+        // A kernel may switch its numerical method after the previous
+        // lifecycle hook, so capabilities belong to this attempt rather than
+        // to the complete integration.
+        kernel.prepare_attempt(problem, &state, time, &mut stats)?;
+        let capabilities = kernel.capabilities();
         attempted_steps += 1;
 
         let callback_stop = kernel.next_callback_time_stop(problem, time, direction);
@@ -786,7 +873,7 @@ where
             return Err(SolveError::StepSizeUnderflow);
         }
 
-        let estimate = match kernel.attempt_step(
+        let attempt = kernel.attempt_step(
             problem,
             &state,
             time,
@@ -794,25 +881,36 @@ where
             &mut candidate,
             options,
             &mut stats,
-        ) {
+        );
+        let attempt = attempt.and_then(|estimate| {
+            candidate
+                .iter()
+                .all(|value| value.is_finite())
+                .then_some(estimate)
+                .ok_or(SolveError::NonFiniteDerivative)
+        });
+        let estimate = match attempt {
             Ok(estimate) => estimate,
             Err(error)
                 if options.adaptive
                     && capabilities.attempt_failure_policy.is_recoverable(error) =>
             {
                 stats.rejected_steps += 1;
-                kernel.reject_step();
+                kernel.reject_step_with_reason(RejectionReason::AttemptFailure(error));
                 controller_state.rejected(1.0, capabilities.controller);
-                step = kernel
-                    .modify_step(attempted_step * capabilities.controller.failed_attempt_factor);
+                let transition = kernel.take_transition();
+                if transition.reset_controller {
+                    controller_state.reset();
+                }
+                let proposed = attempted_step
+                    * capabilities.controller.failed_attempt_factor
+                    * transition.step_multiplier;
+                step = kernel.modify_step(direction * proposed.abs().min(maximum_step));
                 previous_step_rejected = true;
                 continue;
             }
             Err(error) => return Err(error),
         };
-        if !candidate.iter().all(|value| value.is_finite()) {
-            return Err(SolveError::NonFiniteDerivative);
-        }
 
         if controller_state.accepts(estimate.error_norm, capabilities.controller) {
             let previous_time = time;
@@ -824,9 +922,14 @@ where
                 kernel.domain_rejection_factor(problem, &candidate, next_time)
             {
                 stats.rejected_steps += 1;
-                kernel.reject_step();
+                kernel.reject_step_with_reason(RejectionReason::Domain);
                 controller_state.reset();
-                step = kernel.modify_step(attempted_step * reduction_factor);
+                let transition = kernel.take_transition();
+                if transition.reset_controller {
+                    controller_state.reset();
+                }
+                let proposed = attempted_step * reduction_factor * transition.step_multiplier;
+                step = kernel.modify_step(direction * proposed.abs().min(maximum_step));
                 previous_step_rejected = true;
                 continue;
             }
@@ -875,6 +978,7 @@ where
             stats.callback_invocations += callbacks.invocations;
             stats.rhs_evaluations += callbacks.rhs_evaluations;
             stats.accepted_steps += 1;
+            kernel.note_accepted_step(&mut stats);
 
             let dense_recorded = if !options.save_at.is_empty() || options.retain_dense_output {
                 let dense_state = if callbacks.invocations == 0 {
@@ -965,23 +1069,26 @@ where
                 callbacks.state_modified,
                 &mut stats,
             )?;
+            let transition = kernel.take_transition();
             if !custom_dense_output {
                 default_dense.accepted(callbacks.state_modified);
             }
 
-            if callbacks.state_modified {
+            if callbacks.state_modified || transition.reset_controller {
                 // A callback may change the state or parameters discontinuously.
-                // Do not let an error measured before that mutation bias the
-                // next PI proposal.
+                // A kernel transition likewise changes the numerical method.
+                // Do not let history from the old state or method bias the
+                // next controller proposal.
                 controller_state.reset();
             }
+            let retain_error_history = !callbacks.state_modified && !transition.reset_controller;
             if callbacks.requested_step.is_some() {
-                if options.adaptive && !callbacks.state_modified {
+                if options.adaptive && retain_error_history {
                     controller_state.accepted(estimate.error_norm, capabilities.controller);
                 }
                 step = kernel.modify_step(callback_adjusted_step(
                     callbacks,
-                    step,
+                    step * transition.step_multiplier,
                     direction,
                     maximum_step,
                 ));
@@ -989,23 +1096,28 @@ where
                 let mut factor = estimate.proposed_factor.unwrap_or_else(|| {
                     controller_state.factor(estimate.error_norm, capabilities.controller)
                 });
-                if !callbacks.state_modified {
+                if retain_error_history {
                     controller_state.accepted(estimate.error_norm, capabilities.controller);
                 }
                 if previous_step_rejected {
                     factor = factor.min(capabilities.controller.rejected_acceptance_maximum);
                 }
-                let proposed = direction * attempted_step.abs() * factor;
+                let proposed =
+                    direction * attempted_step.abs() * factor * transition.step_multiplier;
                 step = kernel.modify_step(callback_adjusted_step(
                     callbacks,
                     proposed,
                     direction,
                     maximum_step,
                 ));
-            } else if callbacks.step_limit.is_some() {
+            } else {
+                // Fixed-step overrides and transition multipliers apply to the
+                // next attempt only. After that attempt is accepted, start
+                // again from the configured fixed step before applying any
+                // newly requested override.
                 step = kernel.modify_step(callback_adjusted_step(
                     callbacks,
-                    step,
+                    proposed_initial_step * transition.step_multiplier,
                     direction,
                     maximum_step,
                 ));
@@ -1013,7 +1125,7 @@ where
             previous_step_rejected = false;
         } else {
             stats.rejected_steps += 1;
-            kernel.reject_step();
+            kernel.reject_step_with_reason(RejectionReason::ErrorEstimate(estimate.error_norm));
             let factor = estimate
                 .proposed_factor
                 .unwrap_or_else(|| {
@@ -1021,7 +1133,12 @@ where
                 })
                 .min(capabilities.controller.rejection_maximum);
             controller_state.rejected(estimate.error_norm, capabilities.controller);
-            step = kernel.modify_step(attempted_step * factor);
+            let transition = kernel.take_transition();
+            if transition.reset_controller {
+                controller_state.reset();
+            }
+            let proposed = attempted_step * factor * transition.step_multiplier;
+            step = kernel.modify_step(direction * proposed.abs().min(maximum_step));
             previous_step_rejected = true;
         }
     }
@@ -1035,7 +1152,7 @@ fn finish_successful<F, P, K>(
     state: &mut [f64],
     time: f64,
     mut recorder: TrajectoryRecorder<'_>,
-    stats: SolverStats,
+    mut stats: SolverStats,
 ) -> Result<Solution, SolveError>
 where
     F: crate::OdeFunction<P>,
@@ -1044,6 +1161,7 @@ where
     if kernel.apply_finalize_callbacks(problem, state, time)? {
         recorder.synchronize_endpoint(time, state);
     }
+    kernel.finalize_stats(&mut stats);
     Ok(recorder.finish(stats))
 }
 
@@ -1195,8 +1313,8 @@ mod tests {
     use std::rc::Rc;
 
     use super::{
-        ControllerConfig, ControllerState, KernelCapabilities, StepEstimate, StepKernel, integrate,
-        step_factor, step_factor_with_history,
+        ControllerConfig, ControllerState, KernelCapabilities, KernelTransition, StepEstimate,
+        StepKernel, integrate, step_factor, step_factor_with_history,
     };
     use crate::{CallbackAction, OdeProblem, SaveMode, SolveError, SolveOptions, SolverStats};
 
@@ -1214,6 +1332,9 @@ mod tests {
         unexpected_candidate: bool,
         attempted_steps: Vec<f64>,
         controller: ControllerConfig,
+        transitions: Vec<KernelTransition>,
+        transition_index: usize,
+        capability_queries: Cell<usize>,
     }
 
     impl MockKernel {
@@ -1236,11 +1357,19 @@ mod tests {
                 unexpected_candidate: false,
                 attempted_steps: Vec::new(),
                 controller: ControllerConfig::proportional(1, 0.9, 0.2, 10.0, 0.2),
+                transitions: Vec::new(),
+                transition_index: 0,
+                capability_queries: Cell::new(0),
             }
         }
 
         fn with_controller(mut self, controller: ControllerConfig) -> Self {
             self.controller = controller;
+            self
+        }
+
+        fn with_transitions(mut self, transitions: Vec<KernelTransition>) -> Self {
+            self.transitions = transitions;
             self
         }
 
@@ -1269,6 +1398,8 @@ mod tests {
         F: crate::OdeFunction<P>,
     {
         fn capabilities(&self) -> KernelCapabilities {
+            self.capability_queries
+                .set(self.capability_queries.get() + 1);
             let mut controller = self.controller;
             controller.failed_attempt_factor = self.failed_attempt_factor;
             let capabilities = KernelCapabilities::with_controller(true, controller);
@@ -1277,6 +1408,16 @@ mod tests {
             } else {
                 capabilities
             }
+        }
+
+        fn take_transition(&mut self) -> KernelTransition {
+            let transition = self
+                .transitions
+                .get(self.transition_index)
+                .copied()
+                .unwrap_or_default();
+            self.transition_index += 1;
+            transition
         }
 
         fn initialize(
@@ -1394,6 +1535,90 @@ mod tests {
         assert_eq!(effects.get(), solution.stats().accepted_steps);
         assert_eq!(solution.times().len(), solution.stats().accepted_steps + 1);
         assert_eq!(solution.stats().rejected_steps, 1);
+    }
+
+    #[test]
+    fn rejection_transition_scales_the_retry_step() {
+        let problem = unit_problem((0.0, 0.5), 0.0);
+        let transition = KernelTransition {
+            step_multiplier: 0.5,
+            reset_controller: true,
+        };
+        let mut kernel = MockKernel::with_errors(vec![4.0, 0.0]).with_transitions(vec![transition]);
+        let options = SolveOptions {
+            initial_step: Some(0.4),
+            ..SolveOptions::default()
+        };
+
+        integrate(&problem, &options, &mut kernel).unwrap();
+
+        assert!((kernel.attempted_steps[1] - 0.045).abs() < 1.0e-15);
+    }
+
+    #[test]
+    fn accepted_transition_resets_history_and_scales_the_proposal() {
+        let problem = unit_problem((0.0, 3.0), 0.0);
+        let controller =
+            ControllerConfig::proportional(1, 1.0, 0.1, 10.0, 0.2).with_integral_exponent(0.5);
+        let transition = KernelTransition {
+            step_multiplier: 0.5,
+            reset_controller: true,
+        };
+        let mut kernel = MockKernel::with_errors(vec![0.25])
+            .with_controller(controller)
+            .with_transitions(vec![KernelTransition::identity(), transition]);
+        let options = SolveOptions {
+            initial_step: Some(0.1),
+            ..SolveOptions::default()
+        };
+
+        integrate(&problem, &options, &mut kernel).unwrap();
+
+        assert!((kernel.attempted_steps[1] - 0.4).abs() < 1.0e-15);
+        assert!((kernel.attempted_steps[2] - 0.8).abs() < 1.0e-15);
+    }
+
+    #[test]
+    fn fixed_transition_multiplier_changes_only_the_next_attempt() {
+        let problem = unit_problem((0.0, 0.5), 0.0);
+        let transition = KernelTransition {
+            step_multiplier: 0.5,
+            reset_controller: true,
+        };
+        let mut kernel = MockKernel::fixed().with_transitions(vec![transition]);
+
+        integrate(&problem, &fixed_options(0.1), &mut kernel).unwrap();
+
+        assert!((kernel.attempted_steps[0] - 0.1).abs() < 1.0e-15);
+        assert!((kernel.attempted_steps[1] - 0.05).abs() < 1.0e-15);
+        assert!((kernel.attempted_steps[2] - 0.1).abs() < 1.0e-15);
+    }
+
+    #[test]
+    fn callback_step_request_overrides_the_transition_multiplier() {
+        let problem = unit_problem((0.0, 1.0), 0.0).with_preset_time_callback([0.1], |_, _, _| {
+            CallbackAction::ContinueUnmodifiedWithStepSize(0.3)
+        });
+        let transition = KernelTransition {
+            step_multiplier: 0.5,
+            reset_controller: false,
+        };
+        let mut kernel = MockKernel::fixed().with_transitions(vec![transition]);
+
+        integrate(&problem, &fixed_options(0.1), &mut kernel).unwrap();
+
+        assert!((kernel.attempted_steps[1] - 0.3).abs() < 1.0e-15);
+        assert!((kernel.attempted_steps[2] - 0.1).abs() < 1.0e-15);
+    }
+
+    #[test]
+    fn capabilities_are_queried_for_each_attempt() {
+        let problem = unit_problem((0.0, 1.0), 0.0);
+        let mut kernel = MockKernel::fixed();
+
+        integrate(&problem, &fixed_options(0.3), &mut kernel).unwrap();
+
+        assert_eq!(kernel.capability_queries.get(), kernel.attempts);
     }
 
     #[test]

@@ -2,6 +2,7 @@ use thiserror::Error;
 
 use crate::callback::CallbackOutcome;
 use crate::event::{times_are_numerically_equal, times_are_representably_equal};
+use crate::solvers::automatic::AutomaticBranch;
 
 /// A dense-output query or retained interpolation segment is invalid.
 #[derive(Clone, Copy, Debug, Eq, Error, PartialEq)]
@@ -53,6 +54,16 @@ pub struct SolverStats {
     pub linear_factorizations: usize,
     /// Number of discrete or continuous callback effects applied.
     pub callback_invocations: usize,
+    /// Number of in-flight transitions between automatic solver branches.
+    pub algorithm_switches: usize,
+    /// Number of steps accepted by an automatic solver's non-stiff branch.
+    pub nonstiff_accepted_steps: usize,
+    /// Number of steps accepted by an automatic solver's stiff branch.
+    pub stiff_accepted_steps: usize,
+    /// Branch active when an automatic solve finished.
+    ///
+    /// Ordinary, non-composite algorithms leave this as `None`.
+    pub final_automatic_branch: Option<AutomaticBranch>,
 }
 
 use crate::{SaveMode, SolveOptions};

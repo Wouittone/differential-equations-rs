@@ -19,6 +19,13 @@
     },
     "order": { "type": "integer", "minimum": 1 },
     "embedded_order": { "type": "integer", "minimum": 1 },
+    "real_stability_radius": {
+      "description": "Positive finite extent of an explicit method's primary stability region along the negative real axis.",
+      "oneOf": [
+        { "type": "number", "exclusiveMinimum": 0 },
+        { "type": "string", "minLength": 1 }
+      ]
+    },
     "fsal": { "type": "boolean", "default": false },
     "A": {
       "type": "array",
@@ -83,6 +90,10 @@
   },
   "allOf": [
     { "not": { "required": ["error", "b_hat"] } },
+    {
+      "if": { "required": ["real_stability_radius"] },
+      "then": { "properties": { "kind": { "const": "explicit-runge-kutta" } } }
+    },
     {
       "if": { "required": ["stage_predictors"], "properties": { "stage_predictors": { "minItems": 1 } } },
       "then": { "properties": { "kind": { "const": "implicit-runge-kutta" } } }

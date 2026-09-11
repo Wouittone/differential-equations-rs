@@ -65,7 +65,8 @@
 //!   output, and dense output retention; [`solve`] runs an [`OdeAlgorithm`].
 //! - [`solvers::explicit`] is a good starting point for non-stiff problems,
 //!   [`solvers::rosenbrock`] contains linearly implicit stiff methods, and
-//!   [`solvers::automatic`] contains composite choices.
+//!   [`solvers::automatic`] contains in-flight non-stiff/stiff composites with
+//!   configurable hysteresis and observable branch statistics.
 //! - [`tableau`] exposes the extension surface for defining explicit
 //!   Runge--Kutta and Runge--Kutta--Nyström methods from compile-time-validated
 //!   JSON resources, plus typed data for specialized solver families.
@@ -144,5 +145,7 @@ pub use operator_problem::{LieGroupProblem, LinearOperatorProblem};
 pub use problem::{OdeFunction, OdeProblem, SplitOdeProblem};
 pub use semilinear::SemilinearOdeProblem;
 pub use solution::{InterpolationError, Solution, SolverStats};
-pub use solver::{OdeAlgorithm, SaveMode, SolveError, SolveOptions, solve};
+pub use solver::{
+    AutomaticPairIncompatibility, OdeAlgorithm, SaveMode, SolveError, SolveOptions, solve,
+};
 pub use tableau::define_explicit_rk_from_file;

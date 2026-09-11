@@ -4,8 +4,9 @@ All benchmark sources live under `benches/`.
 
 ## Regression suite
 
-`solver_performance` tracks representative explicit, stiff, dense-output, and
-sequential/parallel ensemble paths with stable Criterion-compatible IDs:
+`solver_performance` tracks representative explicit, stiff, automatic,
+dense-output, and sequential/parallel ensemble paths with stable
+Criterion-compatible IDs:
 
 ```console
 cargo bench --locked --bench solver_performance
@@ -22,6 +23,31 @@ To compare a local branch against a saved baseline:
 ```console
 cargo bench --bench solver_performance -- --save-baseline main
 cargo bench --bench solver_performance -- --baseline main
+```
+
+The automatic-switch regression group uses scalar problems. Its fixed-step
+cases keep matched work sequences so adaptive-controller divergence does not
+obscure dispatch and handoff costs; separate adaptive cases cover the real
+controller path. Its stable IDs are:
+
+- `automatic_switching/no_switch/explicit_tsit5`: the explicit baseline;
+- `automatic_switching/no_switch/auto_tsit5`: the same Tsit5 work plus the
+  detector and automatic dispatch, configured never to switch;
+- `automatic_switching/one_switch/auto_tsit5_rodas5p`: one deterministic
+  accepted-state handoff from Tsit5 to Rodas5P; and
+- `automatic_switching/one_switch/stiff_rodas5p`: the stiff-only baseline on
+  the same problem and step sequence;
+- `automatic_switching/adaptive_no_switch/explicit_tsit5` and
+  `automatic_switching/adaptive_no_switch/auto_tsit5`: matched adaptive
+  explicit and detector paths; and
+- `automatic_switching/two_switch/auto_tsit5_rodas5p`: a complete
+  explicit-to-stiff-to-explicit cycle with both caches re-entered.
+
+Each automatic workload is probed before measurement and fails immediately if
+it no longer performs the expected number of switches. Run only this group with:
+
+```console
+cargo bench --locked --bench solver_performance -- automatic_switching
 ```
 
 The `hybrid_workspace/tsit5da_matrix/{128,256,1024}` cases measure short

@@ -57,30 +57,32 @@ generic named-constant banks are not acceptable final representations.
 
 ### Implement genuine in-flight automatic switching
 
-Automatic algorithms must switch from non-stiff to stiff integration at the
-current accepted state. The existing behavior that restarts from the initial
-condition after the explicit algorithm fails is not sufficient for 1.0.
+Automatic algorithms switch from non-stiff to stiff integration at the current
+accepted state. A fallback that restarts from the initial condition after the
+explicit algorithm fails is prohibited.
 
-- [ ] Introduce an internal handoff state for the accepted time and state,
-  derivative, proposed step, direction, controller context, pending time stops,
-  callbacks, saving and dense-output state, and cumulative statistics.
-- [ ] Separate driver-owned integration state from algorithm caches so a stiff
+- [x] Retain the accepted time and state, proposed step, direction, pending time
+  stops, callbacks, saving and dense-output state, and cumulative statistics
+  continuously in the shared driver across every branch handoff. Reinitialize
+  method-specific derivative caches at that accepted state and deliberately
+  reset controller error history between methods.
+- [x] Separate driver-owned integration state from algorithm caches so a stiff
   cache can be initialized lazily at the switching point.
-- [ ] Preserve accepted evaluations, callback effects, saved points, mutable
+- [x] Preserve accepted evaluations, callback effects, saved points, mutable
   parameter side effects, exact stops, termination, interpolation, and error
   semantics without replaying the initial interval.
-- [ ] Add a documented stiffness detector that can switch before fatal explicit
+- [x] Add a documented stiffness detector that can switch before fatal explicit
   failure using stability-limited steps, rejection history, and available
   derivative or Jacobian estimates.
-- [ ] Add hysteresis and minimum-residence rules to avoid repeated switching.
+- [x] Add hysteresis and minimum-residence rules to avoid repeated switching.
   Non-stiff-to-stiff handoff is mandatory; controlled stiff-to-non-stiff
   handoff should be supported by automatic pairs that can provide it.
-- [ ] Make detector thresholds inspectable and configurable with conservative
+- [x] Make detector thresholds inspectable and configurable with conservative
   defaults, and expose switch counts and active-algorithm information in solver
   statistics.
-- [ ] Return typed errors for incompatible handoff pairs; never silently fall
+- [x] Return typed errors for incompatible handoff pairs; never silently fall
   back to a full restart.
-- [ ] Apply the shared switching mechanism to `AutoDP5` and the other automatic
+- [x] Apply the shared switching mechanism to `AutoDP5` and the other automatic
   composites.
 
 Verification must cover a non-stiff problem that never switches, a problem
@@ -117,14 +119,14 @@ cost, allocations, and both explicit-only and stiff-only baselines.
 | Milestone | Estimated focused effort |
 | --- | ---: |
 | Remaining tableau migrations and legacy-loader removal | Completed |
-| In-flight automatic switching and verification | 5–10 development days |
+| In-flight automatic switching and verification | Completed |
 | Module decomposition and public API hardening | 5–10 development days |
 | Numerical audit, downstream testing, and release preparation | 5–10 development days |
 
-A credible 1.0 release still requires the automatic-switching architecture,
-module and API hardening, and the numerical audit. Those remaining items carry
-the most uncertainty. Parallel review can reduce calendar time, but every
-integrated release gate below must still pass.
+A credible 1.0 release still requires module and API hardening plus the
+method-by-method numerical audit. Those remaining items carry the most
+uncertainty. Parallel review can reduce calendar time, but every integrated
+release gate below must still pass.
 
 ### Definition of done
 

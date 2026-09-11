@@ -188,14 +188,20 @@ struct Workspace {
     stages: Vec<f64>,
     dimension: usize,
     temporary: Vec<f64>,
+    stiffness_reference_state: Vec<f64>,
 }
 
 impl Workspace {
-    fn new(stage_count: usize, dimension: usize) -> Self {
+    fn new(stage_count: usize, dimension: usize, stiffness_detection: bool) -> Self {
         Self {
             stages: vec![0.0; stage_count * dimension],
             dimension,
             temporary: vec![0.0; dimension],
+            stiffness_reference_state: if stiffness_detection {
+                vec![0.0; dimension]
+            } else {
+                Vec::new()
+            },
         }
     }
 
@@ -317,7 +323,7 @@ where
     )
 }
 
-trait TableauAccess: Copy {
+pub(crate) trait TableauAccess: Copy {
     fn order(self) -> usize;
     fn fsal(self) -> bool;
     fn nodes(self) -> &'static [f64];
@@ -375,7 +381,7 @@ impl<T: ButcherTableau> TableauAccess for StaticTableau<T> {
 }
 
 #[derive(Clone, Copy)]
-struct ResourceTableau(&'static RungeKuttaTableau);
+pub(crate) struct ResourceTableau(pub(crate) &'static RungeKuttaTableau);
 
 impl TableauAccess for ResourceTableau {
     fn order(self) -> usize {
@@ -411,28 +417,49 @@ impl TableauAccess for ResourceTableau {
     }
 }
 
-struct ExplicitKernel<T> {
+pub(crate) struct ExplicitKernel<T> {
     tableau: T,
     workspace: Workspace,
     stage_zero_is_current: bool,
     dense_endpoint_state: Vec<f64>,
     dense_endpoint_prepared: bool,
     dense_stages_prepared: bool,
+    stiffness_estimate: Option<f64>,
 }
 
 impl<T: TableauAccess> ExplicitKernel<T> {
-    fn new(tableau: T, dimension: usize) -> Self {
+    pub(crate) fn new(tableau: T, dimension: usize) -> Self {
+        Self::with_stiffness_detection(tableau, dimension, false)
+    }
+
+    /// Builds the explicit branch of an automatic composite.
+    ///
+    /// Only automatic composites retain the penultimate endpoint-stage state;
+    /// ordinary explicit solves therefore pay no storage or diagnostic cost.
+    pub(crate) fn new_for_automatic(tableau: T, dimension: usize) -> Self {
+        Self::with_stiffness_detection(tableau, dimension, true)
+    }
+
+    fn with_stiffness_detection(tableau: T, dimension: usize, enabled: bool) -> Self {
         Self {
             tableau,
             workspace: Workspace::new(
                 tableau.weights().len() + tableau.lazy_stage_count(),
                 dimension,
+                enabled,
             ),
             stage_zero_is_current: false,
             dense_endpoint_state: vec![0.0; dimension],
             dense_endpoint_prepared: false,
             dense_stages_prepared: false,
+            stiffness_estimate: None,
         }
+    }
+
+    /// Returns the endpoint-stage secant estimate from the last attempted
+    /// step, when this kernel was created for an automatic composite.
+    pub(crate) fn stiffness_estimate(&self) -> Option<f64> {
+        self.stiffness_estimate
     }
 }
 
@@ -520,6 +547,8 @@ where
             stats,
             self.tableau,
         )?;
+        self.stiffness_estimate =
+            endpoint_stage_stiffness_estimate(&self.workspace, self.tableau.weights().len());
         self.dense_stages_prepared = false;
         ensure_finite(candidate)?;
         let error = if options.adaptive {
@@ -899,6 +928,11 @@ where
             stage_index,
             tableau.stage_row(stage_index),
         );
+        if !workspace.stiffness_reference_state.is_empty() && stage_index + 2 == stage_count {
+            workspace
+                .stiffness_reference_state
+                .copy_from_slice(&workspace.temporary);
+        }
         let start = stage_index * workspace.dimension;
         evaluate(
             problem,
@@ -918,6 +952,47 @@ where
         tableau.weights(),
     );
     Ok(())
+}
+
+/// Estimates the dominant endpoint eigenvalue from the final two stage
+/// derivatives and their corresponding states.
+///
+/// This is Hairer's endpoint-stage secant estimate with the infinity norm, as
+/// used by the pinned SciML automatic composites. An unchanged derivative at
+/// an unchanged state contributes no information; treating that `0 / 0` pair
+/// as stiff would spuriously switch equilibria and systems with conserved
+/// components. Other non-finite quotients are retained so the switching policy
+/// can classify them conservatively.
+fn endpoint_stage_stiffness_estimate(workspace: &Workspace, stage_count: usize) -> Option<f64> {
+    if workspace.stiffness_reference_state.is_empty() || stage_count < 2 {
+        return None;
+    }
+
+    let penultimate_start = (stage_count - 2) * workspace.dimension;
+    let last_start = (stage_count - 1) * workspace.dimension;
+    let penultimate_derivative =
+        &workspace.stages[penultimate_start..penultimate_start + workspace.dimension];
+    let last_derivative = &workspace.stages[last_start..last_start + workspace.dimension];
+    let mut estimate = 0.0_f64;
+    for (((last_derivative, penultimate_derivative), last_state), penultimate_state) in
+        last_derivative
+            .iter()
+            .zip(penultimate_derivative)
+            .zip(&workspace.temporary)
+            .zip(&workspace.stiffness_reference_state)
+    {
+        let derivative_delta = last_derivative - penultimate_derivative;
+        let state_delta = last_state - penultimate_state;
+        if derivative_delta == 0.0 && state_delta == 0.0 {
+            continue;
+        }
+        let quotient = (derivative_delta / state_delta).abs();
+        if !quotient.is_finite() {
+            return Some(quotient);
+        }
+        estimate = estimate.max(quotient);
+    }
+    Some(estimate)
 }
 
 fn perform_lazy_dense_stages<F, P, T>(

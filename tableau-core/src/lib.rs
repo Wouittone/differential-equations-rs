@@ -95,6 +95,7 @@ pub struct RungeKuttaTableau {
     kind: RungeKuttaKind,
     order: usize,
     embedded_order: Option<usize>,
+    real_stability_radius: Option<f64>,
     fsal: bool,
     a: Vec<Vec<f64>>,
     b: Vec<f64>,
@@ -132,6 +133,12 @@ impl RungeKuttaTableau {
     /// Implicit methods may use a higher-order companion for error estimation.
     pub fn embedded_order(&self) -> Option<usize> {
         self.embedded_order
+    }
+
+    /// Returns the extent of the primary method's stability region along the
+    /// negative real axis, when supplied by the resource.
+    pub fn real_stability_radius(&self) -> Option<f64> {
+        self.real_stability_radius
     }
 
     /// Returns whether the method has the first-same-as-last property.
@@ -263,6 +270,7 @@ struct RawTableau {
     kind: RawKind,
     order: usize,
     embedded_order: Option<usize>,
+    real_stability_radius: Option<Scalar>,
     #[serde(default)]
     fsal: bool,
     #[serde(rename = "A")]
@@ -339,6 +347,21 @@ impl RawTableau {
         }) {
             return Err(TableauError::new(
                 "embedded order must be positive; explicit methods require a lower-order companion",
+            ));
+        }
+        let real_stability_radius = self
+            .real_stability_radius
+            .as_ref()
+            .map(Scalar::materialize)
+            .transpose()?;
+        if real_stability_radius.is_some_and(|radius| radius <= 0.0) {
+            return Err(TableauError::new(
+                "real_stability_radius must be positive and finite",
+            ));
+        }
+        if real_stability_radius.is_some() && !matches!(self.kind, RawKind::ExplicitRungeKutta) {
+            return Err(TableauError::new(
+                "real_stability_radius is only supported for explicit Runge--Kutta tableaus",
             ));
         }
 
@@ -549,6 +572,7 @@ impl RawTableau {
             kind,
             order: self.order,
             embedded_order: self.embedded_order,
+            real_stability_radius,
             fsal: self.fsal,
             a,
             b,
@@ -670,6 +694,33 @@ mod tests {
         assert_eq!(tableau.a(), &[vec![0.0, 0.0], vec![1.0, 0.0]]);
         assert_eq!(tableau.b(), &[0.5, 0.5]);
         assert_eq!(tableau.c(), &[0.0, 1.0]);
+        assert_eq!(tableau.real_stability_radius(), None);
+    }
+
+    #[test]
+    fn real_stability_radius_is_optional_positive_explicit_metadata() {
+        let source = RESOURCE.replace(
+            "\"order\": 2,",
+            "\"order\": 2, \"real_stability_radius\": \"4 / 2\",",
+        );
+        assert_eq!(
+            parse_tableau(&source, "Heun")
+                .unwrap()
+                .real_stability_radius(),
+            Some(2.0)
+        );
+
+        for invalid in [
+            source.replace("\"4 / 2\"", "0"),
+            source.replace("\"4 / 2\"", "-1"),
+            source.replace("\"4 / 2\"", "\"1 / 0\""),
+            source.replace("explicit-runge-kutta", "implicit-runge-kutta"),
+        ] {
+            assert!(
+                parse_tableau(&invalid, "Heun").is_err(),
+                "accepted {invalid}"
+            );
+        }
     }
 
     #[test]

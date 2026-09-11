@@ -38,13 +38,39 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 | Non-stiff first-order ODE | Tsit5 | `solvers::explicit::Tsit5` |
 | Stiff first-order ODE | Rodas5P | `solvers::rosenbrock::Rodas5P` |
 | Simple fixed-step baseline | Rk4 | `solvers::explicit::Rk4` |
-| Automatic non-stiff/stiff fallback | DefaultOdeAlgorithm | `solvers::automatic::DefaultOdeAlgorithm` |
+| Automatically changing stiffness | AutoTsit5 with Rodas5P | `solvers::automatic::AutoTsit5` |
 | Separable second-order system | RKN or symplectic family | `solvers::second_order` |
 
 Stiff solvers can use an analytic Jacobian supplied through
 `OdeProblem::with_jacobian`; otherwise they use finite differences. Fixed-step
 algorithms require adaptive stepping to be disabled and an initial step to be
 provided.
+
+Automatic pairs run both numerical kernels inside one integration driver. A
+branch change starts at the current accepted state: callbacks, mutable
+parameters, exact stops, saved output, dense interpolation, step budgets, and
+statistics are not restarted or replayed. The default policy uses hysteresis
+and consecutive evidence to avoid chattering, while repeated explicit-step
+rejections can select the stiff branch sooner.
+
+```rust
+use differential_equations::solvers::{
+    automatic::{AutoSwitchConfig, AutoTsit5},
+    rosenbrock::Rodas5P,
+};
+
+let switching = AutoSwitchConfig::new()
+    .with_stiff_confirmations(6)?
+    .with_nonstiff_confirmations(4)?;
+let algorithm = AutoTsit5::new(Rodas5P).with_switch_config(switching)?;
+# Ok::<(), differential_equations::solvers::automatic::AutoSwitchConfigError>(())
+```
+
+After a solve, `SolverStats::algorithm_switches`, the per-branch accepted-step
+counts, and `final_automatic_branch` make the decision history observable.
+Only built-in Rosenbrock methods currently implement the sealed stiff-branch
+contract; incompatible non-adaptive components return a typed error before
+the problem is evaluated.
 
 ## Cargo features and current scope
 

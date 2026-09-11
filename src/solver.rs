@@ -155,6 +155,24 @@ impl SolveOptions {
     }
 }
 
+/// Explains why two components cannot be used as an automatic solver pair.
+///
+/// Automatic solvers require both components to support adaptive stepping.
+/// Pairs that allow switching back to the explicit component also require a
+/// stiffness diagnostic from the implicit component. This reason is carried
+/// by [`SolveError::IncompatibleAutomaticPair`] so callers can diagnose pair
+/// construction without parsing an error message.
+#[derive(Clone, Copy, Debug, Eq, Error, PartialEq)]
+#[non_exhaustive]
+pub enum AutomaticPairIncompatibility {
+    /// A component does not support adaptive step-size control.
+    #[error("a component does not support adaptive stepping")]
+    NonAdaptiveComponent,
+    /// A component cannot provide the diagnostic required for switch-back.
+    #[error("a component cannot estimate stiffness for switch-back")]
+    MissingStiffnessDiagnostic,
+}
+
 /// A failure to configure or complete an ODE solve.
 #[derive(Clone, Copy, Debug, Eq, Error, PartialEq)]
 #[non_exhaustive]
@@ -183,6 +201,12 @@ pub enum SolveError {
     /// Adaptive stepping was requested from a fixed-step algorithm.
     #[error("the selected algorithm does not support adaptive stepping")]
     AdaptiveStepUnsupported,
+    /// The selected components cannot participate in in-flight automatic switching.
+    #[error("the automatic solver pair is incompatible: {reason}")]
+    IncompatibleAutomaticPair {
+        /// The capability or invariant that the pair does not satisfy.
+        reason: AutomaticPairIncompatibility,
+    },
     /// The requested multistep order is not supported.
     #[error("the configured multistep order is unsupported")]
     InvalidMultistepOrder,
@@ -409,7 +433,7 @@ pub(crate) fn validate_state_time_options(
 mod tests {
     use crate::{DEFAULT_EVENT_TOLERANCE, OdeAlgorithm, OdeProblem, Solution, SolverStats};
 
-    use super::{SaveMode, SolveError, SolveOptions, solve};
+    use super::{AutomaticPairIncompatibility, SaveMode, SolveError, SolveOptions, solve};
 
     struct Noop;
     type TestRhs = fn(&mut [f64], &[f64], &(), f64);
@@ -559,6 +583,13 @@ mod tests {
         assert_eq!(
             SolveError::InvalidPresetTimes.to_string(),
             "preset callback times must be finite, strictly ordered, and inside the time span"
+        );
+        assert_eq!(
+            SolveError::IncompatibleAutomaticPair {
+                reason: AutomaticPairIncompatibility::MissingStiffnessDiagnostic,
+            }
+            .to_string(),
+            "the automatic solver pair is incompatible: a component cannot estimate stiffness for switch-back"
         );
     }
 }
