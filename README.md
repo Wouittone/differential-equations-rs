@@ -33,13 +33,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## Choosing an algorithm
 
-| Problem | Suggested starting point | Import |
-| --- | --- | --- |
-| Non-stiff first-order ODE | Tsit5 | `solvers::explicit::Tsit5` |
-| Stiff first-order ODE | Rodas5P | `solvers::rosenbrock::Rodas5P` |
-| Simple fixed-step baseline | Rk4 | `solvers::explicit::Rk4` |
-| Automatically changing stiffness | AutoTsit5 with Rodas5P | `solvers::automatic::AutoTsit5` |
-| Separable second-order system | RKN or symplectic family | `solvers::second_order` |
+| Problem                          | Suggested starting point | Import                          |
+| -------------------------------- | ------------------------ | ------------------------------- |
+| Non-stiff first-order ODE        | Tsit5                    | `solvers::explicit::Tsit5`      |
+| Stiff first-order ODE            | Rodas5P                  | `solvers::rosenbrock::Rodas5P`  |
+| Simple fixed-step baseline       | Rk4                      | `solvers::explicit::Rk4`        |
+| Automatically changing stiffness | AutoTsit5 with Rodas5P   | `solvers::automatic::AutoTsit5` |
+| Separable second-order system    | RKN or symplectic family | `solvers::second_order`         |
 
 Stiff solvers can use an analytic Jacobian supplied through
 `OdeProblem::with_jacobian`; otherwise they use finite differences. Fixed-step
@@ -76,10 +76,10 @@ the problem is evaluated.
 
 The crate has exactly two Cargo features:
 
-| Feature | Default | Purpose |
-| --- | :---: | --- |
-| `parallel` | Yes | Rayon-backed batch and ensemble solves. |
-| `allocation-metrics` | No | Repository benchmark instrumentation; applications do not need it. |
+| Feature              | Default | Purpose                                                            |
+| -------------------- | :-----: | ------------------------------------------------------------------ |
+| `parallel`           |   Yes   | Rayon-backed batch and ensemble solves.                            |
+| `allocation-metrics` |   No    | Repository benchmark instrumentation; applications do not need it. |
 
 `--no-default-features` selects sequential ensemble execution. State shape is
 not a Cargo feature: ndarray scalar, vector, and matrix adapters are always
