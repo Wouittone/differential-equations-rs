@@ -1,9 +1,8 @@
-use differential_equations::solvers::exponential::rkip::{RKIP, solve_rkip};
-use differential_equations::solvers::rosenbrock::Rosenbrock23;
-use differential_equations::solvers::rosenbrock::amf::{
-    AMF, AmfProblem, build_amf_function, solve_amf,
+use differential_equations::solvers::exponential::{RKIP, solve_rkip};
+use differential_equations::solvers::rosenbrock::{
+    AMF, AmfProblem, Rosenbrock23, build_amf_function, solve_amf,
 };
-use differential_equations::solvers::stabilized::irkc::{IRKC, solve_irkc};
+use differential_equations::solvers::stabilized::{IRKC, solve_irkc};
 use differential_equations::{SaveMode, SemilinearOdeProblem, SolveOptions, SplitOdeProblem};
 
 fn fixed(step: f64) -> SolveOptions {

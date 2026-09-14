@@ -2,8 +2,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use differential_equations::ndarray::{ArrayView2, ArrayViewMut2, ArrayViewMutD, array};
-use differential_equations::solvers::explicit::Rk4;
-use differential_equations::solvers::explicit::split_euler::{SplitEuler, solve_split};
+use differential_equations::solvers::explicit::{Rk4, SplitEuler, solve_split};
 use differential_equations::solvers::multirate::MRIGARKERK22a;
 use differential_equations::solvers::multistep::IMEXEuler;
 use differential_equations::solvers::rosenbrock::Rodas5P;

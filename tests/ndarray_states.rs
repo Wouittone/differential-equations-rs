@@ -3,8 +3,7 @@ use differential_equations::ndarray::{
     ArrayView0, ArrayView1, ArrayView2, ArrayViewD, ArrayViewMut0, ArrayViewMut1, ArrayViewMut2,
     ArrayViewMutD, arr0, array,
 };
-use differential_equations::solvers::explicit::Tsit5;
-use differential_equations::solvers::explicit::split_euler::{SplitEuler, solve_split};
+use differential_equations::solvers::explicit::{SplitEuler, Tsit5, solve_split};
 use differential_equations::solvers::rosenbrock::Rodas5P;
 use differential_equations::solvers::stabilized::{ESERK4, ESERK5, ROCK2, ROCK4, SERK2};
 use differential_equations::{

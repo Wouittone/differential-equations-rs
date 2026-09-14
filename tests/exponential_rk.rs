@@ -1,4 +1,3 @@
-use differential_equations::solvers::exponential::general::ExponentialAlgorithm;
 use differential_equations::solvers::exponential::*;
 use differential_equations::{
     OdeProblem, SaveMode, SemilinearOdeProblem, SolveError, SolveOptions, solve,

@@ -1,8 +1,7 @@
 use differential_equations::callbacks::StepsizeLimiter;
-use differential_equations::solvers::explicit::split_euler::{
-    SplitEuler, SplitOdeAlgorithm, solve_split,
+use differential_equations::solvers::explicit::{
+    Rk4, SplitEuler, SplitOdeAlgorithm, Tsit5, solve_split,
 };
-use differential_equations::solvers::explicit::{Rk4, Tsit5};
 use differential_equations::solvers::multirate::MRIGARKERK22a;
 use differential_equations::solvers::multistep::IMEXEuler;
 use differential_equations::solvers::second_order::{

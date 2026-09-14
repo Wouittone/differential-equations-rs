@@ -8,10 +8,8 @@ use crate::integrator::{
     integrate as drive_integration,
 };
 use crate::solution::TrajectoryRecorder;
-use crate::solvers::explicit::general::{ExplicitKernel, ResourceTableau};
-use crate::solvers::rosenbrock::rosenbrock_extended::{
-    ExtendedRosenbrockKernel, ExtendedRosenbrockMethod,
-};
+use crate::solvers::explicit::{ExplicitKernel, ResourceTableau};
+use crate::solvers::rosenbrock::{ExtendedRosenbrockKernel, ExtendedRosenbrockMethod};
 use crate::tableau::{RungeKuttaKind, RungeKuttaTableau};
 use crate::{
     AutomaticPairIncompatibility, OdeProblem, Solution, SolveError, SolveOptions, SolverStats,

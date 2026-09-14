@@ -1,7 +1,19 @@
 //! Numerical algorithms organized by solver family.
 //!
-//! Implementation modules live below their numerical family so imports make
-//! ownership explicit, for example `solvers::implicit::sdirk::Sdirk2`.
+//! Algorithms live below their numerical family, while shared drivers and
+//! workspaces remain private. For example, use `solvers::implicit::Sdirk2`.
+//!
+//! ```
+//! use differential_equations::solvers::{explicit::Rk4, implicit::Sdirk2};
+//!
+//! let _ = (Rk4, Sdirk2);
+//! ```
+//!
+//! Implementation namespaces are intentionally inaccessible:
+//!
+//! ```compile_fail
+//! use differential_equations::solvers::explicit::general::Rk4;
+//! ```
 
 pub mod automatic;
 pub mod explicit;

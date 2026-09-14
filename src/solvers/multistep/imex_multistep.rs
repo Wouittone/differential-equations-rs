@@ -13,7 +13,7 @@ use crate::solution::{BorrowedHermiteSegment, DenseSegment, HermiteSegment, Traj
 use crate::solver::{
     validate_preset_time_sequences, validate_state_time_options, validate_vector_callback_lengths,
 };
-use crate::solvers::explicit::split_euler::SplitOdeAlgorithm;
+use crate::solvers::explicit::SplitOdeAlgorithm;
 use crate::{Solution, SolveError, SolveOptions, SolverStats, SplitOdeProblem};
 
 const MAX_NEWTON_ITERATIONS: usize = 12;

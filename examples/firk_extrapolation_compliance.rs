@@ -3,7 +3,7 @@ use differential_equations::solvers::extrapolation::{
     ImplicitDeuflhardExtrapolation, ImplicitEulerBarycentricExtrapolation,
     ImplicitEulerExtrapolation, ImplicitHairerWannerExtrapolation,
 };
-use differential_equations::solvers::implicit::firk::{
+use differential_equations::solvers::implicit::{
     AdaptiveRadau, GaussLegendre, RadauIIA3, RadauIIA5, RadauIIA9,
 };
 use differential_equations::{OdeAlgorithm, OdeProblem, SaveMode, SolveOptions, solve};

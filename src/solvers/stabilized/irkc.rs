@@ -6,7 +6,7 @@ use crate::linear::{factorize, solve_factorized};
 use crate::solver::{
     validate_preset_time_sequences, validate_state_time_options, validate_vector_callback_lengths,
 };
-use crate::solvers::explicit::split_euler::SplitOdeAlgorithm;
+use crate::solvers::explicit::SplitOdeAlgorithm;
 use crate::{OdeProblem, Solution, SolveError, SolveOptions, SolverStats, SplitOdeProblem};
 
 const MINIMUM_DEGREE: usize = 50;

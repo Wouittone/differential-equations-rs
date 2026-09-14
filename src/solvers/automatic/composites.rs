@@ -6,9 +6,8 @@
 
 use super::switching::solve_automatic;
 use super::{AutoSwitchConfig, AutoSwitchConfigError, AutomaticStiffAlgorithm};
-use crate::solvers::explicit::tsit5::Tsit5;
-use crate::solvers::explicit::verner::{Vern6, Vern7, Vern8, Vern9};
-use crate::solvers::rosenbrock::rosenbrock_extended::Rodas5P;
+use crate::solvers::explicit::{Tsit5, Vern6, Vern7, Vern8, Vern9};
+use crate::solvers::rosenbrock::Rodas5P;
 use crate::{OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions};
 
 /// Defines an automatic non-stiff-first algorithm with in-flight switching.
@@ -146,9 +145,8 @@ pub type DefaultImplicitODEAlgorithm = DefaultImplicitOdeAlgorithm;
 #[cfg(test)]
 mod tests {
     use super::{AutoTsit5, AutoVern6, AutoVern7, AutoVern8, AutoVern9};
-    use crate::solvers::explicit::tsit5::Tsit5;
-    use crate::solvers::explicit::verner::{Vern6, Vern7, Vern8, Vern9};
-    use crate::solvers::rosenbrock::rosenbrock_extended::Rodas5P;
+    use crate::solvers::explicit::{Tsit5, Vern6, Vern7, Vern8, Vern9};
+    use crate::solvers::rosenbrock::Rodas5P;
     use crate::{OdeProblem, SaveMode, SolveOptions, solve};
 
     type ScalarRhs = fn(&mut [f64], &[f64], &(), f64);

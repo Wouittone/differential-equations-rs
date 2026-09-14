@@ -12,7 +12,7 @@ pub mod mebdf2;
 pub mod nordsieck;
 pub mod qndf1;
 pub mod qndf2;
-pub(crate) mod tableaux;
+mod tableaux;
 /// Trapezoid--backward-differentiation formula method.
 pub mod trbdf2;
 /// Variable-step Adams methods and correctors.
@@ -26,5 +26,6 @@ pub use mebdf2::Mebdf2;
 pub use nordsieck::{AN5, JVODE, JVODE_Adams, JVODE_BDF, JvodeAdams, JvodeBdf, JvodeMethod};
 pub use qndf1::{Qbdf1, Qndf1};
 pub use qndf2::{Qbdf2, Qndf2};
+pub(crate) use tableaux::adams_bashforth;
 pub use trbdf2::Trbdf2;
 pub use variable_adams::{VCABM, Vcab3, Vcab4, Vcab5, Vcabm, Vcabm3, Vcabm4, Vcabm5};

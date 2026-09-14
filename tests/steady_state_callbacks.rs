@@ -2,8 +2,7 @@ use std::cell::Cell;
 
 use differential_equations::callbacks::TerminateSteadyState;
 use differential_equations::ndarray::{ArrayViewD, ArrayViewMutD, arr0, array};
-use differential_equations::solvers::explicit::split_euler::{SplitEuler, solve_split};
-use differential_equations::solvers::explicit::{Euler, Tsit5};
+use differential_equations::solvers::explicit::{Euler, SplitEuler, Tsit5, solve_split};
 use differential_equations::solvers::multirate::MRIGARKERK22a;
 use differential_equations::solvers::multistep::IMEXEuler;
 use differential_equations::solvers::rosenbrock::Rodas5P;

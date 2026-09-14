@@ -1,7 +1,6 @@
 use std::cell::Cell;
 
-use differential_equations::solvers::explicit::split_euler::{SplitEuler, solve_split};
-use differential_equations::solvers::explicit::{Rk4, Tsit5};
+use differential_equations::solvers::explicit::{Rk4, SplitEuler, Tsit5, solve_split};
 use differential_equations::solvers::multirate::MRIGARKERK22a;
 use differential_equations::solvers::multistep::IMEXEuler;
 use differential_equations::solvers::second_order::{

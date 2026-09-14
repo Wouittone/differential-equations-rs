@@ -100,9 +100,9 @@ cost, allocations, and both explicit-only and stiff-only baselines.
 ### Finish code and API hardening
 
 - [ ] Split oversized files along stable responsibilities, especially the
-  second-order API and drivers, extended Rosenbrock methods, low-storage RK,
-  and stabilized methods.
-- [ ] Keep algorithms under `solvers::<family>` while driver, workspace,
+  second-order API and drivers, extended Rosenbrock and stabilized methods,
+  and the shared problem, solution, and integration cores.
+- [x] Keep algorithms under `solvers::<family>` while driver, workspace,
   controller, and resource implementation details remain private unless they
   are deliberate extension surfaces.
 - [ ] Standardize constructors, options, typed errors, tableau inspection,
@@ -130,6 +130,11 @@ A credible 1.0 release still requires module and API hardening plus the
 method-by-method numerical audit. Those remaining items carry the most
 uncertainty. Parallel review can reduce calendar time, but every integrated
 release gate below must still pass.
+
+The pre-1.0 implementation namespaces named `general` and
+`second_order::function` are no longer public. Import their reachable API from
+the owning family instead: for example, use `solvers::explicit::Rk4` rather
+than `solvers::explicit::general::Rk4`.
 
 ### Definition of done
 

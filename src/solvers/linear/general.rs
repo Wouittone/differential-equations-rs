@@ -4,7 +4,7 @@ use crate::integrator::{
 use crate::linear::{factorize, solve_factorized};
 use crate::operator_problem::{LieGroupProblem, LieRepresentation, LinearOperatorProblem};
 use crate::solver::validate_state_time_options;
-use crate::solvers::exponential::general::{identity, mat_mul, mat_vec, matrix_exp};
+use crate::solvers::exponential::{identity, mat_mul, mat_vec, matrix_exp};
 use crate::{OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions, SolverStats};
 
 const SAFETY: f64 = 0.9;

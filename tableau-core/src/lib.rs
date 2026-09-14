@@ -749,10 +749,7 @@ mod tests {
         for invalid in [
             RESOURCE.replace("\"c\": [0, 1]", "\"c\": [0, 1], \"second_error\": [0, 0]"),
             embedded.replace("\"c\": [0, 1]", "\"c\": [0, 1], \"second_error\": [0]"),
-            RESOURCE.replace(
-                "\"c\": [0, 1]",
-                "\"c\": [0, 1], \"dense\": [[\"1/2\"], []]",
-            ),
+            RESOURCE.replace("\"c\": [0, 1]", "\"c\": [0, 1], \"dense\": [[\"1/2\"], []]"),
             RESOURCE.replace(
                 "\"c\": [0, 1]",
                 "\"c\": [0, 1], \"dense\": [[1], [\"1/2\"], [0]]",

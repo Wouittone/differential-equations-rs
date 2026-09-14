@@ -3,8 +3,7 @@
 /// Configurable fifth-order Ananthakrishnan explicit method.
 pub mod anas5;
 pub mod frk65;
-/// General explicit Runge--Kutta tableaus and their shared driver.
-pub mod general;
+mod general;
 pub mod high_order;
 /// Low-storage Runge--Kutta algorithm families.
 pub mod low_storage_rk;

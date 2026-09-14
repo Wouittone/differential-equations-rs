@@ -1,7 +1,6 @@
 //! Exact linear, Magnus, and Lie-group integration algorithms.
 
-/// Dense linear-operator, Magnus, and Lie-group algorithms.
-pub mod general;
+mod general;
 
 pub use general::*;
 pub use general::{

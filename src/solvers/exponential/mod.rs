@@ -1,7 +1,6 @@
 //! Exponential Runge--Kutta and interaction-picture algorithms.
 
-/// Exponential Runge--Kutta algorithms for ordinary ODE problems.
-pub mod general;
+mod general;
 /// Recycled Krylov interaction-picture solver for semilinear problems.
 pub mod rkip;
 

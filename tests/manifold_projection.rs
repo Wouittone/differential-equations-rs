@@ -1,7 +1,6 @@
 use differential_equations::callbacks::ManifoldProjection;
 use differential_equations::ndarray::{ArrayViewD, ArrayViewMutD, arr0, array};
-use differential_equations::solvers::explicit::Euler;
-use differential_equations::solvers::explicit::split_euler::{SplitEuler, solve_split};
+use differential_equations::solvers::explicit::{Euler, SplitEuler, solve_split};
 use differential_equations::solvers::multirate::MRIGARKERK22a;
 use differential_equations::solvers::multistep::IMEXEuler;
 use differential_equations::solvers::stabilized::IRKC;

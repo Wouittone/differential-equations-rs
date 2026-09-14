@@ -1,5 +1,5 @@
 //! Explicit Taylor-series algorithms.
 
-pub mod general;
+mod general;
 
 pub use general::*;

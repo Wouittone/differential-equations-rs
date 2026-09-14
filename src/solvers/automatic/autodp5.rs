@@ -1,6 +1,6 @@
 use super::switching::solve_automatic;
 use super::{AutoSwitchConfig, AutoSwitchConfigError, AutomaticStiffAlgorithm};
-use crate::solvers::explicit::general::Dp5;
+use crate::solvers::explicit::Dp5;
 use crate::{OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions};
 
 /// Automatic low-order Dormand--Prince composite.

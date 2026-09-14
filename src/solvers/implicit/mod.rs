@@ -2,8 +2,7 @@
 
 /// Fully implicit Runge--Kutta and collocation methods.
 pub mod firk;
-/// Basic implicit Euler, midpoint, and trapezoid methods.
-pub mod general;
+mod general;
 /// Parallel diagonally implicit Runge--Kutta methods.
 pub mod pdirk;
 /// Singly diagonally implicit and additive Runge--Kutta methods.

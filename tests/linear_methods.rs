@@ -1,6 +1,3 @@
-use differential_equations::solvers::linear::general::{
-    LieGroupAlgorithm, LinearOperatorAlgorithm, solve_lie_group, solve_linear_operator,
-};
 use differential_equations::solvers::linear::*;
 use differential_equations::{
     CallbackAction, LieGroupProblem, LinearOperatorProblem, OdeProblem, SaveMode, SolveError,

@@ -1,5 +1,4 @@
-use differential_equations::solvers::explicit::general::Bs5;
-use differential_equations::solvers::explicit::verner::{Vern6, Vern7, Vern8, Vern9};
+use differential_equations::solvers::explicit::{Bs5, Vern6, Vern7, Vern8, Vern9};
 use differential_equations::{
     CallbackAction, OdeAlgorithm, OdeProblem, SaveMode, Solution, SolveOptions, solve,
 };

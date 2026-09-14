@@ -1,7 +1,6 @@
-use differential_equations::solvers::explicit::low_storage_rk::CarpenterKennedy2N54;
+use differential_equations::solvers::explicit::CarpenterKennedy2N54;
 use differential_equations::solvers::extrapolation::AitkenNeville;
-use differential_equations::solvers::implicit::firk::RadauIIA5;
-use differential_equations::solvers::implicit::general::ImplicitEuler;
+use differential_equations::solvers::implicit::{ImplicitEuler, RadauIIA5};
 use differential_equations::solvers::multistep::Ab3;
 use differential_equations::solvers::stabilized::RKC;
 use differential_equations::{

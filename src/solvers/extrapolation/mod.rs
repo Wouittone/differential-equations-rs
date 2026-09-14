@@ -1,5 +1,5 @@
 //! Explicit and linearly implicit extrapolation algorithms.
 
-pub mod general;
+mod general;
 
 pub use general::*;

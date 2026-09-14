@@ -7,7 +7,7 @@ use crate::integrator::{
 };
 use crate::linear::{factorize, solve_factorized};
 use crate::solution::{BorrowedHermiteSegment, DenseSegment, HermiteSegment, TrajectoryRecorder};
-use crate::solvers::explicit::tsit5::Tsit5;
+use crate::solvers::explicit::Tsit5;
 use crate::{OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions, SolverStats};
 
 const MAX_NEWTON_ITERATIONS: usize = 12;
