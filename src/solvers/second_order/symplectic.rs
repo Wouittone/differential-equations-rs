@@ -11,7 +11,7 @@ use crate::integrator::{TimeStopSchedule, callback_adjusted_step};
 use crate::solver::{
     validate_preset_time_sequences, validate_state_time_options, validate_vector_callback_lengths,
 };
-use crate::{InterpolationError, SaveMode, SolveError, SolveOptions};
+use crate::{InterpolationError, SaveMode, SolveError, SolveOptions, SolverStats};
 use ndarray::{ArrayD, ArrayViewD, Dimension, IxDyn};
 use thiserror::Error;
 
@@ -55,7 +55,7 @@ pub struct SymplecticSolution {
     velocities: Vec<f64>,
     dimension: usize,
     state_shape: IxDyn,
-    rhs_evaluations: usize,
+    stats: SolverStats,
     dense_segments: Vec<SymplecticDenseSegment>,
 }
 
@@ -87,20 +87,26 @@ impl SymplecticSolution {
             .expect("partition shape must match its validated storage")
     }
 
-    /// Interpolates shape-preserving `(position, velocity)` arrays.
-    ///
-    /// This follows the existing symplectic interpolation order, which differs
-    /// from the `(velocity, position)` order of `SecondOrderSolution`.
-    pub fn interpolate_array(
+    /// Interpolates shape-preserving `(velocity, position)` arrays.
+    pub fn interpolate_array(&self, time: f64) -> Option<(ArrayD<f64>, ArrayD<f64>)> {
+        self.try_interpolate_array(time).ok()
+    }
+
+    /// Interpolates shape-preserving `(velocity, position)` arrays and retains
+    /// interpolation errors.
+    pub fn try_interpolate_array(
         &self,
         time: f64,
     ) -> Result<(ArrayD<f64>, ArrayD<f64>), InterpolationError> {
-        let (position, velocity) = self.try_interpolate(time)?;
+        let (velocity, position) = self.try_interpolate(time)?;
         let reshape = |values| {
-            ArrayD::from_shape_vec(self.state_shape.clone(), values)
-                .map_err(|_| InterpolationError::DimensionMismatch)
+            ArrayD::from_shape_vec(self.state_shape.clone(), values).map_err(|_| {
+                InterpolationError::InvalidSegmentData {
+                    context: "symplectic solution state shape",
+                }
+            })
         };
-        Ok((reshape(position)?, reshape(velocity)?))
+        Ok((reshape(velocity)?, reshape(position)?))
     }
 
     /// Saved times in integration order.
@@ -145,12 +151,21 @@ impl SymplecticSolution {
         partition(&self.velocities, self.dimension, index)
     }
 
-    /// Number of acceleration evaluations.
-    pub fn rhs_evaluations(&self) -> usize {
-        self.rhs_evaluations
+    /// Solver work counters. Acceleration evaluations contribute to
+    /// `rhs_evaluations`; the identity position rate `q' = v` is not evaluated
+    /// as a user function.
+    pub fn stats(&self) -> SolverStats {
+        self.stats
     }
 
-    /// Interpolates `(position, velocity)` at a covered time.
+    /// Number of acceleration evaluations.
+    ///
+    /// This is a convenience accessor for [`Self::stats`].
+    pub fn rhs_evaluations(&self) -> usize {
+        self.stats.rhs_evaluations
+    }
+
+    /// Interpolates `(velocity, position)` at a covered time.
     ///
     /// Retained segments use cubic-Hermite position interpolation consistent
     /// with `q' = v` and linear velocity interpolation. Saved-only solutions
@@ -159,7 +174,7 @@ impl SymplecticSolution {
         self.try_interpolate(time).ok()
     }
 
-    /// Interpolates `(position, velocity)` and reports why the query fails.
+    /// Interpolates `(velocity, position)` and reports why the query fails.
     pub fn try_interpolate(&self, time: f64) -> Result<(Vec<f64>, Vec<f64>), InterpolationError> {
         if !time.is_finite() {
             return Err(InterpolationError::NonFiniteTime);
@@ -170,14 +185,14 @@ impl SymplecticSolution {
         for (index, &saved_time) in self.times.iter().enumerate().rev() {
             if time == saved_time {
                 return Ok((
-                    self.position(index)
-                        .ok_or(InterpolationError::InvalidSegmentData {
-                            context: "saved symplectic position",
-                        })?
-                        .to_vec(),
                     self.velocity(index)
                         .ok_or(InterpolationError::InvalidSegmentData {
                             context: "saved symplectic velocity",
+                        })?
+                        .to_vec(),
+                    self.position(index)
+                        .ok_or(InterpolationError::InvalidSegmentData {
+                            context: "saved symplectic position",
                         })?
                         .to_vec(),
                 ));
@@ -192,7 +207,7 @@ impl SymplecticSolution {
                     .ok_or(InterpolationError::InvalidSegmentData {
                         context: "symplectic dense segment",
                     })?;
-                return Ok((position, velocity));
+                return Ok((velocity, position));
             }
         }
         for index in 1..self.times.len() {
@@ -226,7 +241,7 @@ impl SymplecticSolution {
                     fraction,
                     &mut velocity,
                 );
-                return Ok((position, velocity));
+                return Ok((velocity, position));
             }
         }
         Err(InterpolationError::OutsideTimeSpan)
@@ -356,8 +371,11 @@ where
     let dimension = problem.initial_position().len();
     let mut position = problem.initial_position().to_vec();
     let mut velocity = problem.initial_velocity().to_vec();
+    let mut stats = SolverStats::default();
     let mut recorder = SymplecticRecorder::new(&position, &velocity, start, options);
     let initial_callbacks = apply_initial_callbacks(problem, &mut velocity, &mut position, start)?;
+    stats.callback_invocations += initial_callbacks.invocations;
+    stats.rhs_evaluations += initial_callbacks.rhs_evaluations;
     if initial_callbacks.state_modified {
         recorder.record_callback(
             start,
@@ -389,7 +407,14 @@ where
         Vec::new()
     };
     if initial_callbacks.terminate {
-        return finish_successful(problem, &mut velocity, &mut position, start, recorder, 0);
+        return finish_successful(
+            problem,
+            &mut velocity,
+            &mut position,
+            start,
+            recorder,
+            stats,
+        );
     }
     step_size = callback_adjusted_step(
         initial_callbacks,
@@ -400,7 +425,6 @@ where
     .abs();
     let mut time = start;
     let mut steps = 0usize;
-    let mut rhs_evaluations = 0usize;
     let mut time_stops = TimeStopSchedule::new(&options.time_stops, start, end);
 
     while direction * (end - time) > 0.0 {
@@ -419,7 +443,7 @@ where
         candidate_position.copy_from_slice(&position);
         candidate_velocity.copy_from_slice(&velocity);
         let previous_time = time;
-        rhs_evaluations += perform_step(
+        stats.rhs_evaluations += perform_step(
             problem,
             tableau,
             &mut candidate_position,
@@ -435,6 +459,7 @@ where
         if let Some(reduction_factor) =
             problem.domain_rejection_factor(&candidate_velocity, &candidate_position, next_time)
         {
+            stats.rejected_steps += 1;
             step_size = step.abs() * reduction_factor;
             continue;
         }
@@ -451,6 +476,9 @@ where
             options.event_tolerance,
             None,
         )?;
+        stats.callback_invocations += callback.invocations;
+        stats.rhs_evaluations += callback.rhs_evaluations;
+        stats.accepted_steps += 1;
         recorder.record_step(
             &position,
             &velocity,
@@ -484,27 +512,13 @@ where
         std::mem::swap(&mut position, &mut candidate_position);
         std::mem::swap(&mut velocity, &mut candidate_velocity);
         if callback.terminate {
-            return finish_successful(
-                problem,
-                &mut velocity,
-                &mut position,
-                time,
-                recorder,
-                rhs_evaluations,
-            );
+            return finish_successful(problem, &mut velocity, &mut position, time, recorder, stats);
         }
         step_size =
             callback_adjusted_step(callback, direction * step_size, direction, maximum_step).abs();
     }
 
-    finish_successful(
-        problem,
-        &mut velocity,
-        &mut position,
-        time,
-        recorder,
-        rhs_evaluations,
-    )
+    finish_successful(problem, &mut velocity, &mut position, time, recorder, stats)
 }
 
 fn finish_successful<F, P>(
@@ -513,7 +527,7 @@ fn finish_successful<F, P>(
     position: &mut [f64],
     time: f64,
     mut recorder: SymplecticRecorder<'_>,
-    rhs_evaluations: usize,
+    stats: SolverStats,
 ) -> Result<SymplecticSolution, SymplecticSolveError>
 where
     F: SecondOrderFunction<P>,
@@ -521,7 +535,7 @@ where
     if apply_finalize_callbacks(problem, velocity, position, time)? {
         recorder.synchronize_endpoint(time, position, velocity);
     }
-    Ok(recorder.finish(rhs_evaluations, IxDyn(problem.state_shape())))
+    Ok(recorder.finish(stats, IxDyn(problem.state_shape())))
 }
 
 fn validate<F, P>(
@@ -750,14 +764,14 @@ impl<'a> SymplecticRecorder<'a> {
         self.velocities.extend_from_slice(velocity);
     }
 
-    fn finish(self, rhs_evaluations: usize, state_shape: IxDyn) -> SymplecticSolution {
+    fn finish(self, stats: SolverStats, state_shape: IxDyn) -> SymplecticSolution {
         SymplecticSolution {
             times: self.times,
             positions: self.positions,
             velocities: self.velocities,
             dimension: self.dimension,
             state_shape,
-            rhs_evaluations,
+            stats,
             dense_segments: self.dense_segments,
         }
     }

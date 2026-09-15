@@ -147,14 +147,38 @@ fn fixed_steps_work_backward_and_honor_save_at() {
 #[test]
 fn work_count_is_one_acceleration_evaluation_per_stage() {
     let solution = solve_symplectic(&oscillator(), McAte4, &options(0.25)).unwrap();
+    let stats = solution.stats();
 
     assert_eq!(
-        solution.rhs_evaluations(),
+        stats.rhs_evaluations,
         4 * McAte4::tableau().unwrap().stages()
     );
+    assert_eq!(stats.accepted_steps, 4);
+    assert_eq!(stats.rejected_steps, 0);
+    assert_eq!(stats.callback_invocations, 0);
+    assert_eq!(solution.rhs_evaluations(), stats.rhs_evaluations);
     assert_eq!(solution.dimension(), 1);
     assert_eq!(solution.position_values().len(), 2);
     assert_eq!(solution.velocity_values().len(), 2);
+}
+
+#[test]
+fn initial_callback_statistics_survive_termination() {
+    let problem = oscillator().with_discrete_callback(
+        |_, _, _, time| time == 0.0,
+        |velocity, position, _, _| {
+            velocity[0] = 2.0;
+            position[0] = 3.0;
+            CallbackAction::Terminate
+        },
+    );
+    let solution = solve_symplectic(&problem, PseudoVerletLeapfrog, &options(0.25)).unwrap();
+
+    assert_eq!(solution.last_velocity(), &[2.0]);
+    assert_eq!(solution.last_position(), &[3.0]);
+    let mut expected_stats = SolverStats::default();
+    expected_stats.callback_invocations = 1;
+    assert_eq!(solution.stats(), expected_stats);
 }
 
 #[test]
@@ -168,7 +192,7 @@ fn retained_partitioned_segments_cover_forward_and_backward_queries() {
         },
     )
     .unwrap();
-    let (position, velocity) = forward.interpolate(0.375).unwrap();
+    let (velocity, position) = forward.interpolate(0.375).unwrap();
     assert!((position[0] - 0.375_f64.cos()).abs() < 2.0e-6);
     assert!((velocity[0] + 0.375_f64.sin()).abs() < 2.0e-4);
 
@@ -190,14 +214,14 @@ fn retained_partitioned_segments_cover_forward_and_backward_queries() {
         },
     )
     .unwrap();
-    let (position, velocity) = backward.interpolate(0.375).unwrap();
+    let (velocity, position) = backward.interpolate(0.375).unwrap();
     assert!((position[0] - 0.375_f64.cos()).abs() < 2.0e-6);
     assert!((velocity[0] + 0.375_f64.sin()).abs() < 2.0e-4);
     assert!(backward.interpolate(-0.1).is_none());
 }
 
 #[test]
-fn save_at_uses_position_velocity_consistent_interpolation() {
+fn save_at_uses_velocity_position_consistent_interpolation() {
     let problem = SecondOrderOdeProblem::new(
         |output: &mut [f64], _: &[f64], _: &[f64], _: &(), _: f64| output[0] = 1.0,
         vec![0.0],
@@ -219,6 +243,31 @@ fn save_at_uses_position_velocity_consistent_interpolation() {
     .unwrap();
     assert!((solution.position(0).unwrap()[0] - 0.125).abs() < 1.0e-14);
     assert!((solution.velocity(0).unwrap()[0] - 0.5).abs() < 1.0e-14);
+}
+
+#[test]
+fn saved_and_linear_interpolation_are_velocity_first() {
+    let problem = SecondOrderOdeProblem::new(
+        |output: &mut [f64], _: &[f64], _: &[f64], _: &(), _: f64| output[0] = 0.0,
+        vec![2.0],
+        vec![7.0],
+        (0.0, 0.5),
+        (),
+    );
+    let solution = solve_symplectic(
+        &problem,
+        PseudoVerletLeapfrog,
+        &options(0.25).with_save(SaveMode::EveryStep),
+    )
+    .unwrap();
+
+    let (saved_velocity, saved_position) = solution.try_interpolate(0.25).unwrap();
+    assert_eq!(saved_velocity, vec![2.0]);
+    assert_eq!(saved_position, vec![7.5]);
+
+    let (linear_velocity, linear_position) = solution.try_interpolate(0.125).unwrap();
+    assert_eq!(linear_velocity, vec![2.0]);
+    assert_eq!(linear_position, vec![7.25]);
 }
 
 #[test]

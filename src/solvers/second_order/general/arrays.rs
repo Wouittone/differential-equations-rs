@@ -480,14 +480,23 @@ impl SecondOrderSolution {
     }
 
     /// Interpolates shape-preserving `(velocity, position)` arrays.
-    pub fn interpolate_array(
+    pub fn interpolate_array(&self, time: f64) -> Option<(ArrayD<f64>, ArrayD<f64>)> {
+        self.try_interpolate_array(time).ok()
+    }
+
+    /// Interpolates shape-preserving `(velocity, position)` arrays and retains
+    /// interpolation errors.
+    pub fn try_interpolate_array(
         &self,
         time: f64,
     ) -> Result<(ArrayD<f64>, ArrayD<f64>), InterpolationError> {
         let (velocity, position) = self.try_interpolate(time)?;
         let reshape = |values| {
-            ArrayD::from_shape_vec(self.state_shape.clone(), values)
-                .map_err(|_| InterpolationError::DimensionMismatch)
+            ArrayD::from_shape_vec(self.state_shape.clone(), values).map_err(|_| {
+                InterpolationError::InvalidSegmentData {
+                    context: "second-order solution state shape",
+                }
+            })
         };
         Ok((reshape(velocity)?, reshape(position)?))
     }

@@ -357,4 +357,5 @@ fn every_second_order_driver_routes_vector_events() {
     assert!((solution.times().last().unwrap() - 0.5).abs() < 1.0e-12);
     assert_eq!(solution.last_velocity(), &[2.0]);
     assert_eq!(solution.last_position(), &[3.0]);
+    assert_eq!(solution.stats().callback_invocations, 1);
 }

@@ -205,9 +205,15 @@ let problem = SecondOrderOdeProblem::from_array_out_of_place(
 
 Shape-aware `with_array_*_callback` methods receive velocity before position.
 Solutions provide `position_array`, `velocity_array`, their `last_*` forms,
-and `interpolate_array`. Interpolation preserves the existing tuple order:
-`(velocity, position)` for `SecondOrderSolution`, `(position, velocity)` for
-`SymplecticSolution`. Scalar arrays retain their zero-dimensional shape.
+and shape-preserving interpolation. `SecondOrderSolution` and
+`SymplecticSolution` consistently return `(velocity, position)` from
+`interpolate`, `try_interpolate`, `interpolate_array`, and
+`try_interpolate_array`. The non-`try` methods return `None` when a query
+cannot be answered, while the `try` forms preserve the specific
+`InterpolationError`. Scalar arrays retain their zero-dimensional shape.
+Both solution types expose complete work and callback counts through `stats()`;
+`SymplecticSolution::rhs_evaluations()` remains a convenience accessor for the
+corresponding statistics field.
 
 Custom second-order algorithms now bound their acceleration type by
 `SecondOrderFunction<P>`. Existing in-place closures implement this trait

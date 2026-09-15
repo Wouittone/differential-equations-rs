@@ -82,11 +82,14 @@ fn assert_second_order<A: SecondOrderOdeAlgorithm + Copy>(algorithm: A) {
             assert!(actual.position_array(usize::MAX).is_none());
             assert!(actual.velocity_array(usize::MAX).is_none());
             let (v, q) = actual.interpolate_array(0.105).unwrap();
+            let (try_v, try_q) = actual.try_interpolate_array(0.105).unwrap();
             let (flat_v, flat_q) = actual.try_interpolate(0.105).unwrap();
             assert_eq!(v.shape(), initial.shape());
             assert_eq!(q.shape(), initial.shape());
             assert_eq!(v.as_slice().unwrap(), flat_v);
             assert_eq!(q.as_slice().unwrap(), flat_q);
+            assert_eq!(try_v, v);
+            assert_eq!(try_q, q);
         }
     }
     for fail_at_start in [true, false] {
@@ -157,7 +160,8 @@ fn assert_symplectic<A: SymplecticAlgorithm>(algorithm: A) {
             let expected = solve_symplectic(&flat, algorithm, &options()).unwrap();
             assert_eq!(actual.position_values(), expected.position_values());
             assert_eq!(actual.velocity_values(), expected.velocity_values());
-            assert_eq!(actual.rhs_evaluations(), expected.rhs_evaluations());
+            assert_eq!(actual.stats(), expected.stats());
+            assert_eq!(actual.rhs_evaluations(), actual.stats().rhs_evaluations);
             assert_eq!(actual.state_shape(), initial.shape());
             assert_eq!(actual.last_position_array().shape(), initial.shape());
             assert_eq!(actual.last_velocity_array().shape(), initial.shape());
@@ -165,12 +169,15 @@ fn assert_symplectic<A: SymplecticAlgorithm>(algorithm: A) {
             assert_eq!(actual.velocity_array(0).unwrap().shape(), initial.shape());
             assert!(actual.position_array(usize::MAX).is_none());
             assert!(actual.velocity_array(usize::MAX).is_none());
-            let (q, v) = actual.interpolate_array(0.105).unwrap();
-            let (flat_q, flat_v) = expected.try_interpolate(0.105).unwrap();
+            let (v, q) = actual.interpolate_array(0.105).unwrap();
+            let (try_v, try_q) = actual.try_interpolate_array(0.105).unwrap();
+            let (flat_v, flat_q) = expected.try_interpolate(0.105).unwrap();
             assert_eq!(q.shape(), initial.shape());
             assert_eq!(v.shape(), initial.shape());
             assert_eq!(q.as_slice().unwrap(), flat_q);
             assert_eq!(v.as_slice().unwrap(), flat_v);
+            assert_eq!(try_v, v);
+            assert_eq!(try_q, q);
         }
     }
     let bad = SecondOrderOdeProblem::from_array_out_of_place(
@@ -184,6 +191,23 @@ fn assert_symplectic<A: SymplecticAlgorithm>(algorithm: A) {
     assert_eq!(
         solve_symplectic(&bad, algorithm, &options()),
         Err(SolveError::DerivativeShapeMismatch.into())
+    );
+
+    let scalar = solve_symplectic(
+        &out_of_place(arr0(1.0).into_dyn(), (0.0, 0.2)),
+        algorithm,
+        &options(),
+    )
+    .unwrap();
+    assert!(scalar.interpolate_array(f64::NAN).is_none());
+    assert_eq!(
+        scalar.try_interpolate_array(f64::NAN),
+        Err(InterpolationError::NonFiniteTime)
+    );
+    assert!(scalar.interpolate_array(0.3).is_none());
+    assert_eq!(
+        scalar.try_interpolate_array(0.3),
+        Err(InterpolationError::OutsideTimeSpan)
     );
 }
 
@@ -272,14 +296,49 @@ fn mismatched_shapes_empty_partitions_and_invalid_query_indices_are_safe() {
     )
     .unwrap();
     assert!(scalar.position_array(usize::MAX).is_none());
+    assert!(scalar.interpolate_array(f64::NAN).is_none());
     assert_eq!(
-        scalar.interpolate_array(f64::NAN),
+        scalar.try_interpolate_array(f64::NAN),
         Err(InterpolationError::NonFiniteTime)
     );
+    assert!(scalar.interpolate_array(0.3).is_none());
     assert_eq!(
-        scalar.interpolate_array(0.3),
+        scalar.try_interpolate_array(0.3),
         Err(InterpolationError::OutsideTimeSpan)
     );
+}
+
+#[test]
+fn shaped_interpolation_preserves_velocity_position_order() {
+    let problem = SecondOrderOdeProblem::from_array_out_of_place(
+        |_: ArrayView1<'_, f64>, q: ArrayView1<'_, f64>, _: &(), _| Array::zeros(q.raw_dim()),
+        array![2.0, -3.0],
+        array![7.0, 11.0],
+        (0.0, 0.2),
+        (),
+    )
+    .unwrap();
+    let solution = solve_second_order(&problem, VelocityVerlet, &options()).unwrap();
+
+    let (velocity, position) = solution.try_interpolate_array(0.05).unwrap();
+    assert_eq!(velocity, array![2.0, -3.0].into_dyn());
+    for (actual, expected) in position.iter().zip([7.1, 10.85]) {
+        assert!((actual - expected).abs() < 1e-14);
+    }
+    assert_ne!(velocity, position);
+
+    let (optional_velocity, optional_position) = solution.interpolate_array(0.05).unwrap();
+    assert_eq!(optional_velocity, velocity);
+    assert_eq!(optional_position, position);
+
+    let symplectic = solve_symplectic(&problem, PseudoVerletLeapfrog, &options()).unwrap();
+    let (symplectic_velocity, symplectic_position) =
+        symplectic.try_interpolate_array(0.05).unwrap();
+    assert_eq!(symplectic_velocity, array![2.0, -3.0].into_dyn());
+    for (actual, expected) in symplectic_position.iter().zip([7.1, 10.85]) {
+        assert!((actual - expected).abs() < 1e-14);
+    }
+    assert_ne!(symplectic_velocity, symplectic_position);
 }
 
 #[test]

@@ -136,6 +136,13 @@ The pre-1.0 implementation namespaces named `general` and
 the owning family instead: for example, use `solvers::explicit::Rk4` rather
 than `solvers::explicit::general::Rk4`.
 
+The pre-1.0 second-order solution contract is also normalized. Symplectic
+interpolation now returns `(velocity, position)`, matching every other
+second-order API. Shape-preserving `interpolate_array` now returns `Option`,
+matching `interpolate`; use `try_interpolate_array` when an
+`InterpolationError` is required. `SymplecticSolution::stats` exposes the full
+`SolverStats`, while `rhs_evaluations` remains a convenience accessor.
+
 ### Definition of done
 
 Version 1.0 is ready only when all roadmap items above are complete, automatic

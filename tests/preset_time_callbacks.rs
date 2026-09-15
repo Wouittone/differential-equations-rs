@@ -303,5 +303,6 @@ fn every_partitioned_driver_saves_both_callback_limits() {
         .expect("both callback limits must be adjacent");
     assert_eq!(solution.position(event), Some([1.0].as_slice()));
     assert_eq!(solution.position(event + 1), Some([3.0].as_slice()));
-    assert_eq!(solution.interpolate(0.25).unwrap().0, vec![3.0]);
+    assert_eq!(solution.interpolate(0.25).unwrap().1, vec![3.0]);
+    assert_eq!(solution.stats().callback_invocations, 1);
 }

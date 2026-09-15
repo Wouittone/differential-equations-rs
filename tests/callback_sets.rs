@@ -359,4 +359,5 @@ fn every_second_order_driver_routes_lifecycle_hooks() {
     assert_eq!(solution.position(0), Some([2.0].as_slice()));
     assert_eq!(solution.last_velocity(), &[3.0]);
     assert_eq!(solution.last_position(), &[4.0]);
+    assert_eq!(solution.stats().callback_invocations, 0);
 }

@@ -279,7 +279,10 @@ fn observation_only_callbacks_preserve_work_across_standalone_drivers() {
         solve_symplectic(&second_order_problem(false), PseudoVerletLeapfrog, &options).unwrap();
     let observed =
         solve_symplectic(&second_order_problem(true), PseudoVerletLeapfrog, &options).unwrap();
-    assert_eq!(observed.rhs_evaluations(), plain.rhs_evaluations());
+    let mut expected_stats = plain.stats();
+    expected_stats.callback_invocations = observed.stats().accepted_steps + 1;
+    assert_eq!(observed.stats(), expected_stats);
+    assert_eq!(observed.rhs_evaluations(), observed.stats().rhs_evaluations);
 }
 
 #[test]

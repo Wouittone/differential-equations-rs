@@ -237,5 +237,11 @@ fn guards_route_through_every_split_and_second_order_driver_family() {
 
     let symplectic =
         solve_symplectic(&second_order_problem(), PseudoVerletLeapfrog, &fixed(0.3)).unwrap();
+    assert_eq!(symplectic.stats().rejected_steps, 1);
+    assert_eq!(symplectic.stats().accepted_steps, 2);
+    assert_eq!(
+        symplectic.stats().rhs_evaluations,
+        3 * PseudoVerletLeapfrog::tableau().unwrap().stages()
+    );
     assert!((symplectic.times()[1] - 0.15).abs() < 1.0e-12);
 }
