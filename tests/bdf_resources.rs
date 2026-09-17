@@ -1,5 +1,12 @@
 use differential_equations::solvers::multistep::{Fbdf, Qbdf, Qbdf1, Qbdf2, Qndf, Qndf1, Qndf2};
+use differential_equations::tableau::{LinearMultistepTableau, TableauAccessError};
 use differential_equations::{OdeAlgorithm, OdeProblem, SolveOptions, solve};
+
+fn expect_tableau_access_result(
+    result: Result<&'static LinearMultistepTableau, TableauAccessError>,
+) -> &'static LinearMultistepTableau {
+    result.unwrap()
+}
 
 fn check_trajectory<A: OdeAlgorithm + Copy>(algorithm: A, expected: [[f64; 2]; 2]) {
     for (adaptive, expected) in [false, true].into_iter().zip(expected) {
@@ -103,8 +110,16 @@ fn all_orders_preserve_legacy_coefficient_bits_and_share_storage() {
         assert_eq!(hash, fingerprint, "order {order}");
     }
     for (order, fixed_ndf, fixed_bdf) in [
-        (1, Qndf1.tableau().unwrap(), Qbdf1.tableau().unwrap()),
-        (2, Qndf2.tableau().unwrap(), Qbdf2.tableau().unwrap()),
+        (
+            1,
+            expect_tableau_access_result(Qndf1.tableau()),
+            expect_tableau_access_result(Qbdf1.tableau()),
+        ),
+        (
+            2,
+            expect_tableau_access_result(Qndf2.tableau()),
+            expect_tableau_access_result(Qbdf2.tableau()),
+        ),
     ] {
         assert!(std::ptr::eq(fixed_ndf, fixed_bdf));
         assert!(std::ptr::eq(fixed_ndf, Qndf.tableau(order).unwrap()));
@@ -117,7 +132,11 @@ fn all_orders_preserve_legacy_coefficient_bits_and_share_storage() {
         ] {
             assert_eq!(
                 result,
-                Err(differential_equations::SolveError::InvalidMultistepOrder)
+                Err(TableauAccessError::UnsupportedOrder {
+                    requested: order,
+                    minimum: 1,
+                    maximum: 5,
+                })
             );
         }
     }

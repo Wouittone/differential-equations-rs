@@ -12,8 +12,10 @@ use crate::solver::{
     validate_preset_time_sequences, validate_state_time_options, validate_vector_callback_lengths,
 };
 use crate::solvers::explicit::SplitOdeAlgorithm;
-use crate::solvers::multistep::adams_bashforth;
-use crate::tableau::{MisTableau, MriTableau, TableauError, load_tableau};
+use crate::solvers::multistep::{adams_bashforth, map_tableau_access_error};
+use crate::tableau::{
+    LinearMultistepTableau, MisTableau, MriTableau, TableauAccessError, TableauError, load_tableau,
+};
 use crate::{Solution, SolveError, SolveOptions, SolverStats, SplitOdeProblem};
 
 const MAX_NEWTON_ITERATIONS: usize = 12;
@@ -83,7 +85,13 @@ impl Mrab {
 
     /// Returns the nominal-order formula shared with fixed-step Adams solvers.
     /// Startup microsteps load only the lower-order formulas they actually use.
-    pub fn tableau(&self) -> Result<&'static crate::tableau::LinearMultistepTableau, SolveError> {
+    ///
+    /// # Errors
+    ///
+    /// Returns [`TableauAccessError::UnsupportedOrder`] when the configured
+    /// order lies outside `1..=5`, and preserves resource validation or
+    /// family-invariant failures.
+    pub fn tableau(&self) -> Result<&'static LinearMultistepTableau, TableauAccessError> {
         adams_bashforth(self.order)
     }
 
@@ -803,7 +811,9 @@ where
         let combined: Vec<f64> = fast.iter().zip(&slow).map(|(a, b)| a + b).collect();
         history.insert(0, combined);
         history.truncate(order);
-        let weights = &adams_bashforth(history.len().min(order))?.beta()[1..];
+        let weights = &adams_bashforth(history.len().min(order))
+            .map_err(map_tableau_access_error)?
+            .beta()[1..];
         for index in 0..dimension {
             value[index] += h * weights
                 .iter()
@@ -818,8 +828,12 @@ where
     }
     let mut error = vec![0.0; dimension];
     if history.len() >= order {
-        let high = &adams_bashforth(order)?.beta()[1..];
-        let low = &adams_bashforth(order - 1)?.beta()[1..];
+        let high = &adams_bashforth(order)
+            .map_err(map_tableau_access_error)?
+            .beta()[1..];
+        let low = &adams_bashforth(order - 1)
+            .map_err(map_tableau_access_error)?
+            .beta()[1..];
         for index in 0..dimension {
             error[index] = h
                 * (high

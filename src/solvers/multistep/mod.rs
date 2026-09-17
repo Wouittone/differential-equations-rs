@@ -26,6 +26,6 @@ pub use mebdf2::Mebdf2;
 pub use nordsieck::{AN5, JVODE, JVODE_Adams, JVODE_BDF, JvodeAdams, JvodeBdf, JvodeMethod};
 pub use qndf1::{Qbdf1, Qndf1};
 pub use qndf2::{Qbdf2, Qndf2};
-pub(crate) use tableaux::adams_bashforth;
+pub(crate) use tableaux::{adams_bashforth, map_tableau_access_error};
 pub use trbdf2::Trbdf2;
 pub use variable_adams::{VCABM, Vcab3, Vcab4, Vcab5, Vcabm, Vcabm3, Vcabm4, Vcabm5};

@@ -143,6 +143,12 @@ matching `interpolate`; use `try_interpolate_array` when an
 `InterpolationError` is required. `SymplecticSolution::stats` exposes the full
 `SolverStats`, while `rhs_evaluations` remains a convenience accessor.
 
+Tableau inspection for `Qndf`, `Qbdf`, `Fbdf`, their fixed-order variants,
+and `Mrab` now returns `tableau::TableauAccessError` instead of `SolveError`.
+Downstream code can match `UnsupportedOrder` separately from embedded-resource
+or family-invariant failures. Solver execution continues to report those
+conditions through the corresponding `SolveError` variants.
+
 ### Definition of done
 
 Version 1.0 is ready only when all roadmap items above are complete, automatic

@@ -4,12 +4,14 @@
 //! QNDF, residual DAEs, singular mass matrices, and split/IMEX paths are out
 //! of scope.
 
-use super::tableaux::{backward_differentiation, error_constant, ndf_kappa};
+use super::tableaux::{
+    backward_differentiation, error_constant, map_tableau_access_error, ndf_kappa,
+};
 use crate::integrator::{
     ControllerConfig, KernelCapabilities, StepEstimate, StepKernel, integrate as drive_integration,
 };
 use crate::linear::{DenseLu, LinearError, StateLayout, factorize, solve_factorized};
-use crate::tableau::LinearMultistepTableau;
+use crate::tableau::{LinearMultistepTableau, TableauAccessError};
 use crate::{OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions, SolverStats};
 
 const MAX_NEWTON_ITERATIONS: usize = 12;
@@ -26,14 +28,24 @@ pub struct Qbdf2;
 
 impl Qndf2 {
     /// Returns the shared BDF2 base formula with its NDF modifier.
-    pub fn tableau(self) -> Result<&'static LinearMultistepTableau, SolveError> {
+    ///
+    /// # Errors
+    ///
+    /// Preserves any embedded tableau resource validation or family-invariant
+    /// failure.
+    pub fn tableau(self) -> Result<&'static LinearMultistepTableau, TableauAccessError> {
         backward_differentiation(2)
     }
 }
 
 impl Qbdf2 {
     /// Returns the shared BDF2 formula; this solver ignores its NDF modifier.
-    pub fn tableau(self) -> Result<&'static LinearMultistepTableau, SolveError> {
+    ///
+    /// # Errors
+    ///
+    /// Preserves any embedded tableau resource validation or family-invariant
+    /// failure.
+    pub fn tableau(self) -> Result<&'static LinearMultistepTableau, TableauAccessError> {
         backward_differentiation(2)
     }
 }
@@ -140,12 +152,12 @@ struct Qndf2Kernel {
 
 impl Qndf2Kernel {
     fn new(dimension: usize, ndf: bool) -> Result<Self, SolveError> {
-        let tableau = backward_differentiation(2)?;
+        let tableau = backward_differentiation(2).map_err(map_tableau_access_error)?;
         Ok(Self {
             workspace: Workspace::new(dimension),
-            kappa: ndf_kappa(tableau, ndf)?,
+            kappa: ndf_kappa(tableau, ndf).map_err(map_tableau_access_error)?,
             gamma: tableau.alpha()[0],
-            error_constant: error_constant(tableau, ndf)?,
+            error_constant: error_constant(tableau, ndf).map_err(map_tableau_access_error)?,
         })
     }
 }

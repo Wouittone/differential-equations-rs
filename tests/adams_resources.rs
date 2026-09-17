@@ -30,8 +30,9 @@ fn named_adams_trajectories_match_before_resource_migration() {
 
 #[test]
 fn fixed_and_multirate_methods_share_the_same_formula_storage() {
-    use differential_equations::SolveError;
     use differential_equations::solvers::multirate::MRAB;
+    use differential_equations::tableau::TableauAccessError;
+    use std::error::Error as _;
     for (order, predictor, corrected_predictor, corrector) in [
         (
             3,
@@ -65,10 +66,16 @@ fn fixed_and_multirate_methods_share_the_same_formula_storage() {
         assert!(!corrector.is_explicit());
     }
     for order in [0, 6, usize::MAX] {
+        let error = MRAB::new(order, 8).tableau().unwrap_err();
         assert_eq!(
-            MRAB::new(order, 8).tableau(),
-            Err(SolveError::InvalidMultistepOrder)
+            error,
+            TableauAccessError::UnsupportedOrder {
+                requested: order,
+                minimum: 1,
+                maximum: 5,
+            }
         );
+        assert!(error.source().is_none());
     }
 }
 

@@ -8,6 +8,7 @@
 //! multirate, and symplectic representations.
 
 use std::sync::LazyLock;
+use thiserror::Error;
 
 #[doc(inline)]
 pub use differential_equations_tableau_core::{
@@ -25,6 +26,40 @@ pub use differential_equations_tableau_core::{
     parse_rosenbrock_tableau, parse_serk2_tableau, parse_symplectic_tableau, parse_tableau,
     parse_variable_multistep_tableau,
 };
+
+/// A failure to select or materialize a requested tableau.
+///
+/// Fixed-method accessors normally expose [`TableauError`] directly. Families
+/// whose public accessors can reject a runtime formula selection use this
+/// error so callers can distinguish an unsupported order from a malformed
+/// embedded resource. Related fixed-order accessors may use the same type to
+/// keep one error contract across their family.
+#[derive(Clone, Debug, Eq, Error, PartialEq)]
+#[non_exhaustive]
+pub enum TableauAccessError {
+    /// The requested formula order lies outside the supported inclusive range.
+    #[error(
+        "tableau order {requested} is unsupported; expected an order from {minimum} through {maximum}"
+    )]
+    UnsupportedOrder {
+        /// Requested formula order.
+        requested: usize,
+        /// Smallest supported order.
+        minimum: usize,
+        /// Largest supported order.
+        maximum: usize,
+    },
+    /// The embedded tableau resource could not be parsed or validated.
+    #[error("{0}")]
+    Resource(#[from] TableauError),
+    /// A parsed resource does not satisfy the selected formula family's
+    /// invariants.
+    #[error("tableau resource is incompatible with {context}")]
+    IncompatibleFormula {
+        /// Formula family or invariant that rejected the resource.
+        context: &'static str,
+    },
+}
 
 /// A lazily initialized, validated Runge--Kutta tableau.
 ///
@@ -120,3 +155,34 @@ pub use differential_equations_tableau_macros::define_serk2_tableau_from_file;
 pub use differential_equations_tableau_macros::define_symplectic_from_file;
 #[doc(inline)]
 pub use differential_equations_tableau_macros::define_variable_multistep_tableau_from_file;
+
+#[cfg(test)]
+mod tests {
+    use super::{TableauAccessError, parse_tableau};
+    use std::error::Error as _;
+
+    #[test]
+    fn access_errors_report_the_supported_order_range() {
+        let error = TableauAccessError::UnsupportedOrder {
+            requested: 6,
+            minimum: 1,
+            maximum: 5,
+        };
+
+        assert_eq!(
+            error.to_string(),
+            "tableau order 6 is unsupported; expected an order from 1 through 5"
+        );
+        assert!(error.source().is_none());
+    }
+
+    #[test]
+    fn access_errors_preserve_resource_failures_as_sources() {
+        let resource = parse_tableau("{", "Broken").unwrap_err();
+        let expected = resource.to_string();
+        let error = TableauAccessError::from(resource);
+
+        assert_eq!(error.to_string(), expected);
+        assert_eq!(error.source().unwrap().to_string(), expected);
+    }
+}

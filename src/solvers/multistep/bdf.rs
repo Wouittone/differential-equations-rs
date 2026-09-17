@@ -5,12 +5,14 @@
 //! `211142263781255a9aa2f910f6760b9f18ec29c8`.  Residual DAEs and singular
 //! mass matrices are deliberately outside the crate's current problem model.
 
-use super::tableaux::{backward_differentiation, error_constant, ndf_kappa};
+use super::tableaux::{
+    backward_differentiation, error_constant, map_tableau_access_error, ndf_kappa,
+};
 use crate::integrator::{
     ControllerConfig, KernelCapabilities, StepEstimate, StepKernel, integrate as drive_integration,
 };
 use crate::linear::{DenseLu, LinearError, StateLayout, factorize, solve_factorized};
-use crate::tableau::LinearMultistepTableau;
+use crate::tableau::{LinearMultistepTableau, TableauAccessError};
 use crate::{OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions, SolverStats};
 
 const MAX_ORDER: usize = 5;
@@ -57,8 +59,17 @@ macro_rules! tableau_access {
             /// Returns an order's shared BDF base formula and optional NDF modifier.
             ///
             /// QNDF applies `ndf_kappa()`; QBDF and FBDF use the unmodified
-            /// `alpha()`/`beta()` formula. Orders outside 1..=5 return an error.
-            pub fn tableau(self, order: usize) -> Result<&'static LinearMultistepTableau, SolveError> {
+            /// `alpha()`/`beta()` formula.
+            ///
+            /// # Errors
+            ///
+            /// Returns [`TableauAccessError::UnsupportedOrder`] for orders
+            /// outside `1..=5`, and preserves resource validation or
+            /// family-invariant failures.
+            pub fn tableau(
+                self,
+                order: usize,
+            ) -> Result<&'static LinearMultistepTableau, TableauAccessError> {
                 backward_differentiation(order)
             }
         }
@@ -279,11 +290,15 @@ where
                 *value += delta;
             }
         }
-        let tableau = backward_differentiation(order)?;
-        let beta = 1.0 / ((1.0 - ndf_kappa(tableau, self.ndf)?) * tableau.alpha()[0]);
+        let tableau = backward_differentiation(order).map_err(map_tableau_access_error)?;
+        let beta = 1.0
+            / ((1.0 - ndf_kappa(tableau, self.ndf).map_err(map_tableau_access_error)?)
+                * tableau.alpha()[0]);
         self.forcing.copy_from_slice(&self.predictor);
         for (index, difference) in self.attempted_differences[..order].iter().enumerate() {
-            let gamma = backward_differentiation(index + 1)?.alpha()[0];
+            let gamma = backward_differentiation(index + 1)
+                .map_err(map_tableau_access_error)?
+                .alpha()[0];
             for (value, &delta) in self.forcing.iter_mut().zip(difference) {
                 *value -= beta * gamma * delta;
             }
@@ -309,11 +324,15 @@ where
         }
         update_differences(&mut self.attempted_differences, &correction, order);
 
-        let error = error_constant(tableau, self.ndf)?
+        let error = error_constant(tableau, self.ndf).map_err(map_tableau_access_error)?
             * rms_scaled(correction.iter().copied(), candidate, state, options);
         self.attempted_error = error;
         self.attempted_lower_error = if order > 1 {
-            error_constant(backward_differentiation(order - 1)?, self.ndf)?
+            error_constant(
+                backward_differentiation(order - 1).map_err(map_tableau_access_error)?,
+                self.ndf,
+            )
+            .map_err(map_tableau_access_error)?
                 * rms_scaled(
                     self.attempted_differences[order - 1].iter().copied(),
                     candidate,
@@ -324,7 +343,11 @@ where
             f64::INFINITY
         };
         self.attempted_upper_error = if options.adaptive && order < MAX_ORDER {
-            error_constant(backward_differentiation(order + 1)?, self.ndf)?
+            error_constant(
+                backward_differentiation(order + 1).map_err(map_tableau_access_error)?,
+                self.ndf,
+            )
+            .map_err(map_tableau_access_error)?
                 * rms_scaled(
                     self.attempted_differences[order + 1].iter().copied(),
                     candidate,
@@ -517,7 +540,9 @@ where
             (order + 1).min(self.states.len()),
         );
 
-        let coefficients = backward_differentiation(order)?.alpha();
+        let coefficients = backward_differentiation(order)
+            .map_err(map_tableau_access_error)?
+            .alpha();
         let beta = 1.0 / coefficients[0];
         for (value, &now) in self.forcing.iter_mut().zip(state) {
             *value = -beta * coefficients[1] * now;
