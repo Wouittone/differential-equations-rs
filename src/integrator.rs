@@ -1162,7 +1162,9 @@ where
         recorder.synchronize_endpoint(time, state);
     }
     kernel.finalize_stats(&mut stats);
-    Ok(recorder.finish(stats))
+    let mut solution = recorder.finish(stats);
+    solution.set_state_shape(problem.state_shape());
+    Ok(solution)
 }
 
 fn step_factor(error: f64, controller: ControllerConfig) -> f64 {

@@ -2,7 +2,9 @@
 use crate::integrator::{KernelCapabilities, StepEstimate, StepKernel, integrate};
 use crate::solution::{BorrowedHermiteSegment, TrajectoryRecorder};
 use crate::tableau::{FittedWeight, RungeKuttaTableau, load_tableau};
-use crate::{OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions, SolverStats};
+use crate::{
+    ConfigurationError, OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions, SolverStats,
+};
 use differential_equations_tableau_macros::define_explicit_rk_tableau_from_file;
 
 define_explicit_rk_tableau_from_file!(
@@ -15,13 +17,28 @@ define_explicit_rk_tableau_from_file!(
 /// Fitted Runge--Kutta method of order six (embedded order five).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Frk65 {
-    /// Angular frequency used to fit the zero-dissipation coefficients.
-    pub omega: f64,
+    omega: f64,
 }
 impl Frk65 {
     /// Creates an FRK65 method fitted to `omega`.
-    pub const fn new(omega: f64) -> Self {
-        Self { omega }
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ConfigurationError::InvalidParameter`] when `omega` is not
+    /// finite.
+    pub fn new(omega: f64) -> Result<Self, ConfigurationError> {
+        if !omega.is_finite() {
+            return Err(ConfigurationError::InvalidParameter {
+                parameter: "FRK65 angular frequency",
+                reason: "the frequency must be finite",
+            });
+        }
+        Ok(Self { omega })
+    }
+
+    /// Returns the angular frequency used to fit the coefficients.
+    pub const fn omega(&self) -> f64 {
+        self.omega
     }
 
     /// Returns this method's lazily materialized, validated base tableau.
@@ -268,7 +285,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::Frk65;
-    use crate::{OdeAlgorithm, OdeProblem, SolveOptions};
+    use crate::{ConfigurationError, OdeAlgorithm, OdeProblem, SolveOptions};
 
     #[allow(clippy::type_complexity)]
     fn problem() -> OdeProblem<impl Fn(&mut [f64], &[f64], &(), f64), ()> {
@@ -303,8 +320,20 @@ mod tests {
             max_step: 0.2,
             ..Default::default()
         };
-        let result = Frk65::new(0.0).solve(&problem(), &o).unwrap();
+        let result = Frk65::new(0.0).unwrap().solve(&problem(), &o).unwrap();
         let error = (result.last_state()[0] - std::f64::consts::E).abs();
         assert!(error < 1.0e-7, "error {error}, stats {:?}", result.stats());
+    }
+
+    #[test]
+    fn constructor_rejects_nonfinite_frequency() {
+        for omega in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            assert!(matches!(
+                Frk65::new(omega),
+                Err(ConfigurationError::InvalidParameter { .. })
+            ));
+        }
+        assert_eq!(Frk65::new(-2.0).unwrap().omega(), -2.0);
+        assert_eq!(Frk65::new(0.0).unwrap().omega(), 0.0);
     }
 }

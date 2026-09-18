@@ -7,7 +7,7 @@ use differential_equations::solvers::implicit::{
     AdaptiveRadau, GaussLegendre, RadauIIA3, RadauIIA5, RadauIIA9,
 };
 use differential_equations::{
-    CallbackAction, OdeAlgorithm, OdeProblem, SaveMode, SolveOptions, solve,
+    CallbackAction, ConfigurationError, OdeAlgorithm, OdeProblem, SaveMode, SolveOptions, solve,
 };
 
 fn adaptive_endpoint<A: OdeAlgorithm>(algorithm: A) -> (f64, differential_equations::SolverStats) {
@@ -125,4 +125,60 @@ fn backward_integration_and_callbacks_use_family_dense_segments() {
         assert_eq!(solution.last_state(), &[2.0]);
         assert_eq!(solution.stats().callback_invocations, 1);
     }
+}
+
+#[test]
+fn extrapolation_constructors_preserve_valid_windows_and_reject_invalid_ones() {
+    macro_rules! check_non_strict {
+        ($algorithm:ty, $minimum:expr) => {{
+            let algorithm = <$algorithm>::new(3.max($minimum), 7, 12, Default::default()).unwrap();
+            assert_eq!(algorithm.min_order(), 3.max($minimum));
+            assert_eq!(algorithm.init_order(), 7);
+            assert_eq!(algorithm.max_order(), 12);
+            assert_eq!(algorithm.sequence(), Default::default());
+
+            for (minimum, initial, maximum) in [
+                ($minimum - usize::from($minimum > 0), 7, 12),
+                (15, 15, 15),
+                (7, 6, 12),
+                (3.max($minimum), 7, 16),
+            ] {
+                assert!(matches!(
+                    <$algorithm>::new(minimum, initial, maximum, Default::default()),
+                    Err(ConfigurationError::InvalidBounds { .. })
+                ));
+            }
+        }};
+    }
+
+    macro_rules! check_strict {
+        ($algorithm:ty, $minimum:expr) => {{
+            let algorithm = <$algorithm>::new($minimum, 7, 12, Default::default()).unwrap();
+            assert_eq!(algorithm.min_order(), $minimum);
+            assert_eq!(algorithm.init_order(), 7);
+            assert_eq!(algorithm.max_order(), 12);
+
+            for (minimum, initial, maximum) in [
+                ($minimum - usize::from($minimum > 0), 7, 12),
+                (13, 14, 15),
+                ($minimum, $minimum, 12),
+                ($minimum, 7, 7),
+                ($minimum, 7, 16),
+            ] {
+                let expected_valid_boundary = (minimum, initial, maximum) == (13, 14, 15);
+                assert_eq!(
+                    <$algorithm>::new(minimum, initial, maximum, Default::default()).is_ok(),
+                    expected_valid_boundary
+                );
+            }
+        }};
+    }
+
+    check_non_strict!(AitkenNeville, 1);
+    check_non_strict!(ExtrapolationMidpointDeuflhard, 1);
+    check_non_strict!(ImplicitDeuflhardExtrapolation, 1);
+    check_strict!(ExtrapolationMidpointHairerWanner, 2);
+    check_strict!(ImplicitEulerExtrapolation, 3);
+    check_strict!(ImplicitHairerWannerExtrapolation, 2);
+    check_strict!(ImplicitEulerBarycentricExtrapolation, 3);
 }

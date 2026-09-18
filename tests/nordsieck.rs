@@ -1,6 +1,6 @@
 use differential_equations::solvers::multistep::{AN5, JVODE, JVODE_Adams, JVODE_BDF};
 use differential_equations::{
-    CallbackAction, OdeAlgorithm, OdeProblem, SaveMode, SolveOptions, solve,
+    CallbackAction, ConfigurationError, OdeAlgorithm, OdeProblem, SaveMode, SolveOptions, solve,
 };
 
 fn endpoint<A: OdeAlgorithm>(algorithm: A, step: f64) -> f64 {
@@ -119,4 +119,34 @@ fn lifecycle_supports_backward_callbacks_save_at_and_retained_dense_output() {
             .abs()
             < 1.0e-10
     );
+}
+
+#[test]
+fn jvode_rejects_invalid_algorithm_configuration_at_construction() {
+    let configured = JVODE::adams()
+        .with_biases(4.0, 5.0, 6.0)
+        .unwrap()
+        .with_step_factors(0.1, 8.0)
+        .unwrap();
+    assert_eq!(configured.method(), Default::default());
+    assert_eq!(configured.biases(), (4.0, 5.0, 6.0));
+    assert_eq!(configured.step_factors(), (0.1, 8.0));
+
+    for (lower, current, higher) in [
+        (f64::NAN, 1.0, 1.0),
+        (1.0, f64::INFINITY, 1.0),
+        (1.0, 1.0, 0.0),
+        (-1.0, 1.0, 1.0),
+    ] {
+        assert!(matches!(
+            JVODE::adams().with_biases(lower, current, higher),
+            Err(ConfigurationError::InvalidParameter { .. })
+        ));
+    }
+    for (minimum, maximum) in [(0.0, 1.0), (-1.0, 1.0), (2.0, 1.0), (0.1, f64::NAN)] {
+        assert!(matches!(
+            JVODE::adams().with_step_factors(minimum, maximum),
+            Err(ConfigurationError::InvalidBounds { .. })
+        ));
+    }
 }

@@ -13,7 +13,9 @@ use crate::integrator::{
 };
 use crate::linear::{factorize, solve_factorized};
 use crate::solution::{BorrowedHermiteSegment, DenseSegment, HermiteSegment, TrajectoryRecorder};
-use crate::{OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions, SolverStats};
+use crate::{
+    ConfigurationError, OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions, SolverStats,
+};
 
 /// Subdividing sequences supported by OrdinaryDiffEq's extrapolation methods.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -76,29 +78,46 @@ macro_rules! extrapolation_algorithm {
         impl $name {
             /// Creates an extrapolation algorithm with a bounded order window.
             ///
-            /// Unsupported order values are clamped to the range accepted by
-            /// the selected base method and order controller.
+            /// # Errors
+            ///
+            /// Returns [`ConfigurationError::InvalidBounds`] when an order is
+            /// unsupported or the requested window is not ordered. The
+            /// requested values are never silently changed.
             pub fn new(
                 min_order: usize,
                 init_order: usize,
                 max_order: usize,
                 sequence: ExtrapolationSequence,
-            ) -> Self {
+            ) -> Result<Self, ConfigurationError> {
                 let strict_window = matches!(
                     $policy,
                     OrderPolicy::HairerWanner | OrderPolicy::Barycentric
                 ) || matches!($kind, BaseMethod::LinearlyImplicitEuler);
-                let min_order = min_order.max($min).min(if strict_window { 13 } else { 15 });
-                let init_floor = min_order + usize::from(strict_window);
-                let init_order = init_order.max(init_floor).min(14);
-                let max_floor = init_order + usize::from(strict_window);
-                let max_order = max_order.max(max_floor).min(15);
-                Self {
+                let orders_are_supported = min_order >= $min
+                    && min_order <= if strict_window { 13 } else { 14 }
+                    && init_order <= 14
+                    && max_order <= 15;
+                let window_is_ordered = if strict_window {
+                    min_order < init_order && init_order < max_order
+                } else {
+                    min_order <= init_order && init_order <= max_order
+                };
+                if !orders_are_supported || !window_is_ordered {
+                    return Err(ConfigurationError::InvalidBounds {
+                        context: concat!(stringify!($name), " order window"),
+                        reason: if strict_window {
+                            "orders must satisfy the method minimum and min < init < max <= 15, with init <= 14"
+                        } else {
+                            "orders must satisfy the method minimum and min <= init <= max <= 15, with init <= 14"
+                        },
+                    });
+                }
+                Ok(Self {
                     min_order,
                     init_order,
                     max_order,
                     sequence,
-                }
+                })
             }
 
             /// Returns the lowest order considered by the controller.

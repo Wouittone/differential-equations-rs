@@ -8,6 +8,9 @@ use super::function::SecondOrderFunction;
 use crate::callback::CallbackOutcome;
 use crate::event::{times_are_numerically_equal, times_are_representably_equal};
 use crate::integrator::{TimeStopSchedule, callback_adjusted_step};
+use crate::solution::{
+    finite_partitioned_interpolation, interpolate_value, interpolation_fraction,
+};
 use crate::solver::{
     validate_preset_time_sequences, validate_state_time_options, validate_vector_callback_lengths,
 };
@@ -184,18 +187,23 @@ impl SymplecticSolution {
         }
         for (index, &saved_time) in self.times.iter().enumerate().rev() {
             if time == saved_time {
-                return Ok((
-                    self.velocity(index)
-                        .ok_or(InterpolationError::InvalidSegmentData {
-                            context: "saved symplectic velocity",
-                        })?
-                        .to_vec(),
-                    self.position(index)
-                        .ok_or(InterpolationError::InvalidSegmentData {
-                            context: "saved symplectic position",
-                        })?
-                        .to_vec(),
-                ));
+                let velocity = self
+                    .velocity(index)
+                    .ok_or(InterpolationError::InvalidSegmentData {
+                        context: "saved symplectic velocity",
+                    })?
+                    .to_vec();
+                let position = self
+                    .position(index)
+                    .ok_or(InterpolationError::InvalidSegmentData {
+                        context: "saved symplectic position",
+                    })?
+                    .to_vec();
+                return finite_partitioned_interpolation(
+                    velocity,
+                    position,
+                    "saved symplectic state",
+                );
             }
         }
         for segment in &self.dense_segments {
@@ -207,14 +215,18 @@ impl SymplecticSolution {
                     .ok_or(InterpolationError::InvalidSegmentData {
                         context: "symplectic dense segment",
                     })?;
-                return Ok((velocity, position));
+                return finite_partitioned_interpolation(
+                    velocity,
+                    position,
+                    "symplectic dense segment",
+                );
             }
         }
         for index in 1..self.times.len() {
             let left = self.times[index - 1];
             let right = self.times[index];
             if between(time, left, right) && left != right {
-                let fraction = (time - left) / (right - left);
+                let fraction = interpolation_fraction(time, left, right).clamp(0.0, 1.0);
                 let mut position = vec![0.0; self.dimension];
                 let mut velocity = vec![0.0; self.dimension];
                 interpolate(
@@ -241,7 +253,11 @@ impl SymplecticSolution {
                     fraction,
                     &mut velocity,
                 );
-                return Ok((velocity, position));
+                return finite_partitioned_interpolation(
+                    velocity,
+                    position,
+                    "saved symplectic interpolation",
+                );
             }
         }
         Err(InterpolationError::OutsideTimeSpan)
@@ -315,8 +331,8 @@ impl SymplecticDenseSegment {
                 + h10 * step * self.start_velocity[index]
                 + h01 * self.end_position[index]
                 + h11 * step * self.end_velocity[index];
-            velocity[index] = self.start_velocity[index]
-                + theta * (self.end_velocity[index] - self.start_velocity[index]);
+            velocity[index] =
+                interpolate_value(self.start_velocity[index], self.end_velocity[index], theta);
         }
         Some(())
     }
@@ -779,6 +795,75 @@ impl<'a> SymplecticRecorder<'a> {
 
 fn interpolate(current: &[f64], previous: &[f64], fraction: f64, output: &mut [f64]) {
     for ((output, previous), current) in output.iter_mut().zip(previous).zip(current) {
-        *output = previous + fraction * (current - previous);
+        *output = interpolate_value(*previous, *current, fraction);
+    }
+}
+
+#[cfg(test)]
+mod interpolation_tests {
+    use super::*;
+
+    fn saved_solution(velocities: Vec<f64>, positions: Vec<f64>) -> SymplecticSolution {
+        SymplecticSolution {
+            times: vec![0.0, 1.0],
+            positions,
+            velocities,
+            dimension: 1,
+            state_shape: IxDyn(&[1]),
+            stats: SolverStats::default(),
+            dense_segments: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn saved_interpolation_is_bounded_for_opposite_sign_finite_endpoints() {
+        let mut solution = saved_solution(vec![f64::MAX, -f64::MAX], vec![-f64::MAX, f64::MAX]);
+
+        let (velocity, position) = solution.try_interpolate(0.25).unwrap();
+
+        assert!((velocity[0] / f64::MAX - 0.5).abs() <= f64::EPSILON);
+        assert!((position[0] / f64::MAX + 0.5).abs() <= f64::EPSILON);
+
+        solution.times = vec![-f64::MAX, f64::MAX];
+        assert_eq!(solution.try_interpolate(0.0), Ok((vec![0.0], vec![0.0])));
+    }
+
+    #[test]
+    fn exact_saved_interpolation_rejects_non_finite_partitions() {
+        let solution = saved_solution(vec![1.0, 2.0], vec![f64::INFINITY, 3.0]);
+
+        assert_eq!(
+            solution.try_interpolate(0.0),
+            Err(InterpolationError::NonFiniteResult {
+                context: "saved symplectic state",
+            })
+        );
+        assert_eq!(
+            solution.try_interpolate_array(0.0),
+            Err(InterpolationError::NonFiniteResult {
+                context: "saved symplectic state",
+            })
+        );
+    }
+
+    #[test]
+    fn retained_dense_interpolation_rejects_non_finite_output() {
+        let mut solution = saved_solution(vec![1.0, 1.0], vec![1.0, 1.0]);
+        solution.times[1] = 2.0;
+        solution.dense_segments.push(SymplecticDenseSegment::new(
+            0.0,
+            2.0,
+            &[f64::MAX],
+            &[f64::MAX],
+            &[f64::MAX],
+            &[-f64::MAX],
+        ));
+
+        assert_eq!(
+            solution.try_interpolate(1.0),
+            Err(InterpolationError::NonFiniteResult {
+                context: "symplectic dense segment",
+            })
+        );
     }
 }

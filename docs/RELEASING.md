@@ -149,6 +149,19 @@ Downstream code can match `UnsupportedOrder` separately from embedded-resource
 or family-invariant failures. Solver execution continues to report those
 conditions through the corresponding `SolveError` variants.
 
+Algorithm construction now rejects context-free invalid configuration instead
+of silently normalizing it or deferring it to an unrelated `SolveError`.
+Extrapolation `new` functions, `Anas5::new`, `Frk65::new`, and the three pRRK
+constructors return `Result<_, ConfigurationError>`. `JVODE::with_biases`,
+`JVODE::with_step_factors`, and `IRKC::with_eigenvalue_estimate` are likewise
+fallible. Their configured values remain inspectable through accessors.
+
+All public solution interpolation paths reject non-finite output consistently
+and use overflow-resistant linear fallback for finite extreme values. Invalid
+saved-state indices, including `usize::MAX`, return `None` without panicking.
+Direct calls to public `solve_validated` methods now retain ndarray scalar,
+vector, or matrix shape just like the higher-level `solve` entry point.
+
 ### Definition of done
 
 Version 1.0 is ready only when all roadmap items above are complete, automatic

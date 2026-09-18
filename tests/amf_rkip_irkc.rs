@@ -4,8 +4,8 @@ use differential_equations::solvers::{
     stabilized::{IRKC, solve_irkc},
 };
 use differential_equations::{
-    CallbackAction, OdeProblem, SaveMode, SemilinearOdeProblem, SolveError, SolveOptions,
-    SplitOdeProblem, solve,
+    CallbackAction, ConfigurationError, OdeProblem, SaveMode, SemilinearOdeProblem, SolveError,
+    SolveOptions, SplitOdeProblem, solve,
 };
 
 fn fixed(step: f64) -> SolveOptions {
@@ -157,7 +157,7 @@ fn irkc_handles_stiff_split_and_eigenvalue_override() {
         .with_implicit_jacobian(|jacobian, _, _, _| jacobian[0] = -1.0);
     let solution = solve_irkc(
         &problem,
-        IRKC::new().with_eigenvalue_estimate(100.0),
+        IRKC::new().with_eigenvalue_estimate(100.0).unwrap(),
         &fixed(0.01),
     )
     .unwrap();
@@ -179,20 +179,25 @@ fn irkc_estimates_eigenvalue_and_reports_configuration_failures() {
     assert!(solution.stats().rhs_evaluations > 50);
     let overridden = solve_irkc(
         &problem,
-        IRKC::new().with_eigenvalue_estimate(20.0),
+        IRKC::new().with_eigenvalue_estimate(20.0).unwrap(),
         &fixed(0.01),
     )
     .unwrap();
     assert!((solution.last_state()[0] - overridden.last_state()[0]).abs() < 1.0e-12);
     assert!(overridden.stats().rhs_evaluations < solution.stats().rhs_evaluations);
+    for value in [f64::NAN, f64::INFINITY, 0.0, -1.0] {
+        assert!(matches!(
+            IRKC::new().with_eigenvalue_estimate(value),
+            Err(ConfigurationError::InvalidParameter { .. })
+        ));
+    }
+    assert_eq!(IRKC::new().eigenvalue_estimate(), None);
     assert_eq!(
-        solve_irkc(
-            &problem,
-            IRKC::new().with_eigenvalue_estimate(f64::NAN),
-            &fixed(0.01)
-        )
-        .unwrap_err(),
-        SolveError::InvalidTolerance
+        IRKC::new()
+            .with_eigenvalue_estimate(20.0)
+            .unwrap()
+            .eigenvalue_estimate(),
+        Some(20.0)
     );
 }
 
@@ -214,7 +219,7 @@ fn irkc_preserves_typed_continuous_callbacks() {
     );
     let solution = solve_irkc(
         &problem,
-        IRKC::new().with_eigenvalue_estimate(1.0),
+        IRKC::new().with_eigenvalue_estimate(1.0).unwrap(),
         &fixed(0.2).with_event_tolerance(1.0e-11),
     )
     .unwrap();
@@ -252,7 +257,7 @@ fn typed_problem_dense_segments_use_real_derivatives() {
     let irkc_problem = SplitOdeProblem::new(rhs, zero, vec![1.0], (0.0, 0.1), ());
     let irkc = solve_irkc(
         &irkc_problem,
-        IRKC::new().with_eigenvalue_estimate(1.0),
+        IRKC::new().with_eigenvalue_estimate(1.0).unwrap(),
         &fixed(0.001).with_dense_output(true),
     )
     .unwrap();

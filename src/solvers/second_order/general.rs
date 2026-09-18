@@ -18,6 +18,9 @@ use crate::integrator::{
     ControllerConfig, ControllerState, TimeStopSchedule, callback_adjusted_step,
 };
 use crate::linear::{factorize, solve_factorized};
+use crate::solution::{
+    finite_partitioned_interpolation, interpolate_value, interpolation_fraction,
+};
 use crate::solver::{
     validate_preset_time_sequences, validate_state_time_options, validate_vector_callback_lengths,
 };
@@ -874,18 +877,23 @@ impl SecondOrderSolution {
         }
         for (index, &saved_time) in self.times.iter().enumerate().rev() {
             if time == saved_time {
-                return Ok((
-                    self.velocity(index)
-                        .ok_or(InterpolationError::InvalidSegmentData {
-                            context: "saved second-order velocity",
-                        })?
-                        .to_vec(),
-                    self.position(index)
-                        .ok_or(InterpolationError::InvalidSegmentData {
-                            context: "saved second-order position",
-                        })?
-                        .to_vec(),
-                ));
+                let velocity = self
+                    .velocity(index)
+                    .ok_or(InterpolationError::InvalidSegmentData {
+                        context: "saved second-order velocity",
+                    })?
+                    .to_vec();
+                let position = self
+                    .position(index)
+                    .ok_or(InterpolationError::InvalidSegmentData {
+                        context: "saved second-order position",
+                    })?
+                    .to_vec();
+                return finite_partitioned_interpolation(
+                    velocity,
+                    position,
+                    "saved second-order state",
+                );
             }
         }
         for segment in &self.dense_segments {
@@ -897,14 +905,18 @@ impl SecondOrderSolution {
                     .ok_or(InterpolationError::InvalidSegmentData {
                         context: "second-order dense segment",
                     })?;
-                return Ok((velocity, position));
+                return finite_partitioned_interpolation(
+                    velocity,
+                    position,
+                    "second-order dense segment",
+                );
             }
         }
         for index in 1..self.times.len() {
             let left = self.times[index - 1];
             let right = self.times[index];
             if between(time, left, right) && left != right {
-                let fraction = (time - left) / (right - left);
+                let fraction = interpolation_fraction(time, left, right).clamp(0.0, 1.0);
                 let mut velocity = vec![0.0; self.dimension];
                 let mut position = vec![0.0; self.dimension];
                 interpolate(
@@ -931,7 +943,11 @@ impl SecondOrderSolution {
                     fraction,
                     &mut position,
                 );
-                return Ok((velocity, position));
+                return finite_partitioned_interpolation(
+                    velocity,
+                    position,
+                    "saved second-order interpolation",
+                );
             }
         }
         Err(InterpolationError::OutsideTimeSpan)
@@ -1001,8 +1017,8 @@ impl PartitionedDenseSegment {
         let h01 = -2.0 * theta3 + 3.0 * theta2;
         let h11 = theta3 - theta2;
         for index in 0..velocity.len() {
-            velocity[index] = self.start_velocity[index]
-                + theta * (self.end_velocity[index] - self.start_velocity[index]);
+            velocity[index] =
+                interpolate_value(self.start_velocity[index], self.end_velocity[index], theta);
             position[index] = h00 * self.start_position[index]
                 + h10 * step * self.start_velocity[index]
                 + h01 * self.end_position[index]
@@ -4370,7 +4386,7 @@ fn locate_partitioned_vector_root<P>(
 
 fn interpolate(current: &[f64], previous: &[f64], fraction: f64, output: &mut [f64]) {
     for ((output, previous), current) in output.iter_mut().zip(previous).zip(current) {
-        *output = previous + fraction * (current - previous);
+        *output = interpolate_value(*previous, *current, fraction);
     }
 }
 
@@ -4392,8 +4408,7 @@ fn interpolate_partitioned(
     let h01 = -2.0 * theta3 + 3.0 * theta2;
     let h11 = theta3 - theta2;
     for index in 0..velocity.len() {
-        velocity[index] =
-            start_velocity[index] + theta * (end_velocity[index] - start_velocity[index]);
+        velocity[index] = interpolate_value(start_velocity[index], end_velocity[index], theta);
         position[index] = h00 * start_position[index]
             + h10 * step * start_velocity[index]
             + h01 * end_position[index]
@@ -4606,5 +4621,68 @@ impl<'a> PartitionedRecorder<'a> {
             stats,
             dense_segments: self.dense_segments,
         }
+    }
+}
+
+#[cfg(test)]
+mod interpolation_tests {
+    use super::*;
+
+    fn saved_solution(velocities: Vec<f64>, positions: Vec<f64>) -> SecondOrderSolution {
+        SecondOrderSolution {
+            times: vec![0.0, 1.0],
+            velocities,
+            positions,
+            dimension: 1,
+            state_shape: IxDyn(&[1]),
+            stats: SolverStats::default(),
+            dense_segments: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn saved_interpolation_is_bounded_for_opposite_sign_finite_endpoints() {
+        let mut solution = saved_solution(vec![f64::MAX, -f64::MAX], vec![-f64::MAX, f64::MAX]);
+
+        let (velocity, position) = solution.try_interpolate(0.25).unwrap();
+
+        assert!((velocity[0] / f64::MAX - 0.5).abs() <= f64::EPSILON);
+        assert!((position[0] / f64::MAX + 0.5).abs() <= f64::EPSILON);
+
+        solution.times = vec![-f64::MAX, f64::MAX];
+        assert_eq!(solution.try_interpolate(0.0), Ok((vec![0.0], vec![0.0])));
+    }
+
+    #[test]
+    fn exact_saved_interpolation_rejects_non_finite_partitions() {
+        let solution = saved_solution(vec![1.0, 2.0], vec![f64::INFINITY, 3.0]);
+
+        assert_eq!(
+            solution.try_interpolate(0.0),
+            Err(InterpolationError::NonFiniteResult {
+                context: "saved second-order state",
+            })
+        );
+    }
+
+    #[test]
+    fn retained_dense_interpolation_rejects_non_finite_output() {
+        let mut solution = saved_solution(vec![1.0, 1.0], vec![1.0, 1.0]);
+        solution.times[1] = 2.0;
+        solution.dense_segments.push(PartitionedDenseSegment::new(
+            0.0,
+            2.0,
+            &[f64::MAX],
+            &[-f64::MAX],
+            &[f64::MAX],
+            &[f64::MAX],
+        ));
+
+        assert_eq!(
+            solution.try_interpolate(1.0),
+            Err(InterpolationError::NonFiniteResult {
+                context: "second-order dense segment",
+            })
+        );
     }
 }

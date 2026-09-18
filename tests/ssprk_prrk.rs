@@ -32,7 +32,7 @@ fn prrk22_default_matches_second_order_fixed_convergence() {
 #[test]
 fn prrk22_supports_relaxation_backward_and_termination() {
     let options = fixed(0.05);
-    let relaxed = solve(&exponential(), Prrk22::new(0.5), &options).unwrap();
+    let relaxed = solve(&exponential(), Prrk22::new(0.5).unwrap(), &options).unwrap();
     assert!(relaxed.last_state()[0].is_finite());
 
     let backward = OdeProblem::new(
@@ -75,7 +75,7 @@ fn prrk33_supports_relaxation_backward_callbacks_and_save_at() {
         save_at: vec![0.25, 0.5, 0.75],
         ..SolveOptions::default()
     };
-    let relaxed = solve(&exponential(), Prrk33::new(0.5), &options).unwrap();
+    let relaxed = solve(&exponential(), Prrk33::new(0.5).unwrap(), &options).unwrap();
     assert!(relaxed.last_state()[0].is_finite());
     assert!(
         relaxed
@@ -123,7 +123,7 @@ fn prrk54_supports_relaxation_backward_callbacks_and_save_at() {
         save_at: vec![0.25, 0.5, 0.75],
         ..SolveOptions::default()
     };
-    let relaxed = solve(&exponential(), Prrk54::new(0.5), &options).unwrap();
+    let relaxed = solve(&exponential(), Prrk54::new(0.5).unwrap(), &options).unwrap();
     assert!(relaxed.last_state()[0].is_finite());
     assert_eq!(relaxed.times(), &[0.25, 0.5, 0.75]);
 
@@ -151,4 +151,25 @@ fn prrk54_supports_relaxation_backward_callbacks_and_save_at() {
         solve(&exponential(), Prrk54::default(), &SolveOptions::default()),
         Err(SolveError::AdaptiveStepUnsupported)
     );
+}
+
+#[test]
+fn relaxation_constructors_reject_nonfinite_parameters() {
+    for kappa in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+        assert!(matches!(
+            Prrk22::new(kappa),
+            Err(ConfigurationError::InvalidParameter { .. })
+        ));
+        assert!(matches!(
+            Prrk33::new(kappa),
+            Err(ConfigurationError::InvalidParameter { .. })
+        ));
+        assert!(matches!(
+            Prrk54::new(kappa),
+            Err(ConfigurationError::InvalidParameter { .. })
+        ));
+    }
+    assert_eq!(Prrk22::new(-0.5).unwrap().kappa(), -0.5);
+    assert_eq!(Prrk33::new(0.5).unwrap().kappa(), 0.5);
+    assert_eq!(Prrk54::new(0.0).unwrap().kappa(), 0.0);
 }

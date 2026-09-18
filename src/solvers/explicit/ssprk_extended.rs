@@ -186,8 +186,7 @@ fixed_ssprk!(
 /// OrdinaryDiffEqSSPRK coefficient rescaling before each step.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Prrk22 {
-    /// Relaxation parameter applied to the SSPRK22 coefficients.
-    pub kappa: f64,
+    kappa: f64,
 }
 
 impl Default for Prrk22 {
@@ -198,8 +197,19 @@ impl Default for Prrk22 {
 
 impl Prrk22 {
     /// Creates the method with relaxation parameter `kappa`.
-    pub const fn new(kappa: f64) -> Self {
-        Self { kappa }
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::ConfigurationError::InvalidParameter`] when `kappa`
+    /// is not finite.
+    pub fn new(kappa: f64) -> Result<Self, crate::ConfigurationError> {
+        validate_relaxation(kappa)?;
+        Ok(Self { kappa })
+    }
+
+    /// Returns the coefficient relaxation parameter.
+    pub const fn kappa(&self) -> f64 {
+        self.kappa
     }
 }
 
@@ -212,8 +222,7 @@ pub type pRRK22 = Prrk22;
 /// OrdinaryDiffEqSSPRK coefficient rescaling before each step.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Prrk33 {
-    /// Relaxation parameter applied to the SSPRK33 coefficients.
-    pub kappa: f64,
+    kappa: f64,
 }
 
 impl Default for Prrk33 {
@@ -224,8 +233,19 @@ impl Default for Prrk33 {
 
 impl Prrk33 {
     /// Creates the method with relaxation parameter `kappa`.
-    pub const fn new(kappa: f64) -> Self {
-        Self { kappa }
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::ConfigurationError::InvalidParameter`] when `kappa`
+    /// is not finite.
+    pub fn new(kappa: f64) -> Result<Self, crate::ConfigurationError> {
+        validate_relaxation(kappa)?;
+        Ok(Self { kappa })
+    }
+
+    /// Returns the coefficient relaxation parameter.
+    pub const fn kappa(&self) -> f64 {
+        self.kappa
     }
 }
 
@@ -731,8 +751,7 @@ impl OdeAlgorithm for Prrk33 {
 /// attempted step; `kappa = 0` is the ordinary SSPRK(5,4) method.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Prrk54 {
-    /// Relaxation parameter applied to the SSPRK(5,4) coefficients.
-    pub kappa: f64,
+    kappa: f64,
 }
 
 impl Default for Prrk54 {
@@ -743,9 +762,30 @@ impl Default for Prrk54 {
 
 impl Prrk54 {
     /// Creates the method with relaxation parameter `kappa`.
-    pub const fn new(kappa: f64) -> Self {
-        Self { kappa }
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::ConfigurationError::InvalidParameter`] when `kappa`
+    /// is not finite.
+    pub fn new(kappa: f64) -> Result<Self, crate::ConfigurationError> {
+        validate_relaxation(kappa)?;
+        Ok(Self { kappa })
     }
+
+    /// Returns the coefficient relaxation parameter.
+    pub const fn kappa(&self) -> f64 {
+        self.kappa
+    }
+}
+
+fn validate_relaxation(kappa: f64) -> Result<(), crate::ConfigurationError> {
+    if !kappa.is_finite() {
+        return Err(crate::ConfigurationError::InvalidParameter {
+            parameter: "pRRK relaxation parameter",
+            reason: "the parameter must be finite",
+        });
+    }
+    Ok(())
 }
 
 #[allow(non_camel_case_types)]

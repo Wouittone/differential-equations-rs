@@ -1472,7 +1472,8 @@ impl Solution {
     /// Returns a saved state by its time index.
     pub fn state(&self, index: usize) -> Option<&[f64]> {
         let start = index.checked_mul(self.dimension)?;
-        self.values.get(start..start + self.dimension)
+        let end = start.checked_add(self.dimension)?;
+        self.values.get(start..end)
     }
 
     /// Returns a saved state as an ndarray view with its original shape.
@@ -1513,18 +1514,19 @@ impl Solution {
         }
         for (index, &saved_time) in self.times.iter().enumerate().rev() {
             if time == saved_time {
-                return self.state(index).map(<[f64]>::to_vec).ok_or(
+                let output = self.state(index).map(<[f64]>::to_vec).ok_or(
                     InterpolationError::InvalidSegmentData {
                         context: "saved solution state",
                     },
-                );
+                )?;
+                return finite_interpolation(output, "saved solution state");
             }
         }
         for segment in &self.dense_segments {
             if segment.contains(time) {
                 let mut output = vec![0.0; self.dimension];
                 segment.interpolate(time, &mut output)?;
-                return Ok(output);
+                return finite_interpolation(output, "dense output");
             }
         }
         for index in 1..self.times.len() {
@@ -1533,7 +1535,7 @@ impl Solution {
             if (left <= right && time <= right && time >= left)
                 || (left >= right && time >= right && time <= left)
             {
-                let fraction = (time - left) / (right - left);
+                let fraction = interpolation_fraction(time, left, right).clamp(0.0, 1.0);
                 let previous =
                     self.state(index - 1)
                         .ok_or(InterpolationError::InvalidSegmentData {
@@ -1544,11 +1546,12 @@ impl Solution {
                     .ok_or(InterpolationError::InvalidSegmentData {
                         context: "saved solution state",
                     })?;
-                return Ok(previous
+                let output = previous
                     .iter()
                     .zip(current)
-                    .map(|(previous, current)| previous + fraction * (current - previous))
-                    .collect());
+                    .map(|(&previous, &current)| interpolate_value(previous, current, fraction))
+                    .collect();
+                return finite_interpolation(output, "linear");
             }
         }
         Err(InterpolationError::OutsideTimeSpan)
@@ -1583,9 +1586,56 @@ impl Solution {
     }
 }
 
+pub(crate) fn interpolation_fraction(time: f64, left: f64, right: f64) -> f64 {
+    if left.is_sign_negative() != right.is_sign_negative() {
+        let scale = left.abs().max(right.abs());
+        (time / scale - left / scale) / (right / scale - left / scale)
+    } else {
+        (time - left) / (right - left)
+    }
+}
+
+pub(crate) fn interpolate_value(previous: f64, current: f64, fraction: f64) -> f64 {
+    if previous.is_finite()
+        && current.is_finite()
+        && previous.is_sign_negative() != current.is_sign_negative()
+    {
+        previous * (1.0 - fraction) + current * fraction
+    } else {
+        previous + fraction * (current - previous)
+    }
+}
+
+fn finite_interpolation(
+    output: Vec<f64>,
+    context: &'static str,
+) -> Result<Vec<f64>, InterpolationError> {
+    output
+        .iter()
+        .all(|value| value.is_finite())
+        .then_some(output)
+        .ok_or(InterpolationError::NonFiniteResult { context })
+}
+
+pub(crate) fn finite_partitioned_interpolation(
+    velocity: Vec<f64>,
+    position: Vec<f64>,
+    context: &'static str,
+) -> Result<(Vec<f64>, Vec<f64>), InterpolationError> {
+    velocity
+        .iter()
+        .chain(&position)
+        .all(|value| value.is_finite())
+        .then_some((velocity, position))
+        .ok_or(InterpolationError::NonFiniteResult { context })
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{DenseSegment, HermiteSegment, Solution, SolverStats, TrajectoryRecorder};
+    use super::{
+        DenseSegment, HermiteSegment, InterpolationError, OwnedDenseSegment, Solution, SolverStats,
+        TrajectoryRecorder,
+    };
 
     #[test]
     fn exposes_flat_states_as_slices() {
@@ -1602,6 +1652,67 @@ mod tests {
         assert_eq!(solution.last_state(), &[5.0, 6.0]);
         assert_eq!(solution.interpolate(0.25), Some(vec![2.0, 3.0]));
         assert_eq!(solution.interpolate(2.0), None);
+
+        let scalar = Solution::new(vec![0.0], vec![1.0], 1, SolverStats::default());
+        assert_eq!(scalar.state(usize::MAX), None);
+        assert_eq!(scalar.state_array(usize::MAX), None);
+    }
+
+    #[test]
+    fn linear_interpolation_handles_extreme_opposite_sign_endpoints() {
+        let solution = Solution::new(
+            vec![-f64::MAX, f64::MAX],
+            vec![-f64::MAX, f64::MAX],
+            1,
+            SolverStats::default(),
+        );
+
+        assert_eq!(solution.try_interpolate(0.0), Ok(vec![0.0]));
+    }
+
+    #[test]
+    fn public_interpolation_rejects_non_finite_saved_and_dense_results() {
+        let saved = Solution::new(vec![0.0], vec![f64::INFINITY], 1, SolverStats::default());
+        assert_eq!(
+            saved.try_interpolate(0.0),
+            Err(InterpolationError::NonFiniteResult {
+                context: "saved solution state"
+            })
+        );
+
+        let linear = Solution::new(
+            vec![0.0, 1.0],
+            vec![0.0, f64::INFINITY],
+            1,
+            SolverStats::default(),
+        );
+        assert_eq!(
+            linear.try_interpolate(0.5),
+            Err(InterpolationError::NonFiniteResult { context: "linear" })
+        );
+
+        let segment = HermiteSegment::new(
+            0.0,
+            1.0,
+            vec![0.0],
+            vec![0.0],
+            vec![f64::MAX],
+            vec![f64::MAX],
+        )
+        .unwrap();
+        let dense = Solution::new_with_dense(
+            vec![0.0, 1.0],
+            vec![0.0, 0.0],
+            1,
+            SolverStats::default(),
+            vec![OwnedDenseSegment::Hermite(segment)],
+        );
+        assert_eq!(
+            dense.try_interpolate(0.5),
+            Err(InterpolationError::NonFiniteResult {
+                context: "dense output"
+            })
+        );
     }
 
     #[test]

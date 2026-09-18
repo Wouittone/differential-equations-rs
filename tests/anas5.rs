@@ -113,3 +113,14 @@ fn anas5_rejects_adaptive_configuration() {
         Err(SolveError::AdaptiveStepUnsupported)
     );
 }
+
+#[test]
+fn anas5_rejects_singular_or_nonfinite_periodicity() {
+    for periodicity in [0.0, -0.0, f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+        assert!(matches!(
+            Anas5::new(periodicity),
+            Err(ConfigurationError::InvalidParameter { .. })
+        ));
+    }
+    assert_eq!(Anas5::new(-2.0).unwrap().periodicity(), -2.0);
+}

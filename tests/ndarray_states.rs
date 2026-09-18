@@ -3,9 +3,13 @@ use differential_equations::ndarray::{
     ArrayView0, ArrayView1, ArrayView2, ArrayViewD, ArrayViewMut0, ArrayViewMut1, ArrayViewMut2,
     ArrayViewMutD, arr0, array,
 };
-use differential_equations::solvers::explicit::{SplitEuler, Tsit5, solve_split};
+use differential_equations::solvers::explicit::{
+    SplitEuler, SplitOdeAlgorithm, Tsit5, solve_split,
+};
+use differential_equations::solvers::multirate::MRIGARKERK22a;
+use differential_equations::solvers::multistep::IMEXEuler;
 use differential_equations::solvers::rosenbrock::Rodas5P;
-use differential_equations::solvers::stabilized::{ESERK4, ESERK5, ROCK2, ROCK4, SERK2};
+use differential_equations::solvers::stabilized::{ESERK4, ESERK5, IRKC, ROCK2, ROCK4, SERK2};
 use differential_equations::{
     CallbackAction, OdeAlgorithm, OdeProblem, SaveMode, SolveOptions, solve,
 };
@@ -81,6 +85,45 @@ fn one_decay_ode_is_shape_invariant_for_explicit_and_stiff_solvers() {
     // SERK2 combines stages with large alternating weights, so equivalent
     // component scalings accumulate more floating-point cancellation.
     assert_decay_is_shape_invariant(|| SERK2, 1.0e-9);
+}
+
+#[test]
+fn direct_validated_solve_preserves_array_state_shapes() {
+    let scalar = OdeProblem::from_array(
+        |mut derivative: ArrayViewMut0<'_, f64>, state: ArrayView0<'_, f64>, _: &(), _: f64| {
+            derivative[[]] = -state[[]];
+        },
+        arr0(1.0),
+        (0.0, 0.1),
+        (),
+    );
+    let vector = OdeProblem::from_array(
+        |mut derivative: ArrayViewMut1<'_, f64>, state: ArrayView1<'_, f64>, _: &(), _: f64| {
+            derivative.zip_mut_with(&state, |derivative, state| *derivative = -*state);
+        },
+        array![1.0, 2.0],
+        (0.0, 0.1),
+        (),
+    );
+    let matrix = OdeProblem::from_array(
+        |mut derivative: ArrayViewMut2<'_, f64>, state: ArrayView2<'_, f64>, _: &(), _: f64| {
+            derivative.zip_mut_with(&state, |derivative, state| *derivative = -*state);
+        },
+        array![[1.0, 2.0], [3.0, 4.0]],
+        (0.0, 0.1),
+        (),
+    );
+
+    let scalar_solution = Tsit5.solve_validated(&scalar, &options()).unwrap();
+    let vector_solution = Tsit5.solve_validated(&vector, &options()).unwrap();
+    let matrix_solution = Tsit5.solve_validated(&matrix, &options()).unwrap();
+
+    assert!(scalar_solution.state_shape().is_empty());
+    assert_eq!(vector_solution.state_shape(), &[2]);
+    assert_eq!(matrix_solution.state_shape(), &[2, 2]);
+    assert!(scalar_solution.last_state_array().shape().is_empty());
+    assert_eq!(vector_solution.last_state_array().shape(), &[2]);
+    assert_eq!(matrix_solution.last_state_array().shape(), &[2, 2]);
 }
 
 #[test]
@@ -200,4 +243,39 @@ fn split_array_problems_preserve_matrix_shape() {
     let solution = solve_split(&problem, SplitEuler, &options).unwrap();
     assert_eq!(solution.state_shape(), &[2, 2]);
     assert_eq!(solution.last_state_array().shape(), &[2, 2]);
+}
+
+#[test]
+fn direct_validated_split_solves_preserve_matrix_shape() {
+    let problem = SplitOdeProblem::from_array(
+        |mut derivative: ArrayViewMut2<'_, f64>, state: ArrayView2<'_, f64>, _: &(), _: f64| {
+            derivative.zip_mut_with(&state, |derivative, state| *derivative = -0.5 * *state);
+        },
+        |mut derivative: ArrayViewMut2<'_, f64>, state: ArrayView2<'_, f64>, _: &(), _: f64| {
+            derivative.zip_mut_with(&state, |derivative, state| *derivative = -0.5 * *state);
+        },
+        array![[1.0, 2.0], [3.0, 4.0]],
+        (0.0, 0.1),
+        (),
+    );
+    let options = SolveOptions::new()
+        .with_adaptive(false)
+        .with_initial_step(0.01)
+        .with_save(SaveMode::Endpoints);
+
+    let split_euler = SplitEuler.solve_validated(&problem, &options).unwrap();
+    let imex = IMEXEuler.solve_validated(&problem, &options).unwrap();
+    let multirate = MRIGARKERK22a::new(4)
+        .solve_validated(&problem, &options)
+        .unwrap();
+    let irkc = IRKC::new()
+        .with_eigenvalue_estimate(1.0)
+        .unwrap()
+        .solve_validated(&problem, &options)
+        .unwrap();
+
+    for solution in [split_euler, imex, multirate, irkc] {
+        assert_eq!(solution.state_shape(), &[2, 2]);
+        assert_eq!(solution.last_state_array().shape(), &[2, 2]);
+    }
 }

@@ -7,7 +7,10 @@ use crate::solver::{
     validate_preset_time_sequences, validate_state_time_options, validate_vector_callback_lengths,
 };
 use crate::solvers::explicit::SplitOdeAlgorithm;
-use crate::{OdeProblem, Solution, SolveError, SolveOptions, SolverStats, SplitOdeProblem};
+use crate::{
+    ConfigurationError, OdeProblem, Solution, SolveError, SolveOptions, SolverStats,
+    SplitOdeProblem,
+};
 
 const MINIMUM_DEGREE: usize = 50;
 const MAXIMUM_DEGREE: usize = 50;
@@ -36,14 +39,33 @@ impl IRKC {
     /// For parity with the pinned upstream revision, IRKC still uses exactly 50
     /// Chebyshev stages. The override reduces setup evaluations rather than
     /// selecting a different stage count.
-    #[must_use]
-    pub fn with_eigenvalue_estimate(mut self, upper_bound: f64) -> Self {
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ConfigurationError::InvalidParameter`] unless the bound is
+    /// finite and positive.
+    pub fn with_eigenvalue_estimate(
+        mut self,
+        upper_bound: f64,
+    ) -> Result<Self, ConfigurationError> {
+        if !upper_bound.is_finite() || upper_bound <= 0.0 {
+            return Err(ConfigurationError::InvalidParameter {
+                parameter: "IRKC eigenvalue estimate",
+                reason: "the spectral-radius upper bound must be finite and positive",
+            });
+        }
         self.eigenvalue_override = Some(upper_bound);
-        self
+        Ok(self)
     }
     /// Returns the classical order of the method.
     pub fn order(&self) -> usize {
         2
+    }
+
+    /// Returns the configured spectral-radius bound, or `None` when IRKC will
+    /// estimate it from the explicit component.
+    pub const fn eigenvalue_estimate(&self) -> Option<f64> {
+        self.eigenvalue_override
     }
 }
 
@@ -74,19 +96,15 @@ where
     validate_state_time_options(problem.initial_state(), problem.time_span(), options)?;
     validate_preset_time_sequences(problem.preset_time_sequences(), problem.time_span())?;
     validate_vector_callback_lengths(problem.vector_callback_lengths())?;
-    if algorithm
-        .eigenvalue_override
-        .is_some_and(|value| !value.is_finite() || value <= 0.0)
-    {
-        return Err(SolveError::InvalidTolerance);
-    }
     let dummy = OdeProblem::new(
         noop as fn(&mut [f64], &[f64], &(), f64),
         problem.initial_state().to_vec(),
         problem.time_span(),
         (),
     );
-    drive_integration(&dummy, options, IrkcKernel::new(problem, algorithm))
+    let mut solution = drive_integration(&dummy, options, IrkcKernel::new(problem, algorithm))?;
+    solution.set_state_shape(problem.state_shape());
+    Ok(solution)
 }
 
 fn noop(_: &mut [f64], _: &[f64], _: &(), _: f64) {}

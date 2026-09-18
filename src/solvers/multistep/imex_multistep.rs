@@ -486,7 +486,9 @@ where
     if problem.apply_finalize_callbacks(state, time)? {
         recorder.synchronize_endpoint(time, state);
     }
-    Ok(recorder.finish(stats))
+    let mut solution = recorder.finish(stats);
+    solution.set_state_shape(problem.state_shape());
+    Ok(solution)
 }
 
 #[allow(clippy::needless_range_loop)]

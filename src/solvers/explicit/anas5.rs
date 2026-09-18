@@ -2,21 +2,38 @@ use crate::integrator::{
     KernelCapabilities, StepEstimate, StepKernel, integrate as drive_integration,
 };
 use crate::solution::{BorrowedHermiteSegment, TrajectoryRecorder};
-use crate::{OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions, SolverStats};
+use crate::{
+    ConfigurationError, OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions, SolverStats,
+};
 
 /// Anastassi–Simos optimized fifth-order Runge–Kutta method for periodic problems.
 /// `w` is the periodicity estimate used by the upstream method;
 /// `Anas5::default()` uses the pinned default `w = 1`.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Anas5 {
-    /// Periodicity estimate used to fit the method coefficients.
-    pub w: f64,
+    w: f64,
 }
 
 impl Anas5 {
     /// Creates the method with the supplied periodicity estimate.
-    pub const fn new(w: f64) -> Self {
-        Self { w }
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ConfigurationError::InvalidParameter`] when `w` is zero or
+    /// non-finite because the fitted coefficient formula is singular there.
+    pub fn new(w: f64) -> Result<Self, ConfigurationError> {
+        if !w.is_finite() || w == 0.0 {
+            return Err(ConfigurationError::InvalidParameter {
+                parameter: "Anas5 periodicity estimate",
+                reason: "the estimate must be finite and nonzero",
+            });
+        }
+        Ok(Self { w })
+    }
+
+    /// Returns the periodicity estimate used to fit the coefficients.
+    pub const fn periodicity(&self) -> f64 {
+        self.w
     }
 }
 
@@ -134,9 +151,6 @@ where
         time: f64,
         stats: &mut SolverStats,
     ) -> Result<(), SolveError> {
-        if !self.w.is_finite() {
-            return Err(SolveError::InvalidTableau);
-        }
         Self::evaluate(problem, &mut self.first_derivative, state, time, stats)?;
         Self::ensure_finite(&self.first_derivative)?;
         self.first_is_current = true;

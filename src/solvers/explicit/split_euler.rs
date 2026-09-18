@@ -81,7 +81,9 @@ impl SplitOdeAlgorithm for SplitEuler {
             problem.time_span(),
             (),
         );
-        integrate(&placeholder, options, SplitEulerKernel::new(problem))
+        let mut solution = integrate(&placeholder, options, SplitEulerKernel::new(problem))?;
+        solution.set_state_shape(problem.state_shape());
+        Ok(solution)
     }
 }
 

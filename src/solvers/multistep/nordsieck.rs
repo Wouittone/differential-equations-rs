@@ -8,7 +8,9 @@ use crate::integrator::{
 use crate::linear::{factorize, solve_factorized};
 use crate::solution::{BorrowedHermiteSegment, DenseSegment, HermiteSegment, TrajectoryRecorder};
 use crate::solvers::explicit::Tsit5;
-use crate::{OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions, SolverStats};
+use crate::{
+    ConfigurationError, OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions, SolverStats,
+};
 
 const MAX_NEWTON_ITERATIONS: usize = 12;
 const NEWTON_TOLERANCE: f64 = 1.0e-11;
@@ -70,21 +72,66 @@ impl JVODE {
         self.method
     }
 
+    /// Returns the lower-order, current-order, and higher-order selection biases.
+    pub const fn biases(&self) -> (f64, f64, f64) {
+        (self.bias1, self.bias2, self.bias3)
+    }
+
+    /// Returns the minimum and maximum adaptive step factors.
+    pub const fn step_factors(&self) -> (f64, f64) {
+        (self.minimum_factor, self.maximum_factor)
+    }
+
     /// Sets the lower-order, current-order, and higher-order selection biases.
-    #[must_use]
-    pub const fn with_biases(mut self, lower: f64, current: f64, higher: f64) -> Self {
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ConfigurationError::InvalidParameter`] unless every bias is
+    /// finite and positive.
+    pub fn with_biases(
+        mut self,
+        lower: f64,
+        current: f64,
+        higher: f64,
+    ) -> Result<Self, ConfigurationError> {
+        if !lower.is_finite()
+            || !current.is_finite()
+            || !higher.is_finite()
+            || lower <= 0.0
+            || current <= 0.0
+            || higher <= 0.0
+        {
+            return Err(ConfigurationError::InvalidParameter {
+                parameter: "JVODE order-selection biases",
+                reason: "biases must be finite and positive",
+            });
+        }
         self.bias1 = lower;
         self.bias2 = current;
         self.bias3 = higher;
-        self
+        Ok(self)
     }
 
     /// Sets the minimum and maximum adaptive step factors.
-    #[must_use]
-    pub const fn with_step_factors(mut self, minimum: f64, maximum: f64) -> Self {
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ConfigurationError::InvalidBounds`] unless both factors are
+    /// finite and positive and `minimum <= maximum`.
+    pub fn with_step_factors(
+        mut self,
+        minimum: f64,
+        maximum: f64,
+    ) -> Result<Self, ConfigurationError> {
+        if !minimum.is_finite() || !maximum.is_finite() || minimum <= 0.0 || maximum < minimum {
+            return Err(ConfigurationError::InvalidBounds {
+                context: "JVODE adaptive step factors",
+                reason: "factors must be finite, positive, and ordered",
+            });
+        }
         self.minimum_factor = minimum;
         self.maximum_factor = maximum;
-        self
+        Ok(self)
     }
 }
 
@@ -135,19 +182,6 @@ impl OdeAlgorithm for JVODE {
     where
         F: crate::OdeFunction<P>,
     {
-        if !self.bias1.is_finite()
-            || !self.bias2.is_finite()
-            || !self.bias3.is_finite()
-            || self.bias1 <= 0.0
-            || self.bias2 <= 0.0
-            || self.bias3 <= 0.0
-            || !self.minimum_factor.is_finite()
-            || !self.maximum_factor.is_finite()
-            || self.minimum_factor <= 0.0
-            || self.maximum_factor < self.minimum_factor
-        {
-            return Err(SolveError::InvalidMultistepOrder);
-        }
         drive_integration(
             problem,
             options,

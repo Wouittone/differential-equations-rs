@@ -50,7 +50,7 @@ fn main() {
     .with_implicit_jacobian(|jacobian, _, _, _| jacobian[0] = -1.0);
     let irkc = solve_irkc(
         &irkc_problem,
-        IRKC::new().with_eigenvalue_estimate(100.0),
+        IRKC::new().with_eigenvalue_estimate(100.0).unwrap(),
         &fixed(0.001),
     )
     .unwrap();
