@@ -24,15 +24,15 @@ fn endpoint<A: SplitOdeAlgorithm>(algorithm: A) -> f64 {
 
 fn main() {
     let results = [
-        ("mis", endpoint(MIS::new(8))),
-        ("mrab", endpoint(MRAB::new(3, 8))),
+        ("mis", endpoint(MIS::new(8).unwrap())),
+        ("mrab", endpoint(MRAB::new(3, 8).unwrap())),
         ("mreef", endpoint(MREEF::default())),
-        ("erk22a", endpoint(MRIGARKERK22a::new(8))),
-        ("erk22b", endpoint(MRIGARKERK22b::new(8))),
-        ("erk33a", endpoint(MRIGARKERK33a::new(8))),
-        ("erk45a", endpoint(MRIGARKERK45a::new(8))),
-        ("esdirk34a", endpoint(MRIGARKESDIRK34a::new(8))),
-        ("irk21a", endpoint(MRIGARKIRK21a::new(8))),
+        ("erk22a", endpoint(MRIGARKERK22a::new(8).unwrap())),
+        ("erk22b", endpoint(MRIGARKERK22b::new(8).unwrap())),
+        ("erk33a", endpoint(MRIGARKERK33a::new(8).unwrap())),
+        ("erk45a", endpoint(MRIGARKERK45a::new(8).unwrap())),
+        ("esdirk34a", endpoint(MRIGARKESDIRK34a::new(8).unwrap())),
+        ("irk21a", endpoint(MRIGARKIRK21a::new(8).unwrap())),
     ];
     for (name, value) in results {
         println!("{name},{value:.17e}");

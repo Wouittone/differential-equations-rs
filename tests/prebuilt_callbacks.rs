@@ -264,7 +264,7 @@ fn assert_second_order_observer_preserves_work<A: SecondOrderOdeAlgorithm + Copy
 #[test]
 fn observation_only_callbacks_preserve_work_across_standalone_drivers() {
     assert_split_observer_preserves_work(SplitEuler);
-    assert_split_observer_preserves_work(MRIGARKERK22a::new(4));
+    assert_split_observer_preserves_work(MRIGARKERK22a::new(4).unwrap());
     assert_split_observer_preserves_work(IMEXEuler);
     assert_split_observer_preserves_work(IRKC::default());
 

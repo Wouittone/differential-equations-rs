@@ -174,7 +174,12 @@ fn prediction_routes_through_every_split_driver_family() {
     let split_euler = solve_split(&split_problem(), SplitEuler, &fixed(2.0)).unwrap();
     assert!((first_time_after_start(split_euler.times()) - 0.9).abs() < 1.0e-12);
 
-    let multirate = solve_split(&split_problem(), MRIGARKERK22a::new(4), &fixed(2.0)).unwrap();
+    let multirate = solve_split(
+        &split_problem(),
+        MRIGARKERK22a::new(4).unwrap(),
+        &fixed(2.0),
+    )
+    .unwrap();
     assert!((first_time_after_start(multirate.times()) - 0.9).abs() < 1.0e-12);
 
     let imex = solve_split(&split_problem(), IMEXEuler, &fixed(2.0)).unwrap();

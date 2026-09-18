@@ -182,7 +182,7 @@ fn all_split_drivers_observe_dynamic_stops() {
         );
         let solutions = [
             solve_split(&problem, SplitEuler, &options()).unwrap(),
-            solve_split(&problem, MRIGARKERK22a::new(4), &options()).unwrap(),
+            solve_split(&problem, MRIGARKERK22a::new(4).unwrap(), &options()).unwrap(),
             solve_split(&problem, IMEXEuler, &options()).unwrap(),
             solve_split(&problem, IRKC::default(), &options()).unwrap(),
         ];

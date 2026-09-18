@@ -4,7 +4,9 @@ use differential_equations::solvers::multirate::{
     MRIGARKIRK21a,
 };
 use differential_equations::tableau::{define_mri_tableau_from_file, load_tableau};
-use differential_equations::{CallbackAction, SaveMode, SolveOptions, SplitOdeProblem};
+use differential_equations::{
+    CallbackAction, ConfigurationError, SaveMode, SolveOptions, SplitOdeProblem,
+};
 
 use differential_equations as renamed;
 
@@ -16,8 +18,32 @@ differential_equations::tableau::define_mis_tableau_from_file!(pub DOWNSTREAM_MI
     "src/tableau/resources/mri/mis.json");
 
 #[test]
+fn invalid_multirate_configuration_is_rejected_during_construction() {
+    for result in [
+        MREEF::new(0, 4, Default::default()).map(|_| ()),
+        MREEF::new(4, 1, Default::default()).map(|_| ()),
+        MREEF::new(4, 11, Default::default()).map(|_| ()),
+        MRAB::new(0, 4).map(|_| ()),
+        MRAB::new(6, 4).map(|_| ()),
+        MRAB::new(3, 0).map(|_| ()),
+        MIS::new(0).map(|_| ()),
+        MRIGARKERK22a::new(0).map(|_| ()),
+        MRIGARKERK22b::new(0).map(|_| ()),
+        MRIGARKERK33a::new(0).map(|_| ()),
+        MRIGARKERK45a::new(0).map(|_| ()),
+        MRIGARKESDIRK34a::new(0).map(|_| ()),
+        MRIGARKIRK21a::new(0).map(|_| ()),
+    ] {
+        assert!(matches!(
+            result,
+            Err(ConfigurationError::InvalidParameter { .. })
+        ));
+    }
+}
+
+#[test]
 fn mri_resources_are_inspectable_and_support_renamed_dependencies() {
-    let built_in = MRIGARKERK22a::new(4).tableau().unwrap();
+    let built_in = MRIGARKERK22a::new(4).unwrap().tableau().unwrap();
     assert_eq!(built_in.name(), "MRIGARKERK22a");
     assert_eq!(built_in.order(), 2);
     assert_eq!(built_in.inner_order(), 2);
@@ -26,17 +52,17 @@ fn mri_resources_are_inspectable_and_support_renamed_dependencies() {
     assert_eq!(load_tableau(&DOWNSTREAM_ERK22A).unwrap(), built_in);
     assert_eq!(load_tableau(&RENAMED_ERK22A).unwrap(), built_in);
 
-    let embedded = MRIGARKERK45a::new(4).tableau().unwrap();
+    let embedded = MRIGARKERK45a::new(4).unwrap().tableau().unwrap();
     assert_eq!(embedded.order(), 4);
     assert_eq!(embedded.w0().len(), 5);
     assert!(embedded.embedded0().is_some());
     assert!(embedded.embedded1().is_some());
 
-    let implicit = MRIGARKESDIRK34a::new(4).tableau().unwrap();
+    let implicit = MRIGARKESDIRK34a::new(4).unwrap().tableau().unwrap();
     assert_eq!(implicit.gamma().len(), 6);
     assert!(implicit.gamma().iter().any(|value| *value != 0.0));
 
-    let mis = MIS::new(4).tableau().unwrap();
+    let mis = MIS::new(4).unwrap().tableau().unwrap();
     assert_eq!(mis.name(), "MIS");
     assert_eq!(mis.order(), 3);
     assert_eq!(mis.alpha().len(), 4);
@@ -65,15 +91,18 @@ fn endpoint<A: SplitOdeAlgorithm>(algorithm: A, step: f64) -> f64 {
 #[test]
 fn all_nine_inventory_names_solve_a_separated_timescale_problem() {
     let values = [
-        ("MIS", endpoint(MIS::new(8), 0.01)),
-        ("MRAB", endpoint(MRAB::new(3, 8), 0.01)),
+        ("MIS", endpoint(MIS::new(8).unwrap(), 0.01)),
+        ("MRAB", endpoint(MRAB::new(3, 8).unwrap(), 0.01)),
         ("MREEF", endpoint(MREEF::default(), 0.01)),
-        ("ERK22a", endpoint(MRIGARKERK22a::new(8), 0.01)),
-        ("ERK22b", endpoint(MRIGARKERK22b::new(8), 0.01)),
-        ("ERK33a", endpoint(MRIGARKERK33a::new(8), 0.01)),
-        ("ERK45a", endpoint(MRIGARKERK45a::new(8), 0.01)),
-        ("ESDIRK34a", endpoint(MRIGARKESDIRK34a::new(8), 0.01)),
-        ("IRK21a", endpoint(MRIGARKIRK21a::new(8), 0.01)),
+        ("ERK22a", endpoint(MRIGARKERK22a::new(8).unwrap(), 0.01)),
+        ("ERK22b", endpoint(MRIGARKERK22b::new(8).unwrap(), 0.01)),
+        ("ERK33a", endpoint(MRIGARKERK33a::new(8).unwrap(), 0.01)),
+        ("ERK45a", endpoint(MRIGARKERK45a::new(8).unwrap(), 0.01)),
+        (
+            "ESDIRK34a",
+            endpoint(MRIGARKESDIRK34a::new(8).unwrap(), 0.01),
+        ),
+        ("IRK21a", endpoint(MRIGARKIRK21a::new(8).unwrap(), 0.01)),
     ];
     let exact = (-1.0_f64).exp();
     for (name, value) in values {
@@ -88,22 +117,25 @@ fn all_nine_inventory_names_solve_a_separated_timescale_problem() {
 fn refinement_reduces_error_for_representative_families() {
     let exact = (-1.0_f64).exp();
     for (coarse, fine) in [
-        (endpoint(MIS::new(8), 0.1), endpoint(MIS::new(8), 0.05)),
         (
-            endpoint(MRAB::new(3, 8), 0.1),
-            endpoint(MRAB::new(3, 8), 0.05),
+            endpoint(MIS::new(8).unwrap(), 0.1),
+            endpoint(MIS::new(8).unwrap(), 0.05),
+        ),
+        (
+            endpoint(MRAB::new(3, 8).unwrap(), 0.1),
+            endpoint(MRAB::new(3, 8).unwrap(), 0.05),
         ),
         (
             endpoint(MREEF::default(), 0.1),
             endpoint(MREEF::default(), 0.05),
         ),
         (
-            endpoint(MRIGARKERK45a::new(8), 0.1),
-            endpoint(MRIGARKERK45a::new(8), 0.05),
+            endpoint(MRIGARKERK45a::new(8).unwrap(), 0.1),
+            endpoint(MRIGARKERK45a::new(8).unwrap(), 0.05),
         ),
         (
-            endpoint(MRIGARKESDIRK34a::new(8), 0.1),
-            endpoint(MRIGARKESDIRK34a::new(8), 0.05),
+            endpoint(MRIGARKESDIRK34a::new(8).unwrap(), 0.1),
+            endpoint(MRIGARKESDIRK34a::new(8).unwrap(), 0.05),
         ),
     ] {
         assert!(
@@ -135,7 +167,7 @@ fn split_lifecycle_supports_backward_callbacks_save_at_and_retained_dense_output
         .with_save_at([0.0, 0.2, 0.4])
         .with_dense_output(true)
         .with_event_tolerance(1.0e-10);
-    let solution = solve_split(&problem, MRIGARKERK33a::new(4), &options).unwrap();
+    let solution = solve_split(&problem, MRIGARKERK33a::new(4).unwrap(), &options).unwrap();
     assert!((solution.times().last().unwrap() - 0.6).abs() < 1.0e-9);
     assert_eq!(solution.last_state(), &[2.0]);
     assert!((solution.interpolate(0.3).unwrap()[0] - 0.3).abs() < 1.0e-9);
@@ -152,7 +184,7 @@ fn split_lifecycle_supports_backward_callbacks_save_at_and_retained_dense_output
         .with_initial_step(0.1)
         .with_save(SaveMode::Endpoints);
     assert!(
-        solve_split(&backward, MRIGARKERK22a::new(4), &fixed)
+        solve_split(&backward, MRIGARKERK22a::new(4).unwrap(), &fixed)
             .unwrap()
             .last_state()[0]
             .abs()
@@ -174,8 +206,8 @@ fn adaptive_and_implicit_statistics_are_deterministic() {
         .with_tolerances(1.0e-6, 1.0e-6)
         .with_max_step(0.2)
         .with_save(SaveMode::Endpoints);
-    let first = solve_split(&problem, MRIGARKESDIRK34a::new(4), &options).unwrap();
-    let second = solve_split(&problem, MRIGARKESDIRK34a::new(4), &options).unwrap();
+    let first = solve_split(&problem, MRIGARKESDIRK34a::new(4).unwrap(), &options).unwrap();
+    let second = solve_split(&problem, MRIGARKESDIRK34a::new(4).unwrap(), &options).unwrap();
     assert_eq!(first.stats(), second.stats());
     assert!(first.stats().nonlinear_iterations > 0);
     assert!(first.stats().linear_solves > 0);
@@ -197,7 +229,7 @@ fn multirate_driver_hits_exact_time_stops_and_resumes_fixed_steps() {
         .with_save(SaveMode::EveryStep)
         .with_time_stops([0.25, 0.5]);
 
-    let solution = solve_split(&problem, MRIGARKERK22a::new(4), &options).unwrap();
+    let solution = solve_split(&problem, MRIGARKERK22a::new(4).unwrap(), &options).unwrap();
 
     assert_eq!(solution.times(), &[0.0, 0.25, 0.5, 0.9, 1.0]);
     assert!((solution.last_state()[0] - 1.0).abs() < 1.0e-12);
@@ -215,7 +247,7 @@ fn multirate_driver_hits_exact_time_stops_and_resumes_fixed_steps() {
         .with_save(SaveMode::EveryStep)
         .with_time_stops([0.75, 0.5]);
     let backward_solution =
-        solve_split(&backward, MRIGARKERK22a::new(4), &backward_options).unwrap();
+        solve_split(&backward, MRIGARKERK22a::new(4).unwrap(), &backward_options).unwrap();
 
     assert_eq!(backward_solution.times()[..3], [1.0, 0.75, 0.5]);
     assert!(backward_solution.last_state()[0].abs() < 1.0e-12);

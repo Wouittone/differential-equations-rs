@@ -178,7 +178,7 @@ fn assert_split<A: SplitOdeAlgorithm + Copy>(algorithm: A) {
 #[test]
 fn every_split_driver_accepts_returned_arrays_and_propagates_each_components_errors() {
     assert_split(SplitEuler);
-    assert_split(MRIGARKERK22a::new(4));
+    assert_split(MRIGARKERK22a::new(4).unwrap());
     assert_split(IMEXEuler);
     assert_split(IRKC::default());
 }

@@ -25,7 +25,7 @@ fn only_used_formulas_are_materialized_and_shared_across_solver_families() {
     );
     let result = solve_split(
         &problem,
-        MRAB::new(5, 1),
+        MRAB::new(5, 1).unwrap(),
         &SolveOptions::new()
             .with_adaptive(false)
             .with_initial_step(0.1),
@@ -50,13 +50,16 @@ fn only_used_formulas_are_materialized_and_shared_across_solver_families() {
     black_box(Rk4.tableau().unwrap());
     assert!(first_bootstrap.change().allocations > 0);
 
-    assert!(std::ptr::eq(predictor, MRAB::new(3, 8).tableau().unwrap()));
+    assert!(std::ptr::eq(
+        predictor,
+        MRAB::new(3, 8).unwrap().tableau().unwrap()
+    ));
     let repeated = allocation_support::minimum_measurement(|| {
         let region = Region::new(GLOBAL);
         for _ in 0..1000 {
             black_box(Ab3.tableau().unwrap());
             black_box(Abm32.predictor_tableau().unwrap());
-            black_box(MRAB::new(3, 8).tableau().unwrap());
+            black_box(MRAB::new(3, 8).unwrap().tableau().unwrap());
         }
         region.change().allocations
     });

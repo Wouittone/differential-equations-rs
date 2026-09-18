@@ -292,7 +292,12 @@ fn split_problem() -> SplitOdeProblem<SplitRhs, SplitRhs, ()> {
 fn every_split_driver_routes_vector_events() {
     let solutions = [
         solve_split(&split_problem(), SplitEuler, &fixed_options()).unwrap(),
-        solve_split(&split_problem(), MRIGARKERK22a::new(4), &fixed_options()).unwrap(),
+        solve_split(
+            &split_problem(),
+            MRIGARKERK22a::new(4).unwrap(),
+            &fixed_options(),
+        )
+        .unwrap(),
         solve_split(&split_problem(), IMEXEuler, &fixed_options()).unwrap(),
         solve_split(&split_problem(), IRKC::default(), &fixed_options()).unwrap(),
     ];

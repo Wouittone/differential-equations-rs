@@ -189,7 +189,7 @@ fn every_split_driver_honors_callback_step_requests() {
     let fixed = options(0.25, false);
     let solutions = [
         solve_split(&split_problem(), SplitEuler, &fixed).unwrap(),
-        solve_split(&split_problem(), MRIGARKERK22a::new(4), &fixed).unwrap(),
+        solve_split(&split_problem(), MRIGARKERK22a::new(4).unwrap(), &fixed).unwrap(),
         solve_split(&split_problem(), IMEXEuler, &fixed).unwrap(),
         solve_split(&split_problem(), IRKC::default(), &fixed).unwrap(),
     ];

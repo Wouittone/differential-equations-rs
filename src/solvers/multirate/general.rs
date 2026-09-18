@@ -16,7 +16,7 @@ use crate::solvers::multistep::{adams_bashforth, map_tableau_access_error};
 use crate::tableau::{
     LinearMultistepTableau, MisTableau, MriTableau, TableauAccessError, TableauError, load_tableau,
 };
-use crate::{Solution, SolveError, SolveOptions, SolverStats, SplitOdeProblem};
+use crate::{ConfigurationError, Solution, SolveError, SolveOptions, SolverStats, SplitOdeProblem};
 
 const MAX_NEWTON_ITERATIONS: usize = 12;
 const NEWTON_TOLERANCE: f64 = 1.0e-11;
@@ -41,7 +41,29 @@ pub struct Mreef {
 
 impl Mreef {
     /// Configures the microstep count, extrapolation order, and sequence.
-    pub const fn new(m: usize, order: usize, sequence: MultirateSequence) -> Self {
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ConfigurationError::InvalidParameter`] when `m` is zero or
+    /// `order` is outside `2..=10`.
+    pub const fn new(
+        m: usize,
+        order: usize,
+        sequence: MultirateSequence,
+    ) -> Result<Self, ConfigurationError> {
+        if m == 0 {
+            return Err(invalid_microstep_count("MREEF microstep count"));
+        }
+        if order < 2 || order > 10 {
+            return Err(ConfigurationError::InvalidParameter {
+                parameter: "MREEF order",
+                reason: "must be between two and ten",
+            });
+        }
+        Ok(Self::from_valid_config(m, order, sequence))
+    }
+
+    const fn from_valid_config(m: usize, order: usize, sequence: MultirateSequence) -> Self {
         Self { m, order, sequence }
     }
 
@@ -58,7 +80,7 @@ impl Mreef {
 
 impl Default for Mreef {
     fn default() -> Self {
-        Self::new(4, 4, MultirateSequence::Harmonic)
+        Self::from_valid_config(4, 4, MultirateSequence::Harmonic)
     }
 }
 
@@ -74,7 +96,25 @@ pub struct Mrab {
 
 impl Mrab {
     /// Configures the Adams--Bashforth order and fast microstep count.
-    pub const fn new(order: usize, m: usize) -> Self {
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ConfigurationError::InvalidParameter`] when `order` is
+    /// outside `1..=5` or `m` is zero.
+    pub const fn new(order: usize, m: usize) -> Result<Self, ConfigurationError> {
+        if order < 1 || order > 5 {
+            return Err(ConfigurationError::InvalidParameter {
+                parameter: "MRAB order",
+                reason: "must be between one and five",
+            });
+        }
+        if m == 0 {
+            return Err(invalid_microstep_count("MRAB microstep count"));
+        }
+        Ok(Self::from_valid_config(order, m))
+    }
+
+    const fn from_valid_config(order: usize, m: usize) -> Self {
         Self { order, m }
     }
 
@@ -88,9 +128,8 @@ impl Mrab {
     ///
     /// # Errors
     ///
-    /// Returns [`TableauAccessError::UnsupportedOrder`] when the configured
-    /// order lies outside `1..=5`, and preserves resource validation or
-    /// family-invariant failures.
+    /// Preserves resource-validation and family-invariant failures. The
+    /// constructor validates the order before a value can reach this method.
     pub fn tableau(&self) -> Result<&'static LinearMultistepTableau, TableauAccessError> {
         adams_bashforth(self.order)
     }
@@ -103,7 +142,7 @@ impl Mrab {
 
 impl Default for Mrab {
     fn default() -> Self {
-        Self::new(2, 4)
+        Self::from_valid_config(2, 4)
     }
 }
 
@@ -118,7 +157,18 @@ pub struct Mis {
 
 impl Mis {
     /// Configures the number of fast microsteps per macro step.
-    pub const fn new(m: usize) -> Self {
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ConfigurationError::InvalidParameter`] when `m` is zero.
+    pub const fn new(m: usize) -> Result<Self, ConfigurationError> {
+        if m == 0 {
+            return Err(invalid_microstep_count("MIS microstep count"));
+        }
+        Ok(Self::from_valid_microsteps(m))
+    }
+
+    const fn from_valid_microsteps(m: usize) -> Self {
         Self { m }
     }
 
@@ -135,7 +185,7 @@ impl Mis {
 
 impl Default for Mis {
     fn default() -> Self {
-        Self::new(4)
+        Self::from_valid_microsteps(4)
     }
 }
 
@@ -152,7 +202,22 @@ macro_rules! mri_algorithm {
 
         impl $rust {
             /// Configures the number of fast microsteps per macro step.
-            pub const fn new(m: usize) -> Self {
+            ///
+            /// # Errors
+            ///
+            /// Returns [`ConfigurationError::InvalidParameter`] when `m` is
+            /// zero.
+            pub const fn new(m: usize) -> Result<Self, ConfigurationError> {
+                if m == 0 {
+                    return Err(invalid_microstep_count(concat!(
+                        stringify!($exact),
+                        " microstep count"
+                    )));
+                }
+                Ok(Self::from_valid_microsteps(m))
+            }
+
+            const fn from_valid_microsteps(m: usize) -> Self {
                 Self { m }
             }
 
@@ -169,7 +234,7 @@ macro_rules! mri_algorithm {
 
         impl Default for $rust {
             fn default() -> Self {
-                Self::new(4)
+                Self::from_valid_microsteps(4)
             }
         }
 
@@ -187,9 +252,6 @@ macro_rules! mri_algorithm {
                 FE: crate::OdeFunction<P>,
                 FI: crate::OdeFunction<P>,
             {
-                if self.m == 0 {
-                    return Err(SolveError::InvalidMultistepOrder);
-                }
                 integrate_multirate(
                     problem,
                     options,
@@ -250,9 +312,6 @@ impl SplitOdeAlgorithm for Mreef {
         FE: crate::OdeFunction<P>,
         FI: crate::OdeFunction<P>,
     {
-        if self.m == 0 || !(2..=10).contains(&self.order) {
-            return Err(SolveError::InvalidMultistepOrder);
-        }
         integrate_multirate(
             problem,
             options,
@@ -275,9 +334,6 @@ impl SplitOdeAlgorithm for Mrab {
         FE: crate::OdeFunction<P>,
         FI: crate::OdeFunction<P>,
     {
-        if self.m == 0 || !(1..=5).contains(&self.order) {
-            return Err(SolveError::InvalidMultistepOrder);
-        }
         if options.adaptive && self.order == 1 {
             return Err(SolveError::AdaptiveStepUnsupported);
         }
@@ -302,9 +358,6 @@ impl SplitOdeAlgorithm for Mis {
         FE: crate::OdeFunction<P>,
         FI: crate::OdeFunction<P>,
     {
-        if self.m == 0 {
-            return Err(SolveError::InvalidMultistepOrder);
-        }
         integrate_multirate(
             problem,
             options,
@@ -313,6 +366,13 @@ impl SplitOdeAlgorithm for Mis {
                 tableau: self.tableau().map_err(|_| SolveError::InvalidTableau)?,
             },
         )
+    }
+}
+
+const fn invalid_microstep_count(parameter: &'static str) -> ConfigurationError {
+    ConfigurationError::InvalidParameter {
+        parameter,
+        reason: "must be greater than zero",
     }
 }
 

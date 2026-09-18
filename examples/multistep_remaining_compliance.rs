@@ -47,7 +47,7 @@ fn main() {
     }
     row!("imex_euler", IMEXEuler);
     row!("imex_euler_ark", IMEXEulerARK);
-    row!("sbdf", SBDF::new(2));
+    row!("sbdf", SBDF::new(2).unwrap());
     row!("sbdf2", SBDF2);
     row!("sbdf3", SBDF3);
     row!("sbdf4", SBDF4);

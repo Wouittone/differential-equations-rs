@@ -14,7 +14,7 @@ use crate::solver::{
     validate_preset_time_sequences, validate_state_time_options, validate_vector_callback_lengths,
 };
 use crate::solvers::explicit::SplitOdeAlgorithm;
-use crate::{Solution, SolveError, SolveOptions, SolverStats, SplitOdeProblem};
+use crate::{ConfigurationError, Solution, SolveError, SolveOptions, SolverStats, SplitOdeProblem};
 
 const MAX_NEWTON_ITERATIONS: usize = 12;
 const NEWTON_TOLERANCE: f64 = 1.0e-12;
@@ -29,9 +29,21 @@ pub struct Sbdf {
 impl Sbdf {
     /// Creates an SBDF method of the requested order (one through four).
     ///
-    /// An unsupported order is reported as [`SolveError::InvalidMultistepOrder`]
-    /// when the method is used.
-    pub const fn new(order: usize) -> Self {
+    /// # Errors
+    ///
+    /// Returns [`ConfigurationError::InvalidParameter`] when `order` is not
+    /// in `1..=4`.
+    pub const fn new(order: usize) -> Result<Self, ConfigurationError> {
+        if order < 1 || order > 4 {
+            return Err(ConfigurationError::InvalidParameter {
+                parameter: "SBDF order",
+                reason: "must be between one and four",
+            });
+        }
+        Ok(Self::from_valid_order(order))
+    }
+
+    const fn from_valid_order(order: usize) -> Self {
         Self { order, ark: false }
     }
 
@@ -84,7 +96,7 @@ fixed_algorithm!(
     ImexEuler,
     IMEXEuler,
     "First-order implicit-explicit Euler (`SBDF(1)`).",
-    SplitMethod::Sbdf(Sbdf::new(1))
+    SplitMethod::Sbdf(Sbdf::from_valid_order(1))
 );
 fixed_algorithm!(
     ImexEulerArk,
@@ -96,19 +108,19 @@ fixed_algorithm!(
     Sbdf2,
     SBDF2,
     "The second-order semi-implicit BDF method.",
-    SplitMethod::Sbdf(Sbdf::new(2))
+    SplitMethod::Sbdf(Sbdf::from_valid_order(2))
 );
 fixed_algorithm!(
     Sbdf3,
     SBDF3,
     "The third-order semi-implicit BDF method.",
-    SplitMethod::Sbdf(Sbdf::new(3))
+    SplitMethod::Sbdf(Sbdf::from_valid_order(3))
 );
 fixed_algorithm!(
     Sbdf4,
     SBDF4,
     "The fourth-order semi-implicit BDF method.",
-    SplitMethod::Sbdf(Sbdf::new(4))
+    SplitMethod::Sbdf(Sbdf::from_valid_order(4))
 );
 fixed_algorithm!(
     Cnab2,
@@ -222,12 +234,6 @@ where
     FI: crate::OdeFunction<P>,
 {
     validate(problem, options)?;
-    let SplitMethod::Sbdf(sbdf) = method else {
-        return integrate_validated(problem, options, method);
-    };
-    if !(1..=4).contains(&sbdf.order) {
-        return Err(SolveError::InvalidMultistepOrder);
-    }
     integrate_validated(problem, options, method)
 }
 
@@ -533,7 +539,7 @@ where
                     stats,
                 )?;
             }
-            sbdf_forcing(order, state, step, workspace)?;
+            sbdf_forcing(order, state, step, workspace);
         }
         SplitMethod::Cnab2 => {
             if workspace.history_len > 0 {
@@ -570,12 +576,7 @@ where
 }
 
 #[allow(clippy::needless_range_loop)]
-fn sbdf_forcing(
-    order: usize,
-    state: &[f64],
-    step: f64,
-    workspace: &mut Workspace,
-) -> Result<(), SolveError> {
+fn sbdf_forcing(order: usize, state: &[f64], step: f64, workspace: &mut Workspace) {
     match order {
         1 => {
             for index in 0..state.len() {
@@ -619,9 +620,8 @@ fn sbdf_forcing(
                                 - workspace.explicit_history[2][index]));
             }
         }
-        _ => return Err(SolveError::InvalidMultistepOrder),
+        _ => unreachable!("SBDF orders are validated during construction"),
     }
-    Ok(())
 }
 
 fn implicit_scale(method: SplitMethod, workspace: &Workspace) -> f64 {

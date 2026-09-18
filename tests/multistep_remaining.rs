@@ -52,12 +52,12 @@ fn autonomous_split(time_span: (f64, f64)) -> TestSplitProblem {
 #[test]
 fn configured_and_named_sbdf_aliases_are_identical() {
     let problem = linear_split((0.0, 1.0));
-    let configured = solve_split(&problem, SBDF::new(2), &fixed(0.01)).unwrap();
+    let configured = solve_split(&problem, SBDF::new(2).unwrap(), &fixed(0.01)).unwrap();
     let named = solve_split(&problem, SBDF2, &fixed(0.01)).unwrap();
     assert_eq!(configured, named);
 
     let euler = solve_split(&problem, IMEXEuler, &fixed(0.01)).unwrap();
-    let order_one = solve_split(&problem, SBDF::new(1), &fixed(0.01)).unwrap();
+    let order_one = solve_split(&problem, SBDF::new(1).unwrap(), &fixed(0.01)).unwrap();
     assert_eq!(euler, order_one);
 }
 
@@ -193,7 +193,7 @@ fn second_and_higher_order_imex_methods_converge() {
     // Orders three and four retain the pinned zero-cache startup behavior;
     // refinement still reduces their error, though startup dominates the
     // formal high-order stencil on this short interval.
-    for algorithm in [SBDF::new(3), SBDF::new(4)] {
+    for algorithm in [SBDF::new(3).unwrap(), SBDF::new(4).unwrap()] {
         let error = |step| {
             (solve_split(&autonomous_split((0.0, 1.0)), algorithm, &fixed(step))
                 .unwrap()
@@ -208,10 +208,15 @@ fn second_and_higher_order_imex_methods_converge() {
 #[test]
 fn split_failures_and_analytic_jacobian_stats_are_reported() {
     let problem = autonomous_split((0.0, 1.0));
-    assert_eq!(
-        solve_split(&problem, SBDF::new(5), &fixed(0.1)).unwrap_err(),
-        SolveError::InvalidMultistepOrder
-    );
+    for order in [0, 5, usize::MAX] {
+        assert!(matches!(
+            SBDF::new(order),
+            Err(ConfigurationError::InvalidParameter {
+                parameter: "SBDF order",
+                ..
+            })
+        ));
+    }
     assert_eq!(
         solve_split(&problem, SBDF2, &SolveOptions::default()).unwrap_err(),
         SolveError::AdaptiveStepUnsupported

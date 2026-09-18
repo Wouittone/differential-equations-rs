@@ -448,7 +448,7 @@ and does not prove zero-stability or the stability region. The editor schema is
 
 Fixed-step Adams methods and MRAB share individual resources under
 `src/tableau/resources/multistep`: `Ab3.tableau()` and
-`MRAB::new(3, 8).tableau()` refer to the same parsed formula. ABM methods expose
+`MRAB::new(3, 8).unwrap().tableau()` refer to the same parsed formula. ABM methods expose
 the corrector through `tableau()` and the shared explicit predictor through
 `predictor_tableau()`. MRAB loads lower-order startup formulas only as needed;
 fixed-step Adams startup reuses the ordinary Ralston or RK4 tableau. The

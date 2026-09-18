@@ -219,7 +219,7 @@ fn every_split_driver_routes_lifecycle_hooks() {
         solve_split(&split_lifecycle_problem(), SplitEuler, &fixed_options()).unwrap();
     let multirate = solve_split(
         &split_lifecycle_problem(),
-        MRIGARKERK22a::new(4),
+        MRIGARKERK22a::new(4).unwrap(),
         &fixed_options(),
     )
     .unwrap();

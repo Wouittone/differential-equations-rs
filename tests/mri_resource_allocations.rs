@@ -14,24 +14,24 @@ static GLOBAL: &StatsAlloc<System> = &INSTRUMENTED_SYSTEM;
 #[test]
 fn mri_tableaus_are_independently_lazy_and_cached() {
     let construction = Region::new(GLOBAL);
-    black_box(MRIGARKERK22a::new(4));
-    black_box(MRIGARKERK45a::new(4));
+    black_box(MRIGARKERK22a::new(4).unwrap());
+    black_box(MRIGARKERK45a::new(4).unwrap());
     assert_eq!(construction.change().allocations, 0);
 
     let mis_first = Region::new(GLOBAL);
-    black_box(MIS::new(4).tableau().unwrap());
+    black_box(MIS::new(4).unwrap().tableau().unwrap());
     assert!(mis_first.change().allocations > 0);
     let mis_cached = Region::new(GLOBAL);
-    black_box(MIS::new(4).tableau().unwrap());
+    black_box(MIS::new(4).unwrap().tableau().unwrap());
     assert_eq!(mis_cached.change().allocations, 0);
 
     let loaders: [fn() -> &'static MriTableau; 6] = [
-        || black_box(MRIGARKERK22a::new(4).tableau().unwrap()),
-        || black_box(MRIGARKERK22b::new(4).tableau().unwrap()),
-        || black_box(MRIGARKERK33a::new(4).tableau().unwrap()),
-        || black_box(MRIGARKERK45a::new(4).tableau().unwrap()),
-        || black_box(MRIGARKESDIRK34a::new(4).tableau().unwrap()),
-        || black_box(MRIGARKIRK21a::new(4).tableau().unwrap()),
+        || black_box(MRIGARKERK22a::new(4).unwrap().tableau().unwrap()),
+        || black_box(MRIGARKERK22b::new(4).unwrap().tableau().unwrap()),
+        || black_box(MRIGARKERK33a::new(4).unwrap().tableau().unwrap()),
+        || black_box(MRIGARKERK45a::new(4).unwrap().tableau().unwrap()),
+        || black_box(MRIGARKESDIRK34a::new(4).unwrap().tableau().unwrap()),
+        || black_box(MRIGARKIRK21a::new(4).unwrap().tableau().unwrap()),
     ];
     for load in loaders {
         let first = Region::new(GLOBAL);

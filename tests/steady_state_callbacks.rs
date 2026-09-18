@@ -194,7 +194,7 @@ fn split_checks_use_total_derivative_and_count_both_components() {
                 problem.parameters().set(0);
                 let s = solve_split(
                     &problem,
-                    MRIGARKERK22a::new(4),
+                    MRIGARKERK22a::new(4).unwrap(),
                     &options().with_adaptive(false),
                 )
                 .unwrap();

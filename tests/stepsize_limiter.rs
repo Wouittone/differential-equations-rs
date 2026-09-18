@@ -134,7 +134,7 @@ fn assert_second_order_limiter<A: SecondOrderOdeAlgorithm + Copy>(algorithm: A, 
 #[test]
 fn limiter_routes_through_split_and_second_order_driver_families() {
     assert_split_limiter(SplitEuler);
-    assert_split_limiter(MRIGARKERK22a::new(4));
+    assert_split_limiter(MRIGARKERK22a::new(4).unwrap());
     assert_split_limiter(IMEXEuler);
     assert_split_limiter(IRKC::default());
 

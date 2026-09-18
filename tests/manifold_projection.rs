@@ -142,7 +142,12 @@ fn split_problem() -> SplitOdeProblem<SplitRhs, SplitRhs, ()> {
 fn projection_routes_through_every_split_driver_family() {
     let solutions = [
         solve_split(&split_problem(), SplitEuler, &fixed(0.1)).unwrap(),
-        solve_split(&split_problem(), MRIGARKERK22a::new(4), &fixed(0.1)).unwrap(),
+        solve_split(
+            &split_problem(),
+            MRIGARKERK22a::new(4).unwrap(),
+            &fixed(0.1),
+        )
+        .unwrap(),
         solve_split(&split_problem(), IMEXEuler, &fixed(0.1)).unwrap(),
         solve_split(&split_problem(), IRKC::default(), &fixed(0.1)).unwrap(),
     ];

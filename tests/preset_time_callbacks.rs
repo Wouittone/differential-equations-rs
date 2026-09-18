@@ -201,8 +201,12 @@ fn ndarray_preset_callbacks_preserve_matrix_indexing() {
 #[test]
 fn every_split_driver_uses_problem_owned_preset_stops() {
     let split_euler = solve_split(&split_preset_problem(), SplitEuler, &fixed(0.4)).unwrap();
-    let multirate =
-        solve_split(&split_preset_problem(), MRIGARKERK22a::new(4), &fixed(0.4)).unwrap();
+    let multirate = solve_split(
+        &split_preset_problem(),
+        MRIGARKERK22a::new(4).unwrap(),
+        &fixed(0.4),
+    )
+    .unwrap();
     let multistep = solve_split(&split_preset_problem(), IMEXEuler, &fixed(0.4)).unwrap();
     let irkc = solve_split(&split_preset_problem(), IRKC::default(), &fixed(0.4)).unwrap();
 

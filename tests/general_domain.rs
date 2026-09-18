@@ -219,7 +219,7 @@ fn prediction_and_projection_route_through_all_split_drivers() {
     };
     let solutions = [
         solve_split(&problem(), SplitEuler, &fixed()).unwrap(),
-        solve_split(&problem(), MRIGARKERK22a::new(4), &fixed()).unwrap(),
+        solve_split(&problem(), MRIGARKERK22a::new(4).unwrap(), &fixed()).unwrap(),
         solve_split(&problem(), IMEXEuler, &fixed()).unwrap(),
         solve_split(&problem(), IRKC::default(), &fixed()).unwrap(),
     ];

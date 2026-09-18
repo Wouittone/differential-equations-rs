@@ -225,7 +225,7 @@ fn assert_second_order_guard<A: SecondOrderOdeAlgorithm + Copy>(algorithm: A, ad
 #[test]
 fn guards_route_through_every_split_and_second_order_driver_family() {
     assert_split_guard(SplitEuler);
-    assert_split_guard(MRIGARKERK22a::new(4));
+    assert_split_guard(MRIGARKERK22a::new(4).unwrap());
     assert_split_guard(IMEXEuler);
     assert_split_guard(IRKC::default());
 

@@ -31,8 +31,6 @@ fn named_adams_trajectories_match_before_resource_migration() {
 #[test]
 fn fixed_and_multirate_methods_share_the_same_formula_storage() {
     use differential_equations::solvers::multirate::MRAB;
-    use differential_equations::tableau::TableauAccessError;
-    use std::error::Error as _;
     for (order, predictor, corrected_predictor, corrector) in [
         (
             3,
@@ -56,7 +54,7 @@ fn fixed_and_multirate_methods_share_the_same_formula_storage() {
         assert!(std::ptr::eq(predictor, corrected_predictor));
         assert!(std::ptr::eq(
             predictor,
-            MRAB::new(order, 8).tableau().unwrap()
+            MRAB::new(order, 8).unwrap().tableau().unwrap()
         ));
         assert_eq!(corrector.order(), order);
         assert_eq!(corrector.beta().len(), order);
@@ -66,16 +64,15 @@ fn fixed_and_multirate_methods_share_the_same_formula_storage() {
         assert!(!corrector.is_explicit());
     }
     for order in [0, 6, usize::MAX] {
-        let error = MRAB::new(order, 8).tableau().unwrap_err();
-        assert_eq!(
-            error,
-            TableauAccessError::UnsupportedOrder {
-                requested: order,
-                minimum: 1,
-                maximum: 5,
-            }
-        );
-        assert!(error.source().is_none());
+        assert!(matches!(
+            MRAB::new(order, 8),
+            Err(
+                differential_equations::ConfigurationError::InvalidParameter {
+                    parameter: "MRAB order",
+                    ..
+                }
+            )
+        ));
     }
 }
 
@@ -163,7 +160,7 @@ fn every_multirate_adams_order_preserves_scalar_vector_and_matrix_states() {
                     span,
                     (),
                 );
-                let result = solve_split(&problem, MRAB::new(order, 8), &options).unwrap();
+                let result = solve_split(&problem, MRAB::new(order, 8).unwrap(), &options).unwrap();
                 assert_eq!(result.last_state_array().shape(), initial.shape());
                 for (value, initial) in result.last_state().iter().zip(initial.iter()) {
                     assert!((value - initial * (span.0 - span.1).exp()).abs() < 1e-3);
@@ -190,7 +187,7 @@ fn downstream_macros_support_original_and_renamed_dependencies() {
     use differential_equations::tableau::load_tableau;
     assert_eq!(
         load_tableau(&downstream::FORMULA).unwrap(),
-        MRAB::new(2, 8).tableau().unwrap()
+        MRAB::new(2, 8).unwrap().tableau().unwrap()
     );
     assert_eq!(
         load_tableau(&renamed::FORMULA).unwrap(),
