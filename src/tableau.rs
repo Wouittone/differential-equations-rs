@@ -12,19 +12,19 @@ use thiserror::Error;
 
 #[doc(inline)]
 pub use differential_equations_tableau_core::{
-    AlternatingTwoNTableau, EserkTableau, FittedWeight, IrknBootstrapSeed, IrknTableau,
-    LazyDenseStage as ParsedLazyDenseStage, LinearMultistepTableau, LowStorageAbcTableau,
-    LowStorageAdaptiveController, LowStorageEmbeddedTableau, LowStorageEndpointEvaluation,
-    LowStorageNodePolicy, LowStoragePidController, LowStorageRungeKuttaLayout,
-    LowStorageRungeKuttaTableau, MisTableau, MriTableau, RegisterPipelineTableau, Rock2Tableau,
-    Rock4Tableau, RockRecurrence, RockRecurrenceStage, RosenbrockKind, RosenbrockPairTableau,
-    RosenbrockTableau, RungeKuttaKind, RungeKuttaNystromKind, RungeKuttaNystromTableau,
-    RungeKuttaTableau, Serk2Tableau, SymplecticTableau, TableauError, ThreeSTableau,
-    VariableMultistepTableau, parse_eserk_tableau, parse_irkn_tableau, parse_low_storage_tableau,
-    parse_mis_tableau, parse_mri_tableau, parse_multistep_tableau, parse_rkn_tableau,
-    parse_rock2_tableau, parse_rock4_tableau, parse_rosenbrock_pair_tableau,
-    parse_rosenbrock_tableau, parse_serk2_tableau, parse_symplectic_tableau, parse_tableau,
-    parse_variable_multistep_tableau,
+    AlternatingTwoNTableau, ErrorEstimatorKind, EserkTableau, FittedWeight, IrknBootstrapSeed,
+    IrknTableau, LazyDenseStage as ParsedLazyDenseStage, LinearMultistepTableau,
+    LowStorageAbcTableau, LowStorageAdaptiveController, LowStorageEmbeddedTableau,
+    LowStorageEndpointEvaluation, LowStorageNodePolicy, LowStoragePidController,
+    LowStorageRungeKuttaLayout, LowStorageRungeKuttaTableau, MisTableau, MriTableau,
+    RegisterPipelineTableau, Rock2Tableau, Rock4Tableau, RockRecurrence, RockRecurrenceStage,
+    RosenbrockKind, RosenbrockPairTableau, RosenbrockTableau, RungeKuttaKind,
+    RungeKuttaNystromKind, RungeKuttaNystromTableau, RungeKuttaTableau, Serk2Tableau,
+    SymplecticTableau, TableauError, ThreeSTableau, VariableMultistepTableau, parse_eserk_tableau,
+    parse_irkn_tableau, parse_low_storage_tableau, parse_mis_tableau, parse_mri_tableau,
+    parse_multistep_tableau, parse_rkn_tableau, parse_rock2_tableau, parse_rock4_tableau,
+    parse_rosenbrock_pair_tableau, parse_rosenbrock_tableau, parse_serk2_tableau,
+    parse_symplectic_tableau, parse_tableau, parse_variable_multistep_tableau,
 };
 
 /// A failure to select or materialize a requested tableau.

@@ -355,11 +355,21 @@ require the final primary weight to be zero.
 Alternatively, provide the embedded formula's weights as `b_hat`, together
 with `embedded_order`. The parser validates their length, finite values, and
 sum of one, then materializes `error = b - b_hat`. Do not provide both `error`
-and `b_hat`. Derived errors and coefficient sums are checked for overflow;
-`second_error` can accompany either representation.
-`embedded_order` describes the companion formula: it must be lower than the
-primary order for explicit resources, while implicit resources can use a
-higher-order companion (TR-BDF2 uses orders two and three).
+and `b_hat`. Direct error vectors default to `error_estimator:
+"embedded-difference"`; every such vector must sum to zero. Methods such as
+Alshina2, Alshina3, and SIR54 instead publish residual combinations rather
+than companion weights and declare `error_estimator: "direct-residual"`.
+That distinction is available through `tableau.error_estimator_kind()` and
+prevents a residual formula from being mistaken for an embedded tableau.
+Derived errors and coefficient sums are checked for overflow. A primary
+zero vector is allowed only when a non-zero `second_error` supplies the actual
+estimate; an entirely zero estimator is rejected.
+`embedded_order` describes the formal order associated with the selected
+error estimator. For embedded differences this is the companion formula's
+order; for direct residuals it is the published residual-estimator order. It
+must be lower than the primary order for explicit resources, while implicit
+resources can use a higher-order companion (TR-BDF2 uses orders two and
+three).
 Explicit resources can provide `real_stability_radius`, the positive finite
 extent of the primary method's stability interval along the negative real
 axis. `tableau.real_stability_radius()` returns this resource metadata as
@@ -400,7 +410,7 @@ it does not generate or maintain a
 second set of coefficients.
 
 The resource preserves the direct error weights from
-[SciML's TR-BDF2 definition](https://github.com/SciML/OrdinaryDiffEq.jl/blob/master/lib/OrdinaryDiffEqSDIRK/src/sdirk_tableaus.jl):
+[SciML's TR-BDF2 definition](https://github.com/SciML/OrdinaryDiffEq.jl/blob/211142263781255a9aa2f910f6760b9f18ec29c8/lib/OrdinaryDiffEqSDIRK/src/sdirk_tableaus.jl):
 these use **`b_hat - b`**, unlike the `b - b_hat` convention derived when a
 resource supplies `b_hat` directly. Either sign gives the same error norm.
 The companion is third order, while the accepted solution remains second

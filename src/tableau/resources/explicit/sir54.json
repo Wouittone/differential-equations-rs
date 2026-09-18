@@ -5,6 +5,7 @@
   "kind"           : "explicit-runge-kutta",
   "order"          : 5,
   "embedded_order" : 4,
+  "error_estimator" : "direct-residual",
   "fsal"           : true,
   "A"              : [
     ["0", "0", "0", "0", "0", "0", "0", "0"],

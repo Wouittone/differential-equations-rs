@@ -18,7 +18,15 @@
       "enum": ["explicit-runge-kutta", "implicit-runge-kutta"]
     },
     "order": { "type": "integer", "minimum": 1 },
-    "embedded_order": { "type": "integer", "minimum": 1 },
+    "embedded_order": {
+      "description": "Formal order associated with the embedded-difference or direct-residual error estimate.",
+      "type": "integer",
+      "minimum": 1
+    },
+    "error_estimator": {
+      "description": "Interpretation of direct error weights; omitted resources use an embedded difference.",
+      "enum": ["embedded-difference", "direct-residual"]
+    },
     "real_stability_radius": {
       "description": "Positive finite extent of an explicit method's primary stability region along the negative real axis.",
       "oneOf": [
@@ -38,8 +46,14 @@
       "description": "Embedded weights; the parser derives error = b - b_hat. Mutually exclusive with error."
     },
     "c": { "$ref": "#/$defs/vector" },
-    "error": { "$ref": "#/$defs/vector" },
-    "second_error": { "$ref": "#/$defs/vector" },
+    "error": {
+      "$ref": "#/$defs/vector",
+      "description": "Direct stage weights for the selected error-estimator semantics."
+    },
+    "second_error": {
+      "$ref": "#/$defs/vector",
+      "description": "Optional second stage-weight estimate using the same semantics."
+    },
     "stage_predictors": {
       "type": "array",
       "description": "Implicit-stage initial guesses. Each row weights prior stage derivatives; an empty row uses the driver's default predictor.",

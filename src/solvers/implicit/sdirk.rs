@@ -574,7 +574,7 @@ where
 {
     fn capabilities(&self) -> KernelCapabilities {
         KernelCapabilities::with_controller(
-            true,
+            self.tableau.error().is_some(),
             ControllerConfig::proportional(self.tableau.order(), 0.9, 0.2, 10.0, 0.2),
         )
         .recover_nonlinear_and_singular_failures()
@@ -670,14 +670,13 @@ where
                     .zip(&self.workspace.stages)
                     .map(|(weight, stage)| weight * stage[index])
                     .sum::<f64>();
-            self.workspace.error[index] = self
-                .tableau
-                .error()
-                .expect("compile-time validation requires an error estimator")
-                .iter()
-                .zip(&self.workspace.stages)
-                .map(|(weight, stage)| weight * stage[index])
-                .sum();
+            self.workspace.error[index] = self.tableau.error().map_or(0.0, |weights| {
+                weights
+                    .iter()
+                    .zip(&self.workspace.stages)
+                    .map(|(weight, stage)| weight * stage[index])
+                    .sum()
+            });
         }
         if !options.adaptive {
             return Ok(StepEstimate::new(0.0));
@@ -1037,7 +1036,7 @@ fn extended_resource(kind: ExtendedKind) -> &'static LazyTableau {
 mod tests {
     use super::{ExtendedKind, Sdirk2, Sfsdirk4, extended_resource};
     use crate::tableau::load_tableau;
-    use crate::{OdeProblem, SaveMode, SolveOptions, solve};
+    use crate::{OdeProblem, SaveMode, SolveError, SolveOptions, solve};
 
     #[test]
     fn adaptive_decay_is_stable() {
@@ -1120,10 +1119,33 @@ mod tests {
         ];
         for kind in kinds {
             let tableau = load_tableau(extended_resource(kind)).unwrap();
+            let has_embedded_estimator = !matches!(
+                kind,
+                ExtendedKind::Ars222
+                    | ExtendedKind::Ars232
+                    | ExtendedKind::Ars343
+                    | ExtendedKind::Ars443
+                    | ExtendedKind::Bhr553
+                    | ExtendedKind::Cfnlirk3
+                    | ExtendedKind::ImexSsp222
+                    | ExtendedKind::ImexSsp2322
+                    | ExtendedKind::ImexSsp3332
+                    | ExtendedKind::ImexSsp3433
+                    | ExtendedKind::Sdirk22
+                    | ExtendedKind::Sfsdirk4
+                    | ExtendedKind::Sfsdirk5
+                    | ExtendedKind::Sfsdirk6
+                    | ExtendedKind::Sfsdirk7
+                    | ExtendedKind::Sfsdirk8
+                    | ExtendedKind::SspSdirk2
+            );
             assert!((2..=9).contains(&tableau.a().len()));
             assert_eq!(tableau.a().len(), tableau.c().len());
             assert_eq!(tableau.a().len(), tableau.b().len());
-            assert_eq!(tableau.a().len(), tableau.error().unwrap().len());
+            assert_eq!(tableau.error().is_some(), has_embedded_estimator);
+            if let Some(error) = tableau.error() {
+                assert_eq!(tableau.a().len(), error.len());
+            }
             assert!(
                 tableau
                     .a()
@@ -1131,10 +1153,24 @@ mod tests {
                     .flat_map(|row| row.iter())
                     .chain(tableau.c().iter())
                     .chain(tableau.b().iter())
-                    .chain(tableau.error().unwrap().iter())
+                    .chain(tableau.error().into_iter().flatten())
                     .all(|value| value.is_finite())
             );
         }
+    }
+
+    #[test]
+    fn methods_without_embedded_estimators_reject_adaptive_stepping() {
+        let problem = OdeProblem::new(
+            |du: &mut [f64], u: &[f64], _: &(), _: f64| du[0] = -u[0],
+            vec![1.0],
+            (0.0, 0.1),
+            (),
+        );
+        assert_eq!(
+            solve(&problem, Sfsdirk4, &SolveOptions::default()).unwrap_err(),
+            SolveError::AdaptiveStepUnsupported
+        );
     }
 
     #[test]

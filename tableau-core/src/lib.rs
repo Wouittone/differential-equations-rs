@@ -42,6 +42,17 @@ pub enum RungeKuttaKind {
     Implicit,
 }
 
+/// Semantics of the stage weights used to estimate local error.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq)]
+#[serde(rename_all = "kebab-case")]
+pub enum ErrorEstimatorKind {
+    /// Difference between the primary update and an embedded companion.
+    #[default]
+    EmbeddedDifference,
+    /// A method-specific residual estimate that is not an embedded update.
+    DirectResidual,
+}
+
 /// One sparse stage evaluated only when a continuous extension is requested.
 #[derive(Clone, Debug, PartialEq)]
 pub struct LazyDenseStage {
@@ -100,6 +111,7 @@ pub struct RungeKuttaTableau {
     a: Vec<Vec<f64>>,
     b: Vec<f64>,
     c: Vec<f64>,
+    error_estimator: ErrorEstimatorKind,
     error: Option<Vec<f64>>,
     second_error: Option<Vec<f64>>,
     dense: Option<Vec<Vec<f64>>>,
@@ -129,8 +141,11 @@ impl RungeKuttaTableau {
         self.order
     }
 
-    /// Returns the order of an embedded companion, when present.
-    /// Implicit methods may use a higher-order companion for error estimation.
+    /// Returns the formal order associated with the local error estimate.
+    ///
+    /// This is the companion order for an embedded difference, or the
+    /// published estimator order for a direct residual. Implicit methods may
+    /// use a higher-order companion for error estimation.
     pub fn embedded_order(&self) -> Option<usize> {
         self.embedded_order
     }
@@ -164,6 +179,11 @@ impl RungeKuttaTableau {
     /// Returns the stage nodes `c`.
     pub fn c(&self) -> &[f64] {
         &self.c
+    }
+
+    /// Returns how the error-weight vectors must be interpreted.
+    pub fn error_estimator_kind(&self) -> ErrorEstimatorKind {
+        self.error_estimator
     }
 
     /// Returns direct stage-combination error weights.
@@ -278,6 +298,8 @@ struct RawTableau {
     b: Vec<Scalar>,
     c: Vec<Scalar>,
     b_hat: Option<Vec<Scalar>>,
+    #[serde(default)]
+    error_estimator: ErrorEstimatorKind,
     error: Option<Vec<Scalar>>,
     second_error: Option<Vec<Scalar>>,
     dense: Option<Vec<Vec<Scalar>>>,
@@ -420,6 +442,11 @@ impl RawTableau {
             )));
         }
 
+        if self.b_hat.is_some() && self.error_estimator != ErrorEstimatorKind::EmbeddedDifference {
+            return Err(TableauError::new(
+                "b_hat requires the embedded-difference error estimator",
+            ));
+        }
         let error = match (self.error.as_deref(), self.b_hat.as_deref()) {
             (Some(_), Some(_)) => {
                 return Err(TableauError::new("provide error or b_hat, not both"));
@@ -450,10 +477,50 @@ impl RawTableau {
                 )
             }
         };
+        if error.is_none() && self.error_estimator != ErrorEstimatorKind::EmbeddedDifference {
+            return Err(TableauError::new(
+                "error_estimator requires error weights or b_hat",
+            ));
+        }
         let second_error =
             materialize_optional_vector(self.second_error.as_deref(), "second_error", stages)?;
         if second_error.is_some() && error.is_none() {
             return Err(TableauError::new("second_error requires error or b_hat"));
+        }
+        if self.error_estimator == ErrorEstimatorKind::EmbeddedDifference {
+            for (label, weights) in [
+                ("error", error.as_deref()),
+                ("second_error", second_error.as_deref()),
+            ] {
+                let Some(weights) = weights else {
+                    continue;
+                };
+                let sum = weights.iter().sum::<f64>();
+                if !approximately_equal(sum, 0.0) {
+                    return Err(TableauError::new(format!(
+                        "{label} weights must sum to zero; found {sum}"
+                    )));
+                }
+            }
+        }
+        if error.is_some()
+            && error
+                .iter()
+                .chain(&second_error)
+                .flat_map(|weights| weights.iter())
+                .all(|weight| *weight == 0.0)
+        {
+            return Err(TableauError::new(
+                "an error estimator must contain at least one non-zero weight",
+            ));
+        }
+        if second_error
+            .as_ref()
+            .is_some_and(|weights| weights.iter().all(|weight| *weight == 0.0))
+        {
+            return Err(TableauError::new(
+                "second_error must contain at least one non-zero weight",
+            ));
         }
         if self.embedded_order.is_some() != error.is_some() {
             return Err(TableauError::new(
@@ -577,6 +644,7 @@ impl RawTableau {
             a,
             b,
             c,
+            error_estimator: self.error_estimator,
             error,
             second_error,
             dense,
@@ -675,7 +743,7 @@ pub fn parse_numeric_expression(source: &str) -> Result<f64, TableauError> {
 
 #[cfg(test)]
 mod tests {
-    use super::{RungeKuttaKind, parse_numeric_expression, parse_tableau};
+    use super::{ErrorEstimatorKind, RungeKuttaKind, parse_numeric_expression, parse_tableau};
 
     const RESOURCE: &str = r#"{
       "name": "Heun",
@@ -733,10 +801,52 @@ mod tests {
         let tableau = parse_tableau(&embedded, "Heun").unwrap();
         assert_eq!(tableau, parse_tableau(&direct, "Heun").unwrap());
         assert_eq!(tableau.error(), Some([-0.5, 0.5].as_slice()));
-        let second = embedded.replace("\"c\": [0, 1]", "\"c\": [0, 1], \"second_error\": [0, 0]");
+        let second = embedded.replace(
+            "\"c\": [0, 1]",
+            "\"c\": [0, 1], \"second_error\": [\"-1/4\", \"1/4\"]",
+        );
         assert_eq!(
             parse_tableau(&second, "Heun").unwrap().second_error(),
-            Some([0.0, 0.0].as_slice())
+            Some([-0.25, 0.25].as_slice())
+        );
+    }
+
+    #[test]
+    fn direct_residual_estimators_are_explicitly_typed() {
+        let residual = RESOURCE.replace(
+            "\"order\": 2,",
+            "\"order\": 2, \"embedded_order\": 1, \"error_estimator\": \"direct-residual\", \"error\": [1, 0],",
+        );
+        let tableau = parse_tableau(&residual, "Heun").unwrap();
+        assert_eq!(
+            tableau.error_estimator_kind(),
+            ErrorEstimatorKind::DirectResidual
+        );
+        assert_eq!(tableau.error(), Some([1.0, 0.0].as_slice()));
+
+        assert!(
+            parse_tableau(
+                &residual.replace(", \"error_estimator\": \"direct-residual\"", ""),
+                "Heun"
+            )
+            .is_err()
+        );
+        assert!(
+            parse_tableau(
+                &residual.replace("\"error\": [1, 0]", "\"b_hat\": [1, 0]"),
+                "Heun",
+            )
+            .is_err()
+        );
+        assert!(
+            parse_tableau(
+                &RESOURCE.replace(
+                    "\"order\": 2,",
+                    "\"order\": 2, \"error_estimator\": \"direct-residual\",",
+                ),
+                "Heun",
+            )
+            .is_err()
         );
     }
 
@@ -749,6 +859,8 @@ mod tests {
         for invalid in [
             RESOURCE.replace("\"c\": [0, 1]", "\"c\": [0, 1], \"second_error\": [0, 0]"),
             embedded.replace("\"c\": [0, 1]", "\"c\": [0, 1], \"second_error\": [0]"),
+            embedded.replace("\"-1/2\", \"1/2\"", "0, 0"),
+            embedded.replace("\"-1/2\", \"1/2\"", "1, 1"),
             RESOURCE.replace("\"c\": [0, 1]", "\"c\": [0, 1], \"dense\": [[\"1/2\"], []]"),
             RESOURCE.replace(
                 "\"c\": [0, 1]",

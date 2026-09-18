@@ -5,6 +5,7 @@
   "kind"           : "explicit-runge-kutta",
   "order"          : 2,
   "embedded_order" : 1,
+  "error_estimator" : "direct-residual",
   "A"              : [
     ["0", "0"],
     ["2/3", "0"]
