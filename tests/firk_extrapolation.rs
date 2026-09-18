@@ -69,6 +69,37 @@ fn implicit_families_report_nonlinear_and_linear_work() {
 }
 
 #[test]
+fn firk_constructors_preserve_supported_values_and_reject_invalid_configuration() {
+    let radau = AdaptiveRadau::new(3, 13).unwrap();
+    assert_eq!(radau.min_order(), 3);
+    assert_eq!(radau.max_order(), 13);
+    let fixed_radau = AdaptiveRadau::new(7, 7).unwrap();
+    assert_eq!(fixed_radau.min_order(), 7);
+    assert_eq!(fixed_radau.max_order(), 7);
+    for (minimum, maximum) in [(1, 13), (4, 13), (9, 7), (3, 12), (3, 15)] {
+        assert_eq!(
+            AdaptiveRadau::new(minimum, maximum),
+            Err(ConfigurationError::InvalidBounds {
+                context: "adaptive Radau order window",
+                reason: "bounds must be odd and satisfy 3 <= min_order <= max_order <= 13",
+            })
+        );
+    }
+
+    assert_eq!(GaussLegendre::new(2).unwrap().num_stages(), 2);
+    assert_eq!(GaussLegendre::new(8).unwrap().num_stages(), 8);
+    for stages in [0, 1, 9, usize::MAX] {
+        assert_eq!(
+            GaussLegendre::new(stages),
+            Err(ConfigurationError::InvalidParameter {
+                parameter: "Gauss-Legendre stage count",
+                reason: "must be between 2 and 8 inclusive",
+            })
+        );
+    }
+}
+
+#[test]
 fn backward_integration_and_callbacks_use_family_dense_segments() {
     let backward = OdeProblem::new(
         |du: &mut [f64], u: &[f64], _: &(), _: f64| du[0] = u[0],

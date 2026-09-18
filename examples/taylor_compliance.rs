@@ -28,10 +28,10 @@ fn main() {
     println!("ExplicitTaylor2,{:.17e}", endpoint(ExplicitTaylor2, 0.01));
     println!(
         "ExplicitTaylor,{:.17e}",
-        endpoint(ExplicitTaylor::new(8), 0.1)
+        endpoint(ExplicitTaylor::new(8).unwrap(), 0.1)
     );
     println!(
         "ExplicitTaylorAdaptiveOrder,{:.17e}",
-        endpoint(ExplicitTaylorAdaptiveOrder::new(6, 7), 0.1)
+        endpoint(ExplicitTaylorAdaptiveOrder::new(6, 7).unwrap(), 0.1)
     );
 }

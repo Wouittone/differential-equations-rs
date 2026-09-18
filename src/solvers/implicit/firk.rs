@@ -14,7 +14,9 @@ use crate::integrator::{
 };
 use crate::linear::{factorize, solve_factorized};
 use crate::solution::{CollocationSegment, DenseSegment, InterpolationError, TrajectoryRecorder};
-use crate::{OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions, SolverStats};
+use crate::{
+    ConfigurationError, OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions, SolverStats,
+};
 
 const MAX_NEWTON_ITERATIONS: usize = 12;
 const NEWTON_TOLERANCE: f64 = 2.0e-11;
@@ -33,9 +35,9 @@ pub struct RadauIIA9;
 
 /// Variable-order Radau IIA collocation.
 ///
-/// Odd orders are clamped to the upstream default range 5 through 13.  The
-/// kernel starts at the minimum order and raises or lowers the number of
-/// stages after accepted steps according to the embedded step-doubling error.
+/// Supported odd orders range from 3 through 13. The kernel starts at the
+/// minimum order and raises or lowers the number of stages after accepted
+/// steps according to the embedded step-doubling error.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct AdaptiveRadau {
     min_order: usize,
@@ -52,15 +54,26 @@ impl Default for AdaptiveRadau {
 }
 
 impl AdaptiveRadau {
-    /// Creates a variable-order Radau method. Even bounds are rounded up to
-    /// the next valid odd Radau order and the supported range is 3 through 13.
-    pub fn new(min_order: usize, max_order: usize) -> Self {
-        let min_order = normalize_radau_order(min_order);
-        let max_order = normalize_radau_order(max_order).max(min_order);
-        Self {
+    /// Creates a variable-order Radau method over an inclusive odd-order range.
+    ///
+    /// Returns [`ConfigurationError::InvalidBounds`] unless both bounds are
+    /// odd and satisfy `3 <= min_order <= max_order <= 13`.
+    pub const fn new(min_order: usize, max_order: usize) -> Result<Self, ConfigurationError> {
+        if min_order < 3
+            || max_order > 13
+            || min_order > max_order
+            || min_order % 2 == 0
+            || max_order % 2 == 0
+        {
+            return Err(ConfigurationError::InvalidBounds {
+                context: "adaptive Radau order window",
+                reason: "bounds must be odd and satisfy 3 <= min_order <= max_order <= 13",
+            });
+        }
+        Ok(Self {
             min_order,
             max_order,
-        }
+        })
     }
 
     /// Returns the minimum odd Radau order used by the adaptive controller.
@@ -93,11 +106,16 @@ impl Default for GaussLegendre {
 impl GaussLegendre {
     /// Creates a Gauss--Legendre collocation method with two to eight stages.
     ///
-    /// Values outside the supported range are clamped to its nearest bound.
-    pub fn new(num_stages: usize) -> Self {
-        Self {
-            num_stages: num_stages.clamp(2, 8),
+    /// Returns [`ConfigurationError::InvalidParameter`] when `num_stages` is
+    /// outside the supported range.
+    pub const fn new(num_stages: usize) -> Result<Self, ConfigurationError> {
+        if num_stages < 2 || num_stages > 8 {
+            return Err(ConfigurationError::InvalidParameter {
+                parameter: "Gauss-Legendre stage count",
+                reason: "must be between 2 and 8 inclusive",
+            });
         }
+        Ok(Self { num_stages })
     }
 
     /// Returns the configured collocation stage count.
@@ -184,11 +202,6 @@ impl OdeAlgorithm for GaussLegendre {
             ),
         )
     }
-}
-
-fn normalize_radau_order(order: usize) -> usize {
-    let order = order.clamp(3, 13);
-    if order % 2 == 0 { order + 1 } else { order }
 }
 
 #[derive(Clone)]

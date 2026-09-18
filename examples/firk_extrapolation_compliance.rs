@@ -29,8 +29,11 @@ fn main() {
         ("radau_iia3", endpoint(RadauIIA3)),
         ("radau_iia5", endpoint(RadauIIA5)),
         ("radau_iia9", endpoint(RadauIIA9)),
-        ("adaptive_radau", endpoint(AdaptiveRadau::new(5, 5))),
-        ("gauss_legendre", endpoint(GaussLegendre::new(2))),
+        (
+            "adaptive_radau",
+            endpoint(AdaptiveRadau::new(5, 5).unwrap()),
+        ),
+        ("gauss_legendre", endpoint(GaussLegendre::new(2).unwrap())),
         ("aitken_neville", endpoint(AitkenNeville::default())),
         (
             "midpoint_deuflhard",

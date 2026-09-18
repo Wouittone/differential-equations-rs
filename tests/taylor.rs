@@ -2,7 +2,8 @@ use differential_equations::solvers::taylor::{
     ExplicitTaylor, ExplicitTaylor2, ExplicitTaylorAdaptiveOrder,
 };
 use differential_equations::{
-    CallbackAction, OdeAlgorithm, OdeProblem, SaveMode, SolveError, SolveOptions, solve,
+    CallbackAction, ConfigurationError, OdeAlgorithm, OdeProblem, SaveMode, SolveError,
+    SolveOptions, solve,
 };
 
 type Rhs = fn(&mut [f64], &[f64], &(), f64);
@@ -37,8 +38,8 @@ fn fixed_taylor_polynomials_recover_configured_orders() {
     assert!(second_coarse / second_fine > 3.5);
 
     for order in [4, 6, 8] {
-        let coarse = (endpoint(ExplicitTaylor::new(order), 0.4, false) - exact).abs();
-        let fine = (endpoint(ExplicitTaylor::new(order), 0.2, false) - exact).abs();
+        let coarse = (endpoint(ExplicitTaylor::new(order).unwrap(), 0.4, false) - exact).abs();
+        let fine = (endpoint(ExplicitTaylor::new(order).unwrap(), 0.2, false) - exact).abs();
         assert!(
             coarse / fine > 2.0_f64.powi(order as i32) * 0.55,
             "order {order}: coarse={coarse:e}, fine={fine:e}"
@@ -48,13 +49,46 @@ fn fixed_taylor_polynomials_recover_configured_orders() {
 
 #[test]
 fn fixed_and_adaptive_order_variants_control_error() {
-    assert_eq!(ExplicitTaylor::new(8).order(), 8);
-    let adaptive_order = ExplicitTaylorAdaptiveOrder::new(4, 9);
+    assert_eq!(ExplicitTaylor::new(8).unwrap().order(), 8);
+    let adaptive_order = ExplicitTaylorAdaptiveOrder::new(4, 9).unwrap();
     assert_eq!(adaptive_order.min_order(), 4);
     assert_eq!(adaptive_order.max_order(), 9);
     let exact = 1.0_f64.exp();
-    assert!((endpoint(ExplicitTaylor::new(8), 0.2, true) - exact).abs() < 2.0e-7);
+    assert!((endpoint(ExplicitTaylor::new(8).unwrap(), 0.2, true) - exact).abs() < 2.0e-7);
     assert!((endpoint(adaptive_order, 0.2, true) - exact).abs() < 2.0e-7);
+}
+
+#[test]
+fn constructors_preserve_supported_orders_and_reject_invalid_configuration() {
+    assert_eq!(ExplicitTaylor::new(1).unwrap().order(), 1);
+    assert_eq!(ExplicitTaylor::new(12).unwrap().order(), 12);
+    assert_eq!(
+        ExplicitTaylor::new(0),
+        Err(ConfigurationError::InvalidParameter {
+            parameter: "Taylor order",
+            reason: "must be between 1 and 12 inclusive",
+        })
+    );
+    assert_eq!(
+        ExplicitTaylor::new(13),
+        Err(ConfigurationError::InvalidParameter {
+            parameter: "Taylor order",
+            reason: "must be between 1 and 12 inclusive",
+        })
+    );
+
+    let full_window = ExplicitTaylorAdaptiveOrder::new(1, 12).unwrap();
+    assert_eq!(full_window.min_order(), 1);
+    assert_eq!(full_window.max_order(), 12);
+    for (minimum, maximum) in [(0, 12), (4, 4), (8, 7), (1, 13)] {
+        assert_eq!(
+            ExplicitTaylorAdaptiveOrder::new(minimum, maximum),
+            Err(ConfigurationError::InvalidBounds {
+                context: "adaptive Taylor order window",
+                reason: "must satisfy 1 <= min_order < max_order <= 12",
+            })
+        );
+    }
 }
 
 #[test]
@@ -71,7 +105,7 @@ fn native_taylor_polynomial_drives_dense_queries_and_roots() {
     let problem = OdeProblem::new(exponential as Rhs, vec![1.0], (0.0, 0.4), ());
     let solution = solve(
         &problem,
-        ExplicitTaylor::new(8),
+        ExplicitTaylor::new(8).unwrap(),
         &SolveOptions {
             adaptive: false,
             initial_step: Some(0.4),
@@ -95,7 +129,7 @@ fn native_taylor_polynomial_drives_dense_queries_and_roots() {
         );
     let event = solve(
         &event_problem,
-        ExplicitTaylor::new(8),
+        ExplicitTaylor::new(8).unwrap(),
         &SolveOptions {
             adaptive: false,
             initial_step: Some(0.5),

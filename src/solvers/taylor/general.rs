@@ -14,7 +14,9 @@ use crate::integrator::{
 };
 use crate::linear::{factorize, solve_factorized};
 use crate::solution::{BorrowedTaylorSegment, DenseSegment, TaylorSegment, TrajectoryRecorder};
-use crate::{OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions, SolverStats};
+use crate::{
+    ConfigurationError, OdeAlgorithm, OdeProblem, Solution, SolveError, SolveOptions, SolverStats,
+};
 
 const MAX_ORDER: usize = 12;
 
@@ -35,17 +37,18 @@ impl Default for ExplicitTaylor {
 }
 
 impl ExplicitTaylor {
-    /// Constructs a Taylor method, clamping `order` to the supported range.
-    pub const fn new(order: usize) -> Self {
-        Self {
-            order: if order < 1 {
-                1
-            } else if order > MAX_ORDER {
-                MAX_ORDER
-            } else {
-                order
-            },
+    /// Constructs a Taylor method with an order from 1 through 12.
+    ///
+    /// Returns [`ConfigurationError::InvalidParameter`] when `order` is not
+    /// supported.
+    pub const fn new(order: usize) -> Result<Self, ConfigurationError> {
+        if order == 0 || order > MAX_ORDER {
+            return Err(ConfigurationError::InvalidParameter {
+                parameter: "Taylor order",
+                reason: "must be between 1 and 12 inclusive",
+            });
         }
+        Ok(Self { order })
     }
 
     /// Returns the configured Taylor order.
@@ -71,26 +74,21 @@ impl Default for ExplicitTaylorAdaptiveOrder {
 }
 
 impl ExplicitTaylorAdaptiveOrder {
-    /// Constructs an adaptive-order Taylor method with a clamped order window.
-    pub const fn new(min_order: usize, max_order: usize) -> Self {
-        let min_order = if min_order < 1 {
-            1
-        } else if min_order > MAX_ORDER - 1 {
-            MAX_ORDER - 1
-        } else {
-            min_order
-        };
-        let max_order = if max_order < min_order + 1 {
-            min_order + 1
-        } else if max_order > MAX_ORDER {
-            MAX_ORDER
-        } else {
-            max_order
-        };
-        Self {
+    /// Constructs an adaptive-order Taylor method.
+    ///
+    /// Returns [`ConfigurationError::InvalidBounds`] unless
+    /// `1 <= min_order < max_order <= 12`.
+    pub const fn new(min_order: usize, max_order: usize) -> Result<Self, ConfigurationError> {
+        if min_order == 0 || min_order >= max_order || max_order > MAX_ORDER {
+            return Err(ConfigurationError::InvalidBounds {
+                context: "adaptive Taylor order window",
+                reason: "must satisfy 1 <= min_order < max_order <= 12",
+            });
+        }
+        Ok(Self {
             min_order,
             max_order,
-        }
+        })
     }
 
     /// Returns the minimum candidate order.
