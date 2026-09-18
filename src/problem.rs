@@ -1392,6 +1392,37 @@ impl<F, P> OdeProblem<F, P> {
         &self.parameters
     }
 
+    /// Evaluates the right-hand side without exposing its internal storage.
+    ///
+    /// This is the evaluation seam for downstream [`crate::OdeAlgorithm`]
+    /// implementations. Both buffers must match the initial-state dimension,
+    /// otherwise
+    /// [`SolveError::EvaluationDimensionMismatch`] is returned. Errors from
+    /// fallible functions, including ndarray shape mismatches, are propagated
+    /// unchanged; a successful evaluation containing NaN or infinity returns
+    /// [`SolveError::NonFiniteDerivative`].
+    pub fn evaluate(
+        &self,
+        derivative: &mut [f64],
+        state: &[f64],
+        time: f64,
+    ) -> Result<(), SolveError>
+    where
+        F: crate::OdeFunction<P>,
+    {
+        let dimension = self.initial_state.len();
+        if derivative.len() != dimension || state.len() != dimension {
+            return Err(SolveError::EvaluationDimensionMismatch);
+        }
+        self.rhs
+            .evaluate(derivative, state, &self.parameters, time)?;
+        derivative
+            .iter()
+            .all(|value| value.is_finite())
+            .then_some(())
+            .ok_or(SolveError::NonFiniteDerivative)
+    }
+
     fn discrete_is_triggered(
         &self,
         trigger: &DiscreteTrigger<P>,

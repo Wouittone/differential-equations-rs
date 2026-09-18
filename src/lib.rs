@@ -144,7 +144,7 @@ pub use ndarray;
 pub use operator_problem::{LieGroupProblem, LinearOperatorProblem};
 pub use problem::{OdeFunction, OdeProblem, SplitOdeProblem};
 pub use semilinear::SemilinearOdeProblem;
-pub use solution::{InterpolationError, Solution, SolverStats};
+pub use solution::{InterpolationError, Solution, SolutionConstructionError, SolverStats};
 pub use solver::{
     AutomaticPairIncompatibility, OdeAlgorithm, SaveMode, SolveError, SolveOptions, solve,
 };

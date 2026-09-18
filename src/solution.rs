@@ -4,6 +4,37 @@ use crate::callback::CallbackOutcome;
 use crate::event::{times_are_numerically_equal, times_are_representably_equal};
 use crate::solvers::automatic::AutomaticBranch;
 
+/// Invalid saved trajectory data supplied when constructing a [`Solution`].
+///
+/// This error is shared by ordinary and partitioned second-order solutions so
+/// downstream algorithm implementations can use `?` from their
+/// `solve_validated` methods.
+#[derive(Clone, Copy, Debug, Eq, Error, PartialEq)]
+#[non_exhaustive]
+pub enum SolutionConstructionError {
+    /// At least one saved state is required.
+    #[error("a saved solution must contain at least one time and state")]
+    EmptyTrajectory,
+    /// The logical state shape contains no scalar components.
+    #[error("the saved solution state shape must contain at least one component")]
+    EmptyState,
+    /// Multiplying the logical state extents overflowed `usize`.
+    #[error("the saved solution state dimension overflowed")]
+    DimensionOverflow,
+    /// A flattened state partition does not match the times and logical shape.
+    #[error("saved solution values do not match the times and state shape")]
+    DimensionMismatch,
+    /// At least one saved time is NaN or infinite.
+    #[error("saved solution times must be finite")]
+    NonFiniteTime,
+    /// Saved times change integration direction.
+    #[error("saved solution times must be monotonic in one integration direction")]
+    NonMonotonicTimes,
+    /// At least one saved state component is NaN or infinite.
+    #[error("saved solution states must contain only finite values")]
+    NonFiniteState,
+}
+
 /// A dense-output query or retained interpolation segment is invalid.
 #[derive(Clone, Copy, Debug, Eq, Error, PartialEq)]
 #[non_exhaustive]
@@ -1414,6 +1445,49 @@ pub struct Solution {
 }
 
 impl Solution {
+    /// Constructs a solution from already-saved states.
+    ///
+    /// `values` contains one flattened row-major state for every entry in
+    /// `times`. `state_shape` is the logical ndarray shape of each state; an
+    /// empty shape denotes a scalar. The constructor checks shape arithmetic,
+    /// buffer lengths, finiteness, and monotonic time order. The resulting
+    /// solution has no method-specific dense segments, so interpolation
+    /// between saved states is linear.
+    ///
+    /// This is the construction seam for downstream [`crate::OdeAlgorithm`]
+    /// implementations.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use differential_equations::{Solution, SolverStats};
+    ///
+    /// let solution = Solution::from_saved(
+    ///     vec![0.0, 1.0],
+    ///     vec![1.0, 2.0, 3.0, 4.0],
+    ///     &[2],
+    ///     SolverStats::default(),
+    /// )?;
+    /// assert_eq!(solution.state(1), Some([3.0, 4.0].as_slice()));
+    /// # Ok::<(), differential_equations::SolutionConstructionError>(())
+    /// ```
+    pub fn from_saved(
+        times: Vec<f64>,
+        values: Vec<f64>,
+        state_shape: &[usize],
+        stats: SolverStats,
+    ) -> Result<Self, SolutionConstructionError> {
+        let dimension = validate_saved_solution(&times, state_shape, &[&values])?;
+        Ok(Self {
+            times,
+            values,
+            dimension,
+            state_shape: ndarray::IxDyn(state_shape),
+            stats,
+            dense_segments: Vec::new(),
+        })
+    }
+
     pub(crate) fn new(
         times: Vec<f64>,
         values: Vec<f64>,
@@ -1584,6 +1658,77 @@ impl Solution {
         debug_assert_eq!(state_shape.iter().product::<usize>(), self.dimension);
         self.state_shape = ndarray::IxDyn(state_shape);
     }
+
+    pub(crate) fn set_state_shape_checked(
+        &mut self,
+        state_shape: &[usize],
+    ) -> Result<(), SolutionConstructionError> {
+        if checked_state_dimension(state_shape)? != self.dimension {
+            return Err(SolutionConstructionError::DimensionMismatch);
+        }
+        self.state_shape = ndarray::IxDyn(state_shape);
+        Ok(())
+    }
+}
+
+pub(crate) fn checked_state_dimension(
+    state_shape: &[usize],
+) -> Result<usize, SolutionConstructionError> {
+    let dimension = state_shape
+        .iter()
+        .try_fold(1_usize, |dimension, &extent| dimension.checked_mul(extent));
+    let dimension = dimension.ok_or(SolutionConstructionError::DimensionOverflow)?;
+    if dimension == 0 {
+        return Err(SolutionConstructionError::EmptyState);
+    }
+    Ok(dimension)
+}
+
+pub(crate) fn validate_saved_solution(
+    times: &[f64],
+    state_shape: &[usize],
+    partitions: &[&[f64]],
+) -> Result<usize, SolutionConstructionError> {
+    if times.is_empty() {
+        return Err(SolutionConstructionError::EmptyTrajectory);
+    }
+    if !times.iter().all(|time| time.is_finite()) {
+        return Err(SolutionConstructionError::NonFiniteTime);
+    }
+
+    let mut ordering = None;
+    for pair in times.windows(2) {
+        let current = pair[1]
+            .partial_cmp(&pair[0])
+            .expect("finite times must be comparable");
+        if current == std::cmp::Ordering::Equal {
+            continue;
+        }
+        if ordering.is_some_and(|ordering| ordering != current) {
+            return Err(SolutionConstructionError::NonMonotonicTimes);
+        }
+        ordering = Some(current);
+    }
+
+    let dimension = checked_state_dimension(state_shape)?;
+    let expected = times
+        .len()
+        .checked_mul(dimension)
+        .ok_or(SolutionConstructionError::DimensionOverflow)?;
+    if partitions
+        .iter()
+        .any(|partition| partition.len() != expected)
+    {
+        return Err(SolutionConstructionError::DimensionMismatch);
+    }
+    if !partitions
+        .iter()
+        .flat_map(|partition| partition.iter())
+        .all(|value| value.is_finite())
+    {
+        return Err(SolutionConstructionError::NonFiniteState);
+    }
+    Ok(dimension)
 }
 
 pub(crate) fn interpolation_fraction(time: f64, left: f64, right: f64) -> f64 {

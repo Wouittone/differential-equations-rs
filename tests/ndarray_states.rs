@@ -266,6 +266,7 @@ fn direct_validated_split_solves_preserve_matrix_shape() {
     let split_euler = SplitEuler.solve_validated(&problem, &options).unwrap();
     let imex = IMEXEuler.solve_validated(&problem, &options).unwrap();
     let multirate = MRIGARKERK22a::new(4)
+        .unwrap()
         .solve_validated(&problem, &options)
         .unwrap();
     let irkc = IRKC::new()

@@ -1,4 +1,4 @@
-use crate::{DEFAULT_EVENT_TOLERANCE, OdeProblem, Solution};
+use crate::{DEFAULT_EVENT_TOLERANCE, OdeProblem, Solution, SolutionConstructionError};
 use thiserror::Error;
 
 /// Controls which accepted states are retained in a [`Solution`].
@@ -177,6 +177,9 @@ pub enum AutomaticPairIncompatibility {
 #[derive(Clone, Copy, Debug, Eq, Error, PartialEq)]
 #[non_exhaustive]
 pub enum SolveError {
+    /// An algorithm produced malformed saved trajectory data.
+    #[error("invalid saved solution: {0}")]
+    InvalidSolution(#[from] SolutionConstructionError),
     /// The initial state contains no components.
     #[error("the initial state is empty")]
     EmptyState,
@@ -267,6 +270,9 @@ pub enum SolveError {
     /// An out-of-place derivative has a different shape than the state.
     #[error("the derivative array shape must match the state shape")]
     DerivativeShapeMismatch,
+    /// A direct function evaluation received buffers with the wrong dimension.
+    #[error("function evaluation buffers must match the problem state dimension")]
+    EvaluationDimensionMismatch,
     /// The manifold has more constraints than state components.
     #[error("the manifold residual dimension exceeds the state dimension")]
     InvalidManifoldDimension,
@@ -306,7 +312,7 @@ pub trait OdeAlgorithm {
     {
         validate_ode_problem(problem, options)?;
         let mut solution = self.solve_validated(problem, options)?;
-        solution.set_state_shape(problem.state_shape());
+        solution.set_state_shape_checked(problem.state_shape())?;
         Ok(solution)
     }
 

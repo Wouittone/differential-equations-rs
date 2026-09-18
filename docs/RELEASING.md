@@ -154,13 +154,25 @@ of silently normalizing it or deferring it to an unrelated `SolveError`.
 Extrapolation `new` functions, `Anas5::new`, `Frk65::new`, and the three pRRK
 constructors return `Result<_, ConfigurationError>`. `JVODE::with_biases`,
 `JVODE::with_step_factors`, and `IRKC::with_eigenvalue_estimate` are likewise
-fallible. Their configured values remain inspectable through accessors.
+fallible. Taylor order constructors, adaptive Radau order windows,
+Gauss--Legendre stage counts, SBDF orders, and the configurable multirate
+families now follow the same contract. Their configured values remain
+inspectable through accessors.
 
 All public solution interpolation paths reject non-finite output consistently
 and use overflow-resistant linear fallback for finite extreme values. Invalid
 saved-state indices, including `usize::MAX`, return `None` without panicking.
 Direct calls to public `solve_validated` methods now retain ndarray scalar,
 vector, or matrix shape just like the higher-level `solve` entry point.
+
+Downstream implementations of `OdeAlgorithm` and `SecondOrderOdeAlgorithm`
+can evaluate a problem through checked public methods and construct validated
+saved trajectories with `Solution::from_saved` or
+`SecondOrderSolution::from_saved`. Malformed custom results now produce
+`SolutionConstructionError` through the corresponding solve error rather than
+relying on private constructors or unchecked shape metadata. The second-order
+drivers and workspaces are split into private fixed-step, RKN, structural, and
+shared lifecycle modules without changing the public import paths.
 
 ### Definition of done
 
