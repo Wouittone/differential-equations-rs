@@ -109,7 +109,7 @@ cost, allocations, and both explicit-only and stiff-only baselines.
   solutions, and interpolation across solver families.
 - [ ] Complete rustdoc examples and links for every public type and supported
   extension point.
-- [ ] Add downstream smoke crates for default and no-default features, a
+- [x] Add downstream smoke crates for default and no-default features, a
   renamed dependency, a file-defined tableau, and scalar/vector/matrix states.
 - [ ] Audit coefficient provenance and precision, method orders, dense output,
   estimators, stability policies, and controllers against the pinned upstream

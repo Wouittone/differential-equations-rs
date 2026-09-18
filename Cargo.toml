@@ -29,6 +29,10 @@ publish = false
 
 [workspace]
 members = ["tableau-core", "tableau-macros"]
+exclude = [
+    "tests/downstream/default-features",
+    "tests/downstream/no-default-renamed",
+]
 resolver = "3"
 
 [features]

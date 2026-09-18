@@ -1,0 +1,11 @@
+[package]
+name = "differential-equations-no-default-renamed-smoke"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.85"
+publish = false
+
+[dependencies]
+diffeq = { package = "differential-equations", path = "../../..", default-features = false }
+
+[workspace]
