@@ -100,6 +100,36 @@ impl SplitOdeProblem<(), (), ()> {
 }
 
 impl OdeProblem<(), ()> {
+    /// Starts an explicit builder for an ndarray-backed ODE problem.
+    ///
+    /// The builder names the state, time span, parameters, and evaluation style
+    /// instead of relying on the positional arguments of [`Self::from_array`].
+    /// Required state and time-span fields are tracked by the type system, so a
+    /// problem cannot be built before both have been supplied.
+    ///
+    /// ```
+    /// use differential_equations::ndarray::{array, ArrayView1, ArrayViewMut1};
+    /// use differential_equations::OdeProblem;
+    ///
+    /// let problem = OdeProblem::builder()
+    ///     .initial_state(array![1.0, 2.0])
+    ///     .time_span((0.0, 1.0))
+    ///     .parameters(-2.0)
+    ///     .build_with_in_place_rhs(
+    ///         |mut derivative: ArrayViewMut1<'_, f64>,
+    ///          state: ArrayView1<'_, f64>,
+    ///          rate: &f64,
+    ///          _time: f64| {
+    ///             derivative.zip_mut_with(&state, |du, u| *du = rate * *u);
+    ///         },
+    ///     );
+    ///
+    /// assert_eq!(problem.state_shape(), &[2]);
+    /// ```
+    pub const fn builder() -> super::OdeProblemBuilder {
+        super::OdeProblemBuilder::new()
+    }
+
     /// Constructs an ODE problem whose function returns an ndarray derivative.
     ///
     /// Scalar (`arr0`), vector, and matrix states use one API. The returned

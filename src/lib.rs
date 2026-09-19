@@ -70,8 +70,10 @@
 //! - [`tableau`] exposes the extension surface for defining explicit
 //!   Runge--Kutta and Runge--Kutta--Nyström methods from compile-time-validated
 //!   JSON resources, plus typed data for specialized solver families.
-//! - [`OdeProblem::from_array`] accepts ndarray scalar, vector, and matrix
-//!   states while numerical kernels retain contiguous flat workspaces.
+//! - [`OdeProblem::builder`] names the initial state, time span, parameters,
+//!   and ndarray evaluation style. [`OdeProblem::from_array`] remains the
+//!   compact constructor for scalar, vector, and matrix states while numerical
+//!   kernels retain contiguous flat workspaces.
 //!   [`OdeProblem::from_array_out_of_place`] accepts functions returning arrays;
 //!   [`OdeFunction`] unifies them with in-place closures and propagates errors.
 //!   [`solvers::second_order::SecondOrderOdeProblem`] provides matching ndarray
@@ -142,7 +144,7 @@ pub use event::DEFAULT_EVENT_TOLERANCE;
 /// The ndarray version used by shape-aware ODE states.
 pub use ndarray;
 pub use operator_problem::{LieGroupProblem, LinearOperatorProblem};
-pub use problem::{OdeFunction, OdeProblem, SplitOdeProblem};
+pub use problem::{OdeFunction, OdeProblem, OdeProblemBuilder, SplitOdeProblem};
 pub use semilinear::SemilinearOdeProblem;
 pub use solution::{InterpolationError, Solution, SolutionConstructionError, SolverStats};
 pub use solver::{

@@ -87,23 +87,28 @@ history is visible through `SolverStats`.
 
 ## State shapes
 
-`OdeProblem::from_array` accepts ndarray scalars, vectors, and matrices. The
-right-hand side sees the original shape while the solver keeps one contiguous
-workspace internally.
+For shaped states, prefer `OdeProblem::builder()`. It names every part of the
+problem and makes the in-place versus out-of-place evaluation choice explicit.
+The right-hand side sees the original ndarray shape while the solver keeps one
+contiguous workspace internally.
 
 ```rust
 use differential_equations::ndarray::{array, ArrayView2, ArrayViewMut2};
 use differential_equations::solvers::explicit::Tsit5;
 use differential_equations::{solve, OdeProblem, SolveOptions};
 
-let problem = OdeProblem::from_array(
-    |mut du: ArrayViewMut2<'_, f64>, u: ArrayView2<'_, f64>, _: &(), _: f64| {
-        du.zip_mut_with(&u, |du, u| *du = -*u);
-    },
-    array![[1.0, 2.0], [3.0, 4.0]],
-    (0.0, 1.0),
-    (),
-);
+let problem = OdeProblem::builder()
+    .initial_state(array![[1.0, 2.0], [3.0, 4.0]])
+    .time_span((0.0, 1.0))
+    .parameters(())
+    .build_with_in_place_rhs(
+        |mut du: ArrayViewMut2<'_, f64>,
+         u: ArrayView2<'_, f64>,
+         _: &(),
+         _: f64| {
+            du.zip_mut_with(&u, |du, u| *du = -*u);
+        },
+    );
 
 let solution = solve(&problem, Tsit5, &SolveOptions::default())?;
 assert_eq!(solution.last_state_array().shape(), &[2, 2]);
@@ -115,10 +120,11 @@ Use `arr0(value)` for a scalar, `array![...]` for a vector, and
 interpolation views retain that dimensionality. Flat slice access remains
 available for callers that want it.
 
-Prefer the in-place constructor above when allocations matter. The matching
-`from_array_out_of_place` constructors are convenient when returning an owned
-derivative is more natural. Returned shapes are checked and mismatches produce
-a typed error.
+Prefer `build_with_in_place_rhs` when allocations matter. Use
+`build_with_out_of_place_rhs` when returning an owned derivative is more
+natural. Returned shapes are checked and mismatches produce a typed error.
+The positional `from_array` and `from_array_out_of_place` constructors remain
+available for compact or existing code.
 
 Second-order problems offer the same forms through
 `SecondOrderOdeProblem::from_array` and `from_array_out_of_place`. Velocity and

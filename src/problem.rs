@@ -1,4 +1,5 @@
 mod array_adapters;
+mod builder;
 mod callbacks;
 mod function;
 mod jacobian;
@@ -12,6 +13,7 @@ use crate::SolveError;
 use crate::callback::{
     Callback, InitializationHook, LifecycleHook, PredictiveDomainPolicy, StepGuard,
 };
+pub use builder::OdeProblemBuilder;
 pub use function::OdeFunction;
 #[allow(unused_imports)] // Preserve the existing crate-internal facade path.
 pub(crate) use jacobian::JacobianProvider;
