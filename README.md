@@ -18,18 +18,9 @@ shorter `differential_equations`.
 
 ## Install
 
-After the 1.0 release is published:
-
 ```toml
 [dependencies]
 differential-equations-rs = "1.0"
-```
-
-Until then, use a checkout:
-
-```toml
-[dependencies]
-differential-equations-rs = { path = "../differential-equations-rs" }
 ```
 
 Version 1.0 requires Rust 1.85 or newer.
@@ -40,18 +31,23 @@ Solve `u' = -2u` from `t = 0` to `t = 1` with the adaptive Tsitouras 5/4
 method:
 
 ```rust
+use differential_equations::ndarray::{ArrayView1, ArrayViewMut1, array};
 use differential_equations::solvers::explicit::Tsit5;
 use differential_equations::{solve, OdeProblem, SaveMode, SolveOptions};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let problem = OdeProblem::new(
-        |du: &mut [f64], u: &[f64], rate: &f64, _time: f64| {
-            du[0] = rate * u[0];
-        },
-        [1.0],
-        (0.0, 1.0),
-        -2.0,
-    );
+    let problem = OdeProblem::builder()
+        .initial_state(array![1.0])
+        .time_span((0.0, 1.0))
+        .parameters(-2.0)
+        .build_with_in_place_rhs(
+            |mut du: ArrayViewMut1<'_, f64>,
+             u: ArrayView1<'_, f64>,
+             rate: &f64,
+             _time: f64| {
+                du[0] = rate * u[0];
+            },
+        );
 
     let options = SolveOptions::new()
         .with_tolerances(1.0e-9, 1.0e-9)
@@ -65,6 +61,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 Algorithms live under `solvers::<family>`; problem, option, solution, and
 driver types stay at the crate root.
+
+The builder deliberately names the initial state, time span, parameters, and
+right-hand-side evaluation style. Its type state prevents building a problem
+before the required state and time span have been supplied. Parameters default
+to `()` when the equation does not need them.
 
 ## Pick a solver
 
@@ -197,6 +198,36 @@ available in sequential builds.
 | `parallel` | Yes | Rayon-backed batch and ensemble solves |
 | `allocation-metrics` | No | Benchmark instrumentation for this repository |
 
+## Performance and memory
+
+This crate is a native Rust implementation, not a binding to Julia. Programs
+using it do not need a Julia installation, a Julia package depot, or the SciML
+packages at runtime. Julia is used only by this repository's cross-language
+certification and comparison harness.
+
+| Concern | `differential-equations-rs` | Julia `OrdinaryDiffEq.jl` comparison |
+| --- | --- | --- |
+| Deployment | Compiled into the application; no separate language runtime | Requires Julia and a resolved package environment |
+| Warmup | Solver code is compiled by Cargo ahead of execution | Package loading and JIT compilation must be warmed before timing |
+| Derivative evaluation | `build_with_in_place_rhs` reuses the derivative buffer | Compared with Julia's in-place `f!` problem form |
+| Explicit workspace | Linear in state size for a fixed-stage method | Same algorithmic scaling |
+| Dense stiff workspace | Dense Jacobian and factorization storage can be quadratic in state size | Same algorithmic scaling for matched dense methods |
+| Saved trajectory | Linear in saved points × state size | Same output-dependent scaling |
+
+For minimum retained output, use `SaveMode::Endpoints`; requested-time or full
+step saving necessarily retains more states. Out-of-place right-hand sides may
+allocate an owned derivative on every evaluation, so the in-place builder is
+the preferred form for allocation-sensitive solves. Tableaus are initialized
+lazily and only for methods that are actually used.
+
+The repository includes a matched 31-algorithm Rust/Julia harness. Both sides
+use the same dimensions, tolerances, save policy, and warm-up solve; timing and
+allocation measurements run separately. There is intentionally no blanket
+“Rust is N× faster” claim: results depend on the solver, problem, toolchain,
+CPU, and whether Julia's JIT has been warmed. See the
+[benchmark guide](docs/BENCHMARKING.md) for the reproducible commands and the
+limits of the comparison.
+
 ## Add your own method
 
 Solver coefficients live in canonical JSON resources, not generated Rust
@@ -226,7 +257,7 @@ Included today:
 - Exact stops, reusable callback sets, and solver statistics
 
 SDEs, DDEs, boundary-value problems, and wrappers around external solvers are
-outside the 1.0 scope.
+not currently included.
 
 ## Development and validation
 
@@ -242,7 +273,7 @@ certification uses the pinned `reference/OrdinaryDiffEq.jl` submodule and the
 Julia project in `tests/julia`; ordinary Cargo tests do not require Julia.
 
 - [Benchmarking and Rust/Julia comparisons](docs/BENCHMARKING.md)
-- [Release policy and 1.0 checklist](docs/RELEASING.md)
+- [Release process](docs/RELEASING.md)
 - [Tableau resource format](docs/TABLEAU_RESOURCES.md)
 
 API documentation is built with every feature enabled. CI treats missing docs,

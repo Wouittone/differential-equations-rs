@@ -329,7 +329,9 @@ DAE claims. The resource validator proves structural validity, not those claims.
 }
 ```
 
-The format has no schema-version field while the crate is pre-1.0. Define the
+The format has no schema-version field. Treat it as part of the stable 1.x
+extension contract: an incompatible representation change requires a new
+macro entry point or a new crate major version. Define the
 solver with the macro re-exported from `differential_equations::tableau` and a
 path relative to the downstream package manifest:
 
