@@ -257,7 +257,7 @@ macro_rules! mri_algorithm {
                     options,
                     Method::Mri {
                         m: self.m,
-                        tableau: self.tableau().map_err(|_| SolveError::InvalidTableau)?,
+                        tableau: self.tableau().map_err(SolveError::from)?,
                     },
                 )
             }
@@ -363,7 +363,7 @@ impl SplitOdeAlgorithm for Mis {
             options,
             Method::Mis {
                 m: self.m,
-                tableau: self.tableau().map_err(|_| SolveError::InvalidTableau)?,
+                tableau: self.tableau().map_err(SolveError::from)?,
             },
         )
     }

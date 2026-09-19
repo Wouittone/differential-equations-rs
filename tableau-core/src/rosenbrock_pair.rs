@@ -116,11 +116,10 @@ pub fn parse_rosenbrock_pair_tableau(
     source: &str,
     requested_name: &str,
 ) -> Result<RosenbrockPairTableau, TableauError> {
-    let raw: RawRosenbrockPairTableau = serde_json::from_str(source).map_err(|error| {
-        TableauError::new(format!("invalid Rosenbrock pair tableau JSON: {error}"))
-    })?;
+    let raw: RawRosenbrockPairTableau = serde_json::from_str(source)
+        .map_err(|error| TableauError::json("Rosenbrock pair tableau", error))?;
     if raw.name.trim().is_empty() || raw.name != requested_name {
-        return Err(TableauError::new(format!(
+        return Err(TableauError::name_mismatch(format!(
             "resource method `{}` does not match requested method `{requested_name}`",
             raw.name
         )));

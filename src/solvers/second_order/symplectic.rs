@@ -345,7 +345,7 @@ fn partition(values: &[f64], dimension: usize, index: usize) -> Option<&[f64]> {
 }
 
 /// Failure specific to a fixed-step symplectic composition.
-#[derive(Clone, Copy, Debug, Eq, Error, PartialEq)]
+#[derive(Clone, Debug, Eq, Error, PartialEq)]
 #[non_exhaustive]
 pub enum SymplecticSolveError {
     /// Position and velocity partitions differ in size.
@@ -379,7 +379,7 @@ where
         .initial_step
         .ok_or(SolveError::InitialStepRequired)?;
     let (start, end) = problem.time_span();
-    let tableau = A::tableau().map_err(|_| SolveError::InvalidTableau)?;
+    let tableau = A::tableau().map_err(SolveError::from)?;
 
     let direction = (end - start).signum();
     let maximum_step = options.max_step.min((end - start).abs());

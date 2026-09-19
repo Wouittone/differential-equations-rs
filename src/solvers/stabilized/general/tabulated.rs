@@ -24,8 +24,7 @@ impl StabilizedKernel {
         let requested_total = (((1.5 + scaled_radius) / 0.811).sqrt().floor() as usize + 1)
             .clamp(1, MAX_POLYNOMIAL_STAGES);
         let requested_degree = requested_total.max(3) - 2;
-        let tableau =
-            rock2_tableau_for_degree(requested_degree).map_err(|_| SolveError::InvalidTableau)?;
+        let tableau = rock2_tableau_for_degree(requested_degree).map_err(SolveError::from)?;
         let degree = tableau.degree();
         let recurrence = tableau.recurrence();
         let first_coefficient = recurrence.first_stage();
@@ -131,8 +130,7 @@ impl StabilizedKernel {
         let requested_total =
             (((3.0 + scaled_radius) / 0.353).sqrt().floor() as usize + 1).clamp(1, 152);
         let requested_degree = requested_total.max(5) - 4;
-        let tableau =
-            rock4_tableau_for_degree(requested_degree).map_err(|_| SolveError::InvalidTableau)?;
+        let tableau = rock4_tableau_for_degree(requested_degree).map_err(SolveError::from)?;
         let degree = tableau.degree();
         let recurrence = tableau.recurrence();
         let first_coefficient = recurrence.first_stage();
@@ -303,8 +301,7 @@ impl StabilizedKernel {
         F: crate::OdeFunction<P>,
     {
         let requested = ((scaled_radius / 0.8).sqrt().floor() as usize + 1).min(250);
-        let tableau =
-            serk2_tableau_for_degree(requested).map_err(|_| SolveError::InvalidTableau)?;
+        let tableau = serk2_tableau_for_degree(requested).map_err(SolveError::from)?;
         let subdivisions = tableau.subdivisions();
         let internal_degree = tableau.internal_degree();
         let weights = tableau.weights();
@@ -405,7 +402,7 @@ impl StabilizedKernel {
             }
             _ => return Err(SolveError::InvalidTableau),
         }
-        .map_err(|_| SolveError::InvalidTableau)?;
+        .map_err(SolveError::from)?;
         let degree = tableau.degree();
         let internal_degree = tableau.internal_degree();
         let alpha = tableau.alpha();

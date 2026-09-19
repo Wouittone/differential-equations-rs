@@ -1,3 +1,4 @@
+use crate::tableau::TableauError;
 use crate::{DEFAULT_EVENT_TOLERANCE, OdeProblem, Solution, SolutionConstructionError};
 use thiserror::Error;
 
@@ -174,7 +175,7 @@ pub enum AutomaticPairIncompatibility {
 }
 
 /// A failure to configure or complete an ODE solve.
-#[derive(Clone, Copy, Debug, Eq, Error, PartialEq)]
+#[derive(Clone, Debug, Eq, Error, PartialEq)]
 #[non_exhaustive]
 pub enum SolveError {
     /// An algorithm produced malformed saved trajectory data.
@@ -239,6 +240,13 @@ pub enum SolveError {
     /// An explicit Runge–Kutta tableau violates its structural invariants.
     #[error("the explicit Runge–Kutta tableau is malformed")]
     InvalidTableau,
+    /// An embedded tableau resource could not be decoded or validated.
+    #[error("tableau resource error: {0}")]
+    TableauResource(
+        #[from]
+        #[source]
+        TableauError,
+    ),
     /// An accepted-step dense interpolant could not be evaluated.
     #[error("dense-output interpolation failed for an accepted step")]
     DenseOutputFailed,

@@ -94,9 +94,7 @@ impl Rosenbrock23Kernel {
     fn new(dimension: usize) -> Result<Self, SolveError> {
         Ok(Self {
             workspace: Workspace::new(dimension),
-            tableau: Rosenbrock23
-                .tableau()
-                .map_err(|_| SolveError::InvalidTableau)?,
+            tableau: Rosenbrock23.tableau().map_err(SolveError::from)?,
             candidate_derivative_valid: false,
         })
     }

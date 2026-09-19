@@ -154,10 +154,10 @@ struct RawMisTableau {
 
 /// Parses and structurally validates a canonical MIS JSON resource.
 pub fn parse_mis_tableau(source: &str, requested_name: &str) -> Result<MisTableau, TableauError> {
-    let raw: RawMisTableau = serde_json::from_str(source)
-        .map_err(|error| TableauError::new(format!("invalid MIS tableau JSON: {error}")))?;
+    let raw: RawMisTableau =
+        serde_json::from_str(source).map_err(|error| TableauError::json("MIS tableau", error))?;
     if raw.name.trim().is_empty() || raw.name != requested_name {
-        return Err(TableauError::new(format!(
+        return Err(TableauError::name_mismatch(format!(
             "resource method `{}` does not match requested method `{requested_name}`",
             raw.name
         )));
@@ -224,10 +224,10 @@ pub fn parse_mis_tableau(source: &str, requested_name: &str) -> Result<MisTablea
 /// subinterval lengths, paired embedded rows, and finite coefficients. It does
 /// not prove the declared order or stability properties.
 pub fn parse_mri_tableau(source: &str, requested_name: &str) -> Result<MriTableau, TableauError> {
-    let raw: RawMriTableau = serde_json::from_str(source)
-        .map_err(|error| TableauError::new(format!("invalid MRI tableau JSON: {error}")))?;
+    let raw: RawMriTableau =
+        serde_json::from_str(source).map_err(|error| TableauError::json("MRI tableau", error))?;
     if raw.name.trim().is_empty() || raw.name != requested_name {
-        return Err(TableauError::new(format!(
+        return Err(TableauError::name_mismatch(format!(
             "resource method `{}` does not match requested method `{requested_name}`",
             raw.name
         )));

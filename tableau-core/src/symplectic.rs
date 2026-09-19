@@ -72,9 +72,9 @@ pub fn parse_symplectic_tableau(
     requested_name: &str,
 ) -> Result<SymplecticTableau, TableauError> {
     let raw: RawSymplecticTableau = serde_json::from_str(source)
-        .map_err(|error| TableauError::new(format!("invalid symplectic tableau JSON: {error}")))?;
+        .map_err(|error| TableauError::json("symplectic tableau", error))?;
     if raw.name.trim().is_empty() || raw.name != requested_name {
-        return Err(TableauError::new(format!(
+        return Err(TableauError::name_mismatch(format!(
             "resource method `{}` does not match requested method `{requested_name}`",
             raw.name
         )));

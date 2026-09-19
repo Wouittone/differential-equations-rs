@@ -184,11 +184,10 @@ pub fn parse_variable_multistep_tableau(
     source: &str,
     requested_name: &str,
 ) -> Result<VariableMultistepTableau, TableauError> {
-    let raw: RawTableau = serde_json::from_str(source).map_err(|error| {
-        TableauError::new(format!("invalid variable multistep tableau JSON: {error}"))
-    })?;
+    let raw: RawTableau = serde_json::from_str(source)
+        .map_err(|error| TableauError::json("variable multistep tableau", error))?;
     if raw.name.trim().is_empty() || raw.name != requested_name {
-        return Err(TableauError::new(format!(
+        return Err(TableauError::name_mismatch(format!(
             "resource method `{}` does not match requested method `{requested_name}`",
             raw.name
         )));

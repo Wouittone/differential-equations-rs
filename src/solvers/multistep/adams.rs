@@ -66,12 +66,12 @@ static ABM54_METHOD: AdamsDefinition = AdamsDefinition {
 
 impl AdamsDefinition {
     fn load(&self) -> Result<AdamsMethod, SolveError> {
-        let predictor = load_tableau(self.predictor).map_err(|_| SolveError::InvalidTableau)?;
+        let predictor = load_tableau(self.predictor).map_err(SolveError::from)?;
         let corrector = self
             .corrector
             .map(load_tableau)
             .transpose()
-            .map_err(|_| SolveError::InvalidTableau)?;
+            .map_err(SolveError::from)?;
         if !tableaux::is_adams(predictor, false)
             || corrector.is_some_and(|tableau| {
                 !tableaux::is_adams(tableau, true) || tableau.order() != predictor.order()
@@ -83,7 +83,7 @@ impl AdamsDefinition {
             Bootstrap::Ralston => Ralston.tableau(),
             Bootstrap::Rk4 => Rk4.tableau(),
         }
-        .map_err(|_| SolveError::InvalidTableau)?;
+        .map_err(SolveError::from)?;
         Ok(AdamsMethod {
             order: predictor.order(),
             weights: &predictor.beta()[1..],

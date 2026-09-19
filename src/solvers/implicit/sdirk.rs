@@ -78,7 +78,7 @@ impl OdeAlgorithm for Sdirk2 {
     where
         F: crate::OdeFunction<P>,
     {
-        let tableau = self.tableau().map_err(|_| SolveError::InvalidTableau)?;
+        let tableau = self.tableau().map_err(SolveError::from)?;
         drive_integration(
             problem,
             options,
@@ -889,7 +889,7 @@ macro_rules! extended_algorithm {
             where
                 F: crate::OdeFunction<P>,
             {
-                let tableau = self.tableau().map_err(|_| SolveError::InvalidTableau)?;
+                let tableau = self.tableau().map_err(SolveError::from)?;
                 drive_integration(
                     problem,
                     options,

@@ -98,7 +98,7 @@ struct Trbdf2Kernel {
 
 impl Trbdf2Kernel {
     fn new(dimension: usize) -> Result<Self, SolveError> {
-        let tableau = Trbdf2.tableau().map_err(|_| SolveError::InvalidTableau)?;
+        let tableau = Trbdf2.tableau().map_err(SolveError::from)?;
         validate_tableau(tableau)?;
         Ok(Self {
             workspace: Workspace::new(dimension, tableau),

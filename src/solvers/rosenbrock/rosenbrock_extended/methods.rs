@@ -146,9 +146,7 @@ macro_rules! rodas_method {
             const ADAPTIVE: bool = true;
 
             fn load_resource() -> Result<Option<&'static RosenbrockTableau>, SolveError> {
-                load_tableau(&$tableau)
-                    .map(Some)
-                    .map_err(|_| SolveError::InvalidTableau)
+                load_tableau(&$tableau).map(Some).map_err(SolveError::from)
             }
 
             fn perform_step<F, P>(
@@ -234,7 +232,7 @@ impl ExtendedRosenbrockMethod for HybridExplicitImplicitRK {
     fn load_resource() -> Result<Option<&'static RosenbrockTableau>, SolveError> {
         load_tableau(&TSIT5DA_TABLEAU)
             .map(Some)
-            .map_err(|_| SolveError::InvalidTableau)
+            .map_err(SolveError::from)
     }
 
     fn perform_step<F, P>(
@@ -273,7 +271,7 @@ impl ExtendedRosenbrockMethod for RosenbrockW6S4OS {
     fn load_resource() -> Result<Option<&'static RosenbrockTableau>, SolveError> {
         load_tableau(&ROSENBROCK_W6S4OS_TABLEAU)
             .map(Some)
-            .map_err(|_| SolveError::InvalidTableau)
+            .map_err(SolveError::from)
     }
 
     fn perform_step<F, P>(

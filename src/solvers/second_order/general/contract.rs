@@ -6,7 +6,7 @@ use crate::{SolveError, SolveOptions};
 use thiserror::Error;
 
 /// Configuration or integration failure specific to partitioned ODE states.
-#[derive(Clone, Copy, Debug, Eq, Error, PartialEq)]
+#[derive(Clone, Debug, Eq, Error, PartialEq)]
 #[non_exhaustive]
 pub enum SecondOrderSolveError {
     /// Position and velocity partitions do not have the same dimension.

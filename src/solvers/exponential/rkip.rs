@@ -280,9 +280,7 @@ impl<'a, G, P> RkipKernel<'a, G, P> {
         problem: &'a SemilinearOdeProblem<G, P>,
         algorithm: &'a RKIP,
     ) -> Result<Self, SolveError> {
-        let tableau = algorithm
-            .tableau()
-            .map_err(|_| SolveError::InvalidTableau)?;
+        let tableau = algorithm.tableau().map_err(SolveError::from)?;
         let error_weights = tableau.error().ok_or(SolveError::InvalidTableau)?;
         Ok(Self {
             problem,

@@ -42,7 +42,7 @@ impl OdeAlgorithm for Abdf2 {
     where
         F: crate::OdeFunction<P>,
     {
-        let tableau = self.tableau().map_err(|_| SolveError::InvalidTableau)?;
+        let tableau = self.tableau().map_err(SolveError::from)?;
         drive_integration(
             problem,
             options,

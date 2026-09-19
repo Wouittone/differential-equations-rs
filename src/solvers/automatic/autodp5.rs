@@ -55,7 +55,7 @@ impl<A: AutomaticStiffAlgorithm> OdeAlgorithm for AutoDp5<A> {
     where
         F: crate::OdeFunction<P>,
     {
-        let tableau = Dp5.tableau().map_err(|_| SolveError::InvalidTableau)?;
+        let tableau = Dp5.tableau().map_err(SolveError::from)?;
         solve_automatic(
             problem,
             options,

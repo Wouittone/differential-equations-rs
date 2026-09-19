@@ -269,8 +269,8 @@ pub fn parse_rkn_tableau(
     source: &str,
     requested_name: &str,
 ) -> Result<RungeKuttaNystromTableau, TableauError> {
-    let raw: RawRknTableau = serde_json::from_str(source)
-        .map_err(|error| TableauError::new(format!("invalid RKN tableau JSON: {error}")))?;
+    let raw: RawRknTableau =
+        serde_json::from_str(source).map_err(|error| TableauError::json("RKN tableau", error))?;
     validate_metadata(
         &raw.name,
         &raw.description,
@@ -417,8 +417,8 @@ pub fn parse_rkn_tableau(
 
 /// Parses and validates a canonical improved RKN history tableau.
 pub fn parse_irkn_tableau(source: &str, requested_name: &str) -> Result<IrknTableau, TableauError> {
-    let raw: RawIrknTableau = serde_json::from_str(source)
-        .map_err(|error| TableauError::new(format!("invalid IRKN tableau JSON: {error}")))?;
+    let raw: RawIrknTableau =
+        serde_json::from_str(source).map_err(|error| TableauError::json("IRKN tableau", error))?;
     validate_metadata(
         &raw.name,
         &raw.description,
@@ -495,7 +495,7 @@ fn validate_metadata(
     family: &str,
 ) -> Result<(), TableauError> {
     if name.trim().is_empty() || name != requested_name {
-        return Err(TableauError::new(format!(
+        return Err(TableauError::name_mismatch(format!(
             "resource method `{name}` does not match requested method `{requested_name}`"
         )));
     }

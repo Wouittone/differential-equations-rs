@@ -157,7 +157,7 @@ where
             Ok(estimate) => estimate,
             Err(error)
                 if options.adaptive
-                    && capabilities.attempt_failure_policy.is_recoverable(error) =>
+                    && capabilities.attempt_failure_policy.is_recoverable(&error) =>
             {
                 stats.rejected_steps += 1;
                 kernel.reject_step_with_reason(RejectionReason::AttemptFailure(error));

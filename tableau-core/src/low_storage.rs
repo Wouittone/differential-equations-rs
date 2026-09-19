@@ -468,11 +468,8 @@ pub fn parse_low_storage_tableau(
     source: &str,
     requested_name: &str,
 ) -> Result<LowStorageRungeKuttaTableau, TableauError> {
-    let raw: RawTableau = serde_json::from_str(source).map_err(|error| {
-        TableauError::new(format!(
-            "invalid low-storage Runge--Kutta tableau JSON: {error}"
-        ))
-    })?;
+    let raw: RawTableau = serde_json::from_str(source)
+        .map_err(|error| TableauError::json("low-storage Runge--Kutta tableau", error))?;
     validate_metadata(&raw, requested_name)?;
     let consistency_tolerance = raw
         .consistency_tolerance
@@ -481,7 +478,7 @@ pub fn parse_low_storage_tableau(
         .transpose()?
         .unwrap_or(DEFAULT_CONSISTENCY_TOLERANCE);
     if consistency_tolerance <= 0.0 || consistency_tolerance > MAX_CONSISTENCY_TOLERANCE {
-        return Err(TableauError::new(format!(
+        return Err(TableauError::name_mismatch(format!(
             "low-storage consistency_tolerance must be positive and no greater than {MAX_CONSISTENCY_TOLERANCE}"
         )));
     }
@@ -793,7 +790,7 @@ fn validate_layout_fields(raw: &RawTableau) -> Result<(), TableauError> {
 
 fn validate_metadata(raw: &RawTableau, requested_name: &str) -> Result<(), TableauError> {
     if raw.name.trim().is_empty() || raw.name != requested_name {
-        return Err(TableauError::new(format!(
+        return Err(TableauError::name_mismatch(format!(
             "resource method `{}` does not match requested method `{requested_name}`",
             raw.name
         )));

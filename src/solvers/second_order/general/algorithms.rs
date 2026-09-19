@@ -487,7 +487,7 @@ macro_rules! impl_rkn_algorithm {
             where
                 F: SecondOrderFunction<P>,
             {
-                let tableau = self.tableau().map_err(|_| SolveError::InvalidTableau)?;
+                let tableau = self.tableau().map_err(SolveError::from)?;
                 if tableau.kind() != RungeKuttaNystromKind::Fixed {
                     return Err(SolveError::InvalidTableau.into());
                 }
@@ -520,7 +520,7 @@ macro_rules! impl_adaptive_rkn_algorithm {
             where
                 F: SecondOrderFunction<P>,
             {
-                let tableau = self.tableau().map_err(|_| SolveError::InvalidTableau)?;
+                let tableau = self.tableau().map_err(SolveError::from)?;
                 if tableau.kind() != RungeKuttaNystromKind::Adaptive {
                     return Err(SolveError::InvalidTableau.into());
                 }
@@ -551,7 +551,7 @@ impl SecondOrderOdeAlgorithm for ResourceRungeKuttaNystrom {
     where
         F: SecondOrderFunction<P>,
     {
-        let tableau = self.tableau().map_err(|_| SolveError::InvalidTableau)?;
+        let tableau = self.tableau().map_err(SolveError::from)?;
         match tableau.kind() {
             RungeKuttaNystromKind::Fixed => solve_rkn_fixed(problem, options, tableau),
             RungeKuttaNystromKind::Adaptive => solve_rkn_adaptive(problem, options, tableau),
@@ -621,10 +621,10 @@ macro_rules! impl_irkn_algorithm {
             where
                 F: SecondOrderFunction<P>,
             {
-                let tableau = self.tableau().map_err(|_| SolveError::InvalidTableau)?;
+                let tableau = self.tableau().map_err(SolveError::from)?;
                 let bootstrap = Nystrom4VelocityIndependent
                     .tableau()
-                    .map_err(|_| SolveError::InvalidTableau)?;
+                    .map_err(SolveError::from)?;
                 solve_irkn(problem, options, tableau, bootstrap)
             }
         }

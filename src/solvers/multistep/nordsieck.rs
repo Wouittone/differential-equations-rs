@@ -695,7 +695,7 @@ impl<F, P> NordsieckKernel<F, P> {
     where
         FN: crate::OdeFunction<PP>,
     {
-        let tableau = Tsit5.tableau().map_err(|_| SolveError::InvalidTableau)?;
+        let tableau = Tsit5.tableau().map_err(SolveError::from)?;
         let stages_count = tableau.c().len();
         let mut stages = vec![vec![0.0; self.dimension]; stages_count];
         stages[0].copy_from_slice(&self.start_derivative);

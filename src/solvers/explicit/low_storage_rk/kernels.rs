@@ -48,7 +48,7 @@ impl OdeAlgorithm for ResourceLowStorageRungeKutta {
     where
         F: OdeFunction<P>,
     {
-        let tableau = self.tableau().map_err(|_| SolveError::InvalidTableau)?;
+        let tableau = self.tableau().map_err(SolveError::from)?;
         integrate_resource(problem, options, tableau)
     }
 }

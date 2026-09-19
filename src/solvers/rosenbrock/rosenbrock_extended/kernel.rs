@@ -29,7 +29,7 @@ impl<M: ExtendedRosenbrockMethod> ExtendedRosenbrockKernel<M> {
         let pair_tableau = M::SPECIAL_DENSE
             .then(|| load_tableau(&ROSENBROCK23_32_TABLEAU))
             .transpose()
-            .map_err(|_| SolveError::InvalidTableau)?;
+            .map_err(SolveError::from)?;
         if let Some(tableau) = tableau {
             if tableau.kind() != M::RESOURCE_KIND || (M::ADAPTIVE && tableau.btilde().is_none()) {
                 return Err(SolveError::InvalidTableau);

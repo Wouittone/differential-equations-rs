@@ -2,11 +2,24 @@ use differential_equations::solvers::explicit::Euler;
 use differential_equations::solvers::exponential::RKIP;
 use differential_equations::solvers::rosenbrock::AmfOperator;
 use differential_equations::solvers::second_order::{NewmarkBeta, SecondOrderSolution};
+use differential_equations::tableau::{TableauErrorKind, parse_tableau};
 use differential_equations::{
     ConfigurationError, DEFAULT_EVENT_TOLERANCE, InterpolationError, LieGroupProblem,
     LinearOperatorProblem, OdeProblem, SemilinearOdeProblem, SolveError, SolveOptions,
     SplitOdeProblem, solve,
 };
+use std::error::Error as _;
+
+#[test]
+fn tableau_resource_failures_preserve_category_and_source_chain() {
+    let resource_error = parse_tableau("{", "Broken").unwrap_err();
+    assert_eq!(resource_error.kind(), TableauErrorKind::JsonSyntax);
+    assert!(resource_error.source().is_some());
+
+    let solve_error = SolveError::from(resource_error);
+    assert!(matches!(&solve_error, SolveError::TableauResource(_)));
+    assert!(solve_error.source().is_some());
+}
 
 #[test]
 fn public_constructors_report_typed_configuration_errors() {

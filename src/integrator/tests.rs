@@ -146,7 +146,7 @@ where
         self.attempted_steps.push(step);
         let attempt = self.attempts;
         self.attempts += 1;
-        if let Some(error) = self.failures.get(attempt).copied().flatten() {
+        if let Some(error) = self.failures.get(attempt).cloned().flatten() {
             candidate.fill(f64::NAN);
             return Err(error);
         }

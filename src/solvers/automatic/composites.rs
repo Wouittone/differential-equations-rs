@@ -59,9 +59,7 @@ macro_rules! automatic_facade {
             where
                 F: crate::OdeFunction<P>,
             {
-                let tableau = $component
-                    .tableau()
-                    .map_err(|_| SolveError::InvalidTableau)?;
+                let tableau = $component.tableau().map_err(SolveError::from)?;
                 solve_automatic(
                     problem,
                     options,

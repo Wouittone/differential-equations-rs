@@ -125,10 +125,10 @@ pub fn parse_eserk_tableau(
     requested_order: usize,
     requested_degree: usize,
 ) -> Result<EserkTableau, TableauError> {
-    let raw: RawEserkTableau = serde_json::from_str(source)
-        .map_err(|error| TableauError::new(format!("invalid ESERK tableau JSON: {error}")))?;
+    let raw: RawEserkTableau =
+        serde_json::from_str(source).map_err(|error| TableauError::json("ESERK tableau", error))?;
     if raw.name != requested_name {
-        return Err(TableauError::new(format!(
+        return Err(TableauError::name_mismatch(format!(
             "resource method `{}` does not match requested method `{requested_name}`",
             raw.name
         )));
@@ -183,14 +183,14 @@ pub fn parse_eserk_tableau(
     let alpha = raw
         .alpha
         .materialize()
-        .map_err(|error| TableauError::new(format!("alpha: {error}")))?;
+        .map_err(|error| error.with_context("alpha"))?;
     if alpha <= 0.0 {
         return Err(TableauError::new("ESERK alpha must be positive"));
     }
     let combination_denominator = raw
         .combination_denominator
         .materialize()
-        .map_err(|error| TableauError::new(format!("combination_denominator: {error}")))?;
+        .map_err(|error| error.with_context("combination_denominator"))?;
     if combination_denominator == 0.0 {
         return Err(TableauError::new(
             "ESERK combination_denominator must be non-zero",

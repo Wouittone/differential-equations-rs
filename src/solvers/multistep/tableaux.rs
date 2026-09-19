@@ -134,9 +134,8 @@ pub(super) fn error_constant(
 pub(crate) fn map_tableau_access_error(error: TableauAccessError) -> SolveError {
     match error {
         TableauAccessError::UnsupportedOrder { .. } => SolveError::InvalidMultistepOrder,
-        TableauAccessError::Resource(_) | TableauAccessError::IncompatibleFormula { .. } => {
-            SolveError::InvalidTableau
-        }
+        TableauAccessError::Resource(error) => SolveError::TableauResource(error),
+        TableauAccessError::IncompatibleFormula { .. } => SolveError::InvalidTableau,
     }
 }
 
@@ -144,10 +143,10 @@ pub(crate) fn map_tableau_access_error(error: TableauAccessError) -> SolveError 
 mod tests {
     use super::map_tableau_access_error;
     use crate::SolveError;
-    use crate::tableau::{TableauAccessError, parse_tableau};
+    use crate::tableau::{TableauAccessError, TableauErrorKind, parse_tableau};
 
     #[test]
-    fn access_errors_keep_solve_level_compatibility() {
+    fn access_errors_preserve_solve_level_distinctions() {
         assert_eq!(
             map_tableau_access_error(TableauAccessError::UnsupportedOrder {
                 requested: 6,
@@ -162,11 +161,13 @@ mod tests {
             }),
             SolveError::InvalidTableau
         );
-        assert_eq!(
-            map_tableau_access_error(TableauAccessError::Resource(
-                parse_tableau("{", "Broken").unwrap_err(),
-            )),
-            SolveError::InvalidTableau
-        );
+        let resource = map_tableau_access_error(TableauAccessError::Resource(
+            parse_tableau("{", "Broken").unwrap_err(),
+        ));
+        assert!(matches!(
+            resource,
+            SolveError::TableauResource(error)
+                if error.kind() == TableauErrorKind::JsonSyntax
+        ));
     }
 }

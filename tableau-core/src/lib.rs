@@ -31,7 +31,7 @@ pub use stabilized::{
 };
 
 use serde::Deserialize;
-use std::fmt;
+use std::{error::Error, fmt, sync::Arc};
 
 /// Whether a canonical Runge--Kutta tableau is explicit or implicit.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -234,19 +234,112 @@ impl RungeKuttaTableau {
     }
 }
 
+/// Category of a tableau resource failure.
+///
+/// This classification is stable enough for callers to branch on without
+/// parsing a human-readable diagnostic. The associated [`TableauError`]
+/// retains the complete message and, when available, the originating parser
+/// error.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum TableauErrorKind {
+    /// The resource is not valid JSON or does not match its JSON shape.
+    JsonSyntax,
+    /// The resource declares a different method name than the requested one.
+    NameMismatch,
+    /// A string coefficient is not a supported numeric expression.
+    NumericExpression,
+    /// A parsed or evaluated coefficient is NaN or infinite.
+    NonFiniteCoefficient,
+    /// The decoded tableau violates a mathematical or structural invariant.
+    Validation,
+}
+
 /// A failure to parse or validate a tableau resource.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct TableauError {
+    kind: TableauErrorKind,
     message: String,
+    source: Option<Arc<dyn Error + Send + Sync + 'static>>,
 }
 
 impl TableauError {
     fn new(message: impl Into<String>) -> Self {
         Self {
+            kind: TableauErrorKind::Validation,
             message: message.into(),
+            source: None,
         }
     }
+
+    fn json(context: &str, error: serde_json::Error) -> Self {
+        Self::with_source(
+            TableauErrorKind::JsonSyntax,
+            format!("invalid {context} JSON: {error}"),
+            error,
+        )
+    }
+
+    fn name_mismatch(message: impl Into<String>) -> Self {
+        Self {
+            kind: TableauErrorKind::NameMismatch,
+            message: message.into(),
+            source: None,
+        }
+    }
+
+    fn numeric_expression(message: impl Into<String>) -> Self {
+        Self {
+            kind: TableauErrorKind::NumericExpression,
+            message: message.into(),
+            source: None,
+        }
+    }
+
+    fn numeric_expression_source<E>(message: impl Into<String>, source: E) -> Self
+    where
+        E: Error + Send + Sync + 'static,
+    {
+        Self::with_source(TableauErrorKind::NumericExpression, message, source)
+    }
+
+    fn non_finite(message: impl Into<String>) -> Self {
+        Self {
+            kind: TableauErrorKind::NonFiniteCoefficient,
+            message: message.into(),
+            source: None,
+        }
+    }
+
+    fn with_source<E>(kind: TableauErrorKind, message: impl Into<String>, source: E) -> Self
+    where
+        E: Error + Send + Sync + 'static,
+    {
+        Self {
+            kind,
+            message: message.into(),
+            source: Some(Arc::new(source)),
+        }
+    }
+
+    fn with_context(mut self, context: impl fmt::Display) -> Self {
+        self.message = format!("{context}: {}", self.message);
+        self
+    }
+
+    /// Returns the machine-readable failure category.
+    pub fn kind(&self) -> TableauErrorKind {
+        self.kind
+    }
 }
+
+impl PartialEq for TableauError {
+    fn eq(&self, other: &Self) -> bool {
+        self.kind == other.kind && self.message == other.message
+    }
+}
+
+impl Eq for TableauError {}
 
 impl fmt::Display for TableauError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -254,17 +347,23 @@ impl fmt::Display for TableauError {
     }
 }
 
-impl std::error::Error for TableauError {}
+impl Error for TableauError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        self.source
+            .as_deref()
+            .map(|source| source as &(dyn Error + 'static))
+    }
+}
 
 /// Parses and validates a canonical JSON tableau resource.
 pub fn parse_tableau(
     source: &str,
     requested_name: &str,
 ) -> Result<RungeKuttaTableau, TableauError> {
-    let raw: RawTableau = serde_json::from_str(source)
-        .map_err(|error| TableauError::new(format!("invalid tableau JSON: {error}")))?;
+    let raw: RawTableau =
+        serde_json::from_str(source).map_err(|error| TableauError::json("tableau", error))?;
     if raw.name != requested_name {
-        return Err(TableauError::new(format!(
+        return Err(TableauError::name_mismatch(format!(
             "resource method `{}` does not match requested method `{requested_name}`",
             raw.name
         )));
@@ -352,7 +451,7 @@ impl Scalar {
         value
             .is_finite()
             .then_some(value)
-            .ok_or_else(|| TableauError::new("tableau coefficients must be finite"))
+            .ok_or_else(|| TableauError::non_finite("tableau coefficients must be finite"))
     }
 }
 
@@ -470,7 +569,9 @@ impl RawTableau {
                         .map(|(stage, (b, b_hat))| {
                             let error = b - b_hat;
                             error.is_finite().then_some(error).ok_or_else(|| {
-                                TableauError::new(format!("derived error[{stage}] is not finite"))
+                                TableauError::non_finite(format!(
+                                    "derived error[{stage}] is not finite"
+                                ))
                             })
                         })
                         .collect::<Result<Vec<_>, _>>()?,
@@ -669,7 +770,7 @@ fn materialize_vector(values: &[Scalar], label: &str) -> Result<Vec<f64>, Tablea
         .map(|(index, value)| {
             value
                 .materialize()
-                .map_err(|error| TableauError::new(format!("{label}[{index}]: {error}")))
+                .map_err(|error| error.with_context(format_args!("{label}[{index}]")))
         })
         .collect()
 }
@@ -715,7 +816,7 @@ pub fn parse_numeric_expression(source: &str) -> Result<f64, TableauError> {
         return value
             .is_finite()
             .then_some(value)
-            .ok_or_else(|| TableauError::new("coefficient expression is not finite"));
+            .ok_or_else(|| TableauError::non_finite("coefficient expression is not finite"));
     }
     let arithmetic = normalized.replace("sqrt", "");
     if arithmetic.chars().any(|character| {
@@ -726,24 +827,29 @@ pub fn parse_numeric_expression(source: &str) -> Result<f64, TableauError> {
                 '.' | 'e' | 'E' | '+' | '-' | '*' | '/' | '(' | ')'
             )
     }) {
-        return Err(TableauError::new(format!(
+        return Err(TableauError::numeric_expression(format!(
             "coefficient expression `{source}` uses unsupported symbols"
         )));
     }
     let value = exmex::eval_str::<f64>(&normalized).map_err(|error| {
-        TableauError::new(format!(
-            "invalid coefficient expression `{source}`: {error}"
-        ))
+        TableauError::numeric_expression_source(
+            format!("invalid coefficient expression `{source}`: {error}"),
+            error,
+        )
     })?;
     value
         .is_finite()
         .then_some(value)
-        .ok_or_else(|| TableauError::new("coefficient expression is not finite"))
+        .ok_or_else(|| TableauError::non_finite("coefficient expression is not finite"))
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{ErrorEstimatorKind, RungeKuttaKind, parse_numeric_expression, parse_tableau};
+    use super::{
+        ErrorEstimatorKind, RungeKuttaKind, TableauErrorKind, parse_numeric_expression,
+        parse_tableau,
+    };
+    use std::error::Error as _;
 
     const RESOURCE: &str = r#"{
       "name": "Heun",
@@ -981,6 +1087,30 @@ mod tests {
         assert!(parse_numeric_expression("pi").is_err());
         assert!(parse_numeric_expression("sin(1)").is_err());
         assert!(parse_numeric_expression("coefficient + 1").is_err());
+    }
+
+    #[test]
+    fn tableau_failures_expose_stable_categories_and_parser_sources() {
+        let json = parse_tableau("{", "Heun").unwrap_err();
+        assert_eq!(json.kind(), TableauErrorKind::JsonSyntax);
+        assert!(json.source().is_some());
+
+        let name = parse_tableau(RESOURCE, "Other").unwrap_err();
+        assert_eq!(name.kind(), TableauErrorKind::NameMismatch);
+        assert!(name.source().is_none());
+
+        let expression = parse_numeric_expression("1+").unwrap_err();
+        assert_eq!(expression.kind(), TableauErrorKind::NumericExpression);
+        assert!(expression.source().is_some());
+
+        let non_finite = parse_numeric_expression("1e999").unwrap_err();
+        assert_eq!(non_finite.kind(), TableauErrorKind::NonFiniteCoefficient);
+
+        let invalid = RESOURCE.replace("[\"1/2\", \"1/2\"]", "[1, 1]");
+        assert_eq!(
+            parse_tableau(&invalid, "Heun").unwrap_err().kind(),
+            TableauErrorKind::Validation
+        );
     }
 
     #[test]

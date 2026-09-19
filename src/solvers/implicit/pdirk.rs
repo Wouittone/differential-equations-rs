@@ -46,7 +46,7 @@ impl OdeAlgorithm for Pdirk44 {
     where
         F: crate::OdeFunction<P>,
     {
-        let tableau = self.tableau().map_err(|_| SolveError::InvalidTableau)?;
+        let tableau = self.tableau().map_err(SolveError::from)?;
         integrate(
             problem,
             options,

@@ -20,11 +20,11 @@ pub use differential_equations_tableau_core::{
     RegisterPipelineTableau, Rock2Tableau, Rock4Tableau, RockRecurrence, RockRecurrenceStage,
     RosenbrockKind, RosenbrockPairTableau, RosenbrockTableau, RungeKuttaKind,
     RungeKuttaNystromKind, RungeKuttaNystromTableau, RungeKuttaTableau, Serk2Tableau,
-    SymplecticTableau, TableauError, ThreeSTableau, VariableMultistepTableau, parse_eserk_tableau,
-    parse_irkn_tableau, parse_low_storage_tableau, parse_mis_tableau, parse_mri_tableau,
-    parse_multistep_tableau, parse_rkn_tableau, parse_rock2_tableau, parse_rock4_tableau,
-    parse_rosenbrock_pair_tableau, parse_rosenbrock_tableau, parse_serk2_tableau,
-    parse_symplectic_tableau, parse_tableau, parse_variable_multistep_tableau,
+    SymplecticTableau, TableauError, TableauErrorKind, ThreeSTableau, VariableMultistepTableau,
+    parse_eserk_tableau, parse_irkn_tableau, parse_low_storage_tableau, parse_mis_tableau,
+    parse_mri_tableau, parse_multistep_tableau, parse_rkn_tableau, parse_rock2_tableau,
+    parse_rock4_tableau, parse_rosenbrock_pair_tableau, parse_rosenbrock_tableau,
+    parse_serk2_tableau, parse_symplectic_tableau, parse_tableau, parse_variable_multistep_tableau,
 };
 
 /// A failure to select or materialize a requested tableau.
@@ -59,6 +59,16 @@ pub enum TableauAccessError {
         /// Formula family or invariant that rejected the resource.
         context: &'static str,
     },
+}
+
+impl From<TableauAccessError> for crate::SolveError {
+    fn from(error: TableauAccessError) -> Self {
+        match error {
+            TableauAccessError::Resource(error) => Self::TableauResource(error),
+            TableauAccessError::UnsupportedOrder { .. }
+            | TableauAccessError::IncompatibleFormula { .. } => Self::InvalidTableau,
+        }
+    }
 }
 
 /// A lazily initialized, validated Runge--Kutta tableau.

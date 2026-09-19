@@ -322,11 +322,11 @@ pub fn parse_rock2_tableau(
     requested_name: &str,
     requested_degree: usize,
 ) -> Result<Rock2Tableau, TableauError> {
-    let raw: RawRock2Tableau = serde_json::from_str(source)
-        .map_err(|error| TableauError::new(format!("invalid ROCK2 tableau JSON: {error}")))?;
+    let raw: RawRock2Tableau =
+        serde_json::from_str(source).map_err(|error| TableauError::json("ROCK2 tableau", error))?;
 
     if raw.name != requested_name {
-        return Err(TableauError::new(format!(
+        return Err(TableauError::name_mismatch(format!(
             "resource method `{}` does not match requested method `{requested_name}`",
             raw.name
         )));
@@ -357,12 +357,12 @@ pub fn parse_rock2_tableau(
         .finishing
         .first
         .materialize()
-        .map_err(|error| TableauError::new(format!("finishing.first: {error}")))?;
+        .map_err(|error| error.with_context("finishing.first"))?;
     let finish_second = raw
         .finishing
         .second
         .materialize()
-        .map_err(|error| TableauError::new(format!("finishing.second: {error}")))?;
+        .map_err(|error| error.with_context("finishing.second"))?;
 
     validate_order_two(
         recurrence.first_stage,
@@ -397,7 +397,7 @@ fn materialize_rock_recurrence(
     let first_stage = raw
         .first
         .materialize()
-        .map_err(|error| TableauError::new(format!("recurrence.first: {error}")))?;
+        .map_err(|error| error.with_context("recurrence.first"))?;
     let stages = raw
         .stages
         .into_iter()
@@ -405,10 +405,10 @@ fn materialize_rock_recurrence(
         .map(|(index, stage)| {
             Ok(RockRecurrenceStage {
                 mu: stage[0].materialize().map_err(|error| {
-                    TableauError::new(format!("recurrence.stages[{index}].mu: {error}"))
+                    error.with_context(format_args!("recurrence.stages[{index}].mu"))
                 })?,
                 kappa: stage[1].materialize().map_err(|error| {
-                    TableauError::new(format!("recurrence.stages[{index}].kappa: {error}"))
+                    error.with_context(format_args!("recurrence.stages[{index}].kappa"))
                 })?,
             })
         })
@@ -429,10 +429,10 @@ pub fn parse_rock4_tableau(
     requested_name: &str,
     requested_degree: usize,
 ) -> Result<Rock4Tableau, TableauError> {
-    let raw: RawRock4Tableau = serde_json::from_str(source)
-        .map_err(|error| TableauError::new(format!("invalid ROCK4 tableau JSON: {error}")))?;
+    let raw: RawRock4Tableau =
+        serde_json::from_str(source).map_err(|error| TableauError::json("ROCK4 tableau", error))?;
     if raw.name != requested_name {
-        return Err(TableauError::new(format!(
+        return Err(TableauError::name_mismatch(format!(
             "resource method `{}` does not match requested method `{requested_name}`",
             raw.name
         )));
@@ -508,10 +508,10 @@ pub fn parse_serk2_tableau(
     requested_name: &str,
     requested_degree: usize,
 ) -> Result<Serk2Tableau, TableauError> {
-    let raw: RawSerk2Tableau = serde_json::from_str(source)
-        .map_err(|error| TableauError::new(format!("invalid SERK2 tableau JSON: {error}")))?;
+    let raw: RawSerk2Tableau =
+        serde_json::from_str(source).map_err(|error| TableauError::json("SERK2 tableau", error))?;
     if raw.name != requested_name {
-        return Err(TableauError::new(format!(
+        return Err(TableauError::name_mismatch(format!(
             "resource method `{}` does not match requested method `{requested_name}`",
             raw.name
         )));
@@ -545,7 +545,7 @@ pub fn parse_serk2_tableau(
     let alpha = raw
         .alpha
         .materialize()
-        .map_err(|error| TableauError::new(format!("alpha: {error}")))?;
+        .map_err(|error| error.with_context("alpha"))?;
     if alpha <= 0.0 {
         return Err(TableauError::new("SERK2 alpha must be positive"));
     }

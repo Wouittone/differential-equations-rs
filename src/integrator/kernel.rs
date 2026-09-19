@@ -11,13 +11,13 @@ pub(super) enum AttemptFailurePolicy {
 }
 
 impl AttemptFailurePolicy {
-    pub(super) const fn is_recoverable(self, error: SolveError) -> bool {
+    pub(super) const fn is_recoverable(self, error: &SolveError) -> bool {
         matches!(
             (self, error),
             (
                 Self::NonlinearOrSingular,
-                SolveError::NonlinearSolveFailed | SolveError::SingularLinearSystem
-            ) | (Self::NonFiniteDerivative, SolveError::NonFiniteDerivative)
+                &SolveError::NonlinearSolveFailed | &SolveError::SingularLinearSystem
+            ) | (Self::NonFiniteDerivative, &SolveError::NonFiniteDerivative)
         )
     }
 }
@@ -43,7 +43,7 @@ pub(crate) struct KernelTransition {
 }
 
 /// Why the shared driver rejected the most recent candidate or attempt.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) enum RejectionReason {
     /// A recoverable numerical attempt failed before producing a candidate.
     AttemptFailure(SolveError),

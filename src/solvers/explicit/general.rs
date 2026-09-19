@@ -45,7 +45,7 @@ impl OdeAlgorithm for ResourceExplicitRungeKutta {
     where
         F: crate::OdeFunction<P>,
     {
-        let tableau = load_tableau(self.resource).map_err(|_| SolveError::InvalidTableau)?;
+        let tableau = load_tableau(self.resource).map_err(SolveError::from)?;
         integrate_resource(problem, options, tableau)
     }
 }

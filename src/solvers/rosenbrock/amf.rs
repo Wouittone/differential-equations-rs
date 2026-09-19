@@ -306,9 +306,7 @@ struct AmfKernel<E> {
 impl<E> AmfKernel<E> {
     fn new(n: usize, factor_count: usize, evaluate: E) -> Result<Self, SolveError> {
         Ok(Self {
-            tableau: Rosenbrock23
-                .tableau()
-                .map_err(|_| SolveError::InvalidTableau)?,
+            tableau: Rosenbrock23.tableau().map_err(SolveError::from)?,
             n,
             evaluate,
             derivative: vec![0.0; n],
