@@ -1,7 +1,7 @@
 use differential_equations::solvers::explicit::Euler;
 use differential_equations::solvers::exponential::RKIP;
 use differential_equations::solvers::rosenbrock::AmfOperator;
-use differential_equations::solvers::second_order::NewmarkBeta;
+use differential_equations::solvers::second_order::{NewmarkBeta, SecondOrderSolution};
 use differential_equations::{
     ConfigurationError, DEFAULT_EVENT_TOLERANCE, InterpolationError, LieGroupProblem,
     LinearOperatorProblem, OdeProblem, SemilinearOdeProblem, SolveError, SolveOptions,
@@ -84,6 +84,36 @@ fn interpolation_queries_preserve_failure_reasons() {
     );
     assert_eq!(solution.try_interpolate(0.25).unwrap(), vec![0.25]);
     assert_eq!(solution.interpolate(2.0), None);
+
+    let mut ordinary_output = [0.0];
+    solution
+        .try_interpolate_into(0.25, &mut ordinary_output)
+        .unwrap();
+    assert_eq!(ordinary_output, [0.25]);
+    assert_eq!(
+        solution.try_interpolate_into(0.25, &mut []),
+        Err(InterpolationError::DimensionMismatch)
+    );
+
+    let partitioned = SecondOrderSolution::from_saved(
+        vec![0.0, 1.0],
+        vec![0.0, 2.0],
+        vec![1.0, 3.0],
+        &[1],
+        Default::default(),
+    )
+    .unwrap();
+    let mut velocity = [0.0];
+    let mut position = [0.0];
+    partitioned
+        .try_interpolate_into(0.5, &mut velocity, &mut position)
+        .unwrap();
+    assert_eq!(velocity, [1.0]);
+    assert_eq!(position, [2.0]);
+    assert_eq!(
+        partitioned.try_interpolate_into(0.5, &mut [], &mut position),
+        Err(InterpolationError::DimensionMismatch)
+    );
 }
 
 #[test]

@@ -9,7 +9,7 @@ mod recorder;
 pub use api::Solution;
 pub(crate) use api::{
     checked_state_dimension, finite_partitioned_interpolation, interpolate_value,
-    interpolation_fraction, validate_saved_solution,
+    interpolation_fraction, validate_finite_partitioned_interpolation, validate_saved_solution,
 };
 pub(crate) use dense::{
     BorrowedHermiteSegment, BorrowedRungeKuttaSegment, BorrowedStiffSegment, BorrowedTaylorSegment,

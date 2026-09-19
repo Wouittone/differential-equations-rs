@@ -1,6 +1,6 @@
 use super::driver::interpolate;
 use crate::solution::{
-    finite_partitioned_interpolation, interpolate_value, interpolation_fraction,
+    interpolate_value, interpolation_fraction, validate_finite_partitioned_interpolation,
 };
 use crate::{InterpolationError, SolverStats};
 use ndarray::IxDyn;
@@ -128,6 +128,26 @@ impl SecondOrderSolution {
 
     /// Interpolates `(velocity, position)` and reports why the query fails.
     pub fn try_interpolate(&self, time: f64) -> Result<(Vec<f64>, Vec<f64>), InterpolationError> {
+        let mut velocity = vec![0.0; self.dimension];
+        let mut position = vec![0.0; self.dimension];
+        self.try_interpolate_into(time, &mut velocity, &mut position)?;
+        Ok((velocity, position))
+    }
+
+    /// Interpolates into caller-owned velocity and position buffers.
+    ///
+    /// Both buffers must contain exactly [`Self::dimension`] entries. On
+    /// success they are overwritten with `(velocity, position)` at `time`; on
+    /// failure their contents are unspecified.
+    pub fn try_interpolate_into(
+        &self,
+        time: f64,
+        velocity: &mut [f64],
+        position: &mut [f64],
+    ) -> Result<(), InterpolationError> {
+        if velocity.len() != self.dimension || position.len() != self.dimension {
+            return Err(InterpolationError::DimensionMismatch);
+        }
         if !time.is_finite() {
             return Err(InterpolationError::NonFiniteTime);
         }
@@ -136,19 +156,19 @@ impl SecondOrderSolution {
         }
         for (index, &saved_time) in self.times.iter().enumerate().rev() {
             if time == saved_time {
-                let velocity = self
-                    .velocity(index)
-                    .ok_or(InterpolationError::InvalidSegmentData {
-                        context: "saved second-order velocity",
-                    })?
-                    .to_vec();
-                let position = self
-                    .position(index)
-                    .ok_or(InterpolationError::InvalidSegmentData {
-                        context: "saved second-order position",
-                    })?
-                    .to_vec();
-                return finite_partitioned_interpolation(
+                let saved_velocity =
+                    self.velocity(index)
+                        .ok_or(InterpolationError::InvalidSegmentData {
+                            context: "saved second-order velocity",
+                        })?;
+                let saved_position =
+                    self.position(index)
+                        .ok_or(InterpolationError::InvalidSegmentData {
+                            context: "saved second-order position",
+                        })?;
+                velocity.copy_from_slice(saved_velocity);
+                position.copy_from_slice(saved_position);
+                return validate_finite_partitioned_interpolation(
                     velocity,
                     position,
                     "saved second-order state",
@@ -157,14 +177,12 @@ impl SecondOrderSolution {
         }
         for segment in &self.dense_segments {
             if segment.contains(time) {
-                let mut velocity = vec![0.0; self.dimension];
-                let mut position = vec![0.0; self.dimension];
-                segment
-                    .interpolate(time, &mut velocity, &mut position)
-                    .ok_or(InterpolationError::InvalidSegmentData {
+                segment.interpolate(time, velocity, position).ok_or(
+                    InterpolationError::InvalidSegmentData {
                         context: "second-order dense segment",
-                    })?;
-                return finite_partitioned_interpolation(
+                    },
+                )?;
+                return validate_finite_partitioned_interpolation(
                     velocity,
                     position,
                     "second-order dense segment",
@@ -176,8 +194,6 @@ impl SecondOrderSolution {
             let right = self.times[index];
             if between(time, left, right) && left != right {
                 let fraction = interpolation_fraction(time, left, right).clamp(0.0, 1.0);
-                let mut velocity = vec![0.0; self.dimension];
-                let mut position = vec![0.0; self.dimension];
                 interpolate(
                     self.velocity(index)
                         .ok_or(InterpolationError::InvalidSegmentData {
@@ -188,7 +204,7 @@ impl SecondOrderSolution {
                             context: "saved second-order velocity",
                         })?,
                     fraction,
-                    &mut velocity,
+                    velocity,
                 );
                 interpolate(
                     self.position(index)
@@ -200,9 +216,9 @@ impl SecondOrderSolution {
                             context: "saved second-order position",
                         })?,
                     fraction,
-                    &mut position,
+                    position,
                 );
-                return finite_partitioned_interpolation(
+                return validate_finite_partitioned_interpolation(
                     velocity,
                     position,
                     "saved second-order interpolation",

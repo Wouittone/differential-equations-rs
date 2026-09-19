@@ -155,6 +155,24 @@ impl Solution {
 
     /// Interpolates the saved trajectory and reports why a query cannot be served.
     pub fn try_interpolate(&self, time: f64) -> Result<Vec<f64>, InterpolationError> {
+        let mut output = vec![0.0; self.dimension];
+        self.try_interpolate_into(time, &mut output)?;
+        Ok(output)
+    }
+
+    /// Interpolates into caller-owned contiguous storage without allocating.
+    ///
+    /// `output` must contain exactly [`Self::dimension`] entries. On success it
+    /// is overwritten with the state at `time`; on failure its contents are
+    /// unspecified.
+    pub fn try_interpolate_into(
+        &self,
+        time: f64,
+        output: &mut [f64],
+    ) -> Result<(), InterpolationError> {
+        if output.len() != self.dimension {
+            return Err(InterpolationError::DimensionMismatch);
+        }
         if !time.is_finite() {
             return Err(InterpolationError::NonFiniteTime);
         }
@@ -163,18 +181,18 @@ impl Solution {
         }
         for (index, &saved_time) in self.times.iter().enumerate().rev() {
             if time == saved_time {
-                let output = self.state(index).map(<[f64]>::to_vec).ok_or(
-                    InterpolationError::InvalidSegmentData {
+                let state = self
+                    .state(index)
+                    .ok_or(InterpolationError::InvalidSegmentData {
                         context: "saved solution state",
-                    },
-                )?;
+                    })?;
+                output.copy_from_slice(state);
                 return finite_interpolation(output, "saved solution state");
             }
         }
         for segment in &self.dense_segments {
             if segment.contains(time) {
-                let mut output = vec![0.0; self.dimension];
-                segment.interpolate(time, &mut output)?;
+                segment.interpolate(time, output)?;
                 return finite_interpolation(output, "dense output");
             }
         }
@@ -195,11 +213,10 @@ impl Solution {
                     .ok_or(InterpolationError::InvalidSegmentData {
                         context: "saved solution state",
                     })?;
-                let output = previous
-                    .iter()
-                    .zip(current)
-                    .map(|(&previous, &current)| interpolate_value(previous, current, fraction))
-                    .collect();
+                for ((output, &previous), &current) in output.iter_mut().zip(previous).zip(current)
+                {
+                    *output = interpolate_value(previous, current, fraction);
+                }
                 return finite_interpolation(output, "linear");
             }
         }
@@ -326,14 +343,11 @@ pub(crate) fn interpolate_value(previous: f64, current: f64, fraction: f64) -> f
     }
 }
 
-fn finite_interpolation(
-    output: Vec<f64>,
-    context: &'static str,
-) -> Result<Vec<f64>, InterpolationError> {
+fn finite_interpolation(output: &[f64], context: &'static str) -> Result<(), InterpolationError> {
     output
         .iter()
         .all(|value| value.is_finite())
-        .then_some(output)
+        .then_some(())
         .ok_or(InterpolationError::NonFiniteResult { context })
 }
 
@@ -344,8 +358,21 @@ pub(crate) fn finite_partitioned_interpolation(
 ) -> Result<(Vec<f64>, Vec<f64>), InterpolationError> {
     velocity
         .iter()
-        .chain(&position)
+        .chain(position.iter())
         .all(|value| value.is_finite())
         .then_some((velocity, position))
+        .ok_or(InterpolationError::NonFiniteResult { context })
+}
+
+pub(crate) fn validate_finite_partitioned_interpolation(
+    velocity: &[f64],
+    position: &[f64],
+    context: &'static str,
+) -> Result<(), InterpolationError> {
+    velocity
+        .iter()
+        .chain(position.iter())
+        .all(|value| value.is_finite())
+        .then_some(())
         .ok_or(InterpolationError::NonFiniteResult { context })
 }
