@@ -19,13 +19,13 @@ a CodSpeed-compatible Criterion regression harness.
 
 Every item in this section is a 1.0 release blocker.
 
-Work through the sections in dependency order: finish the resource model and
-remove the legacy loader first, implement in-flight automatic switching on the
-resulting stable solver boundaries, then complete module decomposition and the
-public-API review. A checkbox represents committed repository state, not work
-in progress. Close one only when its implementation, focused regression tests,
-public documentation, and applicable CI gates land together; record follow-up
-work as another unchecked item rather than weakening its completion criteria.
+The resource model, automatic switching, module decomposition, public API
+freeze, and local numerical certification are complete. The remaining release
+evidence is a green remote CI run from the reviewed commits. A checkbox
+represents committed repository state, not work in progress. Close one only
+when its implementation, focused regression tests, public documentation, and
+applicable local gates land together; record follow-up work as another
+unchecked item rather than weakening its completion criteria.
 
 ### Finish typed tableau resources
 
@@ -100,22 +100,22 @@ cost, allocations, and both explicit-only and stiff-only baselines.
 
 ### Finish code and API hardening
 
-- [ ] Split oversized files along stable responsibilities, especially the
+- [x] Split oversized files along stable responsibilities, especially the
   second-order API and drivers, extended Rosenbrock and stabilized methods,
   and the shared problem, solution, and integration cores.
 - [x] Keep algorithms under `solvers::<family>` while driver, workspace,
   controller, and resource implementation details remain private unless they
   are deliberate extension surfaces.
-- [ ] Standardize constructors, options, typed errors, tableau inspection,
+- [x] Standardize constructors, options, typed errors, tableau inspection,
   solutions, and interpolation across solver families.
-- [ ] Complete rustdoc examples and links for every public type and supported
+- [x] Complete rustdoc examples and links for every public type and supported
   extension point.
 - [x] Add downstream smoke crates for default and no-default features, a
   renamed dependency, a file-defined tableau, and scalar/vector/matrix states.
-- [ ] Audit coefficient provenance and precision, method orders, dense output,
+- [x] Audit coefficient provenance and precision, method orders, dense output,
   estimators, stability policies, and controllers against the pinned upstream
   implementation.
-- [ ] Review the complete public API as a 1.0 compatibility commitment. Once
+- [x] Review the complete public API as a 1.0 compatibility commitment. Once
   that review is committed, create the immutable `api-freeze-v1` tag and use
   it as the pre-1.0 `cargo semver-checks --baseline-rev` baseline.
 
@@ -125,13 +125,14 @@ cost, allocations, and both explicit-only and stiff-only baselines.
 | --- | ---: |
 | Remaining tableau migrations and legacy-loader removal | Completed |
 | In-flight automatic switching and verification | Completed |
-| Module decomposition and public API hardening | 5–10 development days |
-| Numerical audit, downstream testing, and release preparation | 5–10 development days |
+| Module decomposition and public API hardening | Completed |
+| Numerical audit, downstream testing, and release preparation | Completed locally; remote CI pending |
 
-A credible 1.0 release still requires module and API hardening plus the
-method-by-method numerical audit. Those remaining items carry the most
-uncertainty. Parallel review can reduce calendar time, but every integrated
-release gate below must still pass.
+The method-by-method numerical audit, downstream tests, documentation, and
+local release gates are complete. A credible 1.0 release still requires a
+green remote CI run from the reviewed commits, an explicit decision to remove
+the publication lock and beta wording, and publication of the internal crates
+in dependency order.
 
 The pre-1.0 implementation namespaces named `general` and
 `second_order::function` are no longer public. Import their reachable API from
@@ -212,13 +213,12 @@ The renamed `differential-equations-rs` package has no published compatibility
 baseline yet. Do not compare it with the unrelated package previously published
 as `differential-equations`.
 
-After the 1.0 API review and all quality gates pass, commit the reviewed API and
-create an immutable annotated `api-freeze-v1` tag at that commit. Subsequent
-pre-1.0 changes must run `cargo semver-checks` for each workspace package with
-that tag supplied through `--baseline-rev`. Once a project-owned prerelease of
-each package exists on crates.io, use the corresponding registry release as an
-additional baseline. This workflow establishes a future baseline; it does not
-claim that either the tag or a project-owned registry release exists today.
+The reviewed API is committed and the immutable annotated `api-freeze-v1` tag
+identifies that commit. Subsequent pre-1.0 changes must run
+`cargo semver-checks` for each workspace package with that tag supplied through
+`--baseline-rev`. Once a project-owned prerelease of each package exists on
+crates.io, use the corresponding registry release as an additional baseline.
+No project-owned registry release exists yet.
 
 The Cargo-native package gate used by CI is:
 

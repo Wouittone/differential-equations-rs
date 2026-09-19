@@ -7,6 +7,19 @@ currently a beta and requires Rust 1.85 or newer.
 The Cargo package is named `differential-equations-rs`; its library target is
 `differential_equations`, so Rust imports remain concise and stable.
 
+The package is not published yet. Until the publication lock is removed for a
+reviewed release, use a path dependency from a checkout:
+
+```toml
+[dependencies]
+differential-equations-rs = { path = "../differential-equations-rs" }
+```
+
+The package explicitly names its library target `differential_equations`, hence
+`use differential_equations::...` in the examples below. API documentation is
+generated with every feature enabled and treats missing documentation and
+broken intra-doc links as errors.
+
 The supported API is intentionally hierarchical: problem, option, solution,
 and driver types live at the crate root, while algorithms live under
 `solvers::<family>`.
@@ -351,9 +364,9 @@ adaptive stepping by default. Other low-storage methods require
 `adaptive = false` and an explicit initial step.
 All named symplectic compositions use individual resources and
 expose fallible `Method::tableau()` access with
-`a()`/`b()` coefficient slices. Some other specialized families still retain
-legacy embedded coefficient data; see
-[the tableau resource guide](docs/TABLEAU_RESOURCES.md).
+`a()`/`b()` coefficient slices. The
+[tableau resource guide](docs/TABLEAU_RESOURCES.md) documents every supported
+resource shape, its validation rules, and the downstream definition macros.
 
 ## Development
 

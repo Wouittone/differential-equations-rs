@@ -26,6 +26,33 @@ numeric literals, parentheses, `+`, `-`, `*`, `/`, and `sqrt(...)`.
 JSON numeric tokens use `serde_json`'s accurate float-roundtrip parsing so
 decimal numbers and equivalent decimal strings produce the same `f64` bits.
 
+## Downstream author workflow
+
+1. Copy the schema for the target method family next to the resource while
+   authoring it, or configure the editor to use the corresponding schema under
+   `src/tableau/resources`.
+2. For an algorithm-defining macro, give the resource the same `name` as the
+   generated Rust type. For a tableau-only macro, match the resource `name` to
+   the macro's explicit method-name string. Preserve source expressions such
+   as `"1/6"` when that best records the coefficient's provenance.
+3. Invoke the algorithm-defining macro from
+   `differential_equations::tableau` for ordinary explicit RK, low-storage RK,
+   RKN, or symplectic methods. Use a tableau-only macro only when a specialized
+   kernel already owns the algorithm implementation.
+4. Keep the JSON file in the downstream package archive. Macro paths are
+   relative to that package's `CARGO_MANIFEST_DIR`, not to the Rust module that
+   invokes the macro.
+5. In tests, call an algorithm-defining macro's generated `.tableau()` accessor
+   to inspect the parsed metadata and coefficients. Tableau-only macros expose
+   a lazy static for `load_tableau` or an owning kernel's accessor instead. A
+   successful build already proves structural validation; method order or
+   stability claims still require numerical certification.
+
+The runnable [`tableau_from_file` example](../examples/tableau_from_file.rs)
+shows the complete explicit-RK path. When the dependency is renamed in
+`Cargo.toml`, pass `crate = renamed_dependency` to the macro so its generated
+paths use that local name.
+
 ## Low-storage Runge--Kutta resources
 
 Each built-in low-storage method has an independent resource under
@@ -638,8 +665,13 @@ include = [
     "/src/**/*.rs",
     "/src/tableau/resources/**/*.json",
     "/README.md",
+    "/docs/TABLEAU_RESOURCES.md",
+    "/LICENSE-APACHE",
+    "/LICENSE-MIT",
 ]
 ```
 
-Use `cargo package --list` to inspect the archive. Cargo tracks every
+This is a minimal illustration, not a replacement for the main package's full
+include list. Downstream packages should add every resource path consumed by a
+macro. Use `cargo package --list` to inspect the archive. Cargo tracks every
 `include_str!` input, so editing a resource invalidates its dependent build.

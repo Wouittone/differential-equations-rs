@@ -6,6 +6,34 @@
 //! use. This includes ordinary Runge--Kutta, Runge--Kutta--Nyström, improved
 //! RKN, low-storage and stabilized Runge--Kutta, multistep, Rosenbrock,
 //! multirate, and symplectic representations.
+//!
+//! # Downstream methods
+//!
+//! A downstream crate normally selects an algorithm-defining macro rather than
+//! constructing a tableau by hand:
+//!
+//! - [`define_explicit_rk_from_file!`] defines an explicit Runge--Kutta solver;
+//! - [`define_low_storage_rk_from_file!`] defines a low-storage RK solver;
+//! - [`define_rkn_from_file!`] defines a fixed or adaptive second-order RKN
+//!   solver; and
+//! - [`define_symplectic_from_file!`] defines a drift/kick composition.
+//!
+//! The remaining macros define typed lazy tableau statics for specialized
+//! kernels already owned by the caller. Paths are relative to the downstream
+//! package's `CARGO_MANIFEST_DIR`; the macro validates the JSON while compiling
+//! and embeds it with [`include_str!`]. Each generated method owns an independent
+//! [`LazyLock`], so unused methods are not parsed or materialized; initialized
+//! tableaus are retained independently.
+//!
+//! Generated `.tableau()` accessors and [`load_tableau`] return
+//! [`TableauError`] instead of panicking. Runtime-order families use
+//! [`TableauAccessError`] to distinguish an unsupported order from a malformed
+//! resource. The complete JSON formats and packaging requirements are in the
+//! [tableau resource guide]. A runnable downstream-style example is available
+//! in [`examples/tableau_from_file.rs`].
+//!
+//! [tableau resource guide]: https://github.com/Wouittone/differential-equations-rs/blob/main/docs/TABLEAU_RESOURCES.md
+//! [`examples/tableau_from_file.rs`]: https://github.com/Wouittone/differential-equations-rs/blob/main/examples/tableau_from_file.rs
 
 use std::sync::LazyLock;
 use thiserror::Error;
