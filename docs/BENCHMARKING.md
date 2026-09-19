@@ -72,18 +72,39 @@ cargo test --locked --test rosenbrock_resource_allocations
 
 ## Matched Rust/Julia matrix
 
-The matched 31-algorithm sources are in `benches/comparison`. Run timing and
-allocation measurements separately so allocation instrumentation cannot skew
-the timing lane:
+The repository checkout contains the matched 31-algorithm sources in
+`benches/comparison`; the Julia runner and verifier are repository-only because
+they also require the pinned submodule and `tests/julia` environment. The crate
+archive retains the Cargo benchmark target but not that repository
+infrastructure. Run timing and allocation measurements separately so allocation
+instrumentation cannot skew the timing lane:
 
 ```console
-cargo bench --locked --bench comparison_matrix -- --repetitions 20
-cargo bench --locked --features allocation-metrics --bench comparison_matrix -- --repetitions 20
-julia --startup-file=no --project=tests/julia benches/comparison/julia_matrix.jl --repetitions 20 --mode timing
-julia --startup-file=no --project=tests/julia benches/comparison/julia_matrix.jl --repetitions 20 --mode allocation
+cargo bench --locked --bench comparison_matrix -- --repetitions 20 > rust-timing.csv
+julia --startup-file=no --project=tests/julia benches/comparison/julia_matrix.jl --repetitions 20 --mode timing > julia-timing.csv
+julia --startup-file=no benches/comparison/verify_matrix.jl --rust rust-timing.csv --julia julia-timing.csv
+
+cargo bench --locked --features allocation-metrics --bench comparison_matrix -- --repetitions 20 > rust-allocation.csv
+julia --startup-file=no --project=tests/julia benches/comparison/julia_matrix.jl --repetitions 20 --mode allocation > julia-allocation.csv
+julia --startup-file=no benches/comparison/verify_matrix.jl --rust rust-allocation.csv --julia julia-allocation.csv
 ```
 
-Each command writes CSV to standard output. Compare rows with matching
-algorithm names, dimensions, tolerances, and solver modes. Benchmark results
-are machine- and revision-specific artifacts and are deliberately not checked
-into the repository.
+The verifier requires the complete 31-algorithm matrix, exact matched
+dimensions, finite positive timing and right-hand-side work measurements, and
+valid allocation measurements when present. Endpoint checksums must agree with
+relative tolerance `2e-7` or absolute tolerance `5e-8`; these defaults can be
+overridden with `--checksum-rtol` and `--checksum-atol`. The absolute threshold
+covers the stiff cases whose expected endpoints are close to zero, while the
+relative threshold covers order-one states.
+
+Timing and right-hand-side ratios are printed for investigation but are not CI
+failure thresholds. Shared-runner noise makes cross-language speed gates
+unstable, and the implementations account for finite-difference and Jacobian
+work differently. CodSpeed remains the regression gate for Rust timing. CI
+runs this matched-matrix certification with one repetition and one Julia
+thread as a correctness smoke test; release comparisons should use the 20
+repetitions shown above on an otherwise idle machine.
+
+Benchmark commands write CSV to standard output. Results are machine- and
+revision-specific artifacts and are deliberately not checked into the
+repository.

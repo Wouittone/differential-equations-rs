@@ -43,6 +43,7 @@ using OrdinaryDiffEqLowStorageRK:
     ParsaniKetchesonDeconinck3S82,
     ParsaniKetchesonDeconinck3S94,
     ParsaniKetchesonDeconinck3S205
+using OrdinaryDiffEqTsit5: Tsit5
 
 function rust_low_storage_endpoints()
     manifest = joinpath(REPOSITORY_ROOT, "Cargo.toml")
@@ -101,6 +102,19 @@ function adaptive_low_storage_reference(algorithm)
         save_everystep = false,
     )
     only(solution.u[end])
+end
+
+function adaptive_low_storage_reference(
+        ::Union{CKLLSRK43_2, CKLLSRK54_3M_3R}
+    )
+    # At the pinned revision, both the mutable and constant-cache 2RP/3RP
+    # kernels start a rejected retry from `integrator.u` instead of
+    # `integrator.uprev`. Their primary formulas are correct (the fixed-step
+    # comparisons below cover them), but copying that state-contamination bug
+    # would make the Rust result wrong.
+    # Use the pinned high-accuracy Tsit5 implementation as the independent
+    # adaptive reference until the upstream retry path is corrected.
+    adaptive_low_storage_reference(Tsit5())
 end
 
 @testset "Low-storage Runge--Kutta compliance" begin

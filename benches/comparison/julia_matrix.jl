@@ -1,4 +1,4 @@
-include(joinpath(@__DIR__, "..", "tests", "julia", "pinned_environment.jl"))
+include(joinpath(@__DIR__, "..", "..", "tests", "julia", "pinned_environment.jl"))
 check_pins()
 
 using SciMLBase: ODEProblem, solve
@@ -87,6 +87,7 @@ function main()
         end
         index += 1
     end
+    repetitions > 0 || error("repetitions must be greater than zero")
     nonstiff = problem(128, 0.2, 2.0)
     stiff = problem(8, 20.0, 1.0)
 

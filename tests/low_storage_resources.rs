@@ -660,6 +660,37 @@ fn rejected_register_pipeline_attempts_reuse_the_start_derivative() {
     );
 }
 
+fn assert_rejected_register_pipeline_attempts_preserve_state<A>(algorithm: A)
+where
+    A: OdeAlgorithm,
+{
+    let problem = OdeProblem::new(
+        |du: &mut [f64], u: &[f64], _: &(), time| du[0] = u[0] + time,
+        [1.0],
+        (0.0, 1.0),
+        (),
+    );
+    let options = SolveOptions::new()
+        .with_initial_step(0.1)
+        .with_tolerances(1.0e-8, 1.0e-8)
+        .with_save(SaveMode::Endpoints);
+    let solution = solve(&problem, algorithm, &options).unwrap();
+    assert!(solution.stats().rejected_steps > 0);
+    let exact = 2.0 * std::f64::consts::E - 2.0;
+    let error = (solution.last_state()[0] - exact).abs();
+    assert!(
+        error < 5.0e-7,
+        "rejected attempts contaminated the accepted state: error={error:e}, stats={:?}",
+        solution.stats(),
+    );
+}
+
+#[test]
+fn rejected_register_pipeline_attempts_preserve_the_last_accepted_state() {
+    assert_rejected_register_pipeline_attempts_preserve_state(CKLLSRK43_2);
+    assert_rejected_register_pipeline_attempts_preserve_state(CKLLSRK54_3M_3R);
+}
+
 #[test]
 fn rejected_three_s_pid_attempts_reuse_the_start_derivative() {
     let problem = OdeProblem::new(

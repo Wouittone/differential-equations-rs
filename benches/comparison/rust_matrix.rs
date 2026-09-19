@@ -92,6 +92,10 @@ fn main() {
     let mut args = std::env::args().skip(1);
     while let Some(argument) = args.next() {
         match argument.as_str() {
+            // `cargo bench` forwards this libtest compatibility flag even for
+            // harness-free benchmark targets.  It has no meaning here, but
+            // accepting it keeps the documented Cargo invocation usable.
+            "--bench" => {}
             "--repetitions" => {
                 repetitions = args
                     .next()
@@ -112,6 +116,7 @@ fn main() {
     if let Some(value) = positional_repetitions {
         repetitions = value;
     }
+    assert!(repetitions > 0, "repetitions must be greater than zero");
 
     let selected = |name: &str| {
         selected_algorithm
