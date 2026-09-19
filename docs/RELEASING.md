@@ -170,9 +170,13 @@ can evaluate a problem through checked public methods and construct validated
 saved trajectories with `Solution::from_saved` or
 `SecondOrderSolution::from_saved`. Malformed custom results now produce
 `SolutionConstructionError` through the corresponding solve error rather than
-relying on private constructors or unchecked shape metadata. The second-order
-drivers and workspaces are split into private fixed-step, RKN, structural, and
-shared lifecycle modules without changing the public import paths.
+relying on private constructors or unchecked shape metadata. Custom drivers
+that do not implement callback lifecycle behavior can inspect
+`has_callbacks()` for both problem kinds and return the typed
+`CallbacksUnsupported` error instead of silently dropping user policies. The
+second-order drivers and workspaces are split into private fixed-step, RKN,
+structural, and shared lifecycle modules without changing the public import
+paths.
 
 ### Definition of done
 

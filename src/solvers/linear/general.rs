@@ -69,7 +69,9 @@ pub trait LinearOperatorAlgorithm {
         O: Fn(&mut [f64], &[f64], &P, f64),
     {
         validate_inputs(problem.initial_state(), problem.time_span(), options)?;
-        self.solve_operator_validated(problem, options)
+        let mut solution = self.solve_operator_validated(problem, options)?;
+        solution.set_state_shape_checked(&[problem.dimension()])?;
+        Ok(solution)
     }
 
     /// Executes the numerical method after common inputs have been checked.
@@ -102,7 +104,14 @@ pub trait LieGroupAlgorithm {
         O: Fn(&mut [f64], &[f64], &P, f64),
     {
         validate_inputs(problem.initial_state(), problem.time_span(), options)?;
-        self.solve_group_validated(problem, options)
+        let mut solution = self.solve_group_validated(problem, options)?;
+        if problem.is_matrix_state() {
+            solution
+                .set_state_shape_checked(&[problem.group_dimension(), problem.group_dimension()])?;
+        } else {
+            solution.set_state_shape_checked(&[problem.group_dimension()])?;
+        }
+        Ok(solution)
     }
 
     /// Executes the numerical method after common inputs have been checked.
@@ -196,7 +205,7 @@ macro_rules! linear_algorithm {
                 O: Fn(&mut [f64], &[f64], &P, f64),
             {
                 if problem.representation != LieRepresentation::Vector {
-                    return Err(SolveError::InvalidTableau);
+                    return Err(SolveError::UnsupportedProblemRepresentation);
                 }
                 solve_typed_group(problem, options, Scheme::$scheme)
             }
@@ -304,7 +313,7 @@ impl LieGroupAlgorithm for CayleyEuler {
         O: Fn(&mut [f64], &[f64], &P, f64),
     {
         if problem.representation != LieRepresentation::Matrix {
-            return Err(SolveError::InvalidTableau);
+            return Err(SolveError::UnsupportedProblemRepresentation);
         }
         let dummy = OdeProblem::new(
             noop_rhs as fn(&mut [f64], &[f64], &(), f64),
@@ -313,9 +322,9 @@ impl LieGroupAlgorithm for CayleyEuler {
             (),
         );
         let evaluate = |output: &mut [f64], state: &[f64], time: f64, stats: &mut SolverStats| {
-            problem.evaluate_operator(output, state, time);
+            problem.evaluate_operator(output, state, time)?;
             stats.rhs_evaluations += 1;
-            finite_operator(output)
+            Ok(())
         };
         drive_integration(
             &dummy,
@@ -342,9 +351,9 @@ where
         (),
     );
     let evaluate = |output: &mut [f64], state: &[f64], time: f64, stats: &mut SolverStats| {
-        problem.evaluate_operator(output, state, time);
+        problem.evaluate_operator(output, state, time)?;
         stats.rhs_evaluations += 1;
-        finite_operator(output)
+        Ok(())
     };
     drive_integration(
         &dummy,
@@ -368,9 +377,9 @@ where
         (),
     );
     let evaluate = |output: &mut [f64], state: &[f64], time: f64, stats: &mut SolverStats| {
-        problem.evaluate_operator(output, state, time);
+        problem.evaluate_operator(output, state, time)?;
         stats.rhs_evaluations += 1;
-        finite_operator(output)
+        Ok(())
     };
     drive_integration(
         &dummy,

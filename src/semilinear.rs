@@ -80,19 +80,48 @@ impl<G, P> SemilinearOdeProblem<G, P> {
     }
 
     /// Evaluates only the nonlinear term `g(u, p, t)`.
-    pub fn evaluate_nonlinear(&self, output: &mut [f64], state: &[f64], time: f64)
+    ///
+    /// Both buffers must match the problem dimension. Non-finite output is
+    /// reported as [`SolveError::NonFiniteDerivative`].
+    pub fn evaluate_nonlinear(
+        &self,
+        output: &mut [f64],
+        state: &[f64],
+        time: f64,
+    ) -> Result<(), SolveError>
+    where
+        G: Fn(&mut [f64], &[f64], &P, f64),
+    {
+        self.check_evaluation_dimensions(output, state)?;
+        self.evaluate_nonlinear_unchecked(output, state, time);
+        finite_derivative(output)
+    }
+
+    /// Evaluates the full right-hand side `A u + g(u, p, t)`.
+    ///
+    /// Both buffers must match the problem dimension. Non-finite output is
+    /// reported as [`SolveError::NonFiniteDerivative`].
+    pub fn evaluate(&self, output: &mut [f64], state: &[f64], time: f64) -> Result<(), SolveError>
+    where
+        G: Fn(&mut [f64], &[f64], &P, f64),
+    {
+        self.check_evaluation_dimensions(output, state)?;
+        self.evaluate_unchecked(output, state, time);
+        finite_derivative(output)
+    }
+
+    pub(crate) fn evaluate_nonlinear_unchecked(&self, output: &mut [f64], state: &[f64], time: f64)
     where
         G: Fn(&mut [f64], &[f64], &P, f64),
     {
         (self.nonlinear)(output, state, &self.parameters, time);
     }
 
-    /// Evaluates the full right-hand side `A u + g(u, p, t)`.
-    pub fn evaluate(&self, output: &mut [f64], state: &[f64], time: f64)
+    pub(crate) fn evaluate_unchecked(&self, output: &mut [f64], state: &[f64], time: f64)
     where
         G: Fn(&mut [f64], &[f64], &P, f64),
     {
-        (self.nonlinear)(output, state, &self.parameters, time);
+        self.evaluate_nonlinear_unchecked(output, state, time);
         let dimension = state.len();
         for (row, output) in output.iter_mut().enumerate() {
             for (column, state) in state.iter().enumerate() {
@@ -100,6 +129,22 @@ impl<G, P> SemilinearOdeProblem<G, P> {
             }
         }
     }
+
+    fn check_evaluation_dimensions(&self, output: &[f64], state: &[f64]) -> Result<(), SolveError> {
+        if output.len() == self.dimension() && state.len() == self.dimension() {
+            Ok(())
+        } else {
+            Err(SolveError::EvaluationDimensionMismatch)
+        }
+    }
+}
+
+fn finite_derivative(values: &[f64]) -> Result<(), SolveError> {
+    values
+        .iter()
+        .all(|value| value.is_finite())
+        .then_some(())
+        .ok_or(SolveError::NonFiniteDerivative)
 }
 
 /// Solves a semilinear problem while preserving its exact linear/nonlinear split.
@@ -113,7 +158,7 @@ where
     A: ExponentialAlgorithm,
 {
     let total = |output: &mut [f64], state: &[f64], _: &(), time: f64| {
-        problem.evaluate(output, state, time);
+        problem.evaluate_unchecked(output, state, time);
     };
     let operator = problem.linear_operator.clone();
     let ode = OdeProblem::new(total, problem.initial_state.clone(), problem.time_span, ())

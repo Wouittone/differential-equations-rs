@@ -3,8 +3,9 @@ use differential_equations::solvers::exponential::RKIP;
 use differential_equations::solvers::rosenbrock::AmfOperator;
 use differential_equations::solvers::second_order::NewmarkBeta;
 use differential_equations::{
-    ConfigurationError, DEFAULT_EVENT_TOLERANCE, InterpolationError, LieGroupProblem, OdeProblem,
-    SemilinearOdeProblem, SolveOptions, solve,
+    ConfigurationError, DEFAULT_EVENT_TOLERANCE, InterpolationError, LieGroupProblem,
+    LinearOperatorProblem, OdeProblem, SemilinearOdeProblem, SolveError, SolveOptions,
+    SplitOdeProblem, solve,
 };
 
 #[test]
@@ -90,5 +91,81 @@ fn default_event_tolerance_is_a_named_stable_constant() {
     assert_eq!(
         SolveOptions::default().event_tolerance,
         DEFAULT_EVENT_TOLERANCE
+    );
+}
+
+#[test]
+fn public_operator_and_semilinear_evaluations_are_checked() {
+    let linear = LinearOperatorProblem::new(
+        |operator: &mut [f64], _: &[f64], _: &(), _: f64| operator.fill(1.0),
+        [1.0, 2.0],
+        (0.0, 1.0),
+        (),
+    )
+    .unwrap();
+    assert_eq!(
+        linear.evaluate_operator(&mut [0.0; 3], &[1.0, 2.0], 0.0),
+        Err(SolveError::EvaluationDimensionMismatch)
+    );
+    assert_eq!(
+        linear.evaluate_operator(&mut [0.0; 4], &[1.0], 0.0),
+        Err(SolveError::EvaluationDimensionMismatch)
+    );
+
+    let nonfinite_group = LieGroupProblem::vector(
+        |operator: &mut [f64], _: &[f64], _: &(), _: f64| operator.fill(f64::NAN),
+        [1.0, 0.0],
+        (0.0, 1.0),
+        (),
+    )
+    .unwrap();
+    assert_eq!(
+        nonfinite_group.evaluate_operator(&mut [0.0; 4], &[1.0, 0.0], 0.0),
+        Err(SolveError::NonFiniteDerivative)
+    );
+
+    let semilinear = SemilinearOdeProblem::new(
+        [-1.0],
+        |output: &mut [f64], _: &[f64], _: &(), _: f64| output[0] = f64::INFINITY,
+        [1.0],
+        (0.0, 1.0),
+        (),
+    )
+    .unwrap();
+    assert_eq!(
+        semilinear.evaluate(&mut [], &[1.0], 0.0),
+        Err(SolveError::EvaluationDimensionMismatch)
+    );
+    assert_eq!(
+        semilinear.evaluate_nonlinear(&mut [0.0], &[1.0], 0.0),
+        Err(SolveError::NonFiniteDerivative)
+    );
+}
+
+#[test]
+fn public_split_evaluations_check_dimensions_and_finiteness() {
+    let problem = SplitOdeProblem::new(
+        |output: &mut [f64], _: &[f64], _: &(), _: f64| output.fill(f64::NAN),
+        |output: &mut [f64], _: &[f64], _: &(), _: f64| output.fill(f64::INFINITY),
+        [1.0, 2.0],
+        (0.0, 1.0),
+        (),
+    );
+
+    assert_eq!(
+        problem.evaluate_explicit(&mut [0.0], &[1.0, 2.0], 0.0),
+        Err(SolveError::EvaluationDimensionMismatch)
+    );
+    assert_eq!(
+        problem.evaluate_implicit(&mut [0.0, 0.0], &[1.0], 0.0),
+        Err(SolveError::EvaluationDimensionMismatch)
+    );
+    assert_eq!(
+        problem.evaluate_explicit(&mut [0.0, 0.0], &[1.0, 2.0], 0.0),
+        Err(SolveError::NonFiniteDerivative)
+    );
+    assert_eq!(
+        problem.evaluate_implicit(&mut [0.0, 0.0], &[1.0, 2.0], 0.0),
+        Err(SolveError::NonFiniteDerivative)
     );
 }

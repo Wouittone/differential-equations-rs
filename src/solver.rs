@@ -204,6 +204,17 @@ pub enum SolveError {
     /// Adaptive stepping was requested from a fixed-step algorithm.
     #[error("the selected algorithm does not support adaptive stepping")]
     AdaptiveStepUnsupported,
+    /// The selected algorithm cannot execute the problem's callback lifecycle.
+    ///
+    /// This is primarily useful to downstream algorithm implementations. The
+    /// built-in drivers support callbacks, while a custom driver that does not
+    /// must reject callback-bearing problems instead of silently ignoring
+    /// their effects, guards, or lifecycle hooks.
+    #[error("the selected algorithm does not support callbacks")]
+    CallbacksUnsupported,
+    /// The selected algorithm cannot act on the problem's state representation.
+    #[error("the selected algorithm does not support this problem representation")]
+    UnsupportedProblemRepresentation,
     /// The selected components cannot participate in in-flight automatic switching.
     #[error("the automatic solver pair is incompatible: {reason}")]
     IncompatibleAutomaticPair {
@@ -300,6 +311,15 @@ pub enum SolveError {
 }
 
 /// An ODE integration algorithm.
+///
+/// This trait is a downstream extension point. Implementors can evaluate the
+/// right-hand side through [`OdeProblem::evaluate`] and construct a checked
+/// trajectory with [`Solution::from_saved`]. [`Self::solve_validated`] must
+/// honor every problem policy and [`SolveOptions`] value that the algorithm
+/// accepts. In particular, an implementation without a callback driver must
+/// check [`OdeProblem::has_callbacks`] and return
+/// [`SolveError::CallbacksUnsupported`] rather than silently skipping callback
+/// effects, domain guards, initializers, or finalizers.
 pub trait OdeAlgorithm {
     /// Solves a problem after validating its state, time span, and options.
     fn solve<F, P>(
@@ -324,6 +344,12 @@ pub trait OdeAlgorithm {
     /// output times. User code should normally call [`OdeAlgorithm::solve`] or
     /// the crate-level [`solve`] function; calling this lower-level hook
     /// directly makes the caller responsible for those common invariants.
+    ///
+    /// Common validation does not execute algorithm behavior. Implementors
+    /// remain responsible for honoring adaptive stepping, step bounds, saving,
+    /// time stops, dense-output retention, and callback lifecycle semantics,
+    /// or for returning the corresponding typed error when a capability is not
+    /// supported.
     fn solve_validated<F, P>(
         &self,
         problem: &OdeProblem<F, P>,

@@ -883,6 +883,7 @@ impl<'a> PartitionedRecorder<'a> {
 #[cfg(test)]
 mod interpolation_tests {
     use super::*;
+    use crate::InterpolationError;
 
     fn saved_solution(velocities: Vec<f64>, positions: Vec<f64>) -> SecondOrderSolution {
         SecondOrderSolution {

@@ -90,7 +90,9 @@ pub trait InteractionPictureAlgorithm {
         G: Fn(&mut [f64], &[f64], &P, f64),
     {
         validate_state_time_options(problem.initial_state(), problem.time_span(), options)?;
-        self.solve_validated(problem, options)
+        let mut solution = self.solve_validated(problem, options)?;
+        solution.set_state_shape_checked(&[problem.dimension()])?;
+        Ok(solution)
     }
 
     /// Executes the numerical method after common inputs have been checked.
@@ -375,9 +377,9 @@ where
         time: f64,
         stats: &mut SolverStats,
     ) -> Result<(), SolveError> {
-        self.problem.evaluate(output, state, time);
+        self.problem.evaluate(output, state, time)?;
         stats.rhs_evaluations += 1;
-        checked(output)
+        Ok(())
     }
     fn initialize(
         &mut self,
@@ -386,9 +388,9 @@ where
         time: f64,
         stats: &mut SolverStats,
     ) -> Result<(), SolveError> {
-        self.problem.evaluate(&mut self.derivative, state, time);
+        self.problem.evaluate(&mut self.derivative, state, time)?;
         stats.rhs_evaluations += 1;
-        checked(&self.derivative)
+        Ok(())
     }
     fn estimate_initial_step(
         &mut self,
@@ -434,9 +436,8 @@ where
             let c = self.tableau.c()[i];
             let true_state = self.action(&interaction, step, c);
             self.problem
-                .evaluate_nonlinear(&mut self.stages[i], &true_state, time + c * step);
+                .evaluate_nonlinear(&mut self.stages[i], &true_state, time + c * step)?;
             stats.rhs_evaluations += 1;
-            checked(&self.stages[i])?;
             self.stages[i] = self.action(&self.stages[i], -step, c);
         }
         let mut interaction = state.to_vec();
@@ -466,9 +467,9 @@ where
         _: bool,
         stats: &mut SolverStats,
     ) -> Result<(), SolveError> {
-        self.problem.evaluate(&mut self.derivative, state, time);
+        self.problem.evaluate(&mut self.derivative, state, time)?;
         stats.rhs_evaluations += 1;
-        checked(&self.derivative)
+        Ok(())
     }
     fn reject_step(&mut self) {
         self.retry_step = true;

@@ -137,6 +137,12 @@ fn cayley_conjugation_preserves_trace_and_determinant() {
         LieGroupProblem::matrix(generator, vec![2.0, 0.5, 0.5, -1.0], 2, (0.0, 1.0), ()).unwrap();
     let solution = solve_lie_group(&problem, CayleyEuler, &fixed(0.1)).unwrap();
     let state = solution.last_state();
+    assert_eq!(solution.state_shape(), &[2, 2]);
+    assert_eq!(solution.last_state_array().shape(), &[2, 2]);
+    assert_eq!(
+        solution.try_interpolate_array(0.5).unwrap().shape(),
+        &[2, 2]
+    );
     assert!((state[0] + state[3] - 1.0).abs() < 2.0e-12);
     assert!((state[0] * state[3] - state[1] * state[2] + 2.25).abs() < 2.0e-12);
     assert_eq!(
@@ -239,7 +245,20 @@ fn lie_vector_representation_and_matrix_representation_are_checked() {
     assert!((solution.last_state()[0] - 1.0_f64.cos()).abs() < 2.0e-12);
     assert_eq!(
         solve_lie_group(&vector, CayleyEuler, &fixed(0.1)).unwrap_err(),
-        SolveError::InvalidTableau
+        SolveError::UnsupportedProblemRepresentation
+    );
+
+    let matrix = LieGroupProblem::matrix(
+        rotation_operator,
+        vec![1.0, 0.0, 0.0, 1.0],
+        2,
+        (0.0, 1.0),
+        (),
+    )
+    .unwrap();
+    assert_eq!(
+        solve_lie_group(&matrix, CG3, &fixed(0.1)).unwrap_err(),
+        SolveError::UnsupportedProblemRepresentation
     );
 }
 

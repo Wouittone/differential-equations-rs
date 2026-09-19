@@ -30,7 +30,7 @@ pub trait SplitOdeAlgorithm {
         validate_preset_time_sequences(problem.preset_time_sequences(), problem.time_span())?;
         validate_vector_callback_lengths(problem.vector_callback_lengths())?;
         let mut solution = self.solve_validated(problem, options)?;
-        solution.set_state_shape(problem.state_shape());
+        solution.set_state_shape_checked(problem.state_shape())?;
         Ok(solution)
     }
 
@@ -82,7 +82,7 @@ impl SplitOdeAlgorithm for SplitEuler {
             (),
         );
         let mut solution = integrate(&placeholder, options, SplitEulerKernel::new(problem))?;
-        solution.set_state_shape(problem.state_shape());
+        solution.set_state_shape_checked(problem.state_shape())?;
         Ok(solution)
     }
 }

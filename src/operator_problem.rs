@@ -54,11 +54,25 @@ impl<O, P> LinearOperatorProblem<O, P> {
     }
 
     /// Evaluates the row-major operator matrix at `state` and `time`.
-    pub fn evaluate_operator(&self, output: &mut [f64], state: &[f64], time: f64)
+    ///
+    /// The output must contain `dimension * dimension` entries and `state`
+    /// must match the problem dimension. Non-finite operator entries are
+    /// rejected with [`SolveError::NonFiniteDerivative`].
+    pub fn evaluate_operator(
+        &self,
+        output: &mut [f64],
+        state: &[f64],
+        time: f64,
+    ) -> Result<(), SolveError>
     where
         O: Fn(&mut [f64], &[f64], &P, f64),
     {
+        let dimension = self.dimension();
+        if state.len() != dimension || output.len() != dimension * dimension {
+            return Err(SolveError::EvaluationDimensionMismatch);
+        }
         (self.operator)(output, state, &self.parameters, time);
+        finite_operator(output)
     }
 }
 
@@ -163,11 +177,34 @@ impl<O, P> LieGroupProblem<O, P> {
     }
 
     /// Evaluates the Lie-algebra generator at `state` and `time`.
-    pub fn evaluate_operator(&self, output: &mut [f64], state: &[f64], time: f64)
+    ///
+    /// The generator output must be a flattened `group_dimension` square
+    /// matrix and `state` must match the selected vector or matrix
+    /// representation. Non-finite entries are rejected.
+    pub fn evaluate_operator(
+        &self,
+        output: &mut [f64],
+        state: &[f64],
+        time: f64,
+    ) -> Result<(), SolveError>
     where
         O: Fn(&mut [f64], &[f64], &P, f64),
     {
+        if state.len() != self.initial_state.len()
+            || output.len() != self.group_dimension * self.group_dimension
+        {
+            return Err(SolveError::EvaluationDimensionMismatch);
+        }
         (self.operator)(output, state, &self.parameters, time);
+        finite_operator(output)
     }
 }
-use crate::ConfigurationError;
+use crate::{ConfigurationError, SolveError};
+
+fn finite_operator(values: &[f64]) -> Result<(), SolveError> {
+    values
+        .iter()
+        .all(|value| value.is_finite())
+        .then_some(())
+        .ok_or(SolveError::NonFiniteDerivative)
+}
