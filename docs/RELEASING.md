@@ -215,10 +215,12 @@ as `differential-equations`.
 
 The reviewed API is committed and the immutable annotated `api-freeze-v1` tag
 identifies that commit. Subsequent pre-1.0 changes must run
-`cargo semver-checks` for each workspace package with that tag supplied through
-`--baseline-rev`. Once a project-owned prerelease of each package exists on
-crates.io, use the corresponding registry release as an additional baseline.
-No project-owned registry release exists yet.
+`cargo semver-checks --release-type patch` for each workspace library package
+with that tag supplied through `--baseline-rev`. The procedural-macro crate has
+no library API surface supported by `cargo-semver-checks`; its compatibility is
+enforced by the downstream compile tests. Once a project-owned prerelease of
+each package exists on crates.io, use the corresponding registry release as an
+additional baseline. No project-owned registry release exists yet.
 
 The Cargo-native package gate used by CI is:
 
