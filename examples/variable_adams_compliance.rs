@@ -2,14 +2,12 @@ use differential_equations::solvers::multistep::*;
 use differential_equations::*;
 
 fn main() {
-    let options = SolveOptions {
-        absolute_tolerance: 1.0e-9,
-        relative_tolerance: 1.0e-9,
-        initial_step: Some(0.013),
-        max_step: 0.2,
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    };
+    let options = SolveOptions::default()
+        .with_absolute_tolerance(1.0e-9)
+        .with_relative_tolerance(1.0e-9)
+        .with_initial_step(0.013)
+        .with_max_step(0.2)
+        .with_save(SaveMode::Endpoints);
 
     macro_rules! run {
         ($name:literal, $algorithm:expr) => {{

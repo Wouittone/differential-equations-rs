@@ -12,11 +12,11 @@ fn exponential() -> OdeProblem<TestRhs, ()> {
 
 #[test]
 fn generated_vern9_has_ninth_order_fixed_convergence() {
-    let options = |step| SolveOptions {
-        adaptive: false,
-        initial_step: Some(step),
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
+    let options = |step| {
+        SolveOptions::default()
+            .with_adaptive(false)
+            .with_initial_step(Some(step))
+            .with_save(SaveMode::Endpoints)
     };
     let coarse = solve(&exponential(), Vern9, &options(0.5)).unwrap();
     let fine = solve(&exponential(), Vern9, &options(0.25)).unwrap();
@@ -28,12 +28,10 @@ fn generated_vern9_has_ninth_order_fixed_convergence() {
 
 #[test]
 fn adaptive_backward_and_callback_paths_remain_safe() {
-    let options = SolveOptions {
-        absolute_tolerance: 1.0e-11,
-        relative_tolerance: 1.0e-11,
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    };
+    let options = SolveOptions::default()
+        .with_absolute_tolerance(1.0e-11)
+        .with_relative_tolerance(1.0e-11)
+        .with_save(SaveMode::Endpoints);
     let adaptive = solve(&exponential(), Vern9, &options).unwrap();
     assert!((adaptive.last_state()[0] - 2.0f64.exp()).abs() < 1.0e-10);
 

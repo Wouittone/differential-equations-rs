@@ -2,12 +2,10 @@ use differential_equations::solvers::explicit::*;
 use differential_equations::*;
 
 fn options() -> SolveOptions {
-    SolveOptions {
-        absolute_tolerance: 1.0e-10,
-        relative_tolerance: 1.0e-10,
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    }
+    SolveOptions::default()
+        .with_absolute_tolerance(1.0e-10)
+        .with_relative_tolerance(1.0e-10)
+        .with_save(SaveMode::Endpoints)
 }
 
 fn print_endpoint(name: &str, solution: &Solution) {

@@ -18,12 +18,10 @@ fn fixed_allocations_for<A: OdeAlgorithm>(algorithm: A, step: f64) -> usize {
         (0.0, 1.0),
         (),
     );
-    let options = SolveOptions {
-        adaptive: false,
-        initial_step: Some(step),
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    };
+    let options = SolveOptions::default()
+        .with_adaptive(false)
+        .with_initial_step(Some(step))
+        .with_save(SaveMode::Endpoints);
     let region = Region::new(GLOBAL);
     let solution = solve(&problem, algorithm, &options).unwrap();
     black_box(solution.last_state());

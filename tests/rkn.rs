@@ -15,12 +15,10 @@ fn oscillator(
 }
 
 fn fixed(step: f64) -> SolveOptions {
-    SolveOptions {
-        adaptive: false,
-        initial_step: Some(step),
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    }
+    SolveOptions::default()
+        .with_adaptive(false)
+        .with_initial_step(Some(step))
+        .with_save(SaveMode::Endpoints)
 }
 
 fn endpoint_error<A: SecondOrderOdeAlgorithm>(algorithm: A, step: f64) -> f64 {

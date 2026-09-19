@@ -32,7 +32,7 @@ pub const PDIRK44: Pdirk44 = Pdirk44;
 
 impl Pdirk44 {
     /// Returns this method's lazily materialized, validated tableau.
-    pub fn tableau(self) -> Result<&'static RungeKuttaTableau, crate::tableau::TableauError> {
+    pub fn tableau(&self) -> Result<&'static RungeKuttaTableau, crate::tableau::TableauError> {
         load_tableau(&PDIRK44_TABLEAU)
     }
 }

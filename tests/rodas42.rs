@@ -2,12 +2,10 @@ use differential_equations::solvers::rosenbrock::*;
 use differential_equations::*;
 
 fn fixed_options(step: f64) -> SolveOptions {
-    SolveOptions {
-        adaptive: false,
-        initial_step: Some(step),
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    }
+    SolveOptions::default()
+        .with_adaptive(false)
+        .with_initial_step(Some(step))
+        .with_save(SaveMode::Endpoints)
 }
 
 type ExponentialProblem = OdeProblem<fn(&mut [f64], &[f64], &(), f64), ()>;
@@ -68,17 +66,15 @@ fn adaptive_jacobian_callbacks_and_save_at_are_supported() {
                 CallbackAction::Continue
             },
         );
-    let options = SolveOptions {
-        absolute_tolerance: 1.0e-8,
-        relative_tolerance: 1.0e-8,
-        save: SaveMode::Endpoints,
-        save_at: vec![0.25, 0.5, 0.75],
-        ..SolveOptions::default()
-    };
+    let options = SolveOptions::default()
+        .with_absolute_tolerance(1.0e-8)
+        .with_relative_tolerance(1.0e-8)
+        .with_save(SaveMode::Endpoints)
+        .with_save_at(vec![0.25, 0.5, 0.75]);
     let solution = solve(&problem, Rodas42, &options).unwrap();
     assert!(solution.last_state()[0].is_finite());
     assert!(solution.stats().callback_invocations > 0);
-    for time in options.save_at {
+    for &time in options.save_at() {
         assert!(solution.times().contains(&time), "missing save_at={time}");
     }
     assert!(solution.stats().jacobian_evaluations > 0);

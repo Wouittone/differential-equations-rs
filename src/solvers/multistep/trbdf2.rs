@@ -27,7 +27,7 @@ pub struct Trbdf2;
 
 impl Trbdf2 {
     /// Returns the shared lazy tableau, including embedded and predictor weights.
-    pub fn tableau(self) -> Result<&'static RungeKuttaTableau, TableauError> {
+    pub fn tableau(&self) -> Result<&'static RungeKuttaTableau, TableauError> {
         load_tableau(&TABLEAU)
     }
 }

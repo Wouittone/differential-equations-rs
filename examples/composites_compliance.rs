@@ -88,12 +88,10 @@ fn print_switching_result(name: &str, profile: StiffnessProfile, initial_branch:
 }
 
 fn main() {
-    let options = SolveOptions {
-        absolute_tolerance: 1.0e-10,
-        relative_tolerance: 1.0e-10,
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    };
+    let options = SolveOptions::default()
+        .with_absolute_tolerance(1.0e-10)
+        .with_relative_tolerance(1.0e-10)
+        .with_save(SaveMode::Endpoints);
     for (name, endpoint) in [
         (
             "auto_tsit5",

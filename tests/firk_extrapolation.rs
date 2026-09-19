@@ -17,13 +17,11 @@ fn adaptive_endpoint<A: OdeAlgorithm>(algorithm: A) -> (f64, differential_equati
         (0.0, 1.0),
         (),
     );
-    let options = SolveOptions {
-        absolute_tolerance: 1.0e-7,
-        relative_tolerance: 1.0e-7,
-        max_step: 0.25,
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    };
+    let options = SolveOptions::default()
+        .with_absolute_tolerance(1.0e-7)
+        .with_relative_tolerance(1.0e-7)
+        .with_max_step(0.25)
+        .with_save(SaveMode::Endpoints);
     let solution = solve(&problem, algorithm, &options).unwrap();
     (solution.last_state()[0], solution.stats())
 }
@@ -107,12 +105,10 @@ fn backward_integration_and_callbacks_use_family_dense_segments() {
         (1.0, 0.0),
         (),
     );
-    let fixed = SolveOptions {
-        adaptive: false,
-        initial_step: Some(0.05),
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    };
+    let fixed = SolveOptions::default()
+        .with_adaptive(false)
+        .with_initial_step(Some(0.05))
+        .with_save(SaveMode::Endpoints);
     assert!((solve(&backward, RadauIIA5, &fixed).unwrap().last_state()[0] - 1.0).abs() < 1.0e-8);
     assert!(
         (solve(&backward, ExtrapolationMidpointDeuflhard::default(), &fixed)
@@ -136,13 +132,11 @@ fn backward_integration_and_callbacks_use_family_dense_segments() {
             CallbackAction::Terminate
         },
     );
-    let callback_options = SolveOptions {
-        adaptive: false,
-        initial_step: Some(1.0),
-        save: SaveMode::EveryStep,
-        save_at: vec![0.2, 0.4],
-        ..SolveOptions::default()
-    };
+    let callback_options = SolveOptions::default()
+        .with_adaptive(false)
+        .with_initial_step(Some(1.0))
+        .with_save(SaveMode::EveryStep)
+        .with_save_at(vec![0.2, 0.4]);
     for solution in [
         solve(&callback_problem, RadauIIA5, &callback_options).unwrap(),
         solve(

@@ -67,12 +67,12 @@ pub enum CallbackSave {
 
 impl CallbackSave {
     /// Returns whether the left-limit state is retained.
-    pub const fn saves_before(self) -> bool {
+    pub const fn saves_before(&self) -> bool {
         matches!(self, Self::Before | Self::Both)
     }
 
     /// Returns whether the affected state is retained.
-    pub const fn saves_after(self) -> bool {
+    pub const fn saves_after(&self) -> bool {
         matches!(self, Self::After | Self::Both)
     }
 }

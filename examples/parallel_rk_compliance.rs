@@ -20,12 +20,10 @@ fn oscillator() -> OdeProblem<VectorRhs, ()> {
 }
 
 fn fixed_endpoint<A: OdeAlgorithm>(algorithm: A) -> f64 {
-    let options = SolveOptions {
-        adaptive: false,
-        initial_step: Some(0.01),
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    };
+    let options = SolveOptions::default()
+        .with_adaptive(false)
+        .with_initial_step(0.01)
+        .with_save(SaveMode::Endpoints);
     solve(&nonautonomous(), algorithm, &options)
         .unwrap()
         .last_state()[0]
@@ -35,13 +33,11 @@ fn main() {
     println!("kutta_prk2p5_fixed,{:.17e}", fixed_endpoint(KuttaPRK2p5()));
     println!("qprk98_fixed,{:.17e}", fixed_endpoint(QPRK98()));
 
-    let options = SolveOptions {
-        absolute_tolerance: 1.0e-10,
-        relative_tolerance: 1.0e-10,
-        initial_step: Some(0.25),
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    };
+    let options = SolveOptions::default()
+        .with_absolute_tolerance(1.0e-10)
+        .with_relative_tolerance(1.0e-10)
+        .with_initial_step(0.25)
+        .with_save(SaveMode::Endpoints);
     let solution = solve(&oscillator(), QPRK98(), &options).unwrap();
     println!(
         "qprk98_adaptive,{:.17e},{:.17e}",

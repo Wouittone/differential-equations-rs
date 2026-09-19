@@ -76,6 +76,11 @@ impl Mreef {
     pub const fn order(&self) -> usize {
         self.order
     }
+
+    /// Returns the configured extrapolation sequence.
+    pub const fn sequence(&self) -> MultirateSequence {
+        self.sequence
+    }
 }
 
 impl Default for Mreef {

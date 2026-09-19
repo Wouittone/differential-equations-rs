@@ -22,12 +22,10 @@ fn exponential_problem(span: (f64, f64), initial: f64) -> ExponentialProblem {
 }
 
 fn fixed_options(step: f64) -> SolveOptions {
-    SolveOptions {
-        adaptive: false,
-        initial_step: Some(step),
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    }
+    SolveOptions::default()
+        .with_adaptive(false)
+        .with_initial_step(Some(step))
+        .with_save(SaveMode::Endpoints)
 }
 
 fn allocations(step: f64) -> usize {

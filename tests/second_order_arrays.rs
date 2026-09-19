@@ -141,7 +141,7 @@ fn one_oscillator_is_shape_invariant_across_all_second_order_drivers() {
     assert_second_order(GeneralizedAlpha::default());
 }
 
-fn assert_symplectic<A: SymplecticAlgorithm>(algorithm: A) {
+fn assert_symplectic<A: SymplecticAlgorithm + Copy>(algorithm: A) {
     for span in [(0.0, 0.2), (0.2, 0.0)] {
         for initial in states() {
             let problem = out_of_place(initial.clone(), span);

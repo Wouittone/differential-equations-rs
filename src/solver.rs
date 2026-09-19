@@ -14,36 +14,54 @@ pub enum SaveMode {
 }
 
 /// Common options for adaptive ODE solvers.
+///
+/// Construct options with [`SolveOptions::new`] or [`SolveOptions::default`]
+/// and the `with_*` methods. The fields are intentionally private so new
+/// options can be added without breaking downstream code.
+///
+/// ```
+/// use differential_equations::{SaveMode, SolveOptions};
+///
+/// let options = SolveOptions::new()
+///     .with_tolerances(1.0e-9, 1.0e-7)
+///     .with_initial_step(0.01)
+///     .with_max_steps(10_000)
+///     .with_save(SaveMode::Endpoints);
+///
+/// assert_eq!(options.absolute_tolerance(), 1.0e-9);
+/// assert_eq!(options.initial_step(), Some(0.01));
+/// ```
 #[derive(Clone, Debug, PartialEq)]
+#[non_exhaustive]
 pub struct SolveOptions {
     /// Absolute local-error tolerance.
-    pub absolute_tolerance: f64,
+    pub(crate) absolute_tolerance: f64,
     /// Relative local-error tolerance.
-    pub relative_tolerance: f64,
+    pub(crate) relative_tolerance: f64,
     /// Initial step-size magnitude. The solver estimates it when absent.
-    pub initial_step: Option<f64>,
+    pub(crate) initial_step: Option<f64>,
     /// Whether an algorithm should use adaptive step-size control.
     ///
     /// Fixed-step-only algorithms require this to be `false` and
     /// [`initial_step`](Self::initial_step) to be present.
-    pub adaptive: bool,
+    pub(crate) adaptive: bool,
     /// Maximum allowed step-size magnitude.
-    pub max_step: f64,
+    pub(crate) max_step: f64,
     /// Maximum number of attempted steps.
-    pub max_steps: usize,
+    pub(crate) max_steps: usize,
     /// Requested absolute time tolerance for continuous callback roots.
     ///
     /// Localization applies a scale-aware representability floor when this is
     /// smaller than the spacing between floating-point times near the root.
-    pub event_tolerance: f64,
+    pub(crate) event_tolerance: f64,
     /// Accepted states retained in the solution.
-    pub save: SaveMode,
+    pub(crate) save: SaveMode,
     /// Requested output times. Empty means to follow [`save`](Self::save).
     ///
     /// Values must be finite, lie inside the time span, and be ordered in the
     /// integration direction. As in SciML, supplying values overrides the
     /// ordinary start/end/every-step saving controlled by [`save`](Self::save).
-    pub save_at: Vec<f64>,
+    pub(crate) save_at: Vec<f64>,
     /// Extra times that the integrator must hit exactly.
     ///
     /// This is the Rust-facing equivalent of SciML's `tstops`. Values must be
@@ -51,13 +69,13 @@ pub struct SolveOptions {
     /// integration direction. Reaching a time stop does not itself save the
     /// state; combine this with [`save_at`](Self::save_at) when both behaviors
     /// are wanted.
-    pub time_stops: Vec<f64>,
+    pub(crate) time_stops: Vec<f64>,
     /// Retain accepted-step method-specific dense segments for post-solve queries.
     ///
     /// This is opt-in because retaining stage data allocates per accepted step.
     /// When disabled, [`Solution::interpolate`](crate::Solution::interpolate)
     /// keeps its stable linear fallback between saved states.
-    pub retain_dense_output: bool,
+    pub(crate) retain_dense_output: bool,
 }
 
 impl Default for SolveOptions {
@@ -84,6 +102,75 @@ impl SolveOptions {
         Self::default()
     }
 
+    /// Returns the absolute local-error tolerance.
+    pub fn absolute_tolerance(&self) -> f64 {
+        self.absolute_tolerance
+    }
+
+    /// Returns the relative local-error tolerance.
+    pub fn relative_tolerance(&self) -> f64 {
+        self.relative_tolerance
+    }
+
+    /// Returns the requested initial step-size magnitude, if one was set.
+    pub fn initial_step(&self) -> Option<f64> {
+        self.initial_step
+    }
+
+    /// Returns whether adaptive step-size control is enabled.
+    pub fn adaptive(&self) -> bool {
+        self.adaptive
+    }
+
+    /// Returns the maximum allowed step-size magnitude.
+    pub fn max_step(&self) -> f64 {
+        self.max_step
+    }
+
+    /// Returns the maximum number of attempted steps.
+    pub fn max_steps(&self) -> usize {
+        self.max_steps
+    }
+
+    /// Returns the requested callback root-localization tolerance.
+    pub fn event_tolerance(&self) -> f64 {
+        self.event_tolerance
+    }
+
+    /// Returns the accepted-state saving mode.
+    pub fn save(&self) -> SaveMode {
+        self.save
+    }
+
+    /// Returns the requested output times.
+    pub fn save_at(&self) -> &[f64] {
+        &self.save_at
+    }
+
+    /// Returns the extra times that the integrator must hit exactly.
+    pub fn time_stops(&self) -> &[f64] {
+        &self.time_stops
+    }
+
+    /// Returns whether method-specific dense-output segments are retained.
+    pub fn retain_dense_output(&self) -> bool {
+        self.retain_dense_output
+    }
+
+    /// Sets the absolute local-error tolerance.
+    #[must_use]
+    pub fn with_absolute_tolerance(mut self, absolute: f64) -> Self {
+        self.absolute_tolerance = absolute;
+        self
+    }
+
+    /// Sets the relative local-error tolerance.
+    #[must_use]
+    pub fn with_relative_tolerance(mut self, relative: f64) -> Self {
+        self.relative_tolerance = relative;
+        self
+    }
+
     /// Sets the absolute and relative local-error tolerances.
     #[must_use]
     pub fn with_tolerances(mut self, absolute: f64, relative: f64) -> Self {
@@ -92,10 +179,13 @@ impl SolveOptions {
         self
     }
 
-    /// Sets the initial step-size magnitude.
+    /// Sets or clears the initial step-size magnitude.
+    ///
+    /// Passing a number requests that magnitude; passing `None` restores
+    /// automatic initial-step selection.
     #[must_use]
-    pub fn with_initial_step(mut self, step: f64) -> Self {
-        self.initial_step = Some(step);
+    pub fn with_initial_step(mut self, step: impl Into<Option<f64>>) -> Self {
+        self.initial_step = step.into();
         self
     }
 
@@ -509,11 +599,17 @@ mod tests {
     fn defaults_match_sciml_tolerances() {
         let options = SolveOptions::default();
 
-        assert_eq!(options.absolute_tolerance, 1.0e-6);
-        assert_eq!(options.relative_tolerance, 1.0e-3);
-        assert_eq!(options.event_tolerance, DEFAULT_EVENT_TOLERANCE);
-        assert!(options.adaptive);
-        assert_eq!(options.save, SaveMode::EveryStep);
+        assert_eq!(options.absolute_tolerance(), 1.0e-6);
+        assert_eq!(options.relative_tolerance(), 1.0e-3);
+        assert_eq!(options.event_tolerance(), DEFAULT_EVENT_TOLERANCE);
+        assert!(options.adaptive());
+        assert_eq!(options.save(), SaveMode::EveryStep);
+        assert_eq!(options.initial_step(), None);
+        assert_eq!(options.max_step(), f64::INFINITY);
+        assert_eq!(options.max_steps(), 100_000);
+        assert!(options.save_at().is_empty());
+        assert!(options.time_stops().is_empty());
+        assert!(!options.retain_dense_output());
     }
 
     #[test]
@@ -527,18 +623,23 @@ mod tests {
             .with_event_tolerance(1.0e-8)
             .with_save(SaveMode::Endpoints)
             .with_save_at([0.25, 0.5])
-            .with_time_stops([0.3, 0.7]);
+            .with_time_stops([0.3, 0.7])
+            .with_dense_output(true);
 
-        assert_eq!(options.absolute_tolerance, 1.0e-9);
-        assert_eq!(options.relative_tolerance, 1.0e-7);
-        assert_eq!(options.initial_step, Some(0.01));
-        assert!(!options.adaptive);
-        assert_eq!(options.max_step, 0.1);
-        assert_eq!(options.max_steps, 42);
-        assert_eq!(options.event_tolerance, 1.0e-8);
-        assert_eq!(options.save, SaveMode::Endpoints);
-        assert_eq!(options.save_at, [0.25, 0.5]);
-        assert_eq!(options.time_stops, [0.3, 0.7]);
+        assert_eq!(options.absolute_tolerance(), 1.0e-9);
+        assert_eq!(options.relative_tolerance(), 1.0e-7);
+        assert_eq!(options.initial_step(), Some(0.01));
+        assert!(!options.adaptive());
+        assert_eq!(options.max_step(), 0.1);
+        assert_eq!(options.max_steps(), 42);
+        assert_eq!(options.event_tolerance(), 1.0e-8);
+        assert_eq!(options.save(), SaveMode::Endpoints);
+        assert_eq!(options.save_at(), [0.25, 0.5]);
+        assert_eq!(options.time_stops(), [0.3, 0.7]);
+        assert!(options.retain_dense_output());
+
+        let cleared = options.with_initial_step(None);
+        assert_eq!(cleared.initial_step(), None);
     }
 
     #[test]

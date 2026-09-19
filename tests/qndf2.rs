@@ -2,12 +2,10 @@ use differential_equations::solvers::multistep::*;
 use differential_equations::*;
 
 fn fixed(step: f64) -> SolveOptions {
-    SolveOptions {
-        adaptive: false,
-        initial_step: Some(step),
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    }
+    SolveOptions::default()
+        .with_adaptive(false)
+        .with_initial_step(Some(step))
+        .with_save(SaveMode::Endpoints)
 }
 
 #[test]
@@ -36,12 +34,10 @@ fn adaptive_stiff_decay_and_backward_callback_work() {
         (0.0, 1.0),
         (),
     );
-    let options = SolveOptions {
-        absolute_tolerance: 1.0e-7,
-        relative_tolerance: 1.0e-7,
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    };
+    let options = SolveOptions::default()
+        .with_absolute_tolerance(1.0e-7)
+        .with_relative_tolerance(1.0e-7)
+        .with_save(SaveMode::Endpoints);
     let solution = solve(&problem, Qndf2, &options).unwrap();
     assert!((solution.last_state()[0] - 1.0f64.cos()).abs() < 3.0e-4);
 
@@ -100,12 +96,10 @@ fn qbdf2_uses_zero_kappa_in_fixed_and_adaptive_modes() {
     assert!((qbdf_fixed.last_state()[0] - 0.540_304_077_836_919_7).abs() < 2.0e-12);
     assert!((qbdf_fixed.last_state()[0] - qndf_fixed.last_state()[0]).abs() > 5.0e-7);
 
-    let adaptive = SolveOptions {
-        absolute_tolerance: 1.0e-8,
-        relative_tolerance: 1.0e-8,
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    };
+    let adaptive = SolveOptions::default()
+        .with_absolute_tolerance(1.0e-8)
+        .with_relative_tolerance(1.0e-8)
+        .with_save(SaveMode::Endpoints);
     let qbdf_adaptive = solve(&problem, Qbdf2, &adaptive).unwrap();
     assert!((qbdf_adaptive.last_state()[0] - 1.0f64.cos()).abs() < 5.0e-7);
     assert!(qbdf_adaptive.stats().accepted_steps > 0);

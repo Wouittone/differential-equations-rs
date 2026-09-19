@@ -15,12 +15,10 @@ fn endpoint<A: differential_equations::solvers::second_order::SecondOrderOdeAlgo
         (0.0, 1.0),
         (),
     );
-    let options = SolveOptions {
-        adaptive: false,
-        initial_step: Some(0.05),
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    };
+    let options = SolveOptions::default()
+        .with_adaptive(false)
+        .with_initial_step(0.05)
+        .with_save(SaveMode::Endpoints);
     let solution = solve_second_order(&problem, algorithm, &options).unwrap();
     (solution.last_velocity()[0], solution.last_position()[0])
 }

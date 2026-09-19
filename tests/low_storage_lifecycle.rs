@@ -22,12 +22,10 @@ fn problem(time_span: (f64, f64), initial: f64) -> OdeProblem<TestRhs, ()> {
 }
 
 fn options(step: f64) -> SolveOptions {
-    SolveOptions {
-        adaptive: false,
-        initial_step: Some(step),
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    }
+    SolveOptions::default()
+        .with_adaptive(false)
+        .with_initial_step(Some(step))
+        .with_save(SaveMode::Endpoints)
 }
 
 fn endpoint<A: OdeAlgorithm>(algorithm: A, step: f64) -> f64 {
@@ -118,12 +116,10 @@ fn representative_methods_recover_every_claimed_design_order() {
 #[test]
 fn backward_save_at_and_callback_lifecycle_use_shared_driver_semantics() {
     let backward = problem((1.0, 0.0), 2.0 * std::f64::consts::E - 2.0);
-    let backward_options = SolveOptions {
-        adaptive: false,
-        initial_step: Some(0.01),
-        save_at: vec![1.0, 0.5, 0.0],
-        ..SolveOptions::default()
-    };
+    let backward_options = SolveOptions::default()
+        .with_adaptive(false)
+        .with_initial_step(Some(0.01))
+        .with_save_at(vec![1.0, 0.5, 0.0]);
 
     macro_rules! check_backward {
         ($algorithm:expr, $tolerance:expr) => {{

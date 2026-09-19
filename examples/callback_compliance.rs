@@ -15,12 +15,10 @@ fn main() {
             CallbackAction::Terminate
         },
     );
-    let event_options = SolveOptions {
-        adaptive: false,
-        initial_step: Some(0.5),
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    };
+    let event_options = SolveOptions::default()
+        .with_adaptive(false)
+        .with_initial_step(0.5)
+        .with_save(SaveMode::Endpoints);
     let event = solve(&event_problem, Rk4, &event_options).expect("event solve failed");
     println!(
         "event,{:.17e},{:.17e}",
@@ -41,12 +39,10 @@ fn main() {
             CallbackAction::Continue
         },
     );
-    let discrete_options = SolveOptions {
-        adaptive: false,
-        initial_step: Some(0.25),
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    };
+    let discrete_options = SolveOptions::default()
+        .with_adaptive(false)
+        .with_initial_step(0.25)
+        .with_save(SaveMode::Endpoints);
     let discrete =
         solve(&discrete_problem, Rk4, &discrete_options).expect("discrete callback solve failed");
     println!(
@@ -61,12 +57,10 @@ fn main() {
         (0.0, 1.0),
         (),
     );
-    let save_options = SolveOptions {
-        adaptive: false,
-        initial_step: Some(0.3),
-        save_at: vec![0.2, 0.5, 0.8],
-        ..SolveOptions::default()
-    };
+    let save_options = SolveOptions::default()
+        .with_adaptive(false)
+        .with_initial_step(0.3)
+        .with_save_at(vec![0.2, 0.5, 0.8]);
     let saved = solve(&save_problem, Rk4, &save_options).expect("save-at solve failed");
     print!("save_at");
     for (&time, state) in saved.times().iter().zip(saved.values()) {

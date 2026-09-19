@@ -6,6 +6,6 @@ rust-version = "1.85"
 publish = false
 
 [dependencies]
-differential-equations = { path = "../../.." }
+differential-equations-rs = { path = "../../.." }
 
 [workspace]

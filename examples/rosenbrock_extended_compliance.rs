@@ -18,14 +18,12 @@ fn nonstiff_problem() -> OdeProblem<TestRhs, ()> {
 }
 
 fn endpoint<A: OdeAlgorithm>(algorithm: A, adaptive: bool) -> f64 {
-    let options = SolveOptions {
-        adaptive,
-        absolute_tolerance: 1.0e-8,
-        relative_tolerance: 1.0e-8,
-        initial_step: Some(if adaptive { 0.1 } else { 0.01 }),
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    };
+    let options = SolveOptions::default()
+        .with_adaptive(adaptive)
+        .with_absolute_tolerance(1.0e-8)
+        .with_relative_tolerance(1.0e-8)
+        .with_initial_step(if adaptive { 0.1 } else { 0.01 })
+        .with_save(SaveMode::Endpoints);
     let problem = if adaptive {
         stiff_problem()
     } else {

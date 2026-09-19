@@ -75,14 +75,14 @@ impl ROCK2 {
     /// [`Rock2Tableau::degree`](crate::tableau::Rock2Tableau::degree) to inspect
     /// the degree selected from the discrete built-in catalogue.
     pub fn tableau(
-        self,
+        &self,
         requested_degree: usize,
     ) -> Result<&'static crate::tableau::Rock2Tableau, crate::tableau::TableauError> {
         rock2_tableau_for_degree(requested_degree)
     }
 
     /// Iterates over the supported polynomial degrees in ascending order.
-    pub fn available_degrees(self) -> impl ExactSizeIterator<Item = usize> {
+    pub fn available_degrees(&self) -> impl ExactSizeIterator<Item = usize> {
         rock2_available_degrees()
     }
 }
@@ -100,14 +100,14 @@ impl ROCK4 {
     /// degree identifies the entry selected from the discrete built-in
     /// catalogue.
     pub fn tableau(
-        self,
+        &self,
         requested_degree: usize,
     ) -> Result<&'static crate::tableau::Rock4Tableau, crate::tableau::TableauError> {
         rock4_tableau_for_degree(requested_degree)
     }
 
     /// Iterates over the supported polynomial degrees in ascending order.
-    pub fn available_degrees(self) -> impl ExactSizeIterator<Item = usize> {
+    pub fn available_degrees(&self) -> impl ExactSizeIterator<Item = usize> {
         rock4_available_degrees()
     }
 }
@@ -123,14 +123,14 @@ impl SERK2 {
     ///
     /// Only the selected degree is parsed on first inspection or use.
     pub fn tableau(
-        self,
+        &self,
         requested_degree: usize,
     ) -> Result<&'static crate::tableau::Serk2Tableau, crate::tableau::TableauError> {
         serk2_tableau_for_degree(requested_degree)
     }
 
     /// Iterates over the supported polynomial degrees in ascending order.
-    pub fn available_degrees(self) -> impl ExactSizeIterator<Item = usize> {
+    pub fn available_degrees(&self) -> impl ExactSizeIterator<Item = usize> {
         serk2_available_degrees()
     }
 }
@@ -146,14 +146,14 @@ impl ESERK4 {
     ///
     /// Only the selected degree is parsed on first inspection or use.
     pub fn tableau(
-        self,
+        &self,
         requested_degree: usize,
     ) -> Result<&'static crate::tableau::EserkTableau, crate::tableau::TableauError> {
         eserk4_tableau_for_degree(requested_degree)
     }
 
     /// Iterates over the supported polynomial degrees in ascending order.
-    pub fn available_degrees(self) -> impl ExactSizeIterator<Item = usize> {
+    pub fn available_degrees(&self) -> impl ExactSizeIterator<Item = usize> {
         eserk4_available_degrees()
     }
 }
@@ -169,14 +169,14 @@ impl ESERK5 {
     ///
     /// Only the selected degree is parsed on first inspection or use.
     pub fn tableau(
-        self,
+        &self,
         requested_degree: usize,
     ) -> Result<&'static crate::tableau::EserkTableau, crate::tableau::TableauError> {
         eserk5_tableau_for_degree(requested_degree)
     }
 
     /// Iterates over the supported polynomial degrees in ascending order.
-    pub fn available_degrees(self) -> impl ExactSizeIterator<Item = usize> {
+    pub fn available_degrees(&self) -> impl ExactSizeIterator<Item = usize> {
         eserk5_available_degrees()
     }
 }

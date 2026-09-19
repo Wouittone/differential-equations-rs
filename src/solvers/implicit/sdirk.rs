@@ -64,7 +64,7 @@ pub struct Sdirk2;
 
 impl Sdirk2 {
     /// Returns this method's lazily materialized, validated tableau.
-    pub fn tableau(self) -> Result<&'static RungeKuttaTableau, crate::tableau::TableauError> {
+    pub fn tableau(&self) -> Result<&'static RungeKuttaTableau, crate::tableau::TableauError> {
         load_tableau(&SDIRK2_TABLEAU)
     }
 }
@@ -874,7 +874,7 @@ macro_rules! extended_algorithm {
         impl $name {
             /// Returns this method's lazily materialized, validated tableau.
             pub fn tableau(
-                self,
+                &self,
             ) -> Result<&'static RungeKuttaTableau, crate::tableau::TableauError> {
                 load_tableau(extended_resource(ExtendedKind::$kind))
             }

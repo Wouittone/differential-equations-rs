@@ -26,12 +26,10 @@ fn resource_tableau_defines_a_lazily_loaded_solver_method() {
         (0.0, 1.0),
         (),
     );
-    let options = SolveOptions {
-        absolute_tolerance: 1.0e-8,
-        relative_tolerance: 1.0e-8,
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    };
+    let options = SolveOptions::default()
+        .with_absolute_tolerance(1.0e-8)
+        .with_relative_tolerance(1.0e-8)
+        .with_save(SaveMode::Endpoints);
 
     let solution = solve(&problem, FileHeun, &options).unwrap();
 

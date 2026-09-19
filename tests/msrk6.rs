@@ -11,12 +11,10 @@ fn exponential() -> OdeProblem<TestRhs, ()> {
 }
 
 fn fixed(step: f64) -> SolveOptions {
-    SolveOptions {
-        adaptive: false,
-        initial_step: Some(step),
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    }
+    SolveOptions::default()
+        .with_adaptive(false)
+        .with_initial_step(Some(step))
+        .with_save(SaveMode::Endpoints)
 }
 
 #[test]
@@ -53,12 +51,10 @@ fn msrk6_supports_forward_backward_save_at() {
     let solution = solve(
         &forward,
         Msrk6,
-        &SolveOptions {
-            adaptive: false,
-            initial_step: Some(0.3),
-            save_at: vec![0.2, 0.5, 0.8],
-            ..SolveOptions::default()
-        },
+        &SolveOptions::default()
+            .with_adaptive(false)
+            .with_initial_step(Some(0.3))
+            .with_save_at(vec![0.2, 0.5, 0.8]),
     )
     .unwrap();
     assert_eq!(solution.times(), &[0.2, 0.5, 0.8]);
@@ -75,12 +71,10 @@ fn msrk6_supports_forward_backward_save_at() {
     let solution = solve(
         &backward,
         Msrk6,
-        &SolveOptions {
-            adaptive: false,
-            initial_step: Some(0.3),
-            save_at: vec![0.8, 0.5, 0.2],
-            ..SolveOptions::default()
-        },
+        &SolveOptions::default()
+            .with_adaptive(false)
+            .with_initial_step(Some(0.3))
+            .with_save_at(vec![0.8, 0.5, 0.2]),
     )
     .unwrap();
     assert_eq!(solution.times(), &[0.8, 0.5, 0.2]);

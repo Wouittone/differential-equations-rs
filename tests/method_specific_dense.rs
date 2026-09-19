@@ -22,13 +22,11 @@ fn retained_with_step<A: OdeAlgorithm>(
     solve(
         &problem(initial, span),
         algorithm,
-        &SolveOptions {
-            adaptive: false,
-            initial_step: Some(step),
-            save: SaveMode::Endpoints,
-            retain_dense_output: true,
-            ..SolveOptions::default()
-        },
+        &SolveOptions::default()
+            .with_adaptive(false)
+            .with_initial_step(Some(step))
+            .with_save(SaveMode::Endpoints)
+            .with_dense_output(true),
     )
     .unwrap()
 }
@@ -99,12 +97,10 @@ fn method_specific_segments_agree_at_endpoints_forward_and_backward() {
 
 fn assert_save_at_matches_retained_query<A: OdeAlgorithm + Copy>(algorithm: A) {
     let retained = retained_one_step(algorithm, 1.0, (0.0, 1.0));
-    let options = SolveOptions {
-        adaptive: false,
-        initial_step: Some(1.0),
-        save_at: vec![0.2, 0.55, 0.9],
-        ..SolveOptions::default()
-    };
+    let options = SolveOptions::default()
+        .with_adaptive(false)
+        .with_initial_step(Some(1.0))
+        .with_save_at(vec![0.2, 0.55, 0.9]);
     let sampled = solve(&problem(1.0, (0.0, 1.0)), algorithm, &options).unwrap();
     for (index, &time) in sampled.times().iter().enumerate() {
         assert_eq!(
@@ -130,13 +126,11 @@ fn assert_continuous_root_uses_dense_segment<A: OdeAlgorithm + Copy>(algorithm: 
     let solution = solve(
         &event_problem,
         algorithm,
-        &SolveOptions {
-            adaptive: false,
-            initial_step: Some(0.25),
-            event_tolerance: 1.0e-13,
-            retain_dense_output: true,
-            ..SolveOptions::default()
-        },
+        &SolveOptions::default()
+            .with_adaptive(false)
+            .with_initial_step(Some(0.25))
+            .with_event_tolerance(1.0e-13)
+            .with_dense_output(true),
     )
     .unwrap();
     let event_time = *solution.times().last().unwrap();
@@ -168,14 +162,12 @@ fn callback_discontinuity_keeps_left_segment_and_right_endpoint() {
     let solution = solve(
         &event_problem,
         Dp5,
-        &SolveOptions {
-            adaptive: false,
-            initial_step: Some(1.0),
-            save: SaveMode::Endpoints,
-            event_tolerance: 1.0e-13,
-            retain_dense_output: true,
-            ..SolveOptions::default()
-        },
+        &SolveOptions::default()
+            .with_adaptive(false)
+            .with_initial_step(Some(1.0))
+            .with_save(SaveMode::Endpoints)
+            .with_event_tolerance(1.0e-13)
+            .with_dense_output(true),
     )
     .unwrap();
     let event_time = solution.times()[1];
@@ -188,24 +180,20 @@ fn assert_dense_sampling_has_no_rhs_cost<A: OdeAlgorithm + Copy>(algorithm: A) {
     let plain = solve(
         &problem(1.0, (0.0, 1.0)),
         algorithm,
-        &SolveOptions {
-            adaptive: false,
-            initial_step: Some(1.0),
-            save: SaveMode::Endpoints,
-            ..SolveOptions::default()
-        },
+        &SolveOptions::default()
+            .with_adaptive(false)
+            .with_initial_step(Some(1.0))
+            .with_save(SaveMode::Endpoints),
     )
     .unwrap();
     let sampled = solve(
         &problem(1.0, (0.0, 1.0)),
         algorithm,
-        &SolveOptions {
-            adaptive: false,
-            initial_step: Some(1.0),
-            save_at: vec![0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
-            retain_dense_output: true,
-            ..SolveOptions::default()
-        },
+        &SolveOptions::default()
+            .with_adaptive(false)
+            .with_initial_step(Some(1.0))
+            .with_save_at(vec![0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9])
+            .with_dense_output(true),
     )
     .unwrap();
     assert_eq!(

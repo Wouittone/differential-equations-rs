@@ -7,13 +7,11 @@ fn cubic_rate(derivative: &mut [f64], _: &[f64], _: &(), time: f64) {
 
 fn fixed_cubic(span: (f64, f64), initial: f64, step: f64, save_at: Vec<f64>) -> Vec<f64> {
     let problem = OdeProblem::new(cubic_rate, vec![initial], span, ());
-    let options = SolveOptions {
-        adaptive: false,
-        initial_step: Some(step),
-        save: SaveMode::Endpoints,
-        save_at,
-        ..SolveOptions::default()
-    };
+    let options = SolveOptions::default()
+        .with_adaptive(false)
+        .with_initial_step(Some(step))
+        .with_save(SaveMode::Endpoints)
+        .with_save_at(save_at);
     solve(&problem, Rk4, &options).unwrap().values().to_vec()
 }
 
@@ -31,12 +29,10 @@ fn rk4_save_at_uses_endpoint_hermite_forward_and_backward() {
 #[test]
 fn rk4_dense_sampling_preserves_exact_endpoints() {
     let problem = OdeProblem::new(cubic_rate, vec![0.0], (0.0, 1.0), ());
-    let options = SolveOptions {
-        adaptive: false,
-        initial_step: Some(1.0),
-        save_at: vec![0.0, 1.0],
-        ..SolveOptions::default()
-    };
+    let options = SolveOptions::default()
+        .with_adaptive(false)
+        .with_initial_step(Some(1.0))
+        .with_save_at(vec![0.0, 1.0]);
     let solution = solve(&problem, Rk4, &options).unwrap();
     assert_eq!(solution.times(), &[0.0, 1.0]);
     assert_eq!(solution.values(), &[0.0, 1.0]);
@@ -52,13 +48,11 @@ fn rejected_explicit_attempts_do_not_emit_dense_samples() {
         (0.0, 1.0),
         (),
     );
-    let options = SolveOptions {
-        initial_step: Some(1.0),
-        absolute_tolerance: 1.0e-12,
-        relative_tolerance: 1.0e-12,
-        save_at: vec![0.25, 0.5, 0.75],
-        ..SolveOptions::default()
-    };
+    let options = SolveOptions::default()
+        .with_initial_step(Some(1.0))
+        .with_absolute_tolerance(1.0e-12)
+        .with_relative_tolerance(1.0e-12)
+        .with_save_at(vec![0.25, 0.5, 0.75]);
     let solution = solve(&problem, Tsit5, &options).unwrap();
     assert!(solution.stats().rejected_steps > 0);
     assert_eq!(solution.times(), &[0.25, 0.5, 0.75]);
@@ -75,12 +69,10 @@ fn tsit5_save_at_uses_pinned_method_specific_continuous_extension() {
         (0.0, 1.0),
         (),
     );
-    let options = SolveOptions {
-        adaptive: false,
-        initial_step: Some(1.0),
-        save_at: vec![0.25, 0.75],
-        ..SolveOptions::default()
-    };
+    let options = SolveOptions::default()
+        .with_adaptive(false)
+        .with_initial_step(Some(1.0))
+        .with_save_at(vec![0.25, 0.75]);
     let solution = solve(&problem, Tsit5, &options).unwrap();
 
     assert!((solution.values()[0] - 1.284_013_054_169_605_8).abs() < 2.0e-14);
@@ -104,13 +96,11 @@ fn tsit5_continuous_callback_and_pre_root_save_at_share_the_full_step_extension(
         |state, _: &(), _: f64| state[0] * state[0] - 3.24,
         |_: &mut [f64], _: &(), _: f64| CallbackAction::Terminate,
     );
-    let options = SolveOptions {
-        adaptive: false,
-        initial_step: Some(1.0),
-        event_tolerance: 1.0e-13,
-        save_at: vec![0.25, 0.5],
-        ..SolveOptions::default()
-    };
+    let options = SolveOptions::default()
+        .with_adaptive(false)
+        .with_initial_step(Some(1.0))
+        .with_event_tolerance(1.0e-13)
+        .with_save_at(vec![0.25, 0.5]);
     let solution = solve(&problem, Tsit5, &options).unwrap();
 
     assert_eq!(solution.stats().callback_invocations, 1);
@@ -124,13 +114,11 @@ fn tsit5_continuous_callback_and_pre_root_save_at_share_the_full_step_extension(
 
 #[test]
 fn retained_tsit5_segments_drive_post_solve_interpolation_forward_and_backward() {
-    let forward_options = SolveOptions {
-        adaptive: false,
-        initial_step: Some(1.0),
-        save: SaveMode::Endpoints,
-        retain_dense_output: true,
-        ..SolveOptions::default()
-    };
+    let forward_options = SolveOptions::default()
+        .with_adaptive(false)
+        .with_initial_step(Some(1.0))
+        .with_save(SaveMode::Endpoints)
+        .with_dense_output(true);
     let forward = solve(
         &exponential_problem(1.0, (0.0, 1.0)),
         Tsit5,
@@ -156,12 +144,10 @@ fn retained_tsit5_segments_drive_post_solve_interpolation_forward_and_backward()
 
 #[test]
 fn dense_retention_is_opt_in_and_callback_endpoints_are_post_effect_states() {
-    let default_options = SolveOptions {
-        adaptive: false,
-        initial_step: Some(1.0),
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    };
+    let default_options = SolveOptions::default()
+        .with_adaptive(false)
+        .with_initial_step(Some(1.0))
+        .with_save(SaveMode::Endpoints);
     let plain = solve(
         &exponential_problem(1.0, (0.0, 1.0)),
         Tsit5,
@@ -178,11 +164,9 @@ fn dense_retention_is_opt_in_and_callback_endpoints_are_post_effect_states() {
             CallbackAction::Continue
         },
     );
-    let retained_options = SolveOptions {
-        retain_dense_output: true,
-        event_tolerance: 1.0e-13,
-        ..default_options
-    };
+    let retained_options = (default_options)
+        .with_dense_output(true)
+        .with_event_tolerance(1.0e-13);
     let solution = solve(&problem, Tsit5, &retained_options).unwrap();
     assert_eq!(solution.stats().callback_invocations, 1);
     let event_time = solution.times()[1];

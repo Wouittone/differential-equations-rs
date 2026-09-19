@@ -25,7 +25,7 @@ impl ResourceExplicitRungeKutta {
     }
 
     /// Loads and returns the method tableau.
-    pub fn tableau(self) -> Result<&'static RungeKuttaTableau, crate::tableau::TableauError> {
+    pub fn tableau(&self) -> Result<&'static RungeKuttaTableau, crate::tableau::TableauError> {
         load_tableau(self.resource)
     }
 }
@@ -164,7 +164,7 @@ impl TableauAccess for ResourceTableau {
         self.0.b()
     }
     fn stage_row(self, stage: usize) -> &'static [f64] {
-        self.0.stage_row(stage)
+        &self.0.a()[stage][..stage]
     }
     fn error_weights(self) -> Option<&'static [f64]> {
         self.0.error()

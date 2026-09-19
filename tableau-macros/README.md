@@ -1,11 +1,11 @@
 # differential-equations-tableau-macros
 
 Procedural macros used by the
-[`differential-equations`](https://crates.io/crates/differential-equations)
+[`differential-equations-rs`](https://crates.io/crates/differential-equations-rs)
 crate to validate JSON tableau resources at compile time and define lazy
 resource-backed solvers without generating Rust coefficient arrays.
 
-Most users should depend on `differential-equations` and use the macros
+Most users should depend on `differential-equations-rs` and use the macros
 re-exported from `differential_equations::tableau`, such as
 `tableau::define_explicit_rk_from_file!` and
 `tableau::define_symplectic_from_file!`, rather than depend on this
@@ -19,7 +19,7 @@ creates a second-order solver. RKN and IRKN tableau-only macros support
 specialized kernels. ROCK2, ROCK4, SERK2, and ESERK degree-specific resources
 have corresponding compile-validating lazy tableau macros. The schemas,
 publishing requirements, and examples are documented in the main crate's
-[tableau resource guide](https://docs.rs/differential-equations/latest/differential_equations/tableau/index.html).
+[tableau resource guide](https://docs.rs/differential-equations-rs/latest/differential_equations/tableau/index.html).
 
 This implementation crate is versioned and released in lockstep with the main
 crate.

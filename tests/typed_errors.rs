@@ -132,7 +132,7 @@ fn interpolation_queries_preserve_failure_reasons() {
 #[test]
 fn default_event_tolerance_is_a_named_stable_constant() {
     assert_eq!(
-        SolveOptions::default().event_tolerance,
+        SolveOptions::default().event_tolerance(),
         DEFAULT_EVENT_TOLERANCE
     );
 }

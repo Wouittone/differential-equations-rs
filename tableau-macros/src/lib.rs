@@ -851,7 +851,7 @@ pub fn define_rkn_from_file(input: TokenStream) -> TokenStream {
 
 /// Defines a named low-storage Runge--Kutta solver from one JSON resource.
 ///
-/// The generated zero-sized type implements [`OdeAlgorithm`](https://docs.rs/differential-equations/latest/differential_equations/trait.OdeAlgorithm.html)
+/// The generated zero-sized type implements [`OdeAlgorithm`](https://docs.rs/differential-equations-rs/latest/differential_equations/trait.OdeAlgorithm.html)
 /// and exposes its independently lazy tableau through `tableau()`.
 #[proc_macro]
 pub fn define_low_storage_rk_from_file(input: TokenStream) -> TokenStream {
@@ -1244,8 +1244,8 @@ fn expand_symplectic_source(input: MacroInput, source: &str) -> Result<TokenStre
             }
         }
         impl #crate_path::solvers::second_order::SymplecticAlgorithm for #name {
-            fn tableau() -> ::std::result::Result<&'static #crate_path::tableau::SymplecticTableau, #crate_path::tableau::TableauError> {
-                Self::tableau()
+            fn tableau(&self) -> ::std::result::Result<&'static #crate_path::tableau::SymplecticTableau, #crate_path::tableau::TableauError> {
+                #name::tableau()
             }
         }
     })

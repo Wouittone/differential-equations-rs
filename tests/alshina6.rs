@@ -6,12 +6,10 @@ fn unit_rate(du: &mut [f64], _: &[f64], _: &(), _: f64) {
 }
 
 fn fixed_options(step: f64) -> SolveOptions {
-    SolveOptions {
-        adaptive: false,
-        initial_step: Some(step),
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    }
+    SolveOptions::default()
+        .with_adaptive(false)
+        .with_initial_step(Some(step))
+        .with_save(SaveMode::Endpoints)
 }
 
 #[test]
@@ -20,12 +18,10 @@ fn alshina6_supports_save_at_and_backward_steps() {
     let solution = solve(
         &forward,
         Alshina6,
-        &SolveOptions {
-            adaptive: false,
-            initial_step: Some(0.3),
-            save_at: vec![0.2, 0.5, 0.8],
-            ..SolveOptions::default()
-        },
+        &SolveOptions::default()
+            .with_adaptive(false)
+            .with_initial_step(Some(0.3))
+            .with_save_at(vec![0.2, 0.5, 0.8]),
     )
     .unwrap();
     assert_eq!(solution.times(), &[0.2, 0.5, 0.8]);
@@ -37,12 +33,10 @@ fn alshina6_supports_save_at_and_backward_steps() {
     let solution = solve(
         &backward,
         Alshina6,
-        &SolveOptions {
-            adaptive: false,
-            initial_step: Some(0.3),
-            save_at: vec![0.8, 0.5, 0.2],
-            ..SolveOptions::default()
-        },
+        &SolveOptions::default()
+            .with_adaptive(false)
+            .with_initial_step(Some(0.3))
+            .with_save_at(vec![0.8, 0.5, 0.2]),
     )
     .unwrap();
     assert_eq!(solution.times(), &[0.8, 0.5, 0.2]);

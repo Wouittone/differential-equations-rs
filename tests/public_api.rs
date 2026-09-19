@@ -2,6 +2,28 @@ use differential_equations::{OdeAlgorithm, OdeProblem, SaveMode, SolveOptions, s
 
 fn assert_algorithm<T: OdeAlgorithm>() {}
 fn assert_second_order_algorithm<T: solvers::second_order::SecondOrderOdeAlgorithm>() {}
+fn assert_borrowing_getter<T, R>(_: fn(&T) -> R) {}
+fn assert_borrowing_lookup<T, A, R>(_: fn(&T, A) -> R) {}
+
+#[test]
+fn inspection_methods_consistently_borrow_their_receiver() {
+    use differential_equations::CallbackSave;
+    use differential_equations::tableau::{LowStoragePidController, RockRecurrenceStage};
+
+    assert_borrowing_getter(CallbackSave::saves_before);
+    assert_borrowing_getter(LowStoragePidController::beta);
+    assert_borrowing_getter(RockRecurrenceStage::mu);
+    assert_borrowing_getter(solvers::taylor::ExplicitTaylor::order);
+    assert_borrowing_getter(solvers::implicit::AdaptiveRadau::min_order);
+    assert_borrowing_getter(solvers::extrapolation::AitkenNeville::sequence);
+    assert_borrowing_getter(solvers::second_order::NewmarkBeta::beta);
+    assert_borrowing_getter(solvers::explicit::ResourceExplicitRungeKutta::tableau);
+    assert_borrowing_getter(solvers::implicit::Sdirk2::tableau);
+    assert_borrowing_getter(solvers::multistep::Ab3::predictor_tableau);
+    assert_borrowing_getter(solvers::rosenbrock::Rosenbrock23::tableau);
+    assert_borrowing_lookup(solvers::stabilized::ROCK2::tableau);
+    assert_borrowing_lookup(solvers::multistep::Qndf::tableau);
+}
 
 #[test]
 fn canonical_solver_paths_stop_at_the_family() {
@@ -41,12 +63,10 @@ fn namespaced_algorithm_runs_through_the_public_driver() {
         (0.0, 0.1),
         (),
     );
-    let options = SolveOptions {
-        adaptive: false,
-        initial_step: Some(0.01),
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    };
+    let options = SolveOptions::default()
+        .with_adaptive(false)
+        .with_initial_step(Some(0.01))
+        .with_save(SaveMode::Endpoints);
 
     let solution = solve(&problem, solvers::explicit::RDPK3Sp35, &options)
         .expect("the concrete low-storage method should solve through its namespace");

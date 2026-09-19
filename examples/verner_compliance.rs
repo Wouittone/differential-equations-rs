@@ -13,14 +13,12 @@ fn problem() -> OdeProblem<TestRhs, ()> {
 }
 
 fn endpoint<A: OdeAlgorithm>(algorithm: A, adaptive: bool) -> Vec<f64> {
-    let options = SolveOptions {
-        adaptive,
-        absolute_tolerance: 1.0e-10,
-        relative_tolerance: 1.0e-10,
-        initial_step: Some(if adaptive { 0.5 } else { 0.05 }),
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    };
+    let options = SolveOptions::default()
+        .with_adaptive(adaptive)
+        .with_absolute_tolerance(1.0e-10)
+        .with_relative_tolerance(1.0e-10)
+        .with_initial_step(if adaptive { 0.5 } else { 0.05 })
+        .with_save(SaveMode::Endpoints);
     solve(&problem(), algorithm, &options)
         .expect("Verner compliance solve failed")
         .last_state()

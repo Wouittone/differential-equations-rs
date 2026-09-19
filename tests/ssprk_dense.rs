@@ -21,13 +21,11 @@ fn retained<A: OdeAlgorithm>(algorithm: A, initial: f64, span: (f64, f64), step:
     solve(
         &exponential_problem(initial, span),
         algorithm,
-        &SolveOptions {
-            adaptive: false,
-            initial_step: Some(step),
-            save: SaveMode::Endpoints,
-            retain_dense_output: true,
-            ..SolveOptions::default()
-        },
+        &SolveOptions::default()
+            .with_adaptive(false)
+            .with_initial_step(Some(step))
+            .with_save(SaveMode::Endpoints)
+            .with_dense_output(true),
     )
     .unwrap()
 }
@@ -102,12 +100,10 @@ fn assert_special_sampling_and_root<A: OdeAlgorithm + Copy>(algorithm: A) {
     let sampled = solve(
         &exponential_problem(1.0, (0.0, 1.0)),
         algorithm,
-        &SolveOptions {
-            adaptive: false,
-            initial_step: Some(1.0),
-            save_at: vec![0.2, 0.55, 0.9],
-            ..SolveOptions::default()
-        },
+        &SolveOptions::default()
+            .with_adaptive(false)
+            .with_initial_step(Some(1.0))
+            .with_save_at(vec![0.2, 0.55, 0.9]),
     )
     .unwrap();
     for (index, &time) in sampled.times().iter().enumerate() {
@@ -124,13 +120,11 @@ fn assert_special_sampling_and_root<A: OdeAlgorithm + Copy>(algorithm: A) {
     let event = solve(
         &event_problem,
         algorithm,
-        &SolveOptions {
-            adaptive: false,
-            initial_step: Some(1.0),
-            event_tolerance: 1.0e-13,
-            retain_dense_output: true,
-            ..SolveOptions::default()
-        },
+        &SolveOptions::default()
+            .with_adaptive(false)
+            .with_initial_step(Some(1.0))
+            .with_event_tolerance(1.0e-13)
+            .with_dense_output(true),
     )
     .unwrap();
     let expected_root = positive_quadratic_root(retained.last_state()[0]);
@@ -158,13 +152,11 @@ fn assert_generic_hermite<A: OdeAlgorithm>(algorithm: A) {
     let solution = solve(
         &quadratic_problem(0.0, (0.0, 1.0)),
         algorithm,
-        &SolveOptions {
-            adaptive: false,
-            initial_step: Some(1.0),
-            save: SaveMode::Endpoints,
-            retain_dense_output: true,
-            ..SolveOptions::default()
-        },
+        &SolveOptions::default()
+            .with_adaptive(false)
+            .with_initial_step(Some(1.0))
+            .with_save(SaveMode::Endpoints)
+            .with_dense_output(true),
     )
     .unwrap();
     assert!((solution.interpolate(0.3).unwrap()[0] - 0.09).abs() < 5.0e-13);
@@ -216,14 +208,12 @@ fn generic_hermite_drives_roots_and_preserves_callback_sides() {
     let solution = solve(
         &problem,
         SspRk53,
-        &SolveOptions {
-            adaptive: false,
-            initial_step: Some(1.0),
-            save: SaveMode::Endpoints,
-            event_tolerance: 1.0e-13,
-            retain_dense_output: true,
-            ..SolveOptions::default()
-        },
+        &SolveOptions::default()
+            .with_adaptive(false)
+            .with_initial_step(Some(1.0))
+            .with_save(SaveMode::Endpoints)
+            .with_event_tolerance(1.0e-13)
+            .with_dense_output(true),
     )
     .unwrap();
     let event_time = solution.times()[1];
@@ -239,18 +229,16 @@ fn special_extensions_are_free_and_generic_endpoint_work_is_not_duplicated() {
         solve(
             &exponential_problem(1.0, (0.0, 1.0)),
             algorithm,
-            &SolveOptions {
-                adaptive: false,
-                initial_step: Some(0.25),
-                save: SaveMode::Endpoints,
-                save_at: if dense {
+            &SolveOptions::default()
+                .with_adaptive(false)
+                .with_initial_step(Some(0.25))
+                .with_save(SaveMode::Endpoints)
+                .with_save_at(if dense {
                     vec![0.125, 0.375, 0.625, 0.875]
                 } else {
                     Vec::new()
-                },
-                retain_dense_output: dense,
-                ..SolveOptions::default()
-            },
+                })
+                .with_dense_output(dense),
         )
         .unwrap()
         .stats()

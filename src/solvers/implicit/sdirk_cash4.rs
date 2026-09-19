@@ -25,7 +25,7 @@ pub struct Cash4;
 
 impl Cash4 {
     /// Returns this method's lazily materialized, validated tableau.
-    pub fn tableau(self) -> Result<&'static RungeKuttaTableau, crate::tableau::TableauError> {
+    pub fn tableau(&self) -> Result<&'static RungeKuttaTableau, crate::tableau::TableauError> {
         load_tableau(&CASH4_TABLEAU)
     }
 }

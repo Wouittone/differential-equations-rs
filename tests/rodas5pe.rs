@@ -2,12 +2,10 @@ use differential_equations::solvers::rosenbrock::*;
 use differential_equations::*;
 
 fn fixed_options(step: f64) -> SolveOptions {
-    SolveOptions {
-        adaptive: false,
-        initial_step: Some(step),
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    }
+    SolveOptions::default()
+        .with_adaptive(false)
+        .with_initial_step(Some(step))
+        .with_save(SaveMode::Endpoints)
 }
 
 #[test]
@@ -24,12 +22,10 @@ fn rodas5pe_fixed_and_adaptive_orders_match_fifth_order_primary() {
     let adaptive = solve(
         &problem,
         Rodas5Pe,
-        &SolveOptions {
-            absolute_tolerance: 1.0e-9,
-            relative_tolerance: 1.0e-9,
-            save: SaveMode::Endpoints,
-            ..SolveOptions::default()
-        },
+        &SolveOptions::default()
+            .with_absolute_tolerance(1.0e-9)
+            .with_relative_tolerance(1.0e-9)
+            .with_save(SaveMode::Endpoints),
     )
     .unwrap();
     assert!((adaptive.last_state()[0] - std::f64::consts::E).abs() < 1.0e-7);
@@ -46,14 +42,12 @@ fn rodas5pe_supports_backward_jacobian_callback_and_save_at() {
     let backward = solve(
         &backward_problem,
         Rodas5Pe,
-        &SolveOptions {
-            absolute_tolerance: 1.0e-9,
-            relative_tolerance: 1.0e-9,
-            initial_step: Some(0.01),
-            max_step: 0.01,
-            save: SaveMode::Endpoints,
-            ..SolveOptions::default()
-        },
+        &SolveOptions::default()
+            .with_absolute_tolerance(1.0e-9)
+            .with_relative_tolerance(1.0e-9)
+            .with_initial_step(Some(0.01))
+            .with_max_step(0.01)
+            .with_save(SaveMode::Endpoints),
     )
     .unwrap();
     assert!((backward.last_state()[0] - 1.0).abs() < 1.0e-7);
@@ -72,17 +66,15 @@ fn rodas5pe_supports_backward_jacobian_callback_and_save_at() {
             CallbackAction::Continue
         },
     );
-    let options = SolveOptions {
-        adaptive: false,
-        initial_step: Some(0.25),
-        save: SaveMode::Endpoints,
-        save_at: vec![0.25, 0.5, 0.75],
-        ..SolveOptions::default()
-    };
+    let options = SolveOptions::default()
+        .with_adaptive(false)
+        .with_initial_step(Some(0.25))
+        .with_save(SaveMode::Endpoints)
+        .with_save_at(vec![0.25, 0.5, 0.75]);
     let solution = solve(&problem, Rodas5Pe, &options).unwrap();
     assert_eq!(solution.stats().callback_invocations, 1);
     assert!(solution.stats().jacobian_evaluations > 0);
-    for time in options.save_at {
+    for &time in options.save_at() {
         assert!(solution.times().contains(&time), "missing save_at={time}");
     }
 }

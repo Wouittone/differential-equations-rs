@@ -17,12 +17,10 @@ fn problem(rhs: TestRhs, end: f64) -> OdeProblem<TestRhs, ()> {
 }
 
 fn fixed_options(step: f64) -> SolveOptions {
-    SolveOptions {
-        adaptive: false,
-        initial_step: Some(step),
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    }
+    SolveOptions::default()
+        .with_adaptive(false)
+        .with_initial_step(Some(step))
+        .with_save(SaveMode::Endpoints)
 }
 
 fn final_value<A: OdeAlgorithm>(algorithm: A, problem: &OdeProblem<TestRhs, ()>, step: f64) -> f64 {
@@ -32,14 +30,12 @@ fn final_value<A: OdeAlgorithm>(algorithm: A, problem: &OdeProblem<TestRhs, ()>,
 }
 
 fn adaptive_final_value<A: OdeAlgorithm>(algorithm: A, problem: &OdeProblem<TestRhs, ()>) -> f64 {
-    let options = SolveOptions {
-        absolute_tolerance: 1.0e-7,
-        relative_tolerance: 1.0e-7,
-        initial_step: Some(0.05),
-        max_step: 0.1,
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    };
+    let options = SolveOptions::default()
+        .with_absolute_tolerance(1.0e-7)
+        .with_relative_tolerance(1.0e-7)
+        .with_initial_step(Some(0.05))
+        .with_max_step(0.1)
+        .with_save(SaveMode::Endpoints);
     solve(problem, algorithm, &options).unwrap().last_state()[0]
 }
 

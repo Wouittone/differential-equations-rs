@@ -20,14 +20,12 @@ fn adaptive_error<A: SecondOrderOdeAlgorithm>(algorithm: A) -> (f64, usize) {
     let solution = solve_second_order(
         &oscillator(),
         algorithm,
-        &SolveOptions {
-            absolute_tolerance: 1.0e-10,
-            relative_tolerance: 1.0e-10,
-            initial_step: Some(1.0),
-            max_step: 1.0,
-            save: SaveMode::Endpoints,
-            ..SolveOptions::default()
-        },
+        &SolveOptions::default()
+            .with_absolute_tolerance(1.0e-10)
+            .with_relative_tolerance(1.0e-10)
+            .with_initial_step(Some(1.0))
+            .with_max_step(1.0)
+            .with_save(SaveMode::Endpoints),
     )
     .unwrap();
     let error = (solution.last_position()[0] - 10.0_f64.cos())
@@ -67,14 +65,12 @@ fn damped_error<A: SecondOrderOdeAlgorithm>(algorithm: A) -> f64 {
     let solution = solve_second_order(
         &problem,
         algorithm,
-        &SolveOptions {
-            absolute_tolerance: 1.0e-10,
-            relative_tolerance: 1.0e-10,
-            initial_step: Some(0.5),
-            max_step: 0.5,
-            save: SaveMode::Endpoints,
-            ..SolveOptions::default()
-        },
+        &SolveOptions::default()
+            .with_absolute_tolerance(1.0e-10)
+            .with_relative_tolerance(1.0e-10)
+            .with_initial_step(Some(0.5))
+            .with_max_step(0.5)
+            .with_save(SaveMode::Endpoints),
     )
     .unwrap();
     let omega = 0.99_f64.sqrt();
@@ -105,12 +101,10 @@ fn dprkn6_dense_output_drives_save_at_and_continuous_roots() {
         (0.0, 1.0),
         (),
     );
-    let options = SolveOptions {
-        adaptive: false,
-        initial_step: Some(1.0),
-        save_at: vec![0.0, 0.5, 1.0],
-        ..SolveOptions::default()
-    };
+    let options = SolveOptions::default()
+        .with_adaptive(false)
+        .with_initial_step(Some(1.0))
+        .with_save_at(vec![0.0, 0.5, 1.0]);
     let solution = solve_second_order(&problem, Dprkn6, &options).unwrap();
     assert_eq!(solution.times(), &[0.0, 0.5, 1.0]);
     assert!((solution.position(1).unwrap()[0] - 0.5_f64.cos()).abs() < 2.0e-5);
@@ -123,13 +117,11 @@ fn dprkn6_dense_output_drives_save_at_and_continuous_roots() {
     let solution = solve_second_order(
         &problem,
         Dprkn6,
-        &SolveOptions {
-            adaptive: false,
-            initial_step: Some(1.0),
-            save: SaveMode::Endpoints,
-            event_tolerance: 1.0e-10,
-            ..SolveOptions::default()
-        },
+        &SolveOptions::default()
+            .with_adaptive(false)
+            .with_initial_step(Some(1.0))
+            .with_save(SaveMode::Endpoints)
+            .with_event_tolerance(1.0e-10),
     )
     .unwrap();
     assert!((solution.times().last().unwrap() - 0.5).abs() < 2.0e-5);
@@ -149,12 +141,10 @@ fn irkn_fixed_error<A: SecondOrderOdeAlgorithm>(algorithm: A, step: f64) -> f64 
     let solution = solve_second_order(
         &problem,
         algorithm,
-        &SolveOptions {
-            adaptive: false,
-            initial_step: Some(step),
-            save: SaveMode::Endpoints,
-            ..SolveOptions::default()
-        },
+        &SolveOptions::default()
+            .with_adaptive(false)
+            .with_initial_step(Some(step))
+            .with_save(SaveMode::Endpoints),
     )
     .unwrap();
     (solution.last_position()[0] - 1.0_f64.cos()).hypot(solution.last_velocity()[0] + 1.0_f64.sin())
@@ -190,12 +180,10 @@ fn irkn_history_rebootstraps_after_callback_discontinuities() {
     let solution = solve_second_order(
         &problem,
         Irkn4,
-        &SolveOptions {
-            adaptive: false,
-            initial_step: Some(0.125),
-            save: SaveMode::Endpoints,
-            ..SolveOptions::default()
-        },
+        &SolveOptions::default()
+            .with_adaptive(false)
+            .with_initial_step(Some(0.125))
+            .with_save(SaveMode::Endpoints),
     )
     .unwrap();
     let expected_position = 1.0_f64.cos() + 0.1 * 0.5_f64.sin();
@@ -217,12 +205,10 @@ fn rejected_attempts_do_not_advance_the_partitioned_state() {
 
 #[test]
 fn adaptive_rkn_methods_also_support_requested_fixed_steps_and_backward_time() {
-    let options = SolveOptions {
-        adaptive: false,
-        initial_step: Some(0.01),
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    };
+    let options = SolveOptions::default()
+        .with_adaptive(false)
+        .with_initial_step(Some(0.01))
+        .with_save(SaveMode::Endpoints);
     let forward = SecondOrderOdeProblem::new(
         |out: &mut [f64], _: &[f64], q: &[f64], _: &(), _: f64| out[0] = -q[0],
         vec![0.0],

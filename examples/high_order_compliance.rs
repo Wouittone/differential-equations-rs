@@ -27,22 +27,18 @@ fn exponential() -> OdeProblem<ScalarRhs, ()> {
 }
 
 fn fixed_options(step: f64) -> SolveOptions {
-    SolveOptions {
-        adaptive: false,
-        initial_step: Some(step),
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    }
+    SolveOptions::default()
+        .with_adaptive(false)
+        .with_initial_step(step)
+        .with_save(SaveMode::Endpoints)
 }
 
 fn adaptive_options(tolerance: f64) -> SolveOptions {
-    SolveOptions {
-        absolute_tolerance: tolerance,
-        relative_tolerance: tolerance,
-        initial_step: Some(0.5),
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    }
+    SolveOptions::default()
+        .with_absolute_tolerance(tolerance)
+        .with_relative_tolerance(tolerance)
+        .with_initial_step(0.5)
+        .with_save(SaveMode::Endpoints)
 }
 
 fn convergence_ratio<A: OdeAlgorithm + Copy>(algorithm: A) -> f64 {

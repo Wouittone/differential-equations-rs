@@ -22,23 +22,19 @@ fn split_problem() -> SplitOdeProblem<Rhs, Rhs, ()> {
 }
 
 fn main() {
-    let adaptive = SolveOptions {
-        absolute_tolerance: 1.0e-9,
-        relative_tolerance: 1.0e-9,
-        initial_step: Some(0.001),
-        max_step: 0.05,
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    };
+    let adaptive = SolveOptions::default()
+        .with_absolute_tolerance(1.0e-9)
+        .with_relative_tolerance(1.0e-9)
+        .with_initial_step(0.001)
+        .with_max_step(0.05)
+        .with_save(SaveMode::Endpoints);
     let vcabm = solve(&variable_problem(), VCABM, &adaptive).unwrap();
     println!("vcabm,{:.17e}", vcabm.last_state()[0]);
 
-    let fixed = SolveOptions {
-        adaptive: false,
-        initial_step: Some(0.0025),
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    };
+    let fixed = SolveOptions::default()
+        .with_adaptive(false)
+        .with_initial_step(0.0025)
+        .with_save(SaveMode::Endpoints);
     macro_rules! row {
         ($name:literal, $algorithm:expr) => {{
             let solution = solve_split(&split_problem(), $algorithm, &fixed).unwrap();

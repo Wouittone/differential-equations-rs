@@ -13,19 +13,15 @@ fn exponential() -> OdeProblem<ScalarRhs, ()> {
 }
 
 fn fixed_options(step: f64) -> SolveOptions {
-    SolveOptions {
-        adaptive: false,
-        initial_step: Some(step),
-        ..SolveOptions::default()
-    }
+    SolveOptions::default()
+        .with_adaptive(false)
+        .with_initial_step(Some(step))
 }
 
 fn adaptive_options() -> SolveOptions {
-    SolveOptions {
-        absolute_tolerance: 1.0e-9,
-        relative_tolerance: 1.0e-9,
-        ..SolveOptions::default()
-    }
+    SolveOptions::default()
+        .with_absolute_tolerance(1.0e-9)
+        .with_relative_tolerance(1.0e-9)
 }
 
 fn assert_fixed_endpoint<A: OdeAlgorithm + Copy>(algorithm: A) {

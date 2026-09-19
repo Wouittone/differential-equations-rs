@@ -142,7 +142,7 @@ jobs:
         run: |
           cargo package --locked --no-verify -p differential-equations-tableau-core
           cargo package --locked --list -p differential-equations-tableau-macros
-          cargo package --locked --list -p differential-equations
+          cargo package --locked --list -p differential-equations-rs
 
   supply-chain:
     name: Advisories, licenses, bans, and sources

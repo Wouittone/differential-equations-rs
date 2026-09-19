@@ -2,12 +2,10 @@ use differential_equations::solvers::multistep::*;
 use differential_equations::*;
 
 fn fixed(step: f64) -> SolveOptions {
-    SolveOptions {
-        adaptive: false,
-        initial_step: Some(step),
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    }
+    SolveOptions::default()
+        .with_adaptive(false)
+        .with_initial_step(Some(step))
+        .with_save(SaveMode::Endpoints)
 }
 
 type TrackingRhs = fn(&mut [f64], &[f64], &(), f64);
@@ -58,12 +56,10 @@ fn variable_order_methods_converge_under_fixed_refinement() {
 #[test]
 fn adaptive_methods_track_a_stiff_forced_mode() {
     let problem = stiff_tracking_problem();
-    let options = SolveOptions {
-        absolute_tolerance: 1.0e-8,
-        relative_tolerance: 1.0e-8,
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    };
+    let options = SolveOptions::default()
+        .with_absolute_tolerance(1.0e-8)
+        .with_relative_tolerance(1.0e-8)
+        .with_save(SaveMode::Endpoints);
     for (name, endpoint, accepted) in [
         {
             let solution = solve(&problem, QNDF, &options).unwrap();

@@ -12,12 +12,10 @@ fn oscillator() -> SecondOrderOdeProblem<Acceleration, ()> {
 }
 
 fn fixed_options(step: f64) -> SolveOptions {
-    SolveOptions {
-        adaptive: false,
-        initial_step: Some(step),
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    }
+    SolveOptions::default()
+        .with_adaptive(false)
+        .with_initial_step(Some(step))
+        .with_save(SaveMode::Endpoints)
 }
 
 fn endpoint_error<A: SecondOrderOdeAlgorithm>(algorithm: A, step: f64) -> f64 {
@@ -54,12 +52,10 @@ fn verlet_has_bounded_long_time_energy_error() {
     let solution = solve_second_order(
         &problem,
         VelocityVerlet,
-        &SolveOptions {
-            adaptive: false,
-            initial_step: Some(0.1),
-            save: SaveMode::EveryStep,
-            ..SolveOptions::default()
-        },
+        &SolveOptions::default()
+            .with_adaptive(false)
+            .with_initial_step(Some(0.1))
+            .with_save(SaveMode::EveryStep),
     )
     .unwrap();
 
@@ -89,12 +85,10 @@ fn fixed_steps_work_backward_and_honor_save_at() {
     let solution = solve_second_order(
         &problem,
         VerletLeapfrog,
-        &SolveOptions {
-            adaptive: false,
-            initial_step: Some(0.01),
-            save_at: vec![0.75, 0.5, 0.0],
-            ..SolveOptions::default()
-        },
+        &SolveOptions::default()
+            .with_adaptive(false)
+            .with_initial_step(Some(0.01))
+            .with_save_at(vec![0.75, 0.5, 0.0]),
     )
     .unwrap();
 

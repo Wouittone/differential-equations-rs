@@ -214,6 +214,7 @@ fn downstream_ordinary_algorithm_can_evaluate_and_return_a_shaped_solution() {
 
     let solution = solve(&problem, ExternalEuler, &SolveOptions::default()).unwrap();
 
+    assert_eq!(problem.dimension(), 4);
     assert_eq!(solution.state_shape(), &[2, 2]);
     assert_eq!(solution.last_state(), &[0.75, 1.5, 2.25, 3.0]);
     assert_eq!(solution.stats().rhs_evaluations, 1);
@@ -237,6 +238,7 @@ fn downstream_second_order_algorithm_can_evaluate_and_return_a_shaped_solution()
     let solution =
         solve_second_order(&problem, ExternalSecondOrderEuler, &SolveOptions::default()).unwrap();
 
+    assert_eq!(problem.dimension(), 4);
     assert_eq!(solution.state_shape(), &[2, 2]);
     assert_eq!(solution.last_velocity(), &[1.0, 2.0, 3.0, 4.0]);
     assert_eq!(solution.last_position(), &[10.0, 20.5, 31.0, 41.5]);

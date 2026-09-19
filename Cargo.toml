@@ -1,5 +1,5 @@
 [package]
-name = "differential-equations"
+name = "differential-equations-rs"
 version = "0.1.0-beta.1"
 edition = "2024"
 rust-version = "1.85"
@@ -8,7 +8,7 @@ license = "MIT OR Apache-2.0"
 readme = "README.md"
 repository = "https://github.com/Wouittone/differential-equations-rs"
 homepage = "https://github.com/Wouittone/differential-equations-rs"
-documentation = "https://docs.rs/differential-equations"
+documentation = "https://docs.rs/differential-equations-rs"
 keywords = ["ode", "differential-equations", "numerical", "simulation", "sciml"]
 categories = ["science", "mathematics", "algorithms", "simulation"]
 include = [
@@ -26,6 +26,9 @@ include = [
     "/LICENSE-MIT",
 ]
 publish = false
+
+[lib]
+name = "differential_equations"
 
 [workspace]
 members = ["tableau-core", "tableau-macros"]

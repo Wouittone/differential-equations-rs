@@ -42,7 +42,7 @@ impl Frk65 {
     }
 
     /// Returns this method's lazily materialized, validated base tableau.
-    pub fn tableau(self) -> Result<&'static RungeKuttaTableau, crate::tableau::TableauError> {
+    pub fn tableau(&self) -> Result<&'static RungeKuttaTableau, crate::tableau::TableauError> {
         load_tableau(&FRK65_TABLEAU)
     }
 }
@@ -196,7 +196,7 @@ where
         for i in 1..8 {
             for j in 0..self.dim {
                 let mut v = s[j];
-                for (k, a) in self.tableau.stage_row(i).iter().enumerate() {
+                for (k, a) in self.tableau.a()[i][..i].iter().enumerate() {
                     v += h * a * self.stage(k)[j];
                 }
                 self.tmp[j] = v;

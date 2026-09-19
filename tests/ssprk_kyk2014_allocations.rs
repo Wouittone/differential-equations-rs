@@ -20,12 +20,10 @@ fn allocations_for(step: f64) -> usize {
         (0.0, 1.0),
         (),
     );
-    let options = SolveOptions {
-        adaptive: false,
-        initial_step: Some(step),
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    };
+    let options = SolveOptions::default()
+        .with_adaptive(false)
+        .with_initial_step(Some(step))
+        .with_save(SaveMode::Endpoints);
     Kyk2014DgSsprk3S2.tableau().unwrap();
     allocation_support::minimum_measurement(|| {
         let region = Region::new(GLOBAL);

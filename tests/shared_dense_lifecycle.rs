@@ -18,13 +18,11 @@ fn retained<A: OdeAlgorithm>(algorithm: A) -> differential_equations::Solution {
     solve(
         &problem,
         algorithm,
-        &SolveOptions {
-            adaptive: false,
-            initial_step: Some(0.05),
-            save: SaveMode::Endpoints,
-            retain_dense_output: true,
-            ..SolveOptions::default()
-        },
+        &SolveOptions::default()
+            .with_adaptive(false)
+            .with_initial_step(Some(0.05))
+            .with_save(SaveMode::Endpoints)
+            .with_dense_output(true),
     )
     .unwrap()
 }
@@ -70,14 +68,12 @@ fn callback_discontinuity_bounds_the_shared_left_segment() {
     let solution = solve(
         &problem,
         ImplicitEuler,
-        &SolveOptions {
-            adaptive: false,
-            initial_step: Some(0.1),
-            save: SaveMode::Endpoints,
-            retain_dense_output: true,
-            event_tolerance: 1.0e-12,
-            ..SolveOptions::default()
-        },
+        &SolveOptions::default()
+            .with_adaptive(false)
+            .with_initial_step(Some(0.1))
+            .with_save(SaveMode::Endpoints)
+            .with_dense_output(true)
+            .with_event_tolerance(1.0e-12),
     )
     .unwrap();
     let event_time = solution.times()[1];

@@ -21,12 +21,10 @@ fn exponential() -> OdeProblem<TestRhs, ()> {
 }
 
 fn fixed_adams_allocations(step: f64) -> usize {
-    let options = SolveOptions {
-        adaptive: false,
-        initial_step: Some(step),
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    };
+    let options = SolveOptions::default()
+        .with_adaptive(false)
+        .with_initial_step(Some(step))
+        .with_save(SaveMode::Endpoints);
     allocation_support::minimum_measurement(|| {
         let region = Region::new(GLOBAL);
         let solution = solve(&exponential(), Ab5, &options).unwrap();
@@ -36,14 +34,12 @@ fn fixed_adams_allocations(step: f64) -> usize {
 }
 
 fn variable_adams_allocations(maximum_step: f64) -> usize {
-    let options = SolveOptions {
-        absolute_tolerance: 1.0e-9,
-        relative_tolerance: 1.0e-9,
-        initial_step: Some(maximum_step),
-        max_step: maximum_step,
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    };
+    let options = SolveOptions::default()
+        .with_absolute_tolerance(1.0e-9)
+        .with_relative_tolerance(1.0e-9)
+        .with_initial_step(Some(maximum_step))
+        .with_max_step(maximum_step)
+        .with_save(SaveMode::Endpoints);
     allocation_support::minimum_measurement(|| {
         let region = Region::new(GLOBAL);
         let solution = solve(&exponential(), Vcab5, &options).unwrap();

@@ -77,12 +77,12 @@ impl AdaptiveRadau {
     }
 
     /// Returns the minimum odd Radau order used by the adaptive controller.
-    pub fn min_order(self) -> usize {
+    pub fn min_order(&self) -> usize {
         self.min_order
     }
 
     /// Returns the maximum odd Radau order used by the adaptive controller.
-    pub fn max_order(self) -> usize {
+    pub fn max_order(&self) -> usize {
         self.max_order
     }
 }
@@ -119,7 +119,7 @@ impl GaussLegendre {
     }
 
     /// Returns the configured collocation stage count.
-    pub fn num_stages(self) -> usize {
+    pub fn num_stages(&self) -> usize {
         self.num_stages
     }
 }

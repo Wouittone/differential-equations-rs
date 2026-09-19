@@ -82,12 +82,12 @@ impl NewmarkBeta {
     }
 
     /// Position update coefficient.
-    pub fn beta(self) -> f64 {
+    pub fn beta(&self) -> f64 {
         self.beta
     }
 
     /// Velocity update coefficient.
-    pub fn gamma(self) -> f64 {
+    pub fn gamma(&self) -> f64 {
         self.gamma
     }
 }
@@ -179,7 +179,7 @@ impl GeneralizedAlpha {
     }
 
     /// Returns `(alpha_m, alpha_f, beta, gamma)`.
-    pub fn parameters(self) -> (f64, f64, f64, f64) {
+    pub fn parameters(&self) -> (f64, f64, f64, f64) {
         (self.alpha_m, self.alpha_f, self.beta, self.gamma)
     }
 }
@@ -264,7 +264,7 @@ impl ResourceRungeKuttaNystrom {
     }
 
     /// Returns the lazily initialized tableau.
-    pub fn tableau(self) -> Result<&'static RungeKuttaNystromTableau, TableauError> {
+    pub fn tableau(&self) -> Result<&'static RungeKuttaNystromTableau, TableauError> {
         load_tableau(self.resource)
     }
 }
@@ -473,7 +473,7 @@ macro_rules! impl_rkn_algorithm {
     ($algorithm:ty, $tableau:ident) => {
         impl $algorithm {
             /// Returns this method's lazily initialized, validated tableau.
-            pub fn tableau(self) -> Result<&'static RungeKuttaNystromTableau, TableauError> {
+            pub fn tableau(&self) -> Result<&'static RungeKuttaNystromTableau, TableauError> {
                 load_tableau(&$tableau)
             }
         }
@@ -506,7 +506,7 @@ macro_rules! impl_adaptive_rkn_algorithm {
     ($algorithm:ty, $tableau:ident) => {
         impl $algorithm {
             /// Returns this method's lazily initialized, validated tableau.
-            pub fn tableau(self) -> Result<&'static RungeKuttaNystromTableau, TableauError> {
+            pub fn tableau(&self) -> Result<&'static RungeKuttaNystromTableau, TableauError> {
                 load_tableau(&$tableau)
             }
         }
@@ -607,7 +607,7 @@ macro_rules! impl_irkn_algorithm {
     ($algorithm:ty, $tableau:ident) => {
         impl $algorithm {
             /// Returns this method's lazily initialized, validated tableau.
-            pub fn tableau(self) -> Result<&'static IrknTableau, TableauError> {
+            pub fn tableau(&self) -> Result<&'static IrknTableau, TableauError> {
                 load_tableau(&$tableau)
             }
         }

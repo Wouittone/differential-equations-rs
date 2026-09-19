@@ -2,12 +2,10 @@ use differential_equations::solvers::rosenbrock::*;
 use differential_equations::*;
 
 fn fixed_options(step: f64) -> SolveOptions {
-    SolveOptions {
-        adaptive: false,
-        initial_step: Some(step),
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    }
+    SolveOptions::default()
+        .with_adaptive(false)
+        .with_initial_step(Some(step))
+        .with_save(SaveMode::Endpoints)
 }
 
 type ExponentialRhs = fn(&mut [f64], &[f64], &(), f64);
@@ -43,12 +41,10 @@ fn ros34pw2_adaptive_jacobian_and_stiff_problem() {
     }
     let problem = OdeProblem::new(rhs, vec![1.0], (0.0, 1.0), ())
         .with_jacobian(|jacobian: &mut [f64], _: &[f64], _: &(), _: f64| jacobian[0] = -1000.0);
-    let options = SolveOptions {
-        absolute_tolerance: 1.0e-8,
-        relative_tolerance: 1.0e-8,
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    };
+    let options = SolveOptions::default()
+        .with_absolute_tolerance(1.0e-8)
+        .with_relative_tolerance(1.0e-8)
+        .with_save(SaveMode::Endpoints);
     let solution = solve(&problem, Ros34Pw2, &options).unwrap();
     assert!((solution.last_state()[0] - 1.0_f64.cos()).abs() < 2.0e-6);
     assert!(solution.stats().jacobian_evaluations > 0);
@@ -69,16 +65,14 @@ fn ros34pw2_supports_backward_callbacks_and_save_at() {
             CallbackAction::Continue
         },
     );
-    let options = SolveOptions {
-        adaptive: false,
-        initial_step: Some(0.05),
-        save: SaveMode::Endpoints,
-        save_at: vec![0.75, 0.5, 0.25],
-        ..SolveOptions::default()
-    };
+    let options = SolveOptions::default()
+        .with_adaptive(false)
+        .with_initial_step(Some(0.05))
+        .with_save(SaveMode::Endpoints)
+        .with_save_at(vec![0.75, 0.5, 0.25]);
     let solution = solve(&problem, Ros34Pw2, &options).unwrap();
     assert_eq!(solution.stats().callback_invocations, 1);
-    for time in options.save_at {
+    for &time in options.save_at() {
         assert!(solution.times().contains(&time), "missing save_at={time}");
     }
     assert!(solution.last_state()[0] > 0.9);

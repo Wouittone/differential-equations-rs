@@ -1,7 +1,7 @@
 use differential_equations::solvers::explicit::{SplitOdeAlgorithm, solve_split};
 use differential_equations::solvers::multirate::{
     MIS, MRAB, MREEF, MRIGARKERK22a, MRIGARKERK22b, MRIGARKERK33a, MRIGARKERK45a, MRIGARKESDIRK34a,
-    MRIGARKIRK21a,
+    MRIGARKIRK21a, MultirateSequence,
 };
 use differential_equations::tableau::{define_mri_tableau_from_file, load_tableau};
 use differential_equations::{
@@ -39,6 +39,15 @@ fn invalid_multirate_configuration_is_rejected_during_construction() {
             Err(ConfigurationError::InvalidParameter { .. })
         ));
     }
+}
+
+#[test]
+fn mreef_configuration_is_fully_inspectable() {
+    let algorithm = MREEF::new(7, 6, MultirateSequence::Romberg).unwrap();
+
+    assert_eq!(algorithm.microsteps(), 7);
+    assert_eq!(algorithm.order(), 6);
+    assert_eq!(algorithm.sequence(), MultirateSequence::Romberg);
 }
 
 #[test]

@@ -18,7 +18,7 @@ pub struct Rosenbrock23;
 
 impl Rosenbrock23 {
     /// Returns the shared, lazily parsed Rosenbrock 2/3 pair tableau.
-    pub fn tableau(self) -> Result<&'static RosenbrockPairTableau, TableauError> {
+    pub fn tableau(&self) -> Result<&'static RosenbrockPairTableau, TableauError> {
         load_tableau(&ROSENBROCK23_32_TABLEAU)
     }
 }

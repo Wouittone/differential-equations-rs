@@ -28,7 +28,7 @@ impl ResourceLowStorageRungeKutta {
     }
 
     /// Loads and returns the method tableau.
-    pub fn tableau(self) -> Result<&'static LowStorageRungeKuttaTableau, TableauError> {
+    pub fn tableau(&self) -> Result<&'static LowStorageRungeKuttaTableau, TableauError> {
         load_tableau(self.resource)
     }
 }

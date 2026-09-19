@@ -14,12 +14,12 @@ pub struct RockRecurrenceStage {
 
 impl RockRecurrenceStage {
     /// Multiplier applied to the current derivative.
-    pub fn mu(self) -> f64 {
+    pub fn mu(&self) -> f64 {
         self.mu
     }
 
     /// Multiplier applied to the stage from two recurrence steps ago.
-    pub fn kappa(self) -> f64 {
+    pub fn kappa(&self) -> f64 {
         self.kappa
     }
 }

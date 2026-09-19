@@ -15,6 +15,15 @@ use crate::{OdeProblem, Solution, SolveError, SolveOptions, SolverStats, SplitOd
 pub struct SplitEuler;
 
 /// Algorithm contract for typed split ODE problems.
+///
+/// This trait is a downstream extension point. Implementors can evaluate the
+/// two right-hand sides through [`SplitOdeProblem::evaluate_explicit`] and
+/// [`SplitOdeProblem::evaluate_implicit`], and construct checked output with
+/// [`Solution::from_saved`]. A custom driver must honor the complete problem
+/// and option contract that it accepts. An implementation without callback
+/// support must check [`SplitOdeProblem::has_callbacks`] and return
+/// [`SolveError::CallbacksUnsupported`] instead of silently skipping callback
+/// effects, guards, initializers, or finalizers.
 pub trait SplitOdeAlgorithm {
     /// Solve a typed split problem with this algorithm.
     fn solve<FE, FI, P>(
@@ -41,6 +50,10 @@ pub trait SplitOdeAlgorithm {
     /// and requested output times. User code should normally call
     /// [`SplitOdeAlgorithm::solve`] or [`solve_split`]; direct callers of this
     /// lower-level hook are responsible for preserving those invariants.
+    /// Implementors remain responsible for honoring adaptive stepping, step
+    /// bounds, saving, time stops, dense-output retention, and callback
+    /// lifecycle semantics, or for returning the corresponding typed error
+    /// when a capability is not supported.
     fn solve_validated<FE, FI, P>(
         &self,
         problem: &SplitOdeProblem<FE, FI, P>,

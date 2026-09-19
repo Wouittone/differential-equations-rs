@@ -10,12 +10,10 @@ fn main() {
         (0.0, 1.0),
         (),
     );
-    let adaptive = SolveOptions {
-        absolute_tolerance: 1.0e-7,
-        relative_tolerance: 1.0e-7,
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    };
+    let adaptive = SolveOptions::default()
+        .with_absolute_tolerance(1.0e-7)
+        .with_relative_tolerance(1.0e-7)
+        .with_save(SaveMode::Endpoints);
     let stiff_solution = solve(&stiff, Trbdf2, &adaptive).unwrap();
     println!(
         "adaptive,{:.17e},{},{}",
@@ -33,12 +31,10 @@ fn main() {
         (0.0, 1.0),
         (),
     );
-    let fixed = SolveOptions {
-        adaptive: false,
-        initial_step: Some(0.025),
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    };
+    let fixed = SolveOptions::default()
+        .with_adaptive(false)
+        .with_initial_step(0.025)
+        .with_save(SaveMode::Endpoints);
     let vector_solution = solve(&vector, Trbdf2, &fixed).unwrap();
     println!(
         "fixed,{:.17e},{:.17e}",

@@ -280,12 +280,12 @@ pub struct LowStoragePidController {
 
 impl LowStoragePidController {
     /// PID filter coefficients before division by the method order.
-    pub fn beta(self) -> [f64; 3] {
+    pub fn beta(&self) -> [f64; 3] {
         self.beta
     }
 
     /// Minimum filtered step ratio for accepting an attempted step.
-    pub fn acceptance_safety(self) -> f64 {
+    pub fn acceptance_safety(&self) -> f64 {
         self.acceptance_safety
     }
 }

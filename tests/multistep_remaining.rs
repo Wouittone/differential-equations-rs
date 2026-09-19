@@ -18,12 +18,10 @@ fn linear_implicit(du: &mut [f64], u: &[f64], _: &(), _: f64) {
 }
 
 fn fixed(step: f64) -> SolveOptions {
-    SolveOptions {
-        adaptive: false,
-        initial_step: Some(step),
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    }
+    SolveOptions::default()
+        .with_adaptive(false)
+        .with_initial_step(Some(step))
+        .with_save(SaveMode::Endpoints)
 }
 
 fn linear_split(time_span: (f64, f64)) -> TestSplitProblem {
@@ -221,10 +219,7 @@ fn split_failures_and_analytic_jacobian_stats_are_reported() {
         solve_split(&problem, SBDF2, &SolveOptions::default()).unwrap_err(),
         SolveError::AdaptiveStepUnsupported
     );
-    let no_step = SolveOptions {
-        adaptive: false,
-        ..SolveOptions::default()
-    };
+    let no_step = SolveOptions::default().with_adaptive(false);
     assert_eq!(
         solve_split(&problem, SBDF2, &no_step).unwrap_err(),
         SolveError::InitialStepRequired
@@ -370,14 +365,12 @@ fn vcabm_handles_scalar_vector_nonautonomous_and_reverse_solves() {
         (0.0, 1.0),
         (),
     );
-    let options = SolveOptions {
-        absolute_tolerance: 1.0e-9,
-        relative_tolerance: 1.0e-9,
-        initial_step: Some(0.001),
-        max_step: 0.05,
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    };
+    let options = SolveOptions::default()
+        .with_absolute_tolerance(1.0e-9)
+        .with_relative_tolerance(1.0e-9)
+        .with_initial_step(Some(0.001))
+        .with_max_step(0.05)
+        .with_save(SaveMode::Endpoints);
     let forward = solve(&scalar, VCABM, &options).unwrap();
     assert!((forward.last_state()[0] - (2.0 * std::f64::consts::E - 2.0)).abs() < 2.0e-6);
     assert!(forward.stats().accepted_steps > 0);

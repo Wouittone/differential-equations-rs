@@ -17,12 +17,10 @@ fn endpoint<A: SecondOrderOdeAlgorithm>(algorithm: A) -> (f64, f64) {
     let solution = solve_second_order(
         &problem,
         algorithm,
-        &SolveOptions {
-            adaptive: false,
-            initial_step: Some(0.01),
-            save: SaveMode::Endpoints,
-            ..SolveOptions::default()
-        },
+        &SolveOptions::default()
+            .with_adaptive(false)
+            .with_initial_step(0.01)
+            .with_save(SaveMode::Endpoints),
     )
     .expect("RKN compliance solve");
     (solution.last_velocity()[0], solution.last_position()[0])
@@ -42,12 +40,10 @@ fn irkn_endpoint<A: SecondOrderOdeAlgorithm>(algorithm: A) -> (f64, f64) {
     let solution = solve_second_order(
         &problem,
         algorithm,
-        &SolveOptions {
-            adaptive: false,
-            initial_step: Some(0.125),
-            save: SaveMode::Endpoints,
-            ..SolveOptions::default()
-        },
+        &SolveOptions::default()
+            .with_adaptive(false)
+            .with_initial_step(0.125)
+            .with_save(SaveMode::Endpoints),
     )
     .expect("IRKN compliance solve");
     (solution.last_velocity()[0], solution.last_position()[0])
@@ -67,14 +63,12 @@ fn adaptive_endpoint<A: SecondOrderOdeAlgorithm>(algorithm: A) -> (f64, f64) {
     let solution = solve_second_order(
         &problem,
         algorithm,
-        &SolveOptions {
-            absolute_tolerance: 1.0e-10,
-            relative_tolerance: 1.0e-10,
-            initial_step: Some(0.5),
-            max_step: 0.5,
-            save: SaveMode::Endpoints,
-            ..SolveOptions::default()
-        },
+        &SolveOptions::default()
+            .with_absolute_tolerance(1.0e-10)
+            .with_relative_tolerance(1.0e-10)
+            .with_initial_step(0.5)
+            .with_max_step(0.5)
+            .with_save(SaveMode::Endpoints),
     )
     .expect("adaptive RKN compliance solve");
     (solution.last_velocity()[0], solution.last_position()[0])
@@ -97,15 +91,13 @@ fn velocity_dependent_endpoint<A: SecondOrderOdeAlgorithm>(
     let solution = solve_second_order(
         &problem,
         algorithm,
-        &SolveOptions {
-            adaptive,
-            initial_step: Some(if adaptive { 0.5 } else { 0.01 }),
-            max_step: 0.5,
-            absolute_tolerance: 1.0e-10,
-            relative_tolerance: 1.0e-10,
-            save: SaveMode::Endpoints,
-            ..SolveOptions::default()
-        },
+        &SolveOptions::default()
+            .with_adaptive(adaptive)
+            .with_initial_step(if adaptive { 0.5 } else { 0.01 })
+            .with_max_step(0.5)
+            .with_absolute_tolerance(1.0e-10)
+            .with_relative_tolerance(1.0e-10)
+            .with_save(SaveMode::Endpoints),
     )
     .expect("velocity-dependent Nystrom4 compliance solve");
     (solution.last_velocity()[0], solution.last_position()[0])
@@ -125,12 +117,10 @@ fn dprkn6_dense_midpoint() -> (f64, f64) {
     let solution = solve_second_order(
         &problem,
         Dprkn6,
-        &SolveOptions {
-            adaptive: false,
-            initial_step: Some(1.0),
-            save_at: vec![0.0, 0.5, 1.0],
-            ..SolveOptions::default()
-        },
+        &SolveOptions::default()
+            .with_adaptive(false)
+            .with_initial_step(1.0)
+            .with_save_at(vec![0.0, 0.5, 1.0]),
     )
     .expect("DPRKN6 dense compliance solve");
     (

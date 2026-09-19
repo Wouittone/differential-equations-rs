@@ -9,12 +9,10 @@ fn endpoint<A: OdeAlgorithm>(algorithm: A) -> f64 {
         (),
     )
     .with_jacobian(|jacobian, _, _, _| jacobian[0] = -2.0);
-    let options = SolveOptions {
-        adaptive: false,
-        initial_step: Some(0.2),
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    };
+    let options = SolveOptions::default()
+        .with_adaptive(false)
+        .with_initial_step(0.2)
+        .with_save(SaveMode::Endpoints);
     solve(&problem, algorithm, &options).unwrap().last_state()[0]
 }
 

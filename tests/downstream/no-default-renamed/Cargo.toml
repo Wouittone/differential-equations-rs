@@ -6,6 +6,6 @@ rust-version = "1.85"
 publish = false
 
 [dependencies]
-diffeq = { package = "differential-equations", path = "../../..", default-features = false }
+diffeq = { package = "differential-equations-rs", path = "../../..", default-features = false }
 
 [workspace]

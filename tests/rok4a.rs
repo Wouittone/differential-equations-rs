@@ -2,14 +2,12 @@ use differential_equations::solvers::rosenbrock::*;
 use differential_equations::*;
 
 fn options(adaptive: bool, step: Option<f64>) -> SolveOptions {
-    SolveOptions {
-        adaptive,
-        absolute_tolerance: 1.0e-9,
-        relative_tolerance: 1.0e-9,
-        initial_step: step,
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    }
+    SolveOptions::default()
+        .with_adaptive(adaptive)
+        .with_absolute_tolerance(1.0e-9)
+        .with_relative_tolerance(1.0e-9)
+        .with_initial_step(step)
+        .with_save(SaveMode::Endpoints)
 }
 
 #[test]

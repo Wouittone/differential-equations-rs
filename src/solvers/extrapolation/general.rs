@@ -121,19 +121,19 @@ macro_rules! extrapolation_algorithm {
             }
 
             /// Returns the lowest order considered by the controller.
-            pub fn min_order(self) -> usize {
+            pub fn min_order(&self) -> usize {
                 self.min_order
             }
             /// Returns the initial order selected for a new integration.
-            pub fn init_order(self) -> usize {
+            pub fn init_order(&self) -> usize {
                 self.init_order
             }
             /// Returns the highest order considered by the controller.
-            pub fn max_order(self) -> usize {
+            pub fn max_order(&self) -> usize {
                 self.max_order
             }
             /// Returns the subdivision sequence used for extrapolation nodes.
-            pub fn sequence(self) -> ExtrapolationSequence {
+            pub fn sequence(&self) -> ExtrapolationSequence {
                 self.sequence
             }
         }

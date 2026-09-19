@@ -20,13 +20,11 @@ fn allocations_for(step: f64, retain_dense_output: bool) -> usize {
         (0.0, 1.0),
         (),
     );
-    let options = SolveOptions {
-        adaptive: false,
-        initial_step: Some(step),
-        save: SaveMode::Endpoints,
-        retain_dense_output,
-        ..SolveOptions::default()
-    };
+    let options = SolveOptions::default()
+        .with_adaptive(false)
+        .with_initial_step(Some(step))
+        .with_save(SaveMode::Endpoints)
+        .with_dense_output(retain_dense_output);
     allocation_support::minimum_measurement(|| {
         let region = Region::new(GLOBAL);
         let solution = solve(&problem, Tsit5, &options).unwrap();

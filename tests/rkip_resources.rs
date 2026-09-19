@@ -119,15 +119,15 @@ fn repeated_resource_nodes_share_exponentials_and_reuse_them_across_solves() {
     let before = algorithm.cache_stats();
     // Six distinct nonzero nodes, for each exponential sign; the duplicate
     // endpoint node and the two endpoint actions reuse those slots.
-    assert_eq!(before.exponentials_built, 12);
-    assert_eq!(before.cached_step_sizes, 1);
+    assert_eq!(before.exponentials_built(), 12);
+    assert_eq!(before.cached_step_sizes(), 1);
     assert_close(first.last_state(), &[(-0.1_f64).exp()], 1e-14);
     assert_eq!(solve_rkip(&problem, &algorithm, &options).unwrap(), first);
     assert_eq!(
-        algorithm.cache_stats().exponentials_built,
-        before.exponentials_built
+        algorithm.cache_stats().exponentials_built(),
+        before.exponentials_built()
     );
-    assert!(algorithm.cache_stats().cache_hits > before.cache_hits);
+    assert!(algorithm.cache_stats().cache_hits() > before.cache_hits());
 }
 
 mod canonical {

@@ -23,12 +23,10 @@ fn exponential(
 }
 
 fn fixed(step: f64) -> SolveOptions {
-    SolveOptions {
-        adaptive: false,
-        initial_step: Some(step),
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    }
+    SolveOptions::default()
+        .with_adaptive(false)
+        .with_initial_step(Some(step))
+        .with_save(SaveMode::Endpoints)
 }
 
 #[test]
@@ -98,12 +96,10 @@ fn adaptive_stiff_decay_and_nonautonomous_rhs() {
         (0.0, 1.0),
         (),
     );
-    let options = SolveOptions {
-        absolute_tolerance: 1.0e-7,
-        relative_tolerance: 1.0e-7,
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    };
+    let options = SolveOptions::default()
+        .with_absolute_tolerance(1.0e-7)
+        .with_relative_tolerance(1.0e-7)
+        .with_save(SaveMode::Endpoints);
     let solution = solve(&problem, Abdf2, &options).unwrap();
     assert!((solution.last_state()[0] - 1.0f64.cos()).abs() < 2.0e-5);
     assert!(solution.stats().rejected_steps > 0);

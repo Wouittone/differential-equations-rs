@@ -68,6 +68,11 @@ impl AmfOperator {
         })
     }
 
+    /// Returns the row and column dimension of every Jacobian factor.
+    pub fn dimension(&self) -> usize {
+        self.dimension
+    }
+
     /// Returns the number of ordered Jacobian factors.
     pub fn factor_count(&self) -> usize {
         self.jacobian_factors.len()
@@ -174,6 +179,14 @@ impl<F, J, S, P> AmfProblem<F, J, S, P> {
     /// Returns the integration time span.
     pub fn time_span(&self) -> (f64, f64) {
         self.time_span
+    }
+    /// Returns the user parameters supplied with the problem.
+    pub fn parameters(&self) -> &P {
+        &self.parameters
+    }
+    /// Returns the number of scalar state components.
+    pub fn dimension(&self) -> usize {
+        self.initial_state.len()
     }
     /// Returns the number of AMF Jacobian factors.
     pub fn factor_count(&self) -> usize {

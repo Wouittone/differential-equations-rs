@@ -9,13 +9,11 @@ fn nonautonomous_forward_and_save_at() {
         (0.0, 1.0),
         (),
     );
-    let options = SolveOptions {
-        adaptive: false,
-        initial_step: Some(0.02),
-        save: SaveMode::Endpoints,
-        save_at: vec![0.25, 0.5, 0.75],
-        ..SolveOptions::default()
-    };
+    let options = SolveOptions::default()
+        .with_adaptive(false)
+        .with_initial_step(Some(0.02))
+        .with_save(SaveMode::Endpoints)
+        .with_save_at(vec![0.25, 0.5, 0.75]);
     let solution = solve(&problem, Cash4, &options).unwrap();
     assert!((solution.last_state()[0] - 0.28125).abs() < 1.0e-4);
     assert!((solution.state(1).unwrap()[0] - 0.125).abs() < 1.0e-8);
@@ -36,12 +34,10 @@ fn analytic_jacobian_path_and_callback() {
         (),
     )
     .with_jacobian(|jac: &mut [f64], _: &[f64], _: &(), _: f64| jac[0] = -30.0);
-    let options = SolveOptions {
-        absolute_tolerance: 1.0e-8,
-        relative_tolerance: 1.0e-8,
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    };
+    let options = SolveOptions::default()
+        .with_absolute_tolerance(1.0e-8)
+        .with_relative_tolerance(1.0e-8)
+        .with_save(SaveMode::Endpoints);
     let solution = solve(&problem, Cash4, &options).unwrap();
     assert!((solution.last_state()[0] - (-3.0_f64).exp()).abs() < 2.0e-7);
     assert!(solution.stats().jacobian_evaluations > 0);

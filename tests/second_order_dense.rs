@@ -20,13 +20,11 @@ fn oscillator(span: (f64, f64)) -> SecondOrderOdeProblem<Acceleration, ()> {
 }
 
 fn dense_options(step: f64) -> SolveOptions {
-    SolveOptions {
-        adaptive: false,
-        initial_step: Some(step),
-        save: SaveMode::Endpoints,
-        retain_dense_output: true,
-        ..SolveOptions::default()
-    }
+    SolveOptions::default()
+        .with_adaptive(false)
+        .with_initial_step(Some(step))
+        .with_save(SaveMode::Endpoints)
+        .with_dense_output(true)
 }
 
 fn assert_oscillator_sample(solution: &SecondOrderSolution, time: f64, tolerance: f64) {
@@ -75,12 +73,10 @@ fn save_at_uses_partition_aware_position_interpolation() {
     let solution = solve_second_order(
         &problem,
         VelocityVerlet,
-        &SolveOptions {
-            adaptive: false,
-            initial_step: Some(1.0),
-            save_at: vec![0.5, 1.0],
-            ..SolveOptions::default()
-        },
+        &SolveOptions::default()
+            .with_adaptive(false)
+            .with_initial_step(Some(1.0))
+            .with_save_at(vec![0.5, 1.0]),
     )
     .unwrap();
 

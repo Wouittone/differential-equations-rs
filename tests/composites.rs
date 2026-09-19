@@ -14,12 +14,10 @@ fn problem() -> OdeProblem<TestRhs, ()> {
 }
 
 fn options() -> SolveOptions {
-    SolveOptions {
-        absolute_tolerance: 1.0e-10,
-        relative_tolerance: 1.0e-10,
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    }
+    SolveOptions::default()
+        .with_absolute_tolerance(1.0e-10)
+        .with_relative_tolerance(1.0e-10)
+        .with_save(SaveMode::Endpoints)
 }
 
 fn assert_default_config(config: &AutoSwitchConfig) {
@@ -119,13 +117,11 @@ fn automatic_facades_switch_in_flight_after_an_accepted_nonstiff_step() {
         (0.0, 1.0),
         (),
     );
-    let options = SolveOptions {
-        initial_step: Some(1.0e-3),
-        absolute_tolerance: 1.0e-9,
-        relative_tolerance: 1.0e-9,
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    };
+    let options = SolveOptions::default()
+        .with_initial_step(Some(1.0e-3))
+        .with_absolute_tolerance(1.0e-9)
+        .with_relative_tolerance(1.0e-9)
+        .with_save(SaveMode::Endpoints);
 
     macro_rules! check_switch {
         ($facade:ident) => {{

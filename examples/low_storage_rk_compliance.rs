@@ -11,12 +11,10 @@ fn problem() -> OdeProblem<TestRhs, ()> {
 }
 
 fn endpoint<A: OdeAlgorithm>(algorithm: A) -> f64 {
-    let options = SolveOptions {
-        adaptive: false,
-        initial_step: Some(0.01),
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    };
+    let options = SolveOptions::default()
+        .with_adaptive(false)
+        .with_initial_step(0.01)
+        .with_save(SaveMode::Endpoints);
     solve(&problem(), algorithm, &options).unwrap().last_state()[0]
 }
 

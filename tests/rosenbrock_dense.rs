@@ -18,13 +18,11 @@ fn retained<A: OdeAlgorithm>(algorithm: A, initial: f64, span: (f64, f64), step:
     solve(
         &problem(initial, span),
         algorithm,
-        &SolveOptions {
-            adaptive: false,
-            initial_step: Some(step),
-            save: SaveMode::Endpoints,
-            retain_dense_output: true,
-            ..SolveOptions::default()
-        },
+        &SolveOptions::default()
+            .with_adaptive(false)
+            .with_initial_step(Some(step))
+            .with_save(SaveMode::Endpoints)
+            .with_dense_output(true),
     )
     .unwrap()
 }
@@ -41,12 +39,10 @@ fn assert_julia_samples_with_step<A: OdeAlgorithm + Copy>(
     let solution = solve(
         &problem(1.0, (0.0, 1.0)),
         algorithm,
-        &SolveOptions {
-            adaptive: false,
-            initial_step: Some(step),
-            save_at: vec![0.2, 0.55, 0.9],
-            ..SolveOptions::default()
-        },
+        &SolveOptions::default()
+            .with_adaptive(false)
+            .with_initial_step(Some(step))
+            .with_save_at(vec![0.2, 0.55, 0.9]),
     )
     .unwrap();
     let retained = retained(algorithm, 1.0, (0.0, 1.0), step);
@@ -236,13 +232,11 @@ fn assert_root_with_step<A: OdeAlgorithm>(algorithm: A, step: f64, expected: f64
     let solution = solve(
         &event_problem,
         algorithm,
-        &SolveOptions {
-            adaptive: false,
-            initial_step: Some(step),
-            event_tolerance: 1.0e-13,
-            retain_dense_output: true,
-            ..SolveOptions::default()
-        },
+        &SolveOptions::default()
+            .with_adaptive(false)
+            .with_initial_step(Some(step))
+            .with_event_tolerance(1.0e-13)
+            .with_dense_output(true),
     )
     .unwrap();
     let event_time = *solution.times().last().unwrap();
@@ -274,14 +268,12 @@ fn callback_discontinuity_keeps_left_segment_and_right_state() {
     let solution = solve(
         &event_problem,
         Rodas4,
-        &SolveOptions {
-            adaptive: false,
-            initial_step: Some(1.0),
-            save: SaveMode::Endpoints,
-            event_tolerance: 1.0e-13,
-            retain_dense_output: true,
-            ..SolveOptions::default()
-        },
+        &SolveOptions::default()
+            .with_adaptive(false)
+            .with_initial_step(Some(1.0))
+            .with_save(SaveMode::Endpoints)
+            .with_event_tolerance(1.0e-13)
+            .with_dense_output(true),
     )
     .unwrap();
     let event_time = solution.times()[1];
@@ -294,13 +286,11 @@ fn rhs_count<A: OdeAlgorithm>(algorithm: A, dense: bool) -> usize {
     solve(
         &problem(1.0, (0.0, 0.5)),
         algorithm,
-        &SolveOptions {
-            adaptive: false,
-            initial_step: Some(0.1),
-            save: SaveMode::Endpoints,
-            retain_dense_output: dense,
-            ..SolveOptions::default()
-        },
+        &SolveOptions::default()
+            .with_adaptive(false)
+            .with_initial_step(Some(0.1))
+            .with_save(SaveMode::Endpoints)
+            .with_dense_output(dense),
     )
     .unwrap()
     .stats()

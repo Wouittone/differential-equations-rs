@@ -10,12 +10,10 @@ fn split_euler_advances_both_typed_components() {
         (0.0, 1.0),
         (),
     );
-    let options = SolveOptions {
-        adaptive: false,
-        initial_step: Some(0.25),
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    };
+    let options = SolveOptions::default()
+        .with_adaptive(false)
+        .with_initial_step(Some(0.25))
+        .with_save(SaveMode::Endpoints);
     let solution = solve_split_euler(&problem, SplitEuler, &options).unwrap();
     assert_eq!(solution.last_state(), &[2.882_812_5]);
     assert_eq!(solution.stats().rhs_evaluations, 8);

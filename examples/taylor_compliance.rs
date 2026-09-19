@@ -13,12 +13,10 @@ fn endpoint<A: OdeAlgorithm>(algorithm: A, step: f64) -> f64 {
     algorithm
         .solve(
             &problem,
-            &SolveOptions {
-                adaptive: false,
-                initial_step: Some(step),
-                save: SaveMode::Endpoints,
-                ..SolveOptions::default()
-            },
+            &SolveOptions::default()
+                .with_adaptive(false)
+                .with_initial_step(step)
+                .with_save(SaveMode::Endpoints),
         )
         .unwrap()
         .last_state()[0]

@@ -67,7 +67,7 @@ macro_rules! tableau_access {
             /// outside `1..=5`, and preserves resource validation or
             /// family-invariant failures.
             pub fn tableau(
-                self,
+                &self,
                 order: usize,
             ) -> Result<&'static LinearMultistepTableau, TableauAccessError> {
                 backward_differentiation(order)

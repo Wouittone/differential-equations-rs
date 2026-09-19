@@ -18,19 +18,41 @@ fn oscillator() -> SecondOrderOdeProblem<Acceleration, ()> {
 }
 
 fn options(step: f64) -> SolveOptions {
-    SolveOptions {
-        adaptive: false,
-        initial_step: Some(step),
-        max_step: step,
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    }
+    SolveOptions::default()
+        .with_adaptive(false)
+        .with_initial_step(Some(step))
+        .with_max_step(step)
+        .with_save(SaveMode::Endpoints)
 }
 
 fn endpoint_error<A: SymplecticAlgorithm>(algorithm: A, step: f64) -> f64 {
     let problem = oscillator();
     let solution = solve_symplectic(&problem, algorithm, &options(step)).unwrap();
     (solution.last_position()[0] - 1.0_f64.cos()).hypot(solution.last_velocity()[0] + 1.0_f64.sin())
+}
+
+struct ConfiguredSymplectic {
+    label: String,
+}
+
+impl SymplecticAlgorithm for ConfiguredSymplectic {
+    fn tableau(
+        &self,
+    ) -> Result<&'static SymplecticTableau, differential_equations::tableau::TableauError> {
+        assert_eq!(self.label, "custom");
+        PseudoVerletLeapfrog::tableau()
+    }
+}
+
+#[test]
+fn downstream_symplectic_algorithms_may_retain_non_copy_configuration() {
+    let algorithm = ConfiguredSymplectic {
+        label: String::from("custom"),
+    };
+
+    let solution = solve_symplectic(&oscillator(), algorithm, &options(0.1)).unwrap();
+
+    assert_eq!(solution.times(), &[0.0, 1.0]);
 }
 
 #[test]
@@ -89,13 +111,11 @@ fn higher_order_method_preserves_bounded_oscillator_energy() {
     let solution = solve_symplectic(
         &problem,
         KahanLi6,
-        &SolveOptions {
-            adaptive: false,
-            initial_step: Some(0.1),
-            max_step: 0.1,
-            save: SaveMode::EveryStep,
-            ..SolveOptions::default()
-        },
+        &SolveOptions::default()
+            .with_adaptive(false)
+            .with_initial_step(Some(0.1))
+            .with_max_step(0.1)
+            .with_save(SaveMode::EveryStep),
     )
     .unwrap();
     let maximum_error = solution
@@ -129,13 +149,11 @@ fn fixed_steps_work_backward_and_honor_save_at() {
     let solution = solve_symplectic(
         &problem,
         Yoshida6,
-        &SolveOptions {
-            adaptive: false,
-            initial_step: Some(0.01),
-            max_step: 0.01,
-            save_at: vec![0.75, 0.5, 0.0],
-            ..SolveOptions::default()
-        },
+        &SolveOptions::default()
+            .with_adaptive(false)
+            .with_initial_step(Some(0.01))
+            .with_max_step(0.01)
+            .with_save_at(vec![0.75, 0.5, 0.0]),
     )
     .unwrap();
 
@@ -186,10 +204,7 @@ fn retained_partitioned_segments_cover_forward_and_backward_queries() {
     let forward = solve_symplectic(
         &oscillator(),
         Yoshida6,
-        &SolveOptions {
-            retain_dense_output: true,
-            ..options(0.05)
-        },
+        &(options(0.05)).with_dense_output(true),
     )
     .unwrap();
     let (velocity, position) = forward.interpolate(0.375).unwrap();
@@ -208,10 +223,7 @@ fn retained_partitioned_segments_cover_forward_and_backward_queries() {
     let backward = solve_symplectic(
         &backward_problem,
         Yoshida6,
-        &SolveOptions {
-            retain_dense_output: true,
-            ..options(0.05)
-        },
+        &(options(0.05)).with_dense_output(true),
     )
     .unwrap();
     let (velocity, position) = backward.interpolate(0.375).unwrap();
@@ -232,13 +244,11 @@ fn save_at_uses_velocity_position_consistent_interpolation() {
     let solution = solve_symplectic(
         &problem,
         PseudoVerletLeapfrog,
-        &SolveOptions {
-            adaptive: false,
-            initial_step: Some(1.0),
-            max_step: 1.0,
-            save_at: vec![0.5, 1.0],
-            ..SolveOptions::default()
-        },
+        &SolveOptions::default()
+            .with_adaptive(false)
+            .with_initial_step(Some(1.0))
+            .with_max_step(1.0)
+            .with_save_at(vec![0.5, 1.0]),
     )
     .unwrap();
     assert!((solution.position(0).unwrap()[0] - 0.125).abs() < 1.0e-14);

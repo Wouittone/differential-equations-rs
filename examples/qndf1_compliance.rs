@@ -10,20 +10,16 @@ fn main() {
         (0.0, 1.0),
         (),
     );
-    let fixed_options = SolveOptions {
-        adaptive: false,
-        initial_step: Some(0.01),
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    };
+    let fixed_options = SolveOptions::default()
+        .with_adaptive(false)
+        .with_initial_step(0.01)
+        .with_save(SaveMode::Endpoints);
     let fixed = solve(&problem, Qndf1, &fixed_options).expect("QNDF1 fixed solve");
     let qbdf_fixed = solve(&problem, Qbdf1, &fixed_options).expect("QBDF1 fixed solve");
-    let adaptive_options = SolveOptions {
-        absolute_tolerance: 1.0e-8,
-        relative_tolerance: 1.0e-8,
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    };
+    let adaptive_options = SolveOptions::default()
+        .with_absolute_tolerance(1.0e-8)
+        .with_relative_tolerance(1.0e-8)
+        .with_save(SaveMode::Endpoints);
     let adaptive = solve(&problem, Qndf1, &adaptive_options).expect("QNDF1 adaptive solve");
     let qbdf_adaptive = solve(&problem, Qbdf1, &adaptive_options).expect("QBDF1 adaptive solve");
     println!("qndf1_fixed,{:.17e}", fixed.last_state()[0]);

@@ -55,6 +55,10 @@ impl Scheme {
 }
 
 /// Algorithms acting on `u' = A(u,p,t)u` through dense exponential actions.
+///
+/// This trait is a downstream extension point. Implementors can evaluate the
+/// checked operator through [`LinearOperatorProblem::evaluate_operator`] and
+/// construct checked output with [`Solution::from_saved`].
 pub trait LinearOperatorAlgorithm {
     /// Classical order reported by OrdinaryDiffEqLinear.
     fn order(&self) -> usize;
@@ -79,7 +83,10 @@ pub trait LinearOperatorAlgorithm {
     /// Implementors may rely on [`LinearOperatorAlgorithm::solve_operator`]
     /// having validated the state, time span, tolerances, step bounds, callback
     /// tolerance, and requested output times. Direct callers of this lower-level
-    /// hook are responsible for preserving those invariants.
+    /// hook are responsible for preserving those invariants. Implementors
+    /// remain responsible for honoring adaptive stepping, step bounds, saving,
+    /// time stops, and dense-output retention, or for returning the
+    /// corresponding typed error when a capability is not supported.
     fn solve_operator_validated<O, P>(
         &self,
         problem: &LinearOperatorProblem<O, P>,
@@ -90,6 +97,11 @@ pub trait LinearOperatorAlgorithm {
 }
 
 /// Algorithms acting on vector homogeneous spaces or matrix Lie groups.
+///
+/// This trait is a downstream extension point. Implementors can evaluate the
+/// checked generator through [`LieGroupProblem::evaluate_operator`] and
+/// construct checked output with [`Solution::from_saved`]. The checked entry
+/// point preserves matrix state shape in the returned solution.
 pub trait LieGroupAlgorithm {
     /// Classical order reported by OrdinaryDiffEqLinear.
     fn order(&self) -> usize;
@@ -119,7 +131,10 @@ pub trait LieGroupAlgorithm {
     /// Implementors may rely on [`LieGroupAlgorithm::solve_group`] having
     /// validated the state, time span, tolerances, step bounds, callback
     /// tolerance, and requested output times. Direct callers of this lower-level
-    /// hook are responsible for preserving those invariants.
+    /// hook are responsible for preserving those invariants. Implementors
+    /// remain responsible for honoring adaptive stepping, step bounds, saving,
+    /// time stops, and dense-output retention, or for returning the
+    /// corresponding typed error when a capability is not supported.
     fn solve_group_validated<O, P>(
         &self,
         problem: &LieGroupProblem<O, P>,

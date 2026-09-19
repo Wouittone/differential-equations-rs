@@ -2,12 +2,10 @@ use differential_equations::solvers::implicit::PDIRK44;
 use differential_equations::{OdeProblem, SaveMode, SolveError, SolveOptions, solve};
 
 fn fixed_options(step: f64) -> SolveOptions {
-    SolveOptions {
-        adaptive: false,
-        initial_step: Some(step),
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    }
+    SolveOptions::default()
+        .with_adaptive(false)
+        .with_initial_step(Some(step))
+        .with_save(SaveMode::Endpoints)
 }
 
 #[test]

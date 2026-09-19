@@ -12,19 +12,15 @@ fn exponential() -> OdeProblem<ScalarRhs, ()> {
 
 #[test]
 fn all_remaining_high_order_names_solve_fixed_and_adaptive() {
-    let fixed = SolveOptions {
-        adaptive: false,
-        initial_step: Some(0.1),
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    };
-    let adaptive = SolveOptions {
-        absolute_tolerance: 1.0e-10,
-        relative_tolerance: 1.0e-10,
-        initial_step: Some(0.2),
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    };
+    let fixed = SolveOptions::default()
+        .with_adaptive(false)
+        .with_initial_step(Some(0.1))
+        .with_save(SaveMode::Endpoints);
+    let adaptive = SolveOptions::default()
+        .with_absolute_tolerance(1.0e-10)
+        .with_relative_tolerance(1.0e-10)
+        .with_initial_step(Some(0.2))
+        .with_save(SaveMode::Endpoints);
     let exact = 1.0_f64.exp();
 
     macro_rules! check {
@@ -74,12 +70,10 @@ fn names_implement_the_solver_contract() {
 
 #[test]
 fn fixed_step_rhs_counts_match_each_methods_stage_count() {
-    let options = SolveOptions {
-        adaptive: false,
-        initial_step: Some(1.0),
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    };
+    let options = SolveOptions::default()
+        .with_adaptive(false)
+        .with_initial_step(Some(1.0))
+        .with_save(SaveMode::Endpoints);
 
     macro_rules! check {
         ($algorithm:expr, $stages:expr) => {

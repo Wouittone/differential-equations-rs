@@ -43,7 +43,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a31eee39dddec8330830986fcd7625edb5a24ec90ea038215273bbc3adb08ac6"
 
 [[package]]
-name = "differential-equations"
+name = "differential-equations-default-smoke"
+version = "0.0.0"
+dependencies = [
+ "differential-equations-rs",
+]
+
+[[package]]
+name = "differential-equations-rs"
 version = "0.1.0-beta.1"
 dependencies = [
  "differential-equations-tableau-core",
@@ -51,13 +58,6 @@ dependencies = [
  "ndarray",
  "rayon",
  "thiserror",
-]
-
-[[package]]
-name = "differential-equations-default-smoke"
-version = "0.0.0"
-dependencies = [
- "differential-equations",
 ]
 
 [[package]]

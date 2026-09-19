@@ -11,12 +11,10 @@ fn exponential() -> OdeProblem<TestRhs, ()> {
 }
 
 fn fixed(step: f64) -> SolveOptions {
-    SolveOptions {
-        adaptive: false,
-        initial_step: Some(step),
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    }
+    SolveOptions::default()
+        .with_adaptive(false)
+        .with_initial_step(Some(step))
+        .with_save(SaveMode::Endpoints)
 }
 
 #[test]
@@ -39,12 +37,10 @@ fn stepanov5_supports_adaptive_order_and_save_at_in_both_directions() {
     let adaptive = solve(
         &exponential(),
         Stepanov5,
-        &SolveOptions {
-            absolute_tolerance: 1.0e-9,
-            relative_tolerance: 1.0e-9,
-            save: SaveMode::Endpoints,
-            ..SolveOptions::default()
-        },
+        &SolveOptions::default()
+            .with_absolute_tolerance(1.0e-9)
+            .with_relative_tolerance(1.0e-9)
+            .with_save(SaveMode::Endpoints),
     )
     .unwrap();
     assert!((adaptive.last_state()[0] - std::f64::consts::E).abs() < 2.0e-8);
@@ -58,12 +54,10 @@ fn stepanov5_supports_adaptive_order_and_save_at_in_both_directions() {
     let solution = solve(
         &forward,
         Stepanov5,
-        &SolveOptions {
-            adaptive: false,
-            initial_step: Some(0.3),
-            save_at: vec![0.2, 0.5, 0.8],
-            ..SolveOptions::default()
-        },
+        &SolveOptions::default()
+            .with_adaptive(false)
+            .with_initial_step(Some(0.3))
+            .with_save_at(vec![0.2, 0.5, 0.8]),
     )
     .unwrap();
     assert_eq!(solution.times(), &[0.2, 0.5, 0.8]);
@@ -80,12 +74,10 @@ fn stepanov5_supports_adaptive_order_and_save_at_in_both_directions() {
     let solution = solve(
         &backward,
         Stepanov5,
-        &SolveOptions {
-            adaptive: false,
-            initial_step: Some(0.3),
-            save_at: vec![0.8, 0.5, 0.2],
-            ..SolveOptions::default()
-        },
+        &SolveOptions::default()
+            .with_adaptive(false)
+            .with_initial_step(Some(0.3))
+            .with_save_at(vec![0.8, 0.5, 0.2]),
     )
     .unwrap();
     assert_eq!(solution.times(), &[0.8, 0.5, 0.2]);

@@ -30,21 +30,17 @@ fn problem(dimension: usize, stiffness: f64, end: f64) -> OdeProblem<DecayRhs, R
 }
 
 fn adaptive_options() -> SolveOptions {
-    SolveOptions {
-        absolute_tolerance: 1.0e-7,
-        relative_tolerance: 1.0e-7,
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    }
+    SolveOptions::default()
+        .with_absolute_tolerance(1.0e-7)
+        .with_relative_tolerance(1.0e-7)
+        .with_save(SaveMode::Endpoints)
 }
 
 fn fixed_options() -> SolveOptions {
-    SolveOptions {
-        adaptive: false,
-        initial_step: Some(0.01),
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    }
+    SolveOptions::default()
+        .with_adaptive(false)
+        .with_initial_step(Some(0.01))
+        .with_save(SaveMode::Endpoints)
 }
 
 fn benchmark<A: OdeAlgorithm + Copy>(

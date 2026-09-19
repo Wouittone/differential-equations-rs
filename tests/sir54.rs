@@ -18,12 +18,10 @@ fn linear() -> OdeProblem<TestRhs, ()> {
 }
 
 fn fixed(step: f64) -> SolveOptions {
-    SolveOptions {
-        adaptive: false,
-        initial_step: Some(step),
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    }
+    SolveOptions::default()
+        .with_adaptive(false)
+        .with_initial_step(Some(step))
+        .with_save(SaveMode::Endpoints)
 }
 
 #[test]
@@ -49,13 +47,11 @@ fn sir54_supports_fixed_steps_and_dense_save_at() {
     let solution = solve(
         &linear(),
         Sir54,
-        &SolveOptions {
-            adaptive: false,
-            initial_step: Some(0.2),
-            save: SaveMode::Endpoints,
-            save_at: vec![0.2, 0.5, 0.8],
-            ..SolveOptions::default()
-        },
+        &SolveOptions::default()
+            .with_adaptive(false)
+            .with_initial_step(Some(0.2))
+            .with_save(SaveMode::Endpoints)
+            .with_save_at(vec![0.2, 0.5, 0.8]),
     )
     .unwrap();
     assert_eq!(solution.times(), &[0.2, 0.5, 0.8]);

@@ -26,6 +26,7 @@ fn amf_operator_applies_ordered_factor_solves() {
     // Solve (I-.2J1)(I-.2J2)x=b explicitly.
     assert!((rhs[0] - 1.4).abs() < 1.0e-14);
     assert!((rhs[1] - 2.28).abs() < 1.0e-14);
+    assert_eq!(operator.dimension(), 2);
     assert_eq!(operator.factor_count(), 2);
 }
 
@@ -44,6 +45,9 @@ fn structured_amf_runs_rosenbrock_w_with_each_factor() {
     }
     let function = build_amf_function(2, rhs, jacobian, vec![vec![0.0; 4]; 2], factors).unwrap();
     let problem = AmfProblem::new(function, vec![1.0, 1.0], (0.0, 0.5), ()).unwrap();
+    assert_eq!(problem.dimension(), 2);
+    assert_eq!(problem.parameters(), &());
+    assert_eq!(problem.factor_count(), 2);
     let solution = solve_amf(&problem, AMF::new(Rosenbrock23), &fixed(0.01)).unwrap();
     assert!((solution.last_state()[0] - (-1.5_f64).exp()).abs() < 2.0e-4);
     assert!((solution.last_state()[1] - (-3.5_f64).exp()).abs() < 2.0e-4);
@@ -78,15 +82,15 @@ fn rkip_matches_affine_semilinear_solution_and_recycles_cache() {
     let first = solve_rkip(&problem, &algorithm, &fixed(0.1)).unwrap();
     let exact = 0.5 + 0.5 * (-2.0_f64).exp();
     assert!((first.last_state()[0] - exact).abs() < 2.0e-10);
-    let built = algorithm.cache_stats().exponentials_built;
-    let hits = algorithm.cache_stats().cache_hits;
+    let built = algorithm.cache_stats().exponentials_built();
+    let hits = algorithm.cache_stats().cache_hits();
     let second = solve_rkip(&problem, &algorithm, &fixed(0.1)).unwrap();
     assert!((second.last_state()[0] - exact).abs() < 2.0e-10);
     // The floating-point terminal remainder is intentionally single-use, but
     // the geometric-grid exponentials are recycled across the second solve.
-    assert!(algorithm.cache_stats().exponentials_built >= built);
-    assert!(algorithm.cache_stats().cache_hits > hits);
-    assert_eq!(algorithm.cache_stats().cached_step_sizes, 1);
+    assert!(algorithm.cache_stats().exponentials_built() >= built);
+    assert!(algorithm.cache_stats().cache_hits() > hits);
+    assert_eq!(algorithm.cache_stats().cached_step_sizes(), 1);
 }
 
 #[test]

@@ -11,21 +11,17 @@ fn problem() -> OdeProblem<TestRhs, ()> {
 }
 
 fn fixed_options() -> SolveOptions {
-    SolveOptions {
-        adaptive: false,
-        initial_step: Some(0.01),
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    }
+    SolveOptions::default()
+        .with_adaptive(false)
+        .with_initial_step(0.01)
+        .with_save(SaveMode::Endpoints)
 }
 
 fn adaptive_options() -> SolveOptions {
-    SolveOptions {
-        absolute_tolerance: 1.0e-9,
-        relative_tolerance: 1.0e-9,
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    }
+    SolveOptions::default()
+        .with_absolute_tolerance(1.0e-9)
+        .with_relative_tolerance(1.0e-9)
+        .with_save(SaveMode::Endpoints)
 }
 
 fn main() {

@@ -52,7 +52,7 @@ impl ExplicitTaylor {
     }
 
     /// Returns the configured Taylor order.
-    pub const fn order(self) -> usize {
+    pub const fn order(&self) -> usize {
         self.order
     }
 }
@@ -92,12 +92,12 @@ impl ExplicitTaylorAdaptiveOrder {
     }
 
     /// Returns the minimum candidate order.
-    pub const fn min_order(self) -> usize {
+    pub const fn min_order(&self) -> usize {
         self.min_order
     }
 
     /// Returns the maximum candidate order.
-    pub const fn max_order(self) -> usize {
+    pub const fn max_order(&self) -> usize {
         self.max_order
     }
 }

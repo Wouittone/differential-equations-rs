@@ -11,12 +11,10 @@ fn exponential() -> OdeProblem<TestRhs, ()> {
 }
 
 fn fixed(step: f64) -> SolveOptions {
-    SolveOptions {
-        adaptive: false,
-        initial_step: Some(step),
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    }
+    SolveOptions::default()
+        .with_adaptive(false)
+        .with_initial_step(Some(step))
+        .with_save(SaveMode::Endpoints)
 }
 
 #[test]
@@ -68,13 +66,11 @@ fn prrk33_default_has_third_order_fixed_convergence() {
 
 #[test]
 fn prrk33_supports_relaxation_backward_callbacks_and_save_at() {
-    let options = SolveOptions {
-        adaptive: false,
-        initial_step: Some(0.05),
-        save: SaveMode::EveryStep,
-        save_at: vec![0.25, 0.5, 0.75],
-        ..SolveOptions::default()
-    };
+    let options = SolveOptions::default()
+        .with_adaptive(false)
+        .with_initial_step(Some(0.05))
+        .with_save(SaveMode::EveryStep)
+        .with_save_at(vec![0.25, 0.5, 0.75]);
     let relaxed = solve(&exponential(), Prrk33::new(0.5).unwrap(), &options).unwrap();
     assert!(relaxed.last_state()[0].is_finite());
     assert!(
@@ -116,13 +112,11 @@ fn prrk54_default_has_fourth_order_fixed_convergence() {
 
 #[test]
 fn prrk54_supports_relaxation_backward_callbacks_and_save_at() {
-    let options = SolveOptions {
-        adaptive: false,
-        initial_step: Some(0.05),
-        save: SaveMode::EveryStep,
-        save_at: vec![0.25, 0.5, 0.75],
-        ..SolveOptions::default()
-    };
+    let options = SolveOptions::default()
+        .with_adaptive(false)
+        .with_initial_step(Some(0.05))
+        .with_save(SaveMode::EveryStep)
+        .with_save_at(vec![0.25, 0.5, 0.75]);
     let relaxed = solve(&exponential(), Prrk54::new(0.5).unwrap(), &options).unwrap();
     assert!(relaxed.last_state()[0].is_finite());
     assert_eq!(relaxed.times(), &[0.25, 0.5, 0.75]);

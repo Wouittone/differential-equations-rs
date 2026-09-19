@@ -11,12 +11,10 @@ fn exponential() -> OdeProblem<ScalarRhs, ()> {
 }
 
 fn fixed(step: f64) -> SolveOptions {
-    SolveOptions {
-        adaptive: false,
-        initial_step: Some(step),
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    }
+    SolveOptions::default()
+        .with_adaptive(false)
+        .with_initial_step(Some(step))
+        .with_save(SaveMode::Endpoints)
 }
 
 #[test]
@@ -88,13 +86,11 @@ fn qprk98_solves_fixed_and_adaptive() {
     // though the exact 9(8) tableau is being used.
     assert!((fixed_endpoint - exact).abs() < 2.0e-8);
 
-    let adaptive = SolveOptions {
-        absolute_tolerance: 1.0e-10,
-        relative_tolerance: 1.0e-10,
-        initial_step: Some(0.25),
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    };
+    let adaptive = SolveOptions::default()
+        .with_absolute_tolerance(1.0e-10)
+        .with_relative_tolerance(1.0e-10)
+        .with_initial_step(Some(0.25))
+        .with_save(SaveMode::Endpoints);
     let adaptive_endpoint = solve(&exponential(), QPRK98(), &adaptive)
         .unwrap()
         .last_state()[0];

@@ -465,6 +465,11 @@ impl<F, P> OdeProblem<F, P> {
         self.state_shape.slice()
     }
 
+    /// Returns the number of scalar state components.
+    pub fn dimension(&self) -> usize {
+        self.initial_state.len()
+    }
+
     /// Returns `(start_time, end_time)`.
     pub fn time_span(&self) -> (f64, f64) {
         self.time_span

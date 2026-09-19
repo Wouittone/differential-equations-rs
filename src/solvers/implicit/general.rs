@@ -35,7 +35,7 @@ macro_rules! algorithm {
         impl $name {
             /// Returns this method's lazily materialized, validated tableau.
             pub fn tableau(
-                self,
+                &self,
             ) -> Result<&'static RungeKuttaTableau, crate::tableau::TableauError> {
                 load_tableau(&$tableau)
             }

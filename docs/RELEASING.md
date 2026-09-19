@@ -1,7 +1,8 @@
 # Release process
 
 The workspace contains three versioned crates: `tableau-core`,
-`tableau-macros`, and the main `differential-equations` crate. Internal
+`tableau-macros`, and the main `differential-equations-rs` package (whose Rust
+library target remains `differential_equations`). Internal
 dependencies use exact versions, so publication order is mandatory.
 
 The main manifest currently contains `publish = false`. Removing that lock
@@ -114,8 +115,9 @@ cost, allocations, and both explicit-only and stiff-only baselines.
 - [ ] Audit coefficient provenance and precision, method orders, dense output,
   estimators, stability policies, and controllers against the pinned upstream
   implementation.
-- [ ] Review the complete public API as a 1.0 compatibility commitment and run
-  `cargo semver-checks` against the latest published prerelease when available.
+- [ ] Review the complete public API as a 1.0 compatibility commitment. Once
+  that review is committed, create the immutable `api-freeze-v1` tag and use
+  it as the pre-1.0 `cargo semver-checks --baseline-rev` baseline.
 
 ### Planning estimate
 
@@ -201,14 +203,29 @@ results, or remote CI as appropriate.
 4. Run Julia compliance and the matched comparison benchmarks when numerical
    kernels change.
 5. Review user-visible and breaking changes. For 1.0, remove beta wording and
-   run `cargo semver-checks` against the latest published release.
+   run `cargo semver-checks` against the `api-freeze-v1` tag. After this project
+   has published its own prerelease, also compare against that registry release.
+
+### API compatibility baseline
+
+The renamed `differential-equations-rs` package has no published compatibility
+baseline yet. Do not compare it with the unrelated package previously published
+as `differential-equations`.
+
+After the 1.0 API review and all quality gates pass, commit the reviewed API and
+create an immutable annotated `api-freeze-v1` tag at that commit. Subsequent
+pre-1.0 changes must run `cargo semver-checks` for each workspace package with
+that tag supplied through `--baseline-rev`. Once a project-owned prerelease of
+each package exists on crates.io, use the corresponding registry release as an
+additional baseline. This workflow establishes a future baseline; it does not
+claim that either the tag or a project-owned registry release exists today.
 
 The Cargo-native package gate used by CI is:
 
 ```console
 cargo package --locked --no-verify -p differential-equations-tableau-core
 cargo package --locked --list -p differential-equations-tableau-macros
-cargo package --locked --list -p differential-equations
+cargo package --locked --list -p differential-equations-rs
 ```
 
 The two dependent crates can only perform registry-backed archive verification
@@ -220,8 +237,9 @@ Cargo-selected file lists are the deterministic package-content gate.
 1. Publish `differential-equations-tableau-core` with `--locked`.
 2. Wait for that exact version to appear in the crates.io index, then publish
    `differential-equations-tableau-macros`.
-3. Wait for the macro version, remove the main crate's publication lock in the
-   reviewed release commit, and run its registry-backed dry run.
+3. Wait for the macro version, remove the publication lock from the main
+   `differential-equations-rs` package in the reviewed release commit, and run
+   its registry-backed dry run.
 4. Publish the main crate, create a signed `v<version>` tag and GitHub release,
    and verify crates.io, docs.rs, and fresh downstream default/no-default builds.
 

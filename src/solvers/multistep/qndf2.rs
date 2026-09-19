@@ -33,7 +33,7 @@ impl Qndf2 {
     ///
     /// Preserves any embedded tableau resource validation or family-invariant
     /// failure.
-    pub fn tableau(self) -> Result<&'static LinearMultistepTableau, TableauAccessError> {
+    pub fn tableau(&self) -> Result<&'static LinearMultistepTableau, TableauAccessError> {
         backward_differentiation(2)
     }
 }
@@ -45,7 +45,7 @@ impl Qbdf2 {
     ///
     /// Preserves any embedded tableau resource validation or family-invariant
     /// failure.
-    pub fn tableau(self) -> Result<&'static LinearMultistepTableau, TableauAccessError> {
+    pub fn tableau(&self) -> Result<&'static LinearMultistepTableau, TableauAccessError> {
         backward_differentiation(2)
     }
 }

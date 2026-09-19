@@ -15,12 +15,10 @@ fn exponential(
 }
 
 fn fixed(step: f64) -> SolveOptions {
-    SolveOptions {
-        adaptive: false,
-        initial_step: Some(step),
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    }
+    SolveOptions::default()
+        .with_adaptive(false)
+        .with_initial_step(Some(step))
+        .with_save(SaveMode::Endpoints)
 }
 
 #[test]
@@ -77,10 +75,7 @@ fn malformed_rhs_and_fixed_configuration_fail() {
         solve(&bad, Mebdf2, &fixed(0.1)),
         Err(SolveError::NonFiniteDerivative)
     );
-    let options = SolveOptions {
-        adaptive: true,
-        ..SolveOptions::default()
-    };
+    let options = SolveOptions::default().with_adaptive(true);
     assert_eq!(
         solve(&exponential(-1.0, (0.0, 1.0)), Mebdf2, &options),
         Err(SolveError::AdaptiveStepUnsupported)

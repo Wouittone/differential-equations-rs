@@ -17,13 +17,11 @@ fn retained<A: OdeAlgorithm>(algorithm: A, initial: f64, span: (f64, f64), step:
     solve(
         &problem(initial, span),
         algorithm,
-        &SolveOptions {
-            adaptive: false,
-            initial_step: Some(step),
-            save: SaveMode::Endpoints,
-            retain_dense_output: true,
-            ..SolveOptions::default()
-        },
+        &SolveOptions::default()
+            .with_adaptive(false)
+            .with_initial_step(Some(step))
+            .with_save(SaveMode::Endpoints)
+            .with_dense_output(true),
     )
     .unwrap()
 }
@@ -80,12 +78,10 @@ fn retained_segments_agree_at_endpoints_and_support_backward_queries() {
 }
 
 fn assert_julia_samples<A: OdeAlgorithm + Copy>(algorithm: A, expected: [f64; 3]) {
-    let options = SolveOptions {
-        adaptive: false,
-        initial_step: Some(1.0),
-        save_at: vec![0.2, 0.55, 0.9],
-        ..SolveOptions::default()
-    };
+    let options = SolveOptions::default()
+        .with_adaptive(false)
+        .with_initial_step(Some(1.0))
+        .with_save_at(vec![0.2, 0.55, 0.9]);
     let sampled = solve(&problem(1.0, (0.0, 1.0)), algorithm, &options).unwrap();
     let retained = retained(algorithm, 1.0, (0.0, 1.0), 1.0);
     for ((index, &time), expected) in sampled.times().iter().enumerate().zip(expected) {
@@ -133,13 +129,11 @@ fn assert_root<A: OdeAlgorithm>(algorithm: A, expected: f64) {
     let solution = solve(
         &event_problem,
         algorithm,
-        &SolveOptions {
-            adaptive: false,
-            initial_step: Some(0.25),
-            event_tolerance: 1.0e-13,
-            retain_dense_output: true,
-            ..SolveOptions::default()
-        },
+        &SolveOptions::default()
+            .with_adaptive(false)
+            .with_initial_step(Some(0.25))
+            .with_event_tolerance(1.0e-13)
+            .with_dense_output(true),
     )
     .unwrap();
     let event_time = *solution.times().last().unwrap();
@@ -172,14 +166,12 @@ fn callback_discontinuity_retains_left_polynomial_and_right_state() {
     let solution = solve(
         &event_problem,
         Vern9,
-        &SolveOptions {
-            adaptive: false,
-            initial_step: Some(1.0),
-            save: SaveMode::Endpoints,
-            event_tolerance: 1.0e-13,
-            retain_dense_output: true,
-            ..SolveOptions::default()
-        },
+        &SolveOptions::default()
+            .with_adaptive(false)
+            .with_initial_step(Some(1.0))
+            .with_save(SaveMode::Endpoints)
+            .with_event_tolerance(1.0e-13)
+            .with_dense_output(true),
     )
     .unwrap();
     let event_time = solution.times()[1];
@@ -192,12 +184,10 @@ fn assert_lazy_rhs_cost<A: OdeAlgorithm + Copy>(algorithm: A, extra_stages: usiz
     let plain = solve(
         &problem(1.0, (0.0, 1.0)),
         algorithm,
-        &SolveOptions {
-            adaptive: false,
-            initial_step: Some(1.0),
-            save: SaveMode::Endpoints,
-            ..SolveOptions::default()
-        },
+        &SolveOptions::default()
+            .with_adaptive(false)
+            .with_initial_step(Some(1.0))
+            .with_save(SaveMode::Endpoints),
     )
     .unwrap();
     let dense = retained(algorithm, 1.0, (0.0, 1.0), 1.0);

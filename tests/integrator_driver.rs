@@ -21,12 +21,10 @@ fn rhs(derivative: &mut [f64], state: &[f64], _: &(), _: f64) {
 fn allocations_for(step: f64) -> usize {
     Rk4.tableau().unwrap();
     let problem = OdeProblem::new(rhs as TestRhs, vec![1.0], (0.0, 1.0), ());
-    let options = SolveOptions {
-        adaptive: false,
-        initial_step: Some(step),
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    };
+    let options = SolveOptions::default()
+        .with_adaptive(false)
+        .with_initial_step(Some(step))
+        .with_save(SaveMode::Endpoints);
     let region = Region::new(GLOBAL);
     let solution = solve(&problem, Rk4, &options).unwrap();
     black_box(solution.last_state());
@@ -43,12 +41,10 @@ fn fixed_implicit_allocations_for(step: f64) -> usize {
         (0.0, 1.0),
         (),
     );
-    let options = SolveOptions {
-        adaptive: false,
-        initial_step: Some(step),
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    };
+    let options = SolveOptions::default()
+        .with_adaptive(false)
+        .with_initial_step(Some(step))
+        .with_save(SaveMode::Endpoints);
     let region = Region::new(GLOBAL);
     let solution = solve(&problem, ImplicitEuler, &options).unwrap();
     black_box(solution.last_state());
@@ -64,12 +60,10 @@ fn adaptive_trbdf2_allocations_for(maximum_step: f64) -> usize {
         (0.0, 1.0),
         (),
     );
-    let options = SolveOptions {
-        initial_step: Some(maximum_step),
-        max_step: maximum_step,
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    };
+    let options = SolveOptions::default()
+        .with_initial_step(Some(maximum_step))
+        .with_max_step(maximum_step)
+        .with_save(SaveMode::Endpoints);
     let region = Region::new(GLOBAL);
     let solution = solve(&problem, Trbdf2, &options).unwrap();
     black_box(solution.last_state());

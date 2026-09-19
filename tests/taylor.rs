@@ -17,14 +17,12 @@ fn endpoint<A: OdeAlgorithm>(algorithm: A, step: f64, adaptive: bool) -> f64 {
     solve(
         &problem,
         algorithm,
-        &SolveOptions {
-            adaptive,
-            initial_step: Some(step),
-            save: SaveMode::Endpoints,
-            relative_tolerance: 1.0e-8,
-            absolute_tolerance: 1.0e-10,
-            ..SolveOptions::default()
-        },
+        &SolveOptions::default()
+            .with_adaptive(adaptive)
+            .with_initial_step(Some(step))
+            .with_save(SaveMode::Endpoints)
+            .with_relative_tolerance(1.0e-8)
+            .with_absolute_tolerance(1.0e-10),
     )
     .unwrap()
     .last_state()[0]
@@ -106,13 +104,11 @@ fn native_taylor_polynomial_drives_dense_queries_and_roots() {
     let solution = solve(
         &problem,
         ExplicitTaylor::new(8).unwrap(),
-        &SolveOptions {
-            adaptive: false,
-            initial_step: Some(0.4),
-            retain_dense_output: true,
-            save: SaveMode::Endpoints,
-            ..SolveOptions::default()
-        },
+        &SolveOptions::default()
+            .with_adaptive(false)
+            .with_initial_step(Some(0.4))
+            .with_dense_output(true)
+            .with_save(SaveMode::Endpoints),
     )
     .unwrap();
     assert_eq!(
@@ -130,13 +126,11 @@ fn native_taylor_polynomial_drives_dense_queries_and_roots() {
     let event = solve(
         &event_problem,
         ExplicitTaylor::new(8).unwrap(),
-        &SolveOptions {
-            adaptive: false,
-            initial_step: Some(0.5),
-            retain_dense_output: true,
-            event_tolerance: 1.0e-12,
-            ..SolveOptions::default()
-        },
+        &SolveOptions::default()
+            .with_adaptive(false)
+            .with_initial_step(Some(0.5))
+            .with_dense_output(true)
+            .with_event_tolerance(1.0e-12),
     )
     .unwrap();
     let event_time = *event.times().last().unwrap();

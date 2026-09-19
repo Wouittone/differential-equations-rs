@@ -13,12 +13,10 @@ fn exponential() -> OdeProblem<TestRhs, ()> {
 
 #[test]
 fn resource_backed_bs3_preserves_adaptive_accuracy_and_fsal_work() {
-    let options = SolveOptions {
-        absolute_tolerance: 1.0e-9,
-        relative_tolerance: 1.0e-9,
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    };
+    let options = SolveOptions::default()
+        .with_absolute_tolerance(1.0e-9)
+        .with_relative_tolerance(1.0e-9)
+        .with_save(SaveMode::Endpoints);
     let solution = solve(&exponential(), Bs3, &options).unwrap();
 
     assert_eq!(solution.dimension(), 1);
@@ -31,12 +29,10 @@ fn resource_backed_bs3_preserves_adaptive_accuracy_and_fsal_work() {
 
 #[test]
 fn resource_backed_dp5_preserves_tight_endpoint_accuracy() {
-    let options = SolveOptions {
-        absolute_tolerance: 1.0e-11,
-        relative_tolerance: 1.0e-11,
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    };
+    let options = SolveOptions::default()
+        .with_absolute_tolerance(1.0e-11)
+        .with_relative_tolerance(1.0e-11)
+        .with_save(SaveMode::Endpoints);
     let solution = solve(&exponential(), Dp5, &options).unwrap();
 
     assert!((solution.last_state()[0] - (-1.0_f64).exp()).abs() < 2.0e-10);

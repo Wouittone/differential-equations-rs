@@ -10,19 +10,15 @@ fn main() {
         (0.0, 1.0),
         (),
     );
-    let fixed_options = SolveOptions {
-        adaptive: false,
-        initial_step: Some(0.01),
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    };
+    let fixed_options = SolveOptions::default()
+        .with_adaptive(false)
+        .with_initial_step(0.01)
+        .with_save(SaveMode::Endpoints);
     let fixed = solve(&problem, Abdf2, &fixed_options).expect("ABDF2 fixed solve");
-    let adaptive_options = SolveOptions {
-        absolute_tolerance: 1.0e-8,
-        relative_tolerance: 1.0e-8,
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    };
+    let adaptive_options = SolveOptions::default()
+        .with_absolute_tolerance(1.0e-8)
+        .with_relative_tolerance(1.0e-8)
+        .with_save(SaveMode::Endpoints);
     let adaptive = solve(&problem, Abdf2, &adaptive_options).expect("ABDF2 adaptive solve");
     println!("abdf2_fixed,{:.17e}", fixed.last_state()[0]);
     println!(

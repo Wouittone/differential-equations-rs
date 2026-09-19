@@ -236,6 +236,14 @@ impl<F, P> SecondOrderOdeProblem<F, P> {
         &self.initial_position
     }
 
+    /// Returns the number of scalar components in each state partition.
+    ///
+    /// Mismatched initial partitions are rejected by the checked solver entry
+    /// point; this reports the position partition's configured dimension.
+    pub fn dimension(&self) -> usize {
+        self.initial_position.len()
+    }
+
     /// Returns `(start_time, end_time)`.
     pub fn time_span(&self) -> (f64, f64) {
         self.time_span

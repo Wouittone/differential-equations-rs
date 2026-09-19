@@ -12,12 +12,10 @@ fn nonautonomous_rhs_and_backward_time() {
         (0.0, 1.0),
         (),
     );
-    let options = SolveOptions {
-        absolute_tolerance: 1.0e-9,
-        relative_tolerance: 1.0e-9,
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    };
+    let options = SolveOptions::default()
+        .with_absolute_tolerance(1.0e-9)
+        .with_relative_tolerance(1.0e-9)
+        .with_save(SaveMode::Endpoints);
     let solution = solve(&forward, Sdirk2, &options).unwrap();
     assert!((solution.last_state()[0] - 0.5).abs() < 2.0e-7);
 
@@ -44,12 +42,10 @@ fn analytic_and_finite_difference_jacobians_agree() {
             jac.copy_from_slice(&[-100.0, 0.0, 0.0, -2.0]);
         },
     );
-    let options = SolveOptions {
-        absolute_tolerance: 1.0e-8,
-        relative_tolerance: 1.0e-8,
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    };
+    let options = SolveOptions::default()
+        .with_absolute_tolerance(1.0e-8)
+        .with_relative_tolerance(1.0e-8)
+        .with_save(SaveMode::Endpoints);
     let a = solve(&numeric, Sdirk2, &options).unwrap();
     let b = solve(&analytic, Sdirk2, &options).unwrap();
     for (x, y) in a.last_state().iter().zip(b.last_state()) {
@@ -82,13 +78,11 @@ fn adaptive_rejection_and_callback_reinitialize() {
             CallbackAction::Terminate
         },
     );
-    let options = SolveOptions {
-        absolute_tolerance: 1.0e-7,
-        relative_tolerance: 1.0e-7,
-        initial_step: Some(0.05),
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    };
+    let options = SolveOptions::default()
+        .with_absolute_tolerance(1.0e-7)
+        .with_relative_tolerance(1.0e-7)
+        .with_initial_step(Some(0.05))
+        .with_save(SaveMode::Endpoints);
     let solution = solve(&problem, Sdirk2, &options).unwrap();
     assert_eq!(solution.last_state(), &[42.0]);
     assert!(rhs_calls.get() > 0);

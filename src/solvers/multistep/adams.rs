@@ -102,13 +102,13 @@ macro_rules! algorithm {
 
         impl $name {
             /// Returns the primary formula (the corrector for an ABM method).
-            pub fn tableau(self) -> Result<&'static LinearMultistepTableau, TableauError> {
+            pub fn tableau(&self) -> Result<&'static LinearMultistepTableau, TableauError> {
                 load_tableau($method.corrector.unwrap_or($method.predictor))
             }
 
             /// Returns the Adams--Bashforth predictor shared with multirate methods.
             pub fn predictor_tableau(
-                self,
+                &self,
             ) -> Result<&'static LinearMultistepTableau, TableauError> {
                 load_tableau($method.predictor)
             }
@@ -354,7 +354,7 @@ where
     workspace.bootstrap_stages[..dimension].copy_from_slice(&workspace.history[0]);
     for stage in 1..tableau.b().len() {
         workspace.temporary.copy_from_slice(state);
-        for (previous, coefficient) in tableau.stage_row(stage).iter().enumerate() {
+        for (previous, coefficient) in tableau.a()[stage][..stage].iter().enumerate() {
             if *coefficient == 0.0 {
                 continue;
             }

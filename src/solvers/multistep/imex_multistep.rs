@@ -55,7 +55,7 @@ impl Sbdf {
     }
 
     /// Returns the configured BDF order.
-    pub const fn order(self) -> usize {
+    pub const fn order(&self) -> usize {
         self.order
     }
 }

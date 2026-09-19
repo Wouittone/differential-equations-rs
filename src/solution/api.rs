@@ -351,19 +351,6 @@ fn finite_interpolation(output: &[f64], context: &'static str) -> Result<(), Int
         .ok_or(InterpolationError::NonFiniteResult { context })
 }
 
-pub(crate) fn finite_partitioned_interpolation(
-    velocity: Vec<f64>,
-    position: Vec<f64>,
-    context: &'static str,
-) -> Result<(Vec<f64>, Vec<f64>), InterpolationError> {
-    velocity
-        .iter()
-        .chain(position.iter())
-        .all(|value| value.is_finite())
-        .then_some((velocity, position))
-        .ok_or(InterpolationError::NonFiniteResult { context })
-}
-
 pub(crate) fn validate_finite_partitioned_interpolation(
     velocity: &[f64],
     position: &[f64],

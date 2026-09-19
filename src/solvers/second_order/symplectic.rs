@@ -9,7 +9,7 @@ use crate::callback::CallbackOutcome;
 use crate::event::{times_are_numerically_equal, times_are_representably_equal};
 use crate::integrator::{TimeStopSchedule, callback_adjusted_step};
 use crate::solution::{
-    finite_partitioned_interpolation, interpolate_value, interpolation_fraction,
+    interpolate_value, interpolation_fraction, validate_finite_partitioned_interpolation,
 };
 use crate::solver::{
     validate_preset_time_sequences, validate_state_time_options, validate_vector_callback_lengths,
@@ -26,9 +26,14 @@ pub use crate::tableau::SymplecticTableau;
 use crate::tableau::{TableauError, define_symplectic_from_file};
 
 /// A named explicit symplectic composition.
-pub trait SymplecticAlgorithm: Copy {
+///
+/// This trait is a downstream extension point. Implementors return a
+/// compile-validated, lazily initialized composition tableau. The method takes
+/// `&self` so custom algorithms may retain configuration without requiring
+/// `Copy` or global mutable state.
+pub trait SymplecticAlgorithm {
     /// Returns the validated, lazily initialized composition tableau.
-    fn tableau() -> Result<&'static SymplecticTableau, TableauError>;
+    fn tableau(&self) -> Result<&'static SymplecticTableau, TableauError>;
 }
 
 define_symplectic_from_file!(pub PseudoVerletLeapfrog, "src/tableau/resources/symplectic/pseudoverletleapfrog.json", crate = crate);
@@ -179,6 +184,26 @@ impl SymplecticSolution {
 
     /// Interpolates `(velocity, position)` and reports why the query fails.
     pub fn try_interpolate(&self, time: f64) -> Result<(Vec<f64>, Vec<f64>), InterpolationError> {
+        let mut velocity = vec![0.0; self.dimension];
+        let mut position = vec![0.0; self.dimension];
+        self.try_interpolate_into(time, &mut velocity, &mut position)?;
+        Ok((velocity, position))
+    }
+
+    /// Interpolates into caller-owned velocity and position buffers.
+    ///
+    /// Both buffers must contain exactly [`Self::dimension`] entries. On
+    /// success they are overwritten with `(velocity, position)` at `time`; on
+    /// failure their contents are unspecified.
+    pub fn try_interpolate_into(
+        &self,
+        time: f64,
+        velocity: &mut [f64],
+        position: &mut [f64],
+    ) -> Result<(), InterpolationError> {
+        if velocity.len() != self.dimension || position.len() != self.dimension {
+            return Err(InterpolationError::DimensionMismatch);
+        }
         if !time.is_finite() {
             return Err(InterpolationError::NonFiniteTime);
         }
@@ -187,19 +212,19 @@ impl SymplecticSolution {
         }
         for (index, &saved_time) in self.times.iter().enumerate().rev() {
             if time == saved_time {
-                let velocity = self
-                    .velocity(index)
-                    .ok_or(InterpolationError::InvalidSegmentData {
-                        context: "saved symplectic velocity",
-                    })?
-                    .to_vec();
-                let position = self
-                    .position(index)
-                    .ok_or(InterpolationError::InvalidSegmentData {
-                        context: "saved symplectic position",
-                    })?
-                    .to_vec();
-                return finite_partitioned_interpolation(
+                let saved_velocity =
+                    self.velocity(index)
+                        .ok_or(InterpolationError::InvalidSegmentData {
+                            context: "saved symplectic velocity",
+                        })?;
+                let saved_position =
+                    self.position(index)
+                        .ok_or(InterpolationError::InvalidSegmentData {
+                            context: "saved symplectic position",
+                        })?;
+                velocity.copy_from_slice(saved_velocity);
+                position.copy_from_slice(saved_position);
+                return validate_finite_partitioned_interpolation(
                     velocity,
                     position,
                     "saved symplectic state",
@@ -208,14 +233,12 @@ impl SymplecticSolution {
         }
         for segment in &self.dense_segments {
             if segment.contains(time) {
-                let mut position = vec![0.0; self.dimension];
-                let mut velocity = vec![0.0; self.dimension];
-                segment
-                    .interpolate(time, &mut position, &mut velocity)
-                    .ok_or(InterpolationError::InvalidSegmentData {
+                segment.interpolate(time, position, velocity).ok_or(
+                    InterpolationError::InvalidSegmentData {
                         context: "symplectic dense segment",
-                    })?;
-                return finite_partitioned_interpolation(
+                    },
+                )?;
+                return validate_finite_partitioned_interpolation(
                     velocity,
                     position,
                     "symplectic dense segment",
@@ -227,8 +250,6 @@ impl SymplecticSolution {
             let right = self.times[index];
             if between(time, left, right) && left != right {
                 let fraction = interpolation_fraction(time, left, right).clamp(0.0, 1.0);
-                let mut position = vec![0.0; self.dimension];
-                let mut velocity = vec![0.0; self.dimension];
                 interpolate(
                     self.position(index)
                         .ok_or(InterpolationError::InvalidSegmentData {
@@ -239,7 +260,7 @@ impl SymplecticSolution {
                             context: "saved symplectic position",
                         })?,
                     fraction,
-                    &mut position,
+                    position,
                 );
                 interpolate(
                     self.velocity(index)
@@ -251,9 +272,9 @@ impl SymplecticSolution {
                             context: "saved symplectic velocity",
                         })?,
                     fraction,
-                    &mut velocity,
+                    velocity,
                 );
-                return finite_partitioned_interpolation(
+                return validate_finite_partitioned_interpolation(
                     velocity,
                     position,
                     "saved symplectic interpolation",
@@ -364,7 +385,7 @@ pub enum SymplecticSolveError {
 ///
 pub fn solve_symplectic<F, P, A>(
     problem: &SecondOrderOdeProblem<F, P>,
-    _algorithm: A,
+    algorithm: A,
     options: &SolveOptions,
 ) -> Result<SymplecticSolution, SymplecticSolveError>
 where
@@ -379,7 +400,7 @@ where
         .initial_step
         .ok_or(SolveError::InitialStepRequired)?;
     let (start, end) = problem.time_span();
-    let tableau = A::tableau().map_err(SolveError::from)?;
+    let tableau = algorithm.tableau().map_err(SolveError::from)?;
 
     let direction = (end - start).signum();
     let maximum_step = options.max_step.min((end - start).abs());
@@ -843,6 +864,26 @@ mod interpolation_tests {
             Err(InterpolationError::NonFiniteResult {
                 context: "saved symplectic state",
             })
+        );
+    }
+
+    #[test]
+    fn caller_owned_interpolation_matches_allocating_api_and_checks_dimensions() {
+        let solution = saved_solution(vec![0.0, 2.0], vec![1.0, 3.0]);
+        let mut velocity = [f64::NAN];
+        let mut position = [f64::NAN];
+
+        solution
+            .try_interpolate_into(0.25, &mut velocity, &mut position)
+            .unwrap();
+
+        assert_eq!(
+            (velocity.to_vec(), position.to_vec()),
+            solution.try_interpolate(0.25).unwrap()
+        );
+        assert_eq!(
+            solution.try_interpolate_into(0.25, &mut [], &mut position),
+            Err(InterpolationError::DimensionMismatch)
         );
     }
 

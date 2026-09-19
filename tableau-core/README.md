@@ -3,9 +3,9 @@
 Shared Serde parser and validator for canonical JSON Runge--Kutta,
 Runge--Kutta--Nyström, improved RKN, stabilized polynomial, linear multistep,
 Rosenbrock/hybrid, and symplectic-composition tableau resources used by
-`differential-equations` and its procedural macros.
+`differential-equations-rs` and its procedural macros.
 
-Most users should depend on `differential-equations`, which exposes the public
+Most users should depend on `differential-equations-rs`, which exposes the public
 tableau API and compile-validating definition macros. This crate is published
 separately so compile-time and runtime validation execute the same code.
 

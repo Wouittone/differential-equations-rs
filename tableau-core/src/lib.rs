@@ -161,14 +161,34 @@ impl RungeKuttaTableau {
         self.fsal
     }
 
+    /// Returns the number of stages in the method.
+    pub fn stages(&self) -> usize {
+        self.b.len()
+    }
+
     /// Returns the full square Butcher stage matrix `A`.
     pub fn a(&self) -> &[Vec<f64>] {
         &self.a
     }
 
-    /// Returns one strictly lower stage row of an explicit `A` matrix.
-    pub fn stage_row(&self, stage: usize) -> &[f64] {
-        &self.a[stage][..stage]
+    /// Returns one full row of the Butcher stage matrix `A`.
+    ///
+    /// Returns `None` when `stage` is outside [`Self::stages`]. For an
+    /// explicit method, prefer [`Self::stage_row`] when only the nonzero
+    /// strictly lower-triangular prefix is needed.
+    pub fn a_row(&self, stage: usize) -> Option<&[f64]> {
+        self.a.get(stage).map(Vec::as_slice)
+    }
+
+    /// Returns the strictly lower-triangular prefix of an explicit stage row.
+    ///
+    /// Returns `None` for implicit tableaus and when `stage` is outside
+    /// [`Self::stages`]. Stage zero is represented by an empty slice.
+    pub fn stage_row(&self, stage: usize) -> Option<&[f64]> {
+        if self.kind != RungeKuttaKind::Explicit {
+            return None;
+        }
+        self.a.get(stage).map(|row| &row[..stage])
     }
 
     /// Returns the primary weights `b`.
@@ -865,10 +885,29 @@ mod tests {
     fn parses_canonical_butcher_tableau() {
         let tableau = parse_tableau(RESOURCE, "Heun").unwrap();
         assert_eq!(tableau.kind(), RungeKuttaKind::Explicit);
+        assert_eq!(tableau.stages(), 2);
         assert_eq!(tableau.a(), &[vec![0.0, 0.0], vec![1.0, 0.0]]);
+        assert_eq!(tableau.a_row(0), Some([0.0, 0.0].as_slice()));
+        assert_eq!(tableau.a_row(1), Some([1.0, 0.0].as_slice()));
+        assert_eq!(tableau.a_row(2), None);
+        assert_eq!(tableau.stage_row(0), Some([].as_slice()));
+        assert_eq!(tableau.stage_row(1), Some([1.0].as_slice()));
+        assert_eq!(tableau.stage_row(2), None);
         assert_eq!(tableau.b(), &[0.5, 0.5]);
         assert_eq!(tableau.c(), &[0.0, 1.0]);
         assert_eq!(tableau.real_stability_radius(), None);
+    }
+
+    #[test]
+    fn explicit_stage_rows_are_not_exposed_for_implicit_tableaus() {
+        let source = r#"{"name":"Trap","description":"Trapezoidal rule","kind":"implicit-runge-kutta","order":2,"A":[[0,0],["1/2","1/2"]],"b":["1/2","1/2"],"c":[0,1]}"#;
+        let tableau = parse_tableau(source, "Trap").unwrap();
+
+        assert_eq!(tableau.stages(), 2);
+        assert_eq!(tableau.a_row(1), Some([0.5, 0.5].as_slice()));
+        assert_eq!(tableau.stage_row(0), None);
+        assert_eq!(tableau.stage_row(1), None);
+        assert_eq!(tableau.stage_row(2), None);
     }
 
     #[test]

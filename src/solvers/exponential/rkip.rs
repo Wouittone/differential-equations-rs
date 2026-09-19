@@ -21,14 +21,35 @@ define_explicit_rk_tableau_from_file!(
 );
 
 /// Observable interaction-picture exponential-cache counters.
+///
+/// Read counters through the accessor methods. Additional counters may be
+/// added in future releases without breaking downstream code.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[non_exhaustive]
 pub struct RkipCacheStats {
     /// Matrix exponentials constructed since the algorithm was created.
-    pub exponentials_built: usize,
+    pub(crate) exponentials_built: usize,
     /// Cached matrix exponentials reused by subsequent stages or solves.
-    pub cache_hits: usize,
+    pub(crate) cache_hits: usize,
     /// Distinct step magnitudes currently represented in the cache.
-    pub cached_step_sizes: usize,
+    pub(crate) cached_step_sizes: usize,
+}
+
+impl RkipCacheStats {
+    /// Returns the number of matrix exponentials constructed.
+    pub fn exponentials_built(&self) -> usize {
+        self.exponentials_built
+    }
+
+    /// Returns the number of cached matrix exponentials reused.
+    pub fn cache_hits(&self) -> usize {
+        self.cache_hits
+    }
+
+    /// Returns the number of distinct cached step magnitudes.
+    pub fn cached_step_sizes(&self) -> usize {
+        self.cached_step_sizes
+    }
 }
 
 struct ExponentialCache {
@@ -73,6 +94,10 @@ pub struct RKIP {
 }
 
 /// Algorithms specialized for semilinear interaction-picture problems.
+///
+/// This trait is a downstream extension point. Implementors can evaluate the
+/// checked nonlinear term through [`SemilinearOdeProblem::evaluate_nonlinear`]
+/// and construct checked output with [`Solution::from_saved`].
 pub trait InteractionPictureAlgorithm {
     /// Classical solution order.
     fn order(&self) -> usize;
@@ -101,7 +126,10 @@ pub trait InteractionPictureAlgorithm {
     /// having validated the state, time span, tolerances, step bounds, callback
     /// tolerance, and requested output times. User code should normally call
     /// that checked method or [`solve_rkip`]; direct callers of this lower-level
-    /// hook are responsible for preserving those invariants.
+    /// hook are responsible for preserving those invariants. Implementors
+    /// remain responsible for honoring adaptive stepping, step bounds, saving,
+    /// time stops, and dense-output retention, or for returning the
+    /// corresponding typed error when a capability is not supported.
     fn solve_validated<G, P>(
         &self,
         problem: &SemilinearOdeProblem<G, P>,
@@ -426,7 +454,7 @@ where
         let n = state.len();
         for i in 0..self.stages.len() {
             let mut interaction = state.to_vec();
-            for (coefficient, stage) in self.tableau.stage_row(i).iter().zip(&self.stages) {
+            for (coefficient, stage) in self.tableau.a()[i][..i].iter().zip(&self.stages) {
                 for (value, stage) in interaction.iter_mut().zip(stage) {
                     *value += step * coefficient * stage;
                 }

@@ -10,13 +10,11 @@ fn main() {
         (0.0, 1.0),
         (),
     );
-    let adaptive = SolveOptions {
-        absolute_tolerance: 1.0e-8,
-        relative_tolerance: 1.0e-8,
-        initial_step: Some(0.1),
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    };
+    let adaptive = SolveOptions::default()
+        .with_absolute_tolerance(1.0e-8)
+        .with_relative_tolerance(1.0e-8)
+        .with_initial_step(0.1)
+        .with_save(SaveMode::Endpoints);
     let adaptive_endpoint = solve(&stiff, Ros34Pw3, &adaptive).unwrap().last_state()[0];
 
     let fixed = OdeProblem::new(
@@ -25,12 +23,10 @@ fn main() {
         (0.0, 1.0),
         (),
     );
-    let fixed_options = SolveOptions {
-        adaptive: false,
-        initial_step: Some(0.01),
-        save: SaveMode::Endpoints,
-        ..SolveOptions::default()
-    };
+    let fixed_options = SolveOptions::default()
+        .with_adaptive(false)
+        .with_initial_step(0.01)
+        .with_save(SaveMode::Endpoints);
     let fixed_endpoint = solve(&fixed, Ros34Pw3, &fixed_options)
         .unwrap()
         .last_state()[0];

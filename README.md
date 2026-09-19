@@ -4,6 +4,9 @@ Rust ordinary differential equation solvers inspired by Julia's
 [OrdinaryDiffEq.jl](https://github.com/SciML/OrdinaryDiffEq.jl). The crate is
 currently a beta and requires Rust 1.85 or newer.
 
+The Cargo package is named `differential-equations-rs`; its library target is
+`differential_equations`, so Rust imports remain concise and stable.
+
 The supported API is intentionally hierarchical: problem, option, solution,
 and driver types live at the crate root, while algorithms live under
 `solvers::<family>`.
