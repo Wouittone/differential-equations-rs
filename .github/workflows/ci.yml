@@ -112,6 +112,9 @@ jobs:
     name: Pinned Julia SciML comparisons
     runs-on: ubuntu-24.04
     timeout-minutes: 45
+    permissions:
+      actions: write
+      contents: read
     env:
       RUSTUP_TOOLCHAIN: "1.85"
       JULIA_PKG_PRECOMPILE_AUTO: "0"
@@ -123,11 +126,15 @@ jobs:
           submodules: recursive
       - uses: dtolnay/rust-toolchain@077fee5b0788f1a772d4c6ce2814159cd1d6632b # 1.85.1
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
-      - uses: julia-actions/setup-julia@fa02766e078afaaf09b14210362cee14137e6a32 # v3.0.2
+      - id: setup-julia
+        uses: julia-actions/setup-julia@fa02766e078afaaf09b14210362cee14137e6a32 # v3.0.2
         with:
           version: "1.12.6"
-      - name: Instantiate the pinned Julia environment
-        run: julia --project=tests/julia --startup-file=no -e 'using Pkg; Pkg.instantiate()'
+      - uses: julia-actions/cache@a7bed9df697e5d7309d68afe7542a87621a8b6c8 # v3.3.0
+        with:
+          cache-name: julia-${{ steps.setup-julia.outputs.julia-version }}-${{ hashFiles('tests/julia/Project.toml', 'tests/julia/Manifest.toml') }}
+      - name: Instantiate and precompile the pinned Julia environment
+        run: julia --project=tests/julia --startup-file=no -e 'using Pkg; Pkg.instantiate(); Pkg.precompile()'
       - name: Compare against pinned SciML solvers
         run: julia --project=tests/julia --startup-file=no tests/julia/runtests.jl
       - name: Certify the matched benchmark matrix
