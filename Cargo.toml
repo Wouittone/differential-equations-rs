@@ -1,9 +1,9 @@
 [package]
 name = "differential-equations-rs"
-version = "0.1.0-beta.1"
+version = "1.0.0"
 edition = "2024"
 rust-version = "1.85"
-description = "Beta Rust implementations of Julia SciML ODE solvers"
+description = "Rust implementations of Julia SciML ODE solvers"
 license = "MIT OR Apache-2.0"
 readme = "README.md"
 repository = "https://github.com/Wouittone/differential-equations-rs"
@@ -26,8 +26,6 @@ include = [
     "/LICENSE-APACHE",
     "/LICENSE-MIT",
 ]
-publish = false
-
 [lib]
 name = "differential_equations"
 
@@ -49,8 +47,8 @@ parallel = ["dep:rayon"]
 allocation-metrics = []
 
 [dependencies]
-differential-equations-tableau-macros = { version = "=0.1.0-beta.1", path = "tableau-macros" }
-differential-equations-tableau-core = { version = "=0.1.0-beta.1", path = "tableau-core" }
+differential-equations-tableau-macros = { version = "=1.0.0", path = "tableau-macros" }
+differential-equations-tableau-core = { version = "=1.0.0", path = "tableau-core" }
 ndarray = "0.17.2"
 rayon = { version = "1.11.0", optional = true }
 thiserror = "2.0.20"

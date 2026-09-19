@@ -26,7 +26,7 @@ dependencies = [
 
 [[package]]
 name = "differential-equations-rs"
-version = "0.1.0-beta.1"
+version = "1.0.0"
 dependencies = [
  "differential-equations-tableau-core",
  "differential-equations-tableau-macros",
@@ -36,7 +36,7 @@ dependencies = [
 
 [[package]]
 name = "differential-equations-tableau-core"
-version = "0.1.0-beta.1"
+version = "1.0.0"
 dependencies = [
  "exmex",
  "serde",
@@ -45,7 +45,7 @@ dependencies = [
 
 [[package]]
 name = "differential-equations-tableau-macros"
-version = "0.1.0-beta.1"
+version = "1.0.0"
 dependencies = [
  "differential-equations-tableau-core",
  "proc-macro2",

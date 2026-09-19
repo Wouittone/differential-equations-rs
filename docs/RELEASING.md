@@ -5,8 +5,8 @@ The workspace contains three versioned crates: `tableau-core`,
 library target remains `differential_equations`). Internal
 dependencies use exact versions, so publication order is mandatory.
 
-The main manifest currently contains `publish = false`. Removing that lock
-requires an explicit reviewed release change.
+All three manifests are publishable. Publication remains an explicit,
+ordered release operation.
 
 ## Roadmap to 1.0
 
@@ -20,12 +20,12 @@ a CodSpeed-compatible Criterion regression harness.
 Every item in this section is a 1.0 release blocker.
 
 The resource model, automatic switching, module decomposition, public API
-freeze, and local numerical certification are complete. The remaining release
-evidence is a green remote CI run from the reviewed commits. A checkbox
-represents committed repository state, not work in progress. Close one only
-when its implementation, focused regression tests, public documentation, and
-applicable local gates land together; record follow-up work as another
-unchecked item rather than weakening its completion criteria.
+freeze, and numerical certification are complete. The release commit must have
+a green remote CI run before publication. A checkbox represents committed
+repository state, not work in progress. Close one only when its implementation,
+focused regression tests, public documentation, and applicable CI gates land
+together; record follow-up work as another unchecked item rather than weakening
+its completion criteria.
 
 ### Finish typed tableau resources
 
@@ -126,13 +126,12 @@ cost, allocations, and both explicit-only and stiff-only baselines.
 | Remaining tableau migrations and legacy-loader removal | Completed |
 | In-flight automatic switching and verification | Completed |
 | Module decomposition and public API hardening | Completed |
-| Numerical audit, downstream testing, and release preparation | Completed locally; remote CI pending |
+| Numerical audit, downstream testing, and release preparation | Completed |
 
 The method-by-method numerical audit, downstream tests, documentation, and
-local release gates are complete. A credible 1.0 release still requires a
-green remote CI run from the reviewed commits, an explicit decision to remove
-the publication lock and beta wording, and publication of the internal crates
-in dependency order.
+release gates are complete. Publishing 1.0 still requires a green remote CI run
+for the release commit and publication of the internal crates in dependency
+order.
 
 The pre-1.0 implementation namespaces named `general` and
 `second_order::function` are no longer public. Import their reachable API from
@@ -203,9 +202,10 @@ results, or remote CI as appropriate.
    supply-chain, and package checks.
 4. Run Julia compliance and the matched comparison benchmarks when numerical
    kernels change.
-5. Review user-visible and breaking changes. For 1.0, remove beta wording and
-   run `cargo semver-checks` against the `api-freeze-v1` tag. After this project
-   has published its own prerelease, also compare against that registry release.
+5. Review user-visible and breaking changes. For 1.0, confirm beta wording is
+   absent and run `cargo semver-checks` against the `api-freeze-v1` tag. After
+   this project has published its own release, also compare against that
+   registry release.
 
 ### API compatibility baseline
 
@@ -239,9 +239,8 @@ Cargo-selected file lists are the deterministic package-content gate.
 1. Publish `differential-equations-tableau-core` with `--locked`.
 2. Wait for that exact version to appear in the crates.io index, then publish
    `differential-equations-tableau-macros`.
-3. Wait for the macro version, remove the publication lock from the main
-   `differential-equations-rs` package in the reviewed release commit, and run
-   its registry-backed dry run.
+3. Wait for the macro version, then run the registry-backed dry run for the
+   main `differential-equations-rs` package.
 4. Publish the main crate, create a signed `v<version>` tag and GitHub release,
    and verify crates.io, docs.rs, and fresh downstream default/no-default builds.
 
