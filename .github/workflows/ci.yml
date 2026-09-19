@@ -27,7 +27,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: dtolnay/rust-toolchain@85c23e28f7ccc75a9a153d45d385d94a85464876
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
@@ -54,7 +54,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: dtolnay/rust-toolchain@85c23e28f7ccc75a9a153d45d385d94a85464876 # 1.85
+      - uses: dtolnay/rust-toolchain@077fee5b0788f1a772d4c6ce2814159cd1d6632b # 1.85.1
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
       - run: cargo check --locked --workspace --all-targets --all-features
       - run: cargo check --locked --workspace --all-targets --no-default-features
@@ -69,7 +69,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: dtolnay/rust-toolchain@85c23e28f7ccc75a9a153d45d385d94a85464876 # 1.85
+      - uses: dtolnay/rust-toolchain@077fee5b0788f1a772d4c6ce2814159cd1d6632b # 1.85.1
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           workspaces: |
@@ -91,12 +91,13 @@ jobs:
     env:
       RUSTUP_TOOLCHAIN: "1.85"
       JULIA_PKG_PRECOMPILE_AUTO: "0"
+      JULIA_NUM_THREADS: "1"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           submodules: recursive
-      - uses: dtolnay/rust-toolchain@85c23e28f7ccc75a9a153d45d385d94a85464876 # 1.85
+      - uses: dtolnay/rust-toolchain@077fee5b0788f1a772d4c6ce2814159cd1d6632b # 1.85.1
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
       - uses: julia-actions/setup-julia@fa02766e078afaaf09b14210362cee14137e6a32 # v3.0.2
         with:
@@ -105,6 +106,11 @@ jobs:
         run: julia --project=tests/julia --startup-file=no -e 'using Pkg; Pkg.instantiate()'
       - name: Compare against pinned SciML solvers
         run: julia --project=tests/julia --startup-file=no tests/julia/runtests.jl
+      - name: Certify the matched benchmark matrix
+        run: |
+          cargo bench --locked --bench comparison_matrix -- --repetitions 1 > "$RUNNER_TEMP/rust-comparison.csv"
+          julia --project=tests/julia --startup-file=no benches/comparison/julia_matrix.jl --repetitions 1 --mode timing > "$RUNNER_TEMP/julia-comparison.csv"
+          julia --startup-file=no benches/comparison/verify_matrix.jl --rust "$RUNNER_TEMP/rust-comparison.csv" --julia "$RUNNER_TEMP/julia-comparison.csv"
 
   platform-smoke:
     name: ${{ matrix.os }} smoke tests
@@ -120,7 +126,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: dtolnay/rust-toolchain@85c23e28f7ccc75a9a153d45d385d94a85464876
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
       - run: cargo test --locked --workspace --lib --no-default-features
 
@@ -134,7 +140,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: dtolnay/rust-toolchain@85c23e28f7ccc75a9a153d45d385d94a85464876
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
       - name: Test the minimal feature set
         run: cargo test --locked --workspace --all-targets --no-default-features
@@ -142,7 +148,11 @@ jobs:
         run: |
           cargo package --locked --no-verify -p differential-equations-tableau-core
           cargo package --locked --list -p differential-equations-tableau-macros
-          cargo package --locked --list -p differential-equations-rs
+          package_files="$(cargo package --locked --list -p differential-equations-rs)"
+          grep -Fxq 'benches/comparison/rust_matrix.rs' <<<"$package_files"
+          grep -Fxq 'benches/solver_performance.rs' <<<"$package_files"
+          grep -Fxq 'LICENSE-APACHE' <<<"$package_files"
+          grep -Fxq 'LICENSE-MIT' <<<"$package_files"
 
   supply-chain:
     name: Advisories, licenses, bans, and sources

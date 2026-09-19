@@ -18,6 +18,7 @@ include = [
     "/docs/BENCHMARKING.md",
     "/docs/RELEASING.md",
     "/docs/TABLEAU_RESOURCES.md",
+    "/benches/comparison/rust_matrix.rs",
     "/benches/solver_performance.rs",
     "/examples/quickstart.rs",
     "/examples/tableau_from_file.rs",

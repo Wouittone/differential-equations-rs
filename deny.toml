@@ -10,6 +10,8 @@ targets = [
 
 [advisories]
 ignore = []
+yanked = "deny"
+unused-ignored-advisory = "deny"
 
 [licenses]
 confidence-threshold = 0.8

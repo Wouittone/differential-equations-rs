@@ -19,3 +19,12 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+Portions of this software are derived from OrdinaryDiffEq.jl:
+
+Copyright (c) 2016-2020: ChrisRackauckas, Yingbo Ma, Julia Computing Inc, and
+other contributors:
+
+Those portions are distributed under the MIT License above. The complete
+OrdinaryDiffEq.jl contributor history is available at:
+https://github.com/SciML/OrdinaryDiffEq.jl/graphs/contributors
