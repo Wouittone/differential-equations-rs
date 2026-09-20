@@ -133,6 +133,10 @@ where
                 &mut candidate,
             )?;
         }
+        // Match the numerical interval to the representable clock advance.
+        // Otherwise repeated steps at a large epoch drift in state while the
+        // reported endpoint remains exact.
+        attempted_step = (time + attempted_step) - time;
         if time + attempted_step == time {
             return Err(SolveError::StepSizeUnderflow);
         }

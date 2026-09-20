@@ -208,6 +208,7 @@ struct RawRknTableau {
     #[serde(rename = "$schema", default)]
     _schema: Option<String>,
     name: String,
+    #[serde(default = "rkn_default_description")]
     description: String,
     kind: RawRknKind,
     order: usize,
@@ -271,6 +272,13 @@ pub fn parse_rkn_tableau(
 ) -> Result<RungeKuttaNystromTableau, TableauError> {
     let raw: RawRknTableau =
         serde_json::from_str(source).map_err(|error| TableauError::json("RKN tableau", error))?;
+    materialize_rkn(raw, requested_name)
+}
+
+fn materialize_rkn(
+    raw: RawRknTableau,
+    requested_name: &str,
+) -> Result<RungeKuttaNystromTableau, TableauError> {
     validate_metadata(
         &raw.name,
         &raw.description,
@@ -494,14 +502,24 @@ fn validate_metadata(
     requested_name: &str,
     family: &str,
 ) -> Result<(), TableauError> {
-    if name.trim().is_empty() || name != requested_name {
+    if name.trim().is_empty() {
+        return Err(TableauError::new(format!(
+            "{family} tableau name must not be empty"
+        )));
+    }
+    if name != requested_name {
         return Err(TableauError::name_mismatch(format!(
             "resource method `{name}` does not match requested method `{requested_name}`"
         )));
     }
-    if description.trim().is_empty() || order == 0 {
+    if description.trim().is_empty() {
         return Err(TableauError::new(format!(
-            "{family} tableau requires a description and positive order"
+            "{family} tableau description must not be empty"
+        )));
+    }
+    if order == 0 {
+        return Err(TableauError::new(format!(
+            "{family} tableau order must be positive"
         )));
     }
     Ok(())
@@ -703,5 +721,89 @@ mod tests {
                 "accepted {invalid}"
             );
         }
+    }
+}
+
+fn rkn_default_description() -> String {
+    "User-supplied Runge-Kutta-Nystrom method".into()
+}
+/// Borrowed inputs for constructing an owned validated RKN tableau.
+#[derive(Clone, Debug)]
+pub struct RknCoefficients<'a> {
+    /// Required method label.
+    pub name: &'a str,
+    /// Declared order, not an order-condition proof.
+    pub order: usize,
+    /// Position stage rows.
+    pub a: &'a [&'a [f64]],
+    /// Velocity stage rows; absent means velocity-independent acceleration.
+    pub a_velocity: Option<&'a [&'a [f64]]>,
+    /// Position weights.
+    pub b: &'a [f64],
+    /// Velocity weights.
+    pub b_velocity: &'a [f64],
+    /// Stage nodes.
+    pub c: &'a [f64],
+    /// Position error weights; presence selects an adaptive method.
+    pub error: Option<&'a [f64]>,
+    /// Velocity error weights.
+    pub velocity_error: Option<&'a [f64]>,
+    /// Whether only position estimates error.
+    pub position_only_error: bool,
+    /// Position continuous extension rows.
+    pub dense: Option<&'a [&'a [f64]]>,
+    /// Velocity continuous extension rows.
+    pub velocity_dense: Option<&'a [&'a [f64]]>,
+}
+impl<'a> RknCoefficients<'a> {
+    /// Minimal fixed velocity-independent formula; materializes owned coefficients at build time.
+    pub fn fixed(
+        name: &'a str,
+        order: usize,
+        a: &'a [&'a [f64]],
+        b: &'a [f64],
+        b_velocity: &'a [f64],
+        c: &'a [f64],
+    ) -> Self {
+        Self {
+            name,
+            order,
+            a,
+            a_velocity: None,
+            b,
+            b_velocity,
+            c,
+            error: None,
+            velocity_error: None,
+            position_only_error: false,
+            dense: None,
+            velocity_dense: None,
+        }
+    }
+    /// Copies and validates using resource invariants, without JSON or caches.
+    pub fn build(self) -> Result<RungeKuttaNystromTableau, TableauError> {
+        use super::runge_kutta::{typed_matrix, typed_vector};
+        let raw = RawRknTableau {
+            _schema: None,
+            name: self.name.into(),
+            description: rkn_default_description(),
+            kind: if self.error.is_some() {
+                RawRknKind::AdaptiveRungeKuttaNystrom
+            } else {
+                RawRknKind::FixedRungeKuttaNystrom
+            },
+            order: self.order,
+            a: typed_matrix(self.a),
+            a_velocity: self.a_velocity.map(typed_matrix),
+            b: typed_vector(self.b),
+            b_velocity: typed_vector(self.b_velocity),
+            c: typed_vector(self.c),
+            error: self.error.map(typed_vector),
+            velocity_error: self.velocity_error.map(typed_vector),
+            position_only_error: self.position_only_error,
+            dense: self.dense.map(typed_matrix),
+            velocity_dense: self.velocity_dense.map(typed_matrix),
+        };
+        materialize_rkn(raw, self.name)
     }
 }

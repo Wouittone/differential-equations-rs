@@ -1,6 +1,6 @@
 [package]
 name = "differential-equations-rs"
-version = "1.0.0"
+version = "1.4.0"
 edition = "2024"
 rust-version = "1.85"
 description = "Rust implementations of Julia SciML ODE solvers"
@@ -18,10 +18,14 @@ include = [
     "/docs/BENCHMARKING.md",
     "/docs/RELEASING.md",
     "/docs/TABLEAU_RESOURCES.md",
+    "/docs/STEPPING_CONTRACT.md",
+    "/docs/STATE_LAYOUT.md",
+    "/docs/GAUSS_JACKSON.md",
     "/benches/comparison/rust_matrix.rs",
     "/benches/solver_performance.rs",
     "/examples/quickstart.rs",
     "/examples/tableau_from_file.rs",
+    "/examples/reusable_integration.rs",
     "/examples/resources/file_heun.json",
     "/LICENSE-APACHE",
     "/LICENSE-MIT",
@@ -45,18 +49,28 @@ default = ["parallel"]
 parallel = ["dep:rayon"]
 # Repository benchmark instrumentation; not intended for application code.
 allocation-metrics = []
+serde = ["dep:serde"]
 
 [dependencies]
-differential-equations-tableau-macros = { version = "=1.0.0", path = "tableau-macros" }
-differential-equations-tableau-core = { version = "=1.0.0", path = "tableau-core" }
+differential-equations-tableau-macros = { version = "=1.4.0", path = "tableau-macros" }
+differential-equations-tableau-core = { version = "=1.4.0", path = "tableau-core" }
 ndarray = "0.17.2"
 rayon = { version = "1.11.0", optional = true }
 thiserror = "2.0.20"
+serde = { version = "1", optional = true, features = ["derive"] }
 
 [dev-dependencies]
 criterion = { package = "codspeed-criterion-compat", version = "5.0.0", default-features = false, features = ["cargo_bench_support"] }
 stats_alloc = "0.1.10"
 serde_json = "1.0"
+
+[[bench]]
+name = "layout"
+harness = false
+
+[[bench]]
+name = "stepping_costs"
+harness = false
 
 [[bench]]
 name = "solver_performance"

@@ -86,6 +86,8 @@
 //! The public Cargo feature surface is intentionally small:
 //!
 //! - `parallel` is enabled by default and adds Rayon-backed independent solves.
+//! - `serde` adds validated, versioned serialization of solutions and portable
+//!   dense segments. It is independent of parallel execution.
 //! - `allocation-metrics` enables repository benchmark instrumentation and is
 //!   not needed by ordinary users.
 //!
@@ -122,15 +124,20 @@ pub mod callbacks;
 mod ensemble;
 mod error;
 mod event;
+pub mod gauss_jackson;
 mod integrator;
 mod linear;
 mod operator_problem;
 mod problem;
+pub mod scoped_problem;
 mod semilinear;
 mod solution;
 mod solver;
 pub mod solvers;
+pub mod state_layout;
+pub mod stepping;
 pub mod tableau;
+pub mod tolerances;
 
 pub use callback::{CallbackAction, CallbackSave, CallbackSet, EventCrossing, EventDirection};
 pub use ensemble::{
@@ -141,12 +148,19 @@ pub use ensemble::{
 pub use ensemble::{solve_batch_parallel, solve_ensemble_parallel};
 pub use error::ConfigurationError;
 pub use event::DEFAULT_EVENT_TOLERANCE;
+pub use gauss_jackson::{
+    GaussJackson8, GaussJacksonConfig, GaussJacksonError, GaussJacksonStatistics, GaussJacksonStep,
+};
 /// The ndarray version used by shape-aware ODE states.
 pub use ndarray;
 pub use operator_problem::{LieGroupProblem, LinearOperatorProblem};
-pub use problem::{OdeFunction, OdeProblem, OdeProblemBuilder, SplitOdeProblem};
+pub use problem::{MutableFunction, OdeFunction, OdeProblem, OdeProblemBuilder, SplitOdeProblem};
+pub use scoped_problem::{ScopedOdeProblem, ScopedSecondOrderProblem};
 pub use semilinear::SemilinearOdeProblem;
-pub use solution::{InterpolationError, Solution, SolutionConstructionError, SolverStats};
+pub use solution::{
+    DenseSegmentData, InterpolationError, InterpolationQuality, PortableDenseSegment, Solution,
+    SolutionConstructionError, SolutionData, SolverStats,
+};
 pub use solver::{
     AutomaticPairIncompatibility, OdeAlgorithm, SaveMode, SolveError, SolveOptions, solve,
 };

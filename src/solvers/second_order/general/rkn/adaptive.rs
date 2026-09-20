@@ -86,6 +86,8 @@ where
             direction * step_magnitude,
             problem.next_preset_time(time, direction),
         );
+        // Integrate over the interval represented by the returned time.
+        let step = (time + step) - time;
         if time + step == time {
             return Err(SolveError::StepSizeUnderflow.into());
         }

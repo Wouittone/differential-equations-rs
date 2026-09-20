@@ -238,13 +238,14 @@ checksum = "460fbee9c2c2f33933d720630a6a0bac33ba7053db5344fac858d4b8952d77d5"
 
 [[package]]
 name = "differential-equations-rs"
-version = "1.0.0"
+version = "1.4.0"
 dependencies = [
  "codspeed-criterion-compat",
  "differential-equations-tableau-core",
  "differential-equations-tableau-macros",
  "ndarray",
  "rayon",
+ "serde",
  "serde_json",
  "stats_alloc",
  "thiserror",
@@ -252,7 +253,7 @@ dependencies = [
 
 [[package]]
 name = "differential-equations-tableau-core"
-version = "1.0.0"
+version = "1.4.0"
 dependencies = [
  "exmex",
  "serde",
@@ -261,7 +262,7 @@ dependencies = [
 
 [[package]]
 name = "differential-equations-tableau-macros"
-version = "1.0.0"
+version = "1.4.0"
 dependencies = [
  "differential-equations-tableau-core",
  "proc-macro2",

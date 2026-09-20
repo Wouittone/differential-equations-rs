@@ -36,6 +36,7 @@ struct RawTableau {
     #[serde(rename = "$schema", default)]
     _schema: Option<String>,
     name: String,
+    #[serde(default = "default_description")]
     description: String,
     kind: RawKind,
     order: usize,
@@ -106,8 +107,14 @@ impl Scalar {
     }
 }
 
+fn default_description() -> String {
+    "User-supplied Runge-Kutta method".into()
+}
 impl RawTableau {
     fn materialize(self) -> Result<RungeKuttaTableau, TableauError> {
+        if self.name.trim().is_empty() {
+            return Err(TableauError::new("tableau name must not be empty"));
+        }
         if self.description.trim().is_empty() {
             return Err(TableauError::new("tableau description must not be empty"));
         }
@@ -285,17 +292,28 @@ impl RawTableau {
             .into_iter()
             .enumerate()
             .map(|(offset, stage)| {
-                let node = stage.c.materialize()?;
+                let node = stage.c.materialize().map_err(|error| {
+                    error.with_context(format_args!("lazy_dense_stages[{offset}].c"))
+                })?;
                 let coefficients = stage
                     .a
                     .into_iter()
                     .map(|coefficient| {
                         if coefficient.stage >= stages + offset {
-                            return Err(TableauError::new(
-                                "lazy dense stage references an unavailable stage",
-                            ));
+                            return Err(TableauError::new(format!(
+                                "lazy_dense_stages[{offset}].A references unavailable stage {}",
+                                coefficient.stage
+                            )));
                         }
-                        Ok((coefficient.stage, coefficient.value.materialize()?))
+                        Ok((
+                            coefficient.stage,
+                            coefficient.value.materialize().map_err(|error| {
+                                error.with_context(format_args!(
+                                    "lazy_dense_stages[{offset}].A[{}]",
+                                    coefficient.stage
+                                ))
+                            })?,
+                        ))
                     })
                     .collect::<Result<Vec<_>, _>>()?;
                 if coefficients.is_empty() {
@@ -499,3 +517,129 @@ pub fn parse_numeric_expression(source: &str) -> Result<f64, TableauError> {
 
 #[cfg(test)]
 mod tests;
+
+/// Borrowed sparse stage evaluated only when continuous output is needed.
+#[derive(Clone, Copy, Debug)]
+pub struct LazyDenseStageCoefficients<'a> {
+    /// Stage abscissa in units of the step.
+    pub node: f64,
+    /// Pairs of prior stage index and coefficient.
+    pub coefficients: &'a [(usize, f64)],
+}
+
+/// Typed borrowed inputs for constructing an owned tableau without JSON.
+#[derive(Clone, Debug)]
+pub struct RungeKuttaCoefficients<'a> {
+    /// Extra interpolation-only stages, with causal sparse dependencies.
+    pub lazy_dense_stages: &'a [LazyDenseStageCoefficients<'a>],
+    /// Optional method description and provenance.
+    pub description: Option<&'a str>,
+    /// Stage matrix kind.
+    pub kind: RungeKuttaKind,
+    /// Error-weight interpretation.
+    pub error_estimator: ErrorEstimatorKind,
+    /// Optional second direct error formula.
+    pub second_error: Option<&'a [f64]>,
+    /// Required method label.
+    pub name: &'a str,
+    /// Classical order, not an order-condition proof.
+    pub order: usize,
+    /// Full square stage matrix rows.
+    pub a: &'a [&'a [f64]],
+    /// Primary weights.
+    pub b: &'a [f64],
+    /// Stage nodes.
+    pub c: &'a [f64],
+    /// Embedded companion order.
+    pub embedded_order: Option<usize>,
+    /// Embedded companion weights.
+    pub b_hat: Option<&'a [f64]>,
+    /// Direct error weights, exclusive with b_hat.
+    pub error: Option<&'a [f64]>,
+    /// Continuous extension in ascending powers.
+    pub dense: Option<&'a [&'a [f64]]>,
+    /// First-same-as-last property.
+    pub fsal: bool,
+}
+impl<'a> RungeKuttaCoefficients<'a> {
+    /// Minimal explicit fixed-step coefficients. Construction materializes owned coefficient storage.
+    pub fn explicit(
+        name: &'a str,
+        order: usize,
+        a: &'a [&'a [f64]],
+        b: &'a [f64],
+        c: &'a [f64],
+    ) -> Self {
+        Self {
+            lazy_dense_stages: &[],
+            description: None,
+            kind: RungeKuttaKind::Explicit,
+            error_estimator: ErrorEstimatorKind::EmbeddedDifference,
+            second_error: None,
+            name,
+            order,
+            a,
+            b,
+            c,
+            embedded_order: None,
+            b_hat: None,
+            error: None,
+            dense: None,
+            fsal: false,
+        }
+    }
+    /// Uses the same coefficient validation as JSON resources without parsing.
+    pub fn build(self) -> Result<RungeKuttaTableau, TableauError> {
+        if self.name.trim().is_empty() {
+            return Err(TableauError::new("tableau name must not be empty"));
+        }
+        RawTableau {
+            _schema: None,
+            name: self.name.into(),
+            description: self
+                .description
+                .map(str::to_owned)
+                .unwrap_or_else(default_description),
+            kind: match self.kind {
+                RungeKuttaKind::Explicit => RawKind::ExplicitRungeKutta,
+                RungeKuttaKind::Implicit => RawKind::ImplicitRungeKutta,
+            },
+            order: self.order,
+            embedded_order: self.embedded_order,
+            real_stability_radius: None,
+            fsal: self.fsal,
+            a: typed_matrix(self.a),
+            b: typed_vector(self.b),
+            c: typed_vector(self.c),
+            b_hat: self.b_hat.map(typed_vector),
+            error_estimator: self.error_estimator,
+            error: self.error.map(typed_vector),
+            second_error: self.second_error.map(typed_vector),
+            dense: self.dense.map(typed_matrix),
+            lazy_dense_stages: self
+                .lazy_dense_stages
+                .iter()
+                .map(|stage| RawLazyDenseStage {
+                    c: Scalar::Float(stage.node),
+                    a: stage
+                        .coefficients
+                        .iter()
+                        .map(|&(stage, value)| RawSparseCoefficient {
+                            stage,
+                            value: Scalar::Float(value),
+                        })
+                        .collect(),
+                })
+                .collect(),
+            fitted_weights: Vec::new(),
+            stage_predictors: Vec::new(),
+        }
+        .materialize()
+    }
+}
+pub(crate) fn typed_vector(values: &[f64]) -> Vec<Scalar> {
+    values.iter().copied().map(Scalar::Float).collect()
+}
+pub(crate) fn typed_matrix(rows: &[&[f64]]) -> Vec<Vec<Scalar>> {
+    rows.iter().map(|row| typed_vector(row)).collect()
+}

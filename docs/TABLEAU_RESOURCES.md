@@ -364,9 +364,9 @@ and inconsistent FSAL metadata fail the build with a resource-path diagnostic.
 The expansion embeds the original text with `include_str!` and materializes the
 tableau behind a `LazyLock` only when that method is first used. Runtime parsing
 errors are typed values rather than panics. `FileHeun.tableau()` exposes the
-materialized tableau for inspection. This resource-backed definition is the
-complete extension mechanism; no parallel Rust coefficient representation is
-required.
+materialized tableau for inspection. Resource definitions remain an optional authoring path. For runtime
+coefficient arrays, use the typed constructors described below; no global lazy
+resource or JSON document is required.
 
 For code written against the pre-resource API, replace a `ButcherTableau`
 marker and `ExplicitRK::<Method>::new()` with one canonical JSON document and a
@@ -677,3 +677,52 @@ This is a minimal illustration, not a replacement for the main package's full
 include list. Downstream packages should add every resource path consumed by a
 macro. Use `cargo package --list` to inspect the archive. Cargo tracks every
 `include_str!` input, so editing a resource invalidates its dependent build.
+
+
+## Runtime typed RK and RKN coefficients
+
+`tableau::RungeKuttaCoefficients::explicit(name, order, rows, b, c)` accepts
+borrowed complete row slices and validates them into an owned `RungeKuttaTableau`
+with `.build()`. Set embedded order and either `b_hat` or direct `error` weights
+before building. Optional direct residual/second estimators and dense polynomial
+rows retain their coefficients exactly. `RknCoefficients::fixed` similarly takes
+position/velocity weights; supply `a_velocity` for velocity-dependent forces.
+An adaptive RKN supplies error weights and its paired dense representations.
+Arrays, Vec storage and borrowed host data all work without JSON or a static
+cache. The resulting method can be borrowed by a reusable per-instance stepper.
+
+Validation is shared with resources: this checks finite numbers, dimensions,
+causality, stage/weight consistency, embedded formulas, FSAL and dense invariants.
+It does not prove the declared classical order. Construction currently uses an
+intermediate typed representation and allocates owned storage; stepping does not
+repeat that conversion. Do not interpret this as zero-allocation construction or
+zero-copy coefficient ownership. Borrowed caller state is a separate stepper API.
+
+RK and RKN JSON descriptions may be omitted and receive a useful default;
+explicit empty descriptions still fail. Names and kind remain required. Errors
+preserve details such as the missing metadata key, the unsupported kind text or
+`A[row][column]` for a nonfinite coefficient. `$schema` is optional editor metadata.
+Typed RK input also accepts `LazyDenseStageCoefficients`: interpolation-only
+stages retain their sparse causal dependencies while the core tableau remains
+limited to force stages needed for the main step. Exact pinned numeris 0.6.0
+RKV98 (16 core + 5 interpolation stages) and Brahe RKF78 fixtures verify every
+coefficient bit, derived embedded-error weight, matrix layout and dense formula.
+The fixtures preserve original numeric literals/expressions, source hashes and
+MIT notices; no method-name substitution establishes equivalence.
+
+Rosenbrock resources declare `error_estimator` explicitly when their adaptive
+strategy differs from the default `{"kind":"embedded"}`. The tagged value
+`{"kind":"richardson-step-doubling","method_order":3}` requires a positive
+order equal to the tableau order and transformed `rosenbrock` kind. Ros34Pw1a
+uses this declaration because its raw embedded combination can cancel on scalar
+linear problems. The parser validates this metadata; it does not prove accuracy.
+The canonical representation is described by `rosenbrock-schema.json`.
+
+The low-level Rosenbrock stepper still computes the fixed-step formula for these
+resources and exposes its solved stages and original coefficient weights. It
+returns no usable `component_error` for a Richardson requirement, so a generic
+adaptive driver cannot silently use the unsuitable embedded weights. Use the
+native Ros34Pw1a algorithm for its step-doubling adaptive strategy. Rodas5Pr's
+additional residual control belongs to its algorithm wrapper: it shares the
+Rodas5P coefficient resource, so that control cannot be inferred from a raw
+Rodas5P tableau and is not provided by the raw-tableau driver.

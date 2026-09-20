@@ -4,6 +4,7 @@ use thiserror::Error;
 
 /// Identifies the active side of an automatic solver pair.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum AutomaticBranch {
     /// The branch intended for non-stiff portions of a problem.
     NonStiff,

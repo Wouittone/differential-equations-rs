@@ -9,13 +9,15 @@ pub use variable_multistep::{VariableMultistepTableau, parse_variable_multistep_
 mod mri;
 pub use mri::{MisTableau, MriTableau, parse_mis_tableau, parse_mri_tableau};
 mod rosenbrock;
-pub use rosenbrock::{RosenbrockKind, RosenbrockTableau, parse_rosenbrock_tableau};
+pub use rosenbrock::{
+    RosenbrockErrorEstimator, RosenbrockKind, RosenbrockTableau, parse_rosenbrock_tableau,
+};
 mod rosenbrock_pair;
 pub use rosenbrock_pair::{RosenbrockPairTableau, parse_rosenbrock_pair_tableau};
 mod second_order;
 pub use second_order::{
-    IrknBootstrapSeed, IrknTableau, RungeKuttaNystromKind, RungeKuttaNystromTableau,
-    parse_irkn_tableau, parse_rkn_tableau,
+    IrknBootstrapSeed, IrknTableau, RknCoefficients, RungeKuttaNystromKind,
+    RungeKuttaNystromTableau, parse_irkn_tableau, parse_rkn_tableau,
 };
 mod low_storage;
 pub use low_storage::{
@@ -32,8 +34,10 @@ pub use stabilized::{
 
 mod runge_kutta;
 use runge_kutta::evaluate_polynomial;
+pub use runge_kutta::{
+    LazyDenseStageCoefficients, RungeKuttaCoefficients, parse_numeric_expression, parse_tableau,
+};
 pub(crate) use runge_kutta::{Scalar, approximately_equal, materialize_matrix, materialize_vector};
-pub use runge_kutta::{parse_numeric_expression, parse_tableau};
 use serde::Deserialize;
 use std::{error::Error, fmt, sync::Arc};
 

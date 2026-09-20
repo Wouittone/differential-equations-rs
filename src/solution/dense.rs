@@ -23,6 +23,7 @@ pub(crate) trait DenseSegment {
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum OwnedDenseSegment {
+    Portable(crate::PortableDenseSegment),
     Hermite(HermiteSegment),
     RungeKutta(RungeKuttaSegment),
     Stiff(StiffSegment),
@@ -31,8 +32,35 @@ pub(crate) enum OwnedDenseSegment {
 }
 
 impl OwnedDenseSegment {
+    pub(super) fn quality(&self) -> crate::InterpolationQuality {
+        match self {
+            Self::Portable(s) => s.quality(),
+            _ => crate::InterpolationQuality::MethodSpecific,
+        }
+    }
+    pub(super) fn portable(&self) -> Result<Vec<crate::PortableDenseSegment>, InterpolationError> {
+        match self {
+            Self::Portable(s) => Ok(vec![s.clone()]),
+            Self::Hermite(s) => Ok(vec![s.portable()?]),
+            Self::RungeKutta(s) => Ok(vec![s.portable()?]),
+            Self::Stiff(s) => Ok(vec![s.portable()?]),
+            Self::Collocation(s) => s.portable(),
+            Self::Taylor(s) => Ok(vec![s.portable()?]),
+        }
+    }
+    pub(super) fn time_bounds(&self) -> (f64, f64) {
+        match self {
+            Self::Portable(s) => s.time_bounds(),
+            Self::Hermite(s) => s.time_bounds(),
+            Self::RungeKutta(s) => s.time_bounds(),
+            Self::Stiff(s) => s.time_bounds(),
+            Self::Collocation(s) => s.time_bounds(),
+            Self::Taylor(s) => s.time_bounds(),
+        }
+    }
     pub(super) fn contains(&self, time: f64) -> bool {
         match self {
+            Self::Portable(segment) => segment.contains(time),
             Self::Hermite(segment) => segment.contains(time),
             Self::RungeKutta(segment) => segment.contains(time),
             Self::Stiff(segment) => segment.contains(time),
@@ -45,6 +73,7 @@ impl OwnedDenseSegment {
 impl DenseSegment for OwnedDenseSegment {
     fn interpolate(&self, time: f64, output: &mut [f64]) -> Result<(), InterpolationError> {
         match self {
+            Self::Portable(segment) => segment.interpolate_into(time, output),
             Self::Hermite(segment) => segment.interpolate(time, output),
             Self::RungeKutta(segment) => segment.interpolate(time, output),
             Self::Stiff(segment) => segment.interpolate(time, output),

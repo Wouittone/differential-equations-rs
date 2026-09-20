@@ -73,6 +73,10 @@ impl<'a> BorrowedStiffSegment<'a> {
 }
 
 impl StiffSegment {
+    pub(super) fn time_bounds(&self) -> (f64, f64) {
+        (self.start_time, self.bound_time)
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         start_time: f64,
@@ -191,4 +195,32 @@ fn interpolate_stiff(
             theta1 * start_state[component] + theta * (end_state[component] + theta1 * polynomial);
     }
     Ok(())
+}
+
+impl StiffSegment {
+    pub(crate) fn portable(&self) -> Result<crate::PortableDenseSegment, InterpolationError> {
+        let n = self.start_state.len();
+        let mut c = vec![0.0; (self.order + 2) * n];
+        c[..n].copy_from_slice(&self.start_state);
+        for i in 0..n {
+            c[n + i] = self.end_state[i] - self.start_state[i];
+        }
+        for degree in 0..self.order {
+            for i in 0..n {
+                c[(degree + 1) * n + i] += self.corrections[degree * n + i];
+                c[(degree + 2) * n + i] -= self.corrections[degree * n + i];
+            }
+        }
+        crate::PortableDenseSegment::from_data(crate::DenseSegmentData {
+            version: 1,
+            start_time: self.start_time,
+            end_time: self.end_time,
+            bound_time: self.bound_time,
+            dimension: n,
+            coefficients: c,
+            end_state: self.end_state.clone(),
+            bound_state: None,
+            quality: crate::InterpolationQuality::MethodSpecific,
+        })
+    }
 }

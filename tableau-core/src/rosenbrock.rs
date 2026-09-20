@@ -1,4 +1,4 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use super::{Scalar, TableauError, approximately_equal, materialize_matrix, materialize_vector};
 
@@ -13,6 +13,38 @@ pub enum RosenbrockKind {
     /// Its diagonal is `gamma`. The implicit coefficients describe the upstream
     /// algebraic specialization; an ordinary ODE uses only `A`, `b`, and `c`.
     HybridExplicitImplicit,
+}
+
+/// Adaptive error strategy required in addition to the stage coefficients.
+#[derive(Clone, Copy, Debug, Default, Serialize, Eq, PartialEq)]
+#[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
+pub enum RosenbrockErrorEstimator {
+    /// Use the direct embedded increment weights, when present.
+    #[default]
+    Embedded,
+    /// Compare a full step with two half steps and retain the refined result.
+    RichardsonStepDoubling {
+        /// Positive classical order, equal to the tableau's declared order.
+        method_order: usize,
+    },
+}
+
+impl<'de> Deserialize<'de> for RosenbrockErrorEstimator {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        // A struct variant makes serde reject extra fields even for Embedded.
+        #[derive(Deserialize)]
+        #[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
+        enum Raw {
+            Embedded {},
+            RichardsonStepDoubling { method_order: usize },
+        }
+        Ok(match Raw::deserialize(deserializer)? {
+            Raw::Embedded {} => Self::Embedded,
+            Raw::RichardsonStepDoubling { method_order } => {
+                Self::RichardsonStepDoubling { method_order }
+            }
+        })
+    }
 }
 
 /// A Rosenbrock-family tableau using a declared SciML stage convention.
@@ -36,6 +68,7 @@ pub enum RosenbrockKind {
 /// Parsing validates the representation, not the claimed order or stability.
 #[derive(Clone, Debug, PartialEq)]
 pub struct RosenbrockTableau {
+    error_estimator: RosenbrockErrorEstimator,
     kind: RosenbrockKind,
     name: String,
     description: String,
@@ -51,6 +84,10 @@ pub struct RosenbrockTableau {
 }
 
 impl RosenbrockTableau {
+    /// Required adaptive strategy; raw `btilde` can be unsuitable for adaptation.
+    pub fn error_estimator(&self) -> RosenbrockErrorEstimator {
+        self.error_estimator
+    }
     /// Stage-equation and coupling-matrix convention.
     pub fn kind(&self) -> RosenbrockKind {
         self.kind
@@ -98,7 +135,8 @@ impl RosenbrockTableau {
     pub fn b(&self) -> &[f64] {
         &self.b
     }
-    /// Direct embedded-error increment weights, absent for fixed-step methods.
+    /// Raw embedded-error increment weights, absent for fixed-step methods.
+    /// Consult [`Self::error_estimator`] before using these for adaptive control.
     pub fn btilde(&self) -> Option<&[f64]> {
         self.btilde.as_deref()
     }
@@ -114,6 +152,8 @@ impl RosenbrockTableau {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RawRosenbrockTableau {
+    #[serde(default)]
+    error_estimator: RosenbrockErrorEstimator,
     #[serde(rename = "$schema", default)]
     _schema: Option<String>,
     name: String,
@@ -160,6 +200,18 @@ pub fn parse_rosenbrock_tableau(
         return Err(TableauError::new(
             "Rosenbrock tableau requires a description and positive order",
         ));
+    }
+    if let RosenbrockErrorEstimator::RichardsonStepDoubling { method_order } = raw.error_estimator {
+        if method_order == 0 || method_order != raw.order {
+            return Err(TableauError::new(
+                "error_estimator.method_order must be positive and equal tableau order",
+            ));
+        }
+        if raw.kind != RosenbrockKind::Rosenbrock {
+            return Err(TableauError::new(
+                "error_estimator richardson-step-doubling requires kind rosenbrock",
+            ));
+        }
     }
     let gamma = raw.gamma.materialize()?;
     if gamma == 0.0 {
@@ -239,6 +291,7 @@ pub fn parse_rosenbrock_tableau(
         ));
     }
     Ok(RosenbrockTableau {
+        error_estimator: raw.error_estimator,
         kind: raw.kind,
         name: raw.name,
         description: raw.description,
@@ -259,6 +312,56 @@ mod tests {
     use super::*;
 
     const SOURCE: &str = r#"{"name":"Test","description":"Test Rosenbrock formula","kind":"rosenbrock","order":2,"gamma":"1/2","A":[[0,0],[2,0]],"C":[[0,0],[-4,0]],"c":[0,1],"d":[0.5,-0.5],"b":[3,1],"btilde":[1,1],"H":[[1,0],[0,1]]}"#;
+
+    #[test]
+    fn estimator_metadata_round_trip_and_validation() {
+        assert_eq!(
+            parse_rosenbrock_tableau(SOURCE, "Test")
+                .unwrap()
+                .error_estimator(),
+            RosenbrockErrorEstimator::Embedded
+        );
+        let estimator = RosenbrockErrorEstimator::RichardsonStepDoubling { method_order: 2 };
+        let serialized = serde_json::to_string(&estimator).unwrap();
+        assert_eq!(
+            serde_json::from_str::<RosenbrockErrorEstimator>(&serialized).unwrap(),
+            estimator
+        );
+        let mut value: serde_json::Value = serde_json::from_str(SOURCE).unwrap();
+        value["error_estimator"] = serde_json::to_value(estimator).unwrap();
+        assert_eq!(
+            parse_rosenbrock_tableau(&value.to_string(), "Test")
+                .unwrap()
+                .error_estimator(),
+            estimator
+        );
+        for order in [0, 1, 3] {
+            value["error_estimator"]["method_order"] = order.into();
+            let error = parse_rosenbrock_tableau(&value.to_string(), "Test")
+                .unwrap_err()
+                .to_string();
+            assert!(error.contains("error_estimator.method_order"), "{error}");
+        }
+        value["error_estimator"]["method_order"] = 2.into();
+        value["kind"] = "hybrid-explicit-implicit".into();
+        assert!(
+            parse_rosenbrock_tableau(&value.to_string(), "Test")
+                .unwrap_err()
+                .to_string()
+                .contains("requires kind rosenbrock")
+        );
+        for invalid in [
+            r#"{"kind":"embedded","method_order":2}"#,
+            r#"{"kind":"richardson-step-doubling"}"#,
+            r#"{"kind":"unknown"}"#,
+            r#"{"kind":"richardson-step-doubling","method_order":-1}"#,
+        ] {
+            assert!(
+                serde_json::from_str::<RosenbrockErrorEstimator>(invalid).is_err(),
+                "{invalid}"
+            );
+        }
+    }
 
     #[test]
     fn parses_sci_ml_convention_with_shared_expressions() {

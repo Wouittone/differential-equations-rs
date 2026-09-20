@@ -4,7 +4,9 @@ use crate::solvers::automatic::AutomaticBranch;
 
 mod api;
 mod dense;
+mod portable;
 mod recorder;
+pub use portable::{DenseSegmentData, InterpolationQuality, PortableDenseSegment, SolutionData};
 
 pub use api::Solution;
 pub(crate) use api::{
@@ -81,6 +83,7 @@ pub enum InterpolationError {
 
 /// Work performed by an ODE solver.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[non_exhaustive]
 pub struct SolverStats {
     /// Number of right-hand-side evaluations, including callback checks.

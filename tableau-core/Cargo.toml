@@ -1,6 +1,6 @@
 [package]
 name = "differential-equations-tableau-core"
-version = "1.0.0"
+version = "1.4.0"
 edition = "2024"
 rust-version = "1.85"
 description = "Shared parser and validator for differential-equations tableau resources"

@@ -1,0 +1,56 @@
+{
+  "repository": "https://github.com/lorcan2440/Gauss-Jackson-Integrator",
+  "revision": "b011576364d77fb606fae6f02415265c33215421",
+  "license": "BSD-2-Clause",
+  "source_sha256": "5ac4551f5012a5452c948d2effb068263fcc8b226dc72e01dd15b7b4c64a3d68",
+  "cases": [
+    {
+      "case": "harmonic",
+      "h": 0.4,
+      "time": 20.0,
+      "q": [
+        0.4080826987456142
+      ],
+      "v": [
+        -0.9129452557378017
+      ],
+      "analytic_error": 6.369322222421481e-07
+    },
+    {
+      "case": "harmonic",
+      "h": 0.2,
+      "time": 20.0,
+      "q": [
+        0.4080820621456037
+      ],
+      "v": [
+        -0.9129452505933037
+      ],
+      "analytic_error": 3.3221175810282944e-10
+    },
+    {
+      "case": "harmonic",
+      "h": 0.1,
+      "time": 20.0,
+      "q": [
+        0.4080820618135249
+      ],
+      "v": [
+        -0.9129452507272791
+      ],
+      "analytic_error": 3.4861002973229915e-13
+    },
+    {
+      "case": "damped",
+      "h": 0.1,
+      "time": 3.0,
+      "q": [
+        0.04978706836819483
+      ],
+      "v": [
+        -0.0497870683681613
+      ],
+      "analytic_error": 3.308880947017201e-13
+    }
+  ]
+}

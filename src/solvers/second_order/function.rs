@@ -76,3 +76,31 @@ where
         (self.function)(acceleration, velocity, position, parameters, time)
     }
 }
+
+/// Sequential mutable, fallible acceleration closure adapter.
+/// Captures may borrow local data. Independent problems are needed per worker.
+pub struct MutableAcceleration<F>(std::cell::RefCell<F>);
+impl<F> MutableAcceleration<F> {
+    pub(crate) fn new(function: F) -> Self {
+        Self(std::cell::RefCell::new(function))
+    }
+    /// Recovers the closure and its accumulated state.
+    pub fn into_inner(self) -> F {
+        self.0.into_inner()
+    }
+}
+impl<F, P> SecondOrderFunction<P> for MutableAcceleration<F>
+where
+    F: FnMut(&mut [f64], &[f64], &[f64], &P, f64) -> Result<(), SolveError>,
+{
+    fn evaluate(
+        &self,
+        acceleration: &mut [f64],
+        velocity: &[f64],
+        position: &[f64],
+        parameters: &P,
+        time: f64,
+    ) -> Result<(), SolveError> {
+        (self.0.borrow_mut())(acceleration, velocity, position, parameters, time)
+    }
+}

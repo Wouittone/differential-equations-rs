@@ -69,6 +69,10 @@ impl<'a> BorrowedTaylorSegment<'a> {
 }
 
 impl TaylorSegment {
+    pub(super) fn time_bounds(&self) -> (f64, f64) {
+        (self.start_time, self.bound_time)
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new_bounded(
         start_time: f64,
@@ -198,4 +202,27 @@ fn interpolate_taylor(
         .all(|value| value.is_finite())
         .then_some(())
         .ok_or(InterpolationError::NonFiniteResult { context: "Taylor" })
+}
+
+impl TaylorSegment {
+    pub(crate) fn portable(&self) -> Result<crate::PortableDenseSegment, InterpolationError> {
+        let n = self.dimension;
+        let mut c = self.coefficients[..(self.order + 1) * n].to_vec();
+        c[..n].copy_from_slice(&self.start_state);
+        crate::PortableDenseSegment::from_data(crate::DenseSegmentData {
+            version: 1,
+            start_time: self.start_time,
+            end_time: self.end_time,
+            bound_time: self.bound_time,
+            dimension: n,
+            coefficients: c,
+            end_state: self.end_state.clone(),
+            bound_state: if self.bound_time == self.start_time {
+                None
+            } else {
+                Some(self.end_state.clone())
+            },
+            quality: crate::InterpolationQuality::MethodSpecific,
+        })
+    }
 }
