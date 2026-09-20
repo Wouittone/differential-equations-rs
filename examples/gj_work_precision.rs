@@ -14,6 +14,8 @@
 //! Match achieved error thresholds across the complete rows in analysis, keeping
 //! failed rows and all sweep points; do not interpret equal nominal settings as
 //! equal accuracy. The oracle has ordinary f64 roundoff near machine precision.
+//! One invocation retains nine samples per case; run three independent rounds
+//! with `GJ_BENCH_ROUND` set to 0, 1, and 2 to record round identity in CSV.
 use differential_equations::solvers::{
     explicit::Vern9,
     multistep::VCABM,
@@ -116,8 +118,9 @@ fn row(
         Ok(e) => (format!("{e:.17e}"), "ok".to_owned()),
         Err(e) => (String::new(), e.replace([',', '\n', '\r'], ";")),
     };
+    let round = std::env::var("GJ_BENCH_ROUND").map(|s|s.parse::<usize>().expect("numeric round")).unwrap_or(0);
     println!(
-        "{},{method},{rep},{h:.17e},{tol:.17e},{calls},{accepted},{startup},{elapsed},,{err},{status}",
+        "{},{method},{round},{rep},{h:.17e},{tol:.17e},{calls},{accepted},{startup},{elapsed},,{err},{status}",
         case.name()
     );
 }
@@ -164,11 +167,11 @@ fn first_order<A: OdeAlgorithm>(
 }
 fn main() {
     println!(
-        "case,method,repeat,step,tolerance,force_calls,accepted_steps,startup_steps,setup_and_solve_ns,allocation_count,endpoint_max_abs_error,status"
+        "case,method,round,sample,step,tolerance,force_calls,accepted_steps,startup_steps,setup_and_solve_ns,allocation_count,endpoint_max_abs_error,status"
     );
     for case in [Case::Kepler, Case::Damped] {
         let oracle = case.oracle();
-        for rep in 0..5 {
+        for rep in 0..9 {
             for h in [0.08, 0.04, 0.02, 0.01, 0.005, 0.0025] {
                 let start = Instant::now();
                 let (q, v) = case.initial();
