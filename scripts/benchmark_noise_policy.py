@@ -26,7 +26,7 @@ def policy(root):
                 row = json.loads(line)
                 key = (row["case"], row["abs_tol"], row["rel_tol"])
                 elapsed = row["elapsed_ns"]
-                if row.get("instrumented") or elapsed <= 0:
+                if row.get("instrumented") is not False or row.get("backend") != backend or elapsed <= 0:
                     raise ValueError(f"Invalid timing sample in {path}")
                 sample_id = (round_id, row["sample"])
                 if sample_id in values[backend][key]:
@@ -39,6 +39,9 @@ def policy(root):
         migrated = values["migrated"][key]
         if upstream.keys() != migrated.keys() or len(upstream) < 27:
             raise ValueError(f"Incomplete 3x9 baseline: {key}")
+        rounds = {round_id for round_id, _ in upstream}
+        if len(rounds) < 3 or any(sum(r == round_id for r, _ in upstream) < 9 for round_id in rounds):
+            raise ValueError(f"Insufficient independent rounds or within-round samples: {key}")
         logarithms = [math.log(migrated[k] / upstream[k]) for k in sorted(upstream)]
         center = statistics.median(logarithms)
         scatter = 1.4826 * statistics.median(abs(x-center) for x in logarithms)
