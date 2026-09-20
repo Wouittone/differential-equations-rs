@@ -13,6 +13,9 @@ pub use explicit::{ExplicitRungeKuttaStepper, StepView};
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
 pub enum StepFailure {
+    /// The Rosenbrock stage matrix could not be factorized.
+    #[error("singular stage matrix")]
+    SingularSystem,
     /// State or output dimensions differ from the constructed workspace.
     #[error("stepper dimension mismatch")]
     Dimension,
@@ -118,3 +121,6 @@ pub(crate) mod time_difference;
 pub use time_difference::TimeDifferencePolicy;
 mod events;
 pub use events::{RootDirection, RootError, RootOptions, RootOutcome, integrate_rk_until_event};
+
+mod rosenbrock;
+pub use rosenbrock::{DerivativeHook, RosenbrockStepView, RosenbrockStepper};
