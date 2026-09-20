@@ -60,6 +60,26 @@ Jacobian or factorization buffers. Run these cases alone with:
 cargo bench --locked --bench solver_performance -- hybrid_workspace
 ```
 
+## Exact RKV98 stage-kernel diagnostics
+
+`rkv98` imports the exact 16-core/5-lazy-dense-stage Numeris fixture used by
+the host-coefficient tests. It compares a reusable `ExplicitRungeKuttaStepper`
+loop with the reusable adaptive driver on the same 64 accepted intervals and
+prints attempts, RHS evaluations, accepted/rejected steps, core stage count,
+and lazy dense-stage count before timing either path:
+
+```console
+cargo bench --locked --bench rkv98
+```
+
+The diagnostic intentionally keeps dense-stage evaluations at zero: the
+output-free stepping API exposes core stage derivatives but does not evaluate
+the five optional lazy interpolation stages. Their count is reported to make
+that limitation explicit rather than attributing interpolation work to the
+stage kernel. This isolates stage-kernel time from controller/driver overhead
+without registering an unvalidated production RKV98 solver or changing
+tolerances and trajectory semantics.
+
 The `rosenbrock_resource_allocations` integration test also checks allocated
 bytes scale linearly when vector and non-square matrix states double in size,
 with fixed/adaptive stepping and dense output enabled/disabled. It checks the

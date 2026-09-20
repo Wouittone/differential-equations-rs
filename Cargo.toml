@@ -78,6 +78,10 @@ harness = false
 required-features = ["parallel"]
 
 [[bench]]
+name = "rkv98"
+harness = false
+
+[[bench]]
 name = "comparison_matrix"
 path = "benches/comparison/rust_matrix.rs"
 harness = false
