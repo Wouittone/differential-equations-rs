@@ -36,27 +36,58 @@ impl StepView<'_> {
 
 /// Persistent explicit RK workspace borrowing a validated per-instance tableau.
 ///
-/// Construction allocates six state vectors and one stage-major vector.
-/// Attempt, accept, reject, reset and derivative injection never allocate.
-/// Specialized fitted formulas are rejected; their frequency-dependent weights
-/// require a dedicated kernel. Both embedded error vectors remain exposed so
-/// hosts can implement their method-specific norm formulas exactly.
+/// Construction allocates a compact scratch buffer that packs the candidate,
+/// temporary stage data, embedded errors, and cached derivative into a single
+/// contiguous allocation. Attempt, accept, reject, reset and derivative
+/// injection never allocate. Specialized fitted formulas are rejected; their
+/// frequency-dependent weights require a dedicated kernel. Both embedded error
+/// vectors remain exposed so hosts can implement their method-specific norm
+/// formulas exactly.
 #[derive(Debug)]
 pub struct ExplicitRungeKuttaStepper<'a> {
     tableau: &'a RungeKuttaTableau,
     time: f64,
     state: StateBuffer<'a>,
-    candidate: Vec<f64>,
-    error: Vec<f64>,
-    second_error: Vec<f64>,
-    temporary: Vec<f64>,
-    stages: Vec<f64>,
-    derivative: Vec<f64>,
+    workspace: Vec<f64>,
+    candidate_offset: usize,
+    error_offset: usize,
+    second_error_offset: Option<usize>,
+    temporary_offset: usize,
+    stages_offset: usize,
+    derivative_offset: usize,
     derivative_valid: bool,
     pending: Option<f64>,
     stats: StepStatistics,
 }
 impl<'a> ExplicitRungeKuttaStepper<'a> {
+    fn workspace_slice(&self, offset: usize, len: usize) -> &[f64] {
+        &self.workspace[offset..offset + len]
+    }
+    fn workspace_slice_mut(&mut self, offset: usize, len: usize) -> &mut [f64] {
+        &mut self.workspace[offset..offset + len]
+    }
+    fn candidate_slice(&self) -> &[f64] {
+        self.workspace_slice(self.candidate_offset, self.state.len())
+    }
+    fn error_slice(&self) -> &[f64] {
+        self.workspace_slice(self.error_offset, self.state.len())
+    }
+    fn second_error_slice(&self) -> Option<&[f64]> {
+        let len = self.state.len();
+        self.second_error_offset
+            .map(|offset| self.workspace_slice(offset, len))
+    }
+    fn stages_slice(&self) -> &[f64] {
+        let n = self.state.len();
+        let stage_len = n * self.tableau.stages();
+        self.workspace_slice(self.stages_offset, stage_len)
+    }
+    fn derivative_slice(&self) -> &[f64] {
+        self.workspace_slice(self.derivative_offset, self.state.len())
+    }
+    fn derivative_slice_mut(&mut self) -> &mut [f64] {
+        self.workspace_slice_mut(self.derivative_offset, self.state.len())
+    }
     /// Construct once; all initial state components and time must be finite.
     pub fn new(
         tableau: &'a RungeKuttaTableau,
@@ -96,16 +127,42 @@ impl<'a> ExplicitRungeKuttaStepper<'a> {
         let stage_len = n
             .checked_mul(tableau.stages())
             .ok_or(StepFailure::Dimension)?;
+        let second_error_len = usize::from(tableau.second_error().is_some()) * n;
+        let candidate_len = n;
+        let error_len = n;
+        let temporary_len = n;
+        let derivative_len = n;
+        let workspace_len = candidate_len
+            + error_len
+            + second_error_len
+            + temporary_len
+            + stage_len
+            + derivative_len;
+        let mut workspace = vec![0.; workspace_len];
+        let candidate_offset = 0;
+        let error_offset = candidate_len;
+        let second_error_offset = if tableau.second_error().is_some() {
+            Some(error_offset + error_len)
+        } else {
+            None
+        };
+        let temporary_offset = second_error_offset
+            .map_or(error_offset + error_len, |offset| offset + second_error_len);
+        let stages_offset = temporary_offset + temporary_len;
+        let derivative_offset = stages_offset + stage_len;
+        debug_assert_eq!(derivative_offset + derivative_len, workspace_len);
+        workspace.fill(0.);
         Ok(Self {
             tableau,
             time,
             state,
-            candidate: vec![0.; n],
-            error: vec![0.; n],
-            second_error: vec![0.; n],
-            temporary: vec![0.; n],
-            stages: vec![0.; stage_len],
-            derivative: vec![0.; n],
+            workspace,
+            candidate_offset,
+            error_offset,
+            second_error_offset,
+            temporary_offset,
+            stages_offset,
+            derivative_offset,
             derivative_valid: false,
             pending: None,
             stats: StepStatistics::default(),
@@ -137,7 +194,7 @@ impl<'a> ExplicitRungeKuttaStepper<'a> {
     }
     /// Derivative at the accepted state, only when a valid cache exists.
     pub fn current_derivative(&self) -> Option<&[f64]> {
-        self.derivative_valid.then_some(&self.derivative)
+        self.derivative_valid.then_some(self.derivative_slice())
     }
     /// Inject the complete RHS at the accepted state (including control terms).
     pub fn inject_derivative(&mut self, derivative: &[f64]) -> Result<(), StepFailure> {
@@ -148,7 +205,7 @@ impl<'a> ExplicitRungeKuttaStepper<'a> {
             return Err(StepFailure::Dimension);
         }
         finite(derivative)?;
-        self.derivative.copy_from_slice(derivative);
+        self.derivative_slice_mut().copy_from_slice(derivative);
         self.derivative_valid = true;
         Ok(())
     }
@@ -189,18 +246,37 @@ impl<'a> ExplicitRungeKuttaStepper<'a> {
         let end = checked_time(self.time, step)?;
         // Advance state over the same representable interval as the public clock.
         let step = end - self.time;
-        self.stats.attempts += 1;
-        self.candidate.copy_from_slice(&self.state);
-        self.error.fill(0.);
-        self.second_error.fill(0.);
         let n = self.state.len();
+        self.stats.attempts += 1;
+        for k in 0..n {
+            self.workspace[self.candidate_offset + k] = self.state[k];
+        }
+        for k in 0..n {
+            self.workspace[self.error_offset + k] = 0.0;
+        }
+        if let Some(offset) = self.second_error_offset {
+            for k in 0..n {
+                self.workspace[offset + k] = 0.0;
+            }
+        }
+        for k in 0..n {
+            self.workspace[self.temporary_offset + k] = 0.0;
+        }
+        for k in 0..(n * self.tableau.stages()) {
+            self.workspace[self.stages_offset + k] = 0.0;
+        }
         if step != 0.0 {
             for i in 0..self.tableau.stages() {
                 let start = i * n;
+                let stage_start = self.stages_offset + start;
                 if i == 0 && self.tableau.c()[0] == 0.0 && self.derivative_valid {
-                    self.stages[..n].copy_from_slice(&self.derivative);
+                    for k in 0..n {
+                        self.workspace[stage_start + k] = self.workspace[self.derivative_offset + k];
+                    }
                 } else {
-                    self.temporary.copy_from_slice(&self.state);
+                    for k in 0..n {
+                        self.workspace[self.temporary_offset + k] = self.state[k];
+                    }
                     for (j, &a) in self
                         .tableau
                         .stage_row(i)
@@ -210,23 +286,26 @@ impl<'a> ExplicitRungeKuttaStepper<'a> {
                     {
                         if a != 0.0 {
                             for k in 0..n {
-                                self.temporary[k] += step * a * self.stages[j * n + k];
+                                self.workspace[self.temporary_offset + k] +=
+                                    step * a * self.workspace[self.stages_offset + j * n + k];
                             }
                         }
                     }
-                    finite(&self.temporary)?;
+                    let temporary = &self.workspace[self.temporary_offset..self.temporary_offset + n];
+                    finite(temporary)?;
                     let stage_time = self.time + self.tableau.c()[i] * step;
                     finite(&[stage_time])?;
                     self.stats.rhs_evaluations += 1;
-                    rhs(
-                        stage_time,
-                        &self.temporary,
-                        &mut self.stages[start..start + n],
-                    )
-                    .map_err(StepError::User)?;
-                    finite(&self.stages[start..start + n])?;
+                    let (prefix, stage_tail) = self.workspace.split_at_mut(stage_start);
+                    let temporary2 = &prefix[self.temporary_offset..self.temporary_offset + n];
+                    let stage = &mut stage_tail[..n];
+                    rhs(stage_time, temporary2, stage).map_err(StepError::User)?;
+                    finite(stage)?;
                     if i == 0 && self.tableau.c()[0] == 0.0 {
-                        self.derivative.copy_from_slice(&self.stages[..n]);
+                        for k in 0..n {
+                            self.workspace[self.derivative_offset + k] =
+                                self.workspace[self.stages_offset + k];
+                        }
                         self.derivative_valid = true;
                     }
                 }
@@ -234,27 +313,35 @@ impl<'a> ExplicitRungeKuttaStepper<'a> {
                 let e = self.tableau.error().map_or(0., |w| w[i]);
                 let e2 = self.tableau.second_error().map_or(0., |w| w[i]);
                 for k in 0..n {
-                    self.candidate[k] += step * b * self.stages[start + k];
-                    self.error[k] += step * e * self.stages[start + k];
-                    self.second_error[k] += step * e2 * self.stages[start + k];
+                    self.workspace[self.candidate_offset + k] +=
+                        step * b * self.workspace[stage_start + k];
+                    self.workspace[self.error_offset + k] +=
+                        step * e * self.workspace[stage_start + k];
+                }
+                if let Some(offset) = self.second_error_offset {
+                    for k in 0..n {
+                        self.workspace[offset + k] += step * e2 * self.workspace[stage_start + k];
+                    }
                 }
             }
-            finite(&self.candidate)?;
-            finite(&self.error)?;
-            finite(&self.second_error)?;
+            finite(self.candidate_slice())?;
+            finite(self.error_slice())?;
+            if let Some(offset) = self.second_error_offset {
+                finite(&self.workspace[offset..offset + n])?;
+            }
         }
         self.pending = Some(step);
         Ok(StepView {
             previous_state: &self.state,
             start_time: self.time,
             end_time: end,
-            candidate: &self.candidate,
-            component_error: self.tableau.error().map(|_| self.error.as_slice()),
+            candidate: self.candidate_slice(),
+            component_error: self.tableau.error().map(|_| self.error_slice()),
             second_error: self
                 .tableau
                 .second_error()
-                .map(|_| self.second_error.as_slice()),
-            stage_derivatives: if step == 0.0 { &[] } else { &self.stages },
+                .map(|_| self.second_error_slice().expect("allocated when present")),
+            stage_derivatives: if step == 0.0 { &[] } else { self.stages_slice() },
             statistics: self.stats,
             dimension: n,
         })
@@ -262,16 +349,20 @@ impl<'a> ExplicitRungeKuttaStepper<'a> {
     /// Commit the pending candidate and advance the accepted time.
     pub fn accept(&mut self) -> Result<(), StepFailure> {
         let step = self.pending.take().ok_or(StepFailure::NoCandidate)?;
-        self.state.copy_from_slice(&self.candidate);
+        let n = self.state.len();
+        for k in 0..n {
+            self.state[k] = self.workspace[self.candidate_offset + k];
+        }
         self.time += step;
         self.stats.accepted_steps += 1;
         if step != 0.0 {
             self.derivative_valid = self.tableau.fsal();
             if self.derivative_valid {
-                let n = self.state.len();
                 let start = (self.tableau.stages() - 1) * n;
-                self.derivative
-                    .copy_from_slice(&self.stages[start..start + n]);
+                for k in 0..n {
+                    self.workspace[self.derivative_offset + k] =
+                        self.workspace[self.stages_offset + start + k];
+                }
             }
         }
         Ok(())
@@ -306,12 +397,16 @@ impl ExplicitRungeKuttaStepper<'_> {
         // Match the existing resource RK kernel's maximum-of-norms policy.
         // Hosts needing a compound estimator drive the raw StepView directly.
         let estimate = (|| {
-            let primary = norm(&self.state, &self.candidate, &self.error)?;
+            let primary = norm(&self.state, self.candidate_slice(), self.error_slice())?;
             if primary.is_nan() || primary < 0.0 {
                 return Ok(primary);
             }
             if self.tableau.second_error().is_some() {
-                let secondary = norm(&self.state, &self.candidate, &self.second_error)?;
+                let secondary = norm(
+                    &self.state,
+                    self.candidate_slice(),
+                    self.second_error_slice().expect("allocated when present"),
+                )?;
                 if secondary.is_nan() || secondary < 0.0 {
                     return Ok(secondary);
                 }
