@@ -36,12 +36,12 @@ Baseline: crate 1.0.0, commit 31decb9c. The complete acceptance criteria live in
 ## v1.4.0 — Gauss-Jackson and downstream integration
 
 - [x] [T15: Gauss-Jackson eighth-order integrator](https://github.com/Wouittone/differential-equations-rs/issues/30)
-- [ ] [T16: Complete both downstream integrations](https://github.com/Wouittone/differential-equations-rs/issues/31)
+- [x] [T16: Complete both downstream integrations](https://github.com/Wouittone/differential-equations-rs/issues/31)
 
 ## v1.4.1 — Measured optimization and final acceptance
 
-- [ ] [T14: Reproducible performance and accuracy gates](https://github.com/Wouittone/differential-equations-rs/issues/29)
-- [ ] [T17: Compatibility design and release gates](https://github.com/Wouittone/differential-equations-rs/issues/32)
+- [x] [T14: Reproducible performance and accuracy gates](https://github.com/Wouittone/differential-equations-rs/issues/29)
+- [x] [T17: Compatibility design and release gates](https://github.com/Wouittone/differential-equations-rs/issues/32)
 - [ ] [H06: Benchmark force/reference consistency](https://github.com/Wouittone/differential-equations-rs/issues/15)
 
 ## Scope clarification
