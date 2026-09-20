@@ -86,6 +86,8 @@
 //! The public Cargo feature surface is intentionally small:
 //!
 //! - `parallel` is enabled by default and adds Rayon-backed independent solves.
+//! - `serde` adds validated, versioned serialization of solutions and portable
+//!   dense segments. It is independent of parallel execution.
 //! - `allocation-metrics` enables repository benchmark instrumentation and is
 //!   not needed by ordinary users.
 //!

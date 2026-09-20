@@ -69,6 +69,21 @@ to `()` when the equation does not need them.
 
 ## Pick a solver
 
+The development branch also provides reusable `stepping` workspaces for external
+controllers, componentwise `tolerances`, and concrete `ScopedOdeProblem` and
+`ScopedSecondOrderProblem` hooks that can borrow application context. The
+[runnable integration example](examples/reusable_integration.rs) demonstrates
+typed application errors, fixed output buffers, sensitivities, and continuation.
+See the [stepping contract](docs/STEPPING_CONTRACT.md) for cache ownership and
+allocation guarantees, and [state layouts](docs/STATE_LAYOUT.md) for borrowed
+arrays and row/column-major conversion. The optional `serde` feature preserves
+versioned solution data and reports interpolation quality explicitly.
+
+`GaussJackson8` supplies a separate persistent fixed-step second-order interface;
+its [method guide](docs/GAUSS_JACKSON.md) describes startup, corrector convergence,
+restart rules, and the lower-order dense interpolant. These development additions
+have not been published to crates.io.
+
 | Your problem | Start with | Import |
 | --- | --- | --- |
 | Non-stiff first-order ODE | `Tsit5` | `solvers::explicit::Tsit5` |
