@@ -34,6 +34,15 @@ pub struct ControllerConfig {
     pub minimum_step_policy: MinimumStepPolicy,
     /// Seed errors used before sufficient accepted history exists.
     pub initial_error_history: [f64; 2],
+    /// Smallest accepted error stored in history (for example `1e-4`).
+    pub error_history_floor: f64,
+    /// Accept equality at error one; false reproduces strict host policies.
+    pub accept_equal: bool,
+    /// Optional proportional rejection exponent, independent of accepted history.
+    /// `None` uses the same PID formula as accepted proposals.
+    pub rejection_exponent: Option<f64>,
+    /// Additional factor cap after the first consecutive rejection.
+    pub repeated_rejection_maximum: Option<f64>,
 }
 impl ControllerConfig {
     /// Conventional proportional controller; existing whole-solve defaults are unchanged.
@@ -52,6 +61,10 @@ impl ControllerConfig {
             maximum_step: f64::MAX,
             minimum_step_policy: MinimumStepPolicy::Error,
             initial_error_history: [1., 1.],
+            error_history_floor: f64::MIN_POSITIVE,
+            accept_equal: true,
+            rejection_exponent: None,
+            repeated_rejection_maximum: None,
         })
     }
     /// PI coefficients with the supplied already-scaled error exponents.
@@ -82,11 +95,13 @@ impl ControllerConfig {
             self.maximum_step,
             self.initial_error_history[0],
             self.initial_error_history[1],
+            self.error_history_floor,
         ];
         if values.iter().any(|x| !x.is_finite())
             || self.beta[0] <= 0.
             || self.safety <= 0.
             || self.minimum_factor <= 0.
+            || self.minimum_factor > 1.
             || self.maximum_factor < self.minimum_factor
             || self.rejection_maximum <= 0.
             || self.rejection_maximum > 1.
@@ -95,6 +110,9 @@ impl ControllerConfig {
             || self.maximum_step <= 0.
             || self.maximum_step < self.minimum_step
             || self.initial_error_history.iter().any(|x| *x <= 0.)
+            || self.error_history_floor <= 0.
+            || self.rejection_exponent.is_some_and(|x| !x.is_finite() || x <= 0.)
+            || self.repeated_rejection_maximum.is_some_and(|x| !x.is_finite() || x <= 0. || x > 1.)
         {
             return Err(ControllerError::Configuration);
         }
@@ -124,6 +142,8 @@ pub struct ControllerState {
     pub rejected_since_acceptance: bool,
     /// Signed next proposal, independent of any clipped last interval.
     pub next_step: f64,
+    /// Rejections since the last acceptance, retained for exact policy replay.
+    pub consecutive_rejections: usize,
 }
 /// Explicit acceptance decision and following signed proposal.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -158,6 +178,7 @@ impl AdaptiveController {
                 accepted_errors: config.initial_error_history,
                 rejected_since_acceptance: false,
                 next_step,
+                consecutive_rejections: 0,
             },
         })
     }
@@ -179,6 +200,7 @@ impl AdaptiveController {
                 .any(|e| !e.is_finite() || *e <= 0.)
             || state.next_step.abs() < self.config.minimum_step
             || state.next_step.abs() > self.config.maximum_step
+            || state.rejected_since_acceptance != (state.consecutive_rejections != 0)
         {
             return Err(ControllerError::Configuration);
         }
@@ -199,10 +221,11 @@ impl AdaptiveController {
         if !step.is_finite() || step == 0. || error.is_nan() || error < 0. {
             return Err(ControllerError::Configuration);
         }
-        let forced = error > 1.
+        let within_tolerance = if self.config.accept_equal { error <= 1. } else { error < 1. };
+        let forced = !within_tolerance
             && step.abs() <= self.config.minimum_step
             && self.config.minimum_step_policy == MinimumStepPolicy::ForceAccept;
-        let accepted = error <= 1. || forced;
+        let accepted = within_tolerance || forced;
         if !accepted && step.abs() <= self.config.minimum_step {
             return Err(ControllerError::MinimumStep { error });
         }
@@ -210,15 +233,27 @@ impl AdaptiveController {
             self.config.maximum_factor
         } else if error.is_infinite() {
             self.config.minimum_factor
+        } else if !accepted && self.config.rejection_exponent.is_some() {
+            self.config.safety * error.powf(-self.config.rejection_exponent.unwrap())
         } else {
-            self.config.safety
+            let raw = self.config.safety
                 * error.powf(-self.config.beta[0])
                 * self.state.accepted_errors[0].powf(self.config.beta[1])
-                * self.state.accepted_errors[1].powf(-self.config.beta[2])
+                * self.state.accepted_errors[1].powf(-self.config.beta[2]);
+            if raw.is_nan() {
+                // Avoid indeterminate infinity-times-zero for valid extreme
+                // exponents/history, retaining ordinary arithmetic otherwise.
+                (self.config.safety.ln() - self.config.beta[0] * error.ln()
+                    + self.config.beta[1] * self.state.accepted_errors[0].ln()
+                    - self.config.beta[2] * self.state.accepted_errors[1].ln()).exp()
+            } else { raw }
         }
         .clamp(self.config.minimum_factor, self.config.maximum_factor);
         if !accepted {
             factor = factor.min(self.config.rejection_maximum);
+            if self.state.consecutive_rejections > 0 {
+                if let Some(cap) = self.config.repeated_rejection_maximum { factor = factor.min(cap); }
+            }
         } else if self.state.rejected_since_acceptance {
             factor = factor.min(self.config.rejected_acceptance_maximum);
         }
@@ -232,12 +267,14 @@ impl AdaptiveController {
         }
         if accepted {
             self.state.accepted_errors = [
-                error.max(f64::MIN_POSITIVE).min(f64::MAX),
+                error.max(self.config.error_history_floor).min(f64::MAX),
                 self.state.accepted_errors[0],
             ];
             self.state.rejected_since_acceptance = false;
+            self.state.consecutive_rejections = 0;
         } else {
             self.state.rejected_since_acceptance = true;
+            self.state.consecutive_rejections = self.state.consecutive_rejections.saturating_add(1);
         }
         self.state.next_step = next_step;
         Ok(StepDecision {
