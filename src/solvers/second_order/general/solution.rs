@@ -19,6 +19,7 @@ pub struct SecondOrderSolution {
     pub(super) state_shape: IxDyn,
     pub(super) stats: SolverStats,
     pub(super) dense_segments: Vec<PartitionedDenseSegment>,
+    pub(super) portable_segments: Vec<(crate::PortableDenseSegment, crate::PortableDenseSegment)>,
 }
 
 impl SecondOrderSolution {
@@ -54,6 +55,7 @@ impl SecondOrderSolution {
             state_shape: IxDyn(state_shape),
             stats,
             dense_segments: Vec::new(),
+            portable_segments: Vec::new(),
         })
     }
 
@@ -172,6 +174,11 @@ impl SecondOrderSolution {
                 "saved second-order state",
             );
         }
+        if let Some(pair) = self.portable_segment_at(time) {
+            pair.0.interpolate_into(time, velocity)?;
+            pair.1.interpolate_into(time, position)?;
+            return Ok(());
+        }
         if let Some(segment) = self.dense_segment_at(time) {
             segment.interpolate(time, velocity, position).ok_or(
                 InterpolationError::InvalidSegmentData {
@@ -225,7 +232,6 @@ pub(super) struct PartitionedDenseSegment {
     end_velocity: Vec<f64>,
     start_position: Vec<f64>,
     end_position: Vec<f64>,
-    portable: Option<Box<(crate::PortableDenseSegment, crate::PortableDenseSegment)>>,
 }
 
 impl PartitionedDenseSegment {
@@ -244,7 +250,6 @@ impl PartitionedDenseSegment {
             end_velocity: end_velocity.to_vec(),
             start_position: start_position.to_vec(),
             end_position: end_position.to_vec(),
-            portable: None,
         }
     }
 
@@ -263,11 +268,6 @@ impl PartitionedDenseSegment {
             || position.len() != self.start_position.len()
         {
             return None;
-        }
-        if let Some(pair) = &self.portable {
-            pair.0.interpolate_into(time, velocity).ok()?;
-            pair.1.interpolate_into(time, position).ok()?;
-            return Some(());
         }
         if time == self.start_time {
             velocity.copy_from_slice(&self.start_velocity);
@@ -345,6 +345,10 @@ impl SecondOrderSolution {
             velocity.segments.push(v);
             position.segments.push(q);
         }
+        for (v, q) in &self.portable_segments {
+            velocity.segments.push(v.clone());
+            position.segments.push(q.clone());
+        }
         Ok(SecondOrderSolutionData {
             version: 1,
             velocity,
@@ -387,23 +391,7 @@ impl SecondOrderSolution {
                     context: "second-order portable segment boundaries differ",
                 });
             }
-            let (start, end) = v.time_bounds();
-            let n = v.dimension();
-            let (mut v0, mut v1, mut q0, mut q1) =
-                (vec![0.0; n], vec![0.0; n], vec![0.0; n], vec![0.0; n]);
-            v.interpolate_into(start, &mut v0)?;
-            v.interpolate_into(end, &mut v1)?;
-            q.interpolate_into(start, &mut q0)?;
-            q.interpolate_into(end, &mut q1)?;
-            solution.dense_segments.push(PartitionedDenseSegment {
-                start_time: start,
-                end_time: end,
-                start_velocity: v0,
-                end_velocity: v1,
-                start_position: q0,
-                end_position: q1,
-                portable: Some(Box::new((v, q))),
-            });
+            solution.portable_segments.push((v, q));
         }
         Ok(solution)
     }
@@ -422,13 +410,11 @@ impl SecondOrderSolution {
         if after > 0 && self.times[after - 1] == time {
             return Ok((Q::ExactSavedState, Q::ExactSavedState));
         }
-        if let Some(segment) = self.dense_segment_at(time) {
-            return Ok(segment
-                .portable
-                .as_ref()
-                .map_or((Q::Linear, Q::MethodSpecific), |s| {
-                    (s.0.quality(), s.1.quality())
-                }));
+        if let Some(pair) = self.portable_segment_at(time) {
+            return Ok((pair.0.quality(), pair.1.quality()));
+        }
+        if self.dense_segment_at(time).is_some() {
+            return Ok((Q::Linear, Q::MethodSpecific));
         }
         if after > 0 && after < self.times.len() {
             Ok((Q::Linear, Q::Linear))
@@ -453,6 +439,20 @@ impl SecondOrderSolution {
         }
         self.try_interpolate_into(time, velocity, position)
     }
+    fn portable_segment_at(
+        &self,
+        time: f64,
+    ) -> Option<&(crate::PortableDenseSegment, crate::PortableDenseSegment)> {
+        let forward = self.portable_segments.first()?.0.time_bounds().0
+            <= self.portable_segments.last()?.0.time_bounds().1;
+        let index = self.portable_segments.partition_point(|pair| {
+            let end = pair.0.time_bounds().1;
+            if forward { end < time } else { end > time }
+        });
+        self.portable_segments
+            .get(index)
+            .filter(|pair| pair.0.contains(time))
+    }
     fn saved_partition(&self, time: f64) -> usize {
         let forward = self.times.first() <= self.times.last();
         self.times
@@ -476,9 +476,6 @@ impl PartitionedDenseSegment {
         &self,
     ) -> Result<(crate::PortableDenseSegment, crate::PortableDenseSegment), InterpolationError>
     {
-        if let Some(pair) = &self.portable {
-            return Ok((pair.0.clone(), pair.1.clone()));
-        }
         let n = self.start_position.len();
         let h = self.end_time - self.start_time;
         let mut vc = vec![0.0; 2 * n];
@@ -532,5 +529,19 @@ impl<'de> serde::Deserialize<'de> for SecondOrderSolution {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         Self::from_data(SecondOrderSolutionData::deserialize(deserializer)?)
             .map_err(serde::de::Error::custom)
+    }
+}
+
+#[cfg(test)]
+mod storage_tests {
+    use super::PartitionedDenseSegment;
+    #[test]
+    fn native_rkn_segment_keeps_its_original_storage_size() {
+        // Original layout: two times and four owned endpoint vectors. Portable
+        // imports must not add a pointer/tag to every retained native segment.
+        assert_eq!(
+            std::mem::size_of::<PartitionedDenseSegment>(),
+            2 * std::mem::size_of::<f64>() + 4 * std::mem::size_of::<Vec<f64>>()
+        );
     }
 }

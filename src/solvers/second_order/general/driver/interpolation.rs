@@ -241,6 +241,7 @@ impl<'a> PartitionedRecorder<'a> {
             state_shape,
             stats,
             dense_segments: self.dense_segments,
+            portable_segments: Vec::new(),
         }
     }
 }

@@ -10,6 +10,7 @@ fn saved_solution(velocities: Vec<f64>, positions: Vec<f64>) -> SecondOrderSolut
         state_shape: IxDyn(&[1]),
         stats: SolverStats::default(),
         dense_segments: Vec::new(),
+        portable_segments: Vec::new(),
     }
 }
 
