@@ -125,3 +125,23 @@ proposal by floating-point rounding; external controllers must assess
 mixed views expose them in their physical partition. The built-in adaptive and
 root drivers already use the effective interval. Initial-step estimation uses
 scaled RMS norms with a log-domain fallback to avoid spurious overflow.
+
+## Multiple and specialized error estimators
+
+The reusable RK workspace exposes primary and optional secondary component
+estimates independently. The convenience `integrate_rk` driver applies the norm
+once to each supplied vector and uses their maximum, matching the crate's native
+resource RK kernel for BS5 and DP8. Invalid or fallible secondary norms are not
+hidden by a finite primary estimate. Event conditions still execute once per
+candidate. This native policy is not a claim of equivalence to an upstream
+DOP853 E5/E3 compound estimator; hosts requiring another combination drive the
+low-level view directly. `error_estimator_kind` distinguishes embedded differences
+from direct residuals. Frequency-fitted RK weights remain explicitly unsupported
+by the raw reusable kernel rather than being replaced with unfitted weights.
+
+Focused native-parity tests cover Tsit5, Dp5, Bs5, DP8, Vern9, Feagin10, Rk4,
+FineRkn4/5, Nystrom4, Dprkn6 and position-only Erkn5 using nonsymmetric nonlinear
+coupled systems. They compare captured native stages, both component-estimator
+formulas, fixed-step endpoints, backward propagation and rejection/retry.
+Native/reusable floating-point accumulation order can differ; these are numerical
+parity checks, not a promise of bitwise identity across APIs.

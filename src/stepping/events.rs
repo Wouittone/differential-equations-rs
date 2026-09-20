@@ -176,10 +176,14 @@ where
         let start = stepper.time();
         let h = endpoint_step(start, target, controller.next_step()).map_err(failure)?;
         let mut next_value = 0.0;
+        let mut condition_evaluated = false;
         remaining_attempts -= 1;
         let error = stepper.attempt_with_norm(target, h, rhs, &mut |old, new, e| {
             let error = norm(old, new, e)?;
-            next_value = condition(start + h, new)?;
+            if !condition_evaluated {
+                next_value = condition(start + h, new)?;
+                condition_evaluated = true;
+            }
             Ok(error)
         })?;
         if !next_value.is_finite() {
@@ -216,6 +220,7 @@ where
                 if remaining_attempts == 0 {
                     return Err(IntegrationError::AttemptLimit.into());
                 }
+                let mut condition_evaluated = false;
                 remaining_attempts -= 1;
                 let error = stepper.attempt_with_norm(
                     start + middle,
@@ -223,7 +228,10 @@ where
                     rhs,
                     &mut |old, new, e| {
                         let error = norm(old, new, e)?;
-                        next_value = condition(start + middle, new)?;
+                        if !condition_evaluated {
+                            next_value = condition(start + middle, new)?;
+                            condition_evaluated = true;
+                        }
                         Ok(error)
                     },
                 )?;

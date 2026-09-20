@@ -13,7 +13,9 @@ pub struct StepView<'a> {
     pub end_time: f64,
     /// Candidate state, not yet committed.
     pub candidate: &'a [f64],
-    /// Signed component embedded errors, if the method supplies them.
+    /// Signed component local-error estimate, if the method supplies one.
+    /// The tableau's error_estimator_kind distinguishes embedded differences
+    /// from direct residual formulas.
     pub component_error: Option<&'a [f64]>,
     /// Optional secondary estimator (for methods with two error formulas).
     pub second_error: Option<&'a [f64]>,
@@ -301,7 +303,24 @@ impl ExplicitRungeKuttaStepper<'_> {
             return Err(super::IntegrationError::MissingErrorEstimate);
         }
         self.attempt_to(endpoint, proposal, rhs)?;
-        match norm(&self.state, &self.candidate, &self.error) {
+        // Match the existing resource RK kernel's maximum-of-norms policy.
+        // Hosts needing a compound estimator drive the raw StepView directly.
+        let estimate = (|| {
+            let primary = norm(&self.state, &self.candidate, &self.error)?;
+            if primary.is_nan() || primary < 0.0 {
+                return Ok(primary);
+            }
+            if self.tableau.second_error().is_some() {
+                let secondary = norm(&self.state, &self.candidate, &self.second_error)?;
+                if secondary.is_nan() || secondary < 0.0 {
+                    return Ok(secondary);
+                }
+                Ok(primary.max(secondary))
+            } else {
+                Ok(primary)
+            }
+        })();
+        match estimate {
             Ok(e) => Ok(e),
             Err(e) => {
                 self.pending = None;

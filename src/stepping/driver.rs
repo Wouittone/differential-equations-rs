@@ -53,6 +53,11 @@ pub struct IntegrationOutcome {
 }
 /// Integrate using reusable state, caller-controlled norm and an output observer.
 ///
+/// The norm is applied to the primary error vector and, if present, once to
+/// the secondary vector. Their maximum reproduces this crate's native generic
+/// RK estimator convention (including BS5/DP8); it is not a claim of upstream
+/// DOP853 E5/E3 compound-estimator equivalence. Hosts needing a different
+/// compound formula must drive the low-level step view containing both vectors.
 /// No trajectory is retained. `requested_times` are exact step boundaries and
 /// are never suppressed; each accepted step is observed once, with a flag for
 /// requested outputs. Caller-owned output buffers can be filled by the observer;
