@@ -148,6 +148,8 @@ pub struct GaussJackson8 {
 }
 impl GaussJackson8 {
     /// Allocates workspace and validates a signed nonzero fixed step.
+    /// It is quantized to the representable time increment at the initial epoch.
+    /// If the representable grid spacing changes later, history safely restarts.
     pub fn new(
         time: f64,
         position: &[f64],
@@ -157,6 +159,7 @@ impl GaussJackson8 {
     ) -> Result<Self, GaussJacksonError<std::convert::Infallible>> {
         validate_input(time, position, velocity, step, config)?;
         let n = position.len();
+        let step = (time + step) - time;
         Ok(Self {
             time,
             step,
@@ -201,7 +204,8 @@ impl GaussJackson8 {
     pub fn velocity(&self) -> &[f64] {
         &self.v
     }
-    /// Signed fixed step used by the history.
+    /// Signed representable fixed step used by the history.
+    /// The requested step is rounded to `(time + requested_step) - time`.
     pub fn step_size(&self) -> f64 {
         self.step
     }
@@ -227,7 +231,7 @@ impl GaussJackson8 {
             return Err(GaussJacksonError::InvalidInput("restart dimension differs"));
         }
         self.time = time;
-        self.step = step;
+        self.step = (time + step) - time;
         self.q.copy_from_slice(position);
         self.v.copy_from_slice(velocity);
         self.history_len = 0;
@@ -272,9 +276,19 @@ impl GaussJackson8 {
                 "endpoint opposes step direction",
             ));
         }
-        let on_grid = end == self.time + self.step;
-        let partial = remaining.abs() < self.step.abs() && !on_grid;
-        let h = if partial { remaining } else { self.step };
+        let grid_end = self.time + self.step;
+        let representable_step = grid_end - self.time;
+        // Ordinary addition jitter below 1024 ulps of h is roundoff, not a
+        // user step-size change. Every numerical update still uses actual dt.
+        let grid_changed =
+            (representable_step - self.step).abs() > 1024. * f64::EPSILON * self.step.abs();
+        let on_grid = end == grid_end;
+        let partial = remaining.abs() < representable_step.abs() && !on_grid;
+        let h = if partial {
+            remaining
+        } else {
+            representable_step
+        };
         let new_time = if partial || on_grid {
             end
         } else {
@@ -299,7 +313,7 @@ impl GaussJackson8 {
             self.initial_a
                 .copy_from_slice(&self.history[(self.history_len - 1) * n..self.history_len * n]);
         }
-        let startup = partial || self.history_len < 9;
+        let startup = partial || grid_changed || self.history_len < 9;
         if startup {
             self.bootstrap(h, new_time, acceleration)?;
         } else {
@@ -319,6 +333,10 @@ impl GaussJackson8 {
         if partial {
             self.history_len = 0;
         } else if startup {
+            if grid_changed {
+                self.history_len = 0;
+                self.step = h;
+            }
             if self.history_len == 0 {
                 self.history[..n].copy_from_slice(&self.initial_a);
                 self.history_len = 1;
@@ -675,7 +693,13 @@ fn validate_input<E>(
             "nonzero equal state dimensions required",
         ));
     }
-    if !t.is_finite() || !h.is_finite() || h == 0. || !q.iter().chain(v).all(|x| x.is_finite()) {
+    if !t.is_finite()
+        || !h.is_finite()
+        || h == 0.
+        || !(t + h).is_finite()
+        || t + h == t
+        || !q.iter().chain(v).all(|x| x.is_finite())
+    {
         return Err(GaussJacksonError::InvalidInput(
             "finite state/time and nonzero finite step required",
         ));

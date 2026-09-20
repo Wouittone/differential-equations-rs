@@ -85,3 +85,15 @@ Dedicated allocator instrumentation verifies zero allocations/reallocations for
 startup, mature accepted steps, failed-force attempts, interpolation, coefficient
 extraction, restart, and a final partial interval. Construction and portable
 export intentionally allocate and are outside that stepping contract.
+
+Absolute epochs use a representable grid: construction/restart quantize the
+requested step to `(epoch + h) - epoch`, and each state update uses exactly the
+reported accepted interval. Significant later changes of representable spacing
+restart history via the accurate startup path. Addition jitter within 1024
+machine epsilons relative to the grid step is retained as floating roundoff,
+while still using the actual interval in state updates. Restarting at every
+one-ulp addition difference would repeatedly discard mature history even near
+ordinary times and increased eccentric-orbit error in the focused audit.
+Forward/backward constant-velocity tests at epoch 1e12 and across the 2^40
+spacing boundary compare position directly with accepted-time elapsed. Steps
+that cannot advance representable time fail at construction/restart.

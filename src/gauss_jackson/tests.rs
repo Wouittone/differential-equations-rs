@@ -329,3 +329,32 @@ fn eccentric_two_body_matches_kepler_reference() {
     }
     assert!(errors[0] / errors[1] > 150., "eccentric errors={errors:?}");
 }
+#[test]
+fn large_epoch_steps_match_accepted_time_and_restart_across_binades() {
+    for h in [0.1, -0.1] {
+        for start in [1e12, 2f64.powi(40) - h * 12.] {
+            let mut solver =
+                GaussJackson8::new(start, &[0.], &[1.], h, GaussJacksonConfig::default()).unwrap();
+            assert_eq!(solver.step_size(), (start + h) - start);
+            let mut force = |_: f64, _: &[f64], _: &[f64], a: &mut [f64]| {
+                a[0] = 0.;
+                Ok::<_, Infallible>(())
+            };
+            for _ in 0..40 {
+                solver.try_step(&mut force).unwrap();
+                assert!(
+                    (solver.position()[0] - (solver.time() - start)).abs() < 2e-13,
+                    "time={}, position={}",
+                    solver.time(),
+                    solver.position()[0]
+                );
+                assert!((solver.velocity()[0] - 1.).abs() < 2e-14);
+            }
+            let end = solver.time() + 0.037 * h.signum();
+            solver.try_step_to(end, &mut force).unwrap();
+            assert_eq!(solver.time(), end);
+            assert!((solver.position()[0] - (end - start)).abs() < 2e-13);
+        }
+    }
+    assert!(GaussJackson8::new(1e12, &[0.], &[1.], 1e-10, GaussJacksonConfig::default()).is_err());
+}
