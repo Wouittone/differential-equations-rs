@@ -8,34 +8,34 @@ Baseline: crate 1.0.0, commit 31decb9c. The complete acceptance criteria live in
 
 ## v1.1.0 — Reusable stepping foundations
 
-- [ ] [T01: Public reusable stepping contract](https://github.com/Wouittone/differential-equations-rs/issues/16)
-- [ ] [T02: Error norms and tolerance policies](https://github.com/Wouittone/differential-equations-rs/issues/17)
-- [ ] [T03: Public controllers and minimum-step policy](https://github.com/Wouittone/differential-equations-rs/issues/18)
-- [ ] [T04: Allocation-free reuse and output control](https://github.com/Wouittone/differential-equations-rs/issues/19)
-- [ ] [T05: Mutable and fallible closure ergonomics](https://github.com/Wouittone/differential-equations-rs/issues/20)
-- [ ] [T06: Preserve application errors without side channels](https://github.com/Wouittone/differential-equations-rs/issues/21)
-- [ ] [T07: State storage and layout adapters](https://github.com/Wouittone/differential-equations-rs/issues/22)
-- [ ] [T08: Typed tableaus and useful resource diagnostics](https://github.com/Wouittone/differential-equations-rs/issues/23)
+- [x] [T01: Public reusable stepping contract](https://github.com/Wouittone/differential-equations-rs/issues/16)
+- [x] [T02: Error norms and tolerance policies](https://github.com/Wouittone/differential-equations-rs/issues/17)
+- [x] [T03: Public controllers and minimum-step policy](https://github.com/Wouittone/differential-equations-rs/issues/18)
+- [x] [T04: Allocation-free reuse and output control](https://github.com/Wouittone/differential-equations-rs/issues/19)
+- [x] [T05: Mutable and fallible closure ergonomics](https://github.com/Wouittone/differential-equations-rs/issues/20)
+- [x] [T06: Preserve application errors without side channels](https://github.com/Wouittone/differential-equations-rs/issues/21)
+- [x] [T07: State storage and layout adapters](https://github.com/Wouittone/differential-equations-rs/issues/22)
+- [x] [T08: Typed tableaus and useful resource diagnostics](https://github.com/Wouittone/differential-equations-rs/issues/23)
 
 ## v1.2.0 — Interoperability and continuation
 
-- [ ] [T09: Portable dense output and explicit interpolation quality](https://github.com/Wouittone/differential-equations-rs/issues/24)
-- [ ] [T10: Borrowed callbacks and thread-safe problems](https://github.com/Wouittone/differential-equations-rs/issues/25)
-- [ ] [T11: FSAL and resumable continuation](https://github.com/Wouittone/differential-equations-rs/issues/26)
+- [x] [T09: Portable dense output and explicit interpolation quality](https://github.com/Wouittone/differential-equations-rs/issues/24)
+- [x] [T10: Borrowed callbacks and thread-safe problems](https://github.com/Wouittone/differential-equations-rs/issues/25)
+- [x] [T11: FSAL and resumable continuation](https://github.com/Wouittone/differential-equations-rs/issues/26)
 - [ ] [H01: Brahe fixed-step configuration](https://github.com/Wouittone/differential-equations-rs/issues/10)
 - [ ] [H02: Brahe controlled FSAL](https://github.com/Wouittone/differential-equations-rs/issues/11)
 - [ ] [H05: Brahe offline SPICE fixture restoration](https://github.com/Wouittone/differential-equations-rs/issues/14)
 
 ## v1.3.0 — Rosenbrock accuracy and mixed variational systems
 
-- [ ] [T12: Rosenbrock observability and orbital accuracy investigation](https://github.com/Wouittone/differential-equations-rs/issues/27)
-- [ ] [T13: RKN mixed variational systems](https://github.com/Wouittone/differential-equations-rs/issues/28)
+- [x] [T12: Rosenbrock observability and orbital accuracy investigation](https://github.com/Wouittone/differential-equations-rs/issues/27)
+- [x] [T13: RKN mixed variational systems](https://github.com/Wouittone/differential-equations-rs/issues/28)
 - [ ] [H03: Brahe velocity-dependent RKN stages](https://github.com/Wouittone/differential-equations-rs/issues/12)
 - [ ] [H04: numeris/SatKit Rosenbrock time term](https://github.com/Wouittone/differential-equations-rs/issues/13)
 
 ## v1.4.0 — Gauss-Jackson and downstream integration
 
-- [ ] [T15: Gauss-Jackson eighth-order integrator](https://github.com/Wouittone/differential-equations-rs/issues/30)
+- [x] [T15: Gauss-Jackson eighth-order integrator](https://github.com/Wouittone/differential-equations-rs/issues/30)
 - [ ] [T16: Complete both downstream integrations](https://github.com/Wouittone/differential-equations-rs/issues/31)
 
 ## v1.4.1 — Measured optimization and final acceptance
