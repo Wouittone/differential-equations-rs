@@ -43,9 +43,13 @@ where
     let mut stats = SolverStats::default();
     let custom_dense_output = kernel.has_custom_dense_output();
     let custom_callback_handling = kernel.has_custom_callback_handling();
+    let dense_sampling_requested = options
+        .save_at
+        .iter()
+        .any(|&target| target != start && target != end);
     let default_dense_enabled = !custom_dense_output
         && (problem.has_continuous_callbacks()
-            || !options.save_at.is_empty()
+            || dense_sampling_requested
             || options.retain_dense_output);
     let default_callback_dense_enabled = !custom_dense_output && problem.has_continuous_callbacks();
     let mut default_dense = DefaultDenseState::new(dimension, default_dense_enabled);
@@ -248,7 +252,7 @@ where
             stats.accepted_steps += 1;
             kernel.note_accepted_step(&mut stats);
 
-            let dense_recorded = if !options.save_at.is_empty() || options.retain_dense_output {
+            let dense_recorded = if dense_sampling_requested || options.retain_dense_output {
                 let dense_state = if callbacks.invocations == 0 {
                     &candidate
                 } else {

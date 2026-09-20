@@ -39,6 +39,45 @@ fn rk4_dense_sampling_preserves_exact_endpoints() {
 }
 
 #[test]
+fn tsit5_endpoint_only_output_does_not_prepare_dense_stages() {
+    let problem = exponential_problem(1.0, (0.0, 1.0));
+    let base_options = SolveOptions::default()
+        .with_adaptive(false)
+        .with_initial_step(Some(1.0))
+        .with_save(SaveMode::Endpoints);
+    let plain = solve(&problem, Tsit5, &base_options).unwrap();
+    let endpoint_only = solve(&problem, Tsit5, &base_options.with_save_at([0.0, 1.0])).unwrap();
+
+    assert_eq!(plain.values(), endpoint_only.values());
+    assert_eq!(
+        plain.stats().accepted_steps,
+        endpoint_only.stats().accepted_steps
+    );
+    assert_eq!(
+        plain.stats().rejected_steps,
+        endpoint_only.stats().rejected_steps
+    );
+    assert_eq!(endpoint_only.stats().dense_output_evaluations, 0);
+}
+
+#[test]
+fn tsit5_requested_output_reports_dense_stage_evaluations() {
+    let solution = solve(
+        &exponential_problem(1.0, (0.0, 1.0)),
+        Tsit5,
+        &SolveOptions::default()
+            .with_adaptive(false)
+            .with_initial_step(Some(1.0))
+            .with_save_at([0.25, 0.75]),
+    )
+    .unwrap();
+
+    assert!(solution.stats().dense_output_evaluations > 0);
+    assert!((solution.values()[0] - 1.284_013_054_169_605_8).abs() < 2.0e-14);
+    assert!((solution.values()[1] - 2.116_634_262_977_034_3).abs() < 2.0e-14);
+}
+
+#[test]
 fn rejected_explicit_attempts_do_not_emit_dense_samples() {
     let problem = OdeProblem::new(
         |derivative: &mut [f64], state: &[f64], _: &(), _: f64| {
@@ -104,6 +143,7 @@ fn tsit5_continuous_callback_and_pre_root_save_at_share_the_full_step_extension(
     let solution = solve(&problem, Tsit5, &options).unwrap();
 
     assert_eq!(solution.stats().callback_invocations, 1);
+    assert!(solution.stats().dense_output_evaluations > 0);
     assert_eq!(&solution.times()[..2], &[0.25, 0.5]);
     assert!((solution.values()[0] - 1.284_013_054_169_605_8).abs() < 2.0e-14);
     assert!((solution.values()[1] - 1.648_457_727_049_976_3).abs() < 2.0e-14);

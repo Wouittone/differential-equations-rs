@@ -89,6 +89,8 @@ pub enum InterpolationError {
 pub struct SolverStats {
     /// Number of right-hand-side evaluations, including callback checks.
     pub rhs_evaluations: usize,
+    /// Number of accepted steps that performed dense-output work.
+    pub dense_output_evaluations: usize,
     /// Number of accepted time steps.
     pub accepted_steps: usize,
     /// Number of rejected time steps.
