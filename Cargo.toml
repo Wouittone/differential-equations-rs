@@ -82,6 +82,10 @@ name = "rkv98"
 harness = false
 
 [[bench]]
+name = "reusable_lifecycle"
+harness = false
+
+[[bench]]
 name = "comparison_matrix"
 path = "benches/comparison/rust_matrix.rs"
 harness = false

@@ -90,6 +90,29 @@ This deterministic allocation check complements the timing benchmarks:
 cargo test --locked --test rosenbrock_resource_allocations
 ```
 
+### Reusable downstream lifecycle
+
+Downstream adapters should construct the tableau, stepper, controller, and
+caller-owned state once, outside the host's repeated solve loop. Reuse the
+stepper with `reset` and the controller with `reset`, then drive each arc with
+`integrate_rk`; keep requested outputs in caller-owned storage. This separates
+solver-intrinsic stepping from setup and avoids rebuilding scratch workspaces.
+
+The reusable lifecycle timing lane reports those costs separately:
+
+```console
+cargo bench --locked --bench reusable_lifecycle
+```
+
+Its allocation regression runs the same reusable path over short and long
+arcs, after warm-up, and requires zero allocation calls and bytes in both
+steady-state measurements. A longer arc therefore cannot hide per-step
+workspace growth:
+
+```console
+cargo test --locked --test reusable_lifecycle_allocations
+```
+
 ## Matched Rust/Julia matrix
 
 The repository checkout contains the matched 31-algorithm sources in
