@@ -43,3 +43,8 @@ mod tests {
         assert!((endpoints[2] - 4.0 * endpoints[0]).abs() < 1.0e-12);
     }
 }
+#[cfg(test)]
+mod new_api {
+    use differential_equations as diffeq;
+    include!("../../new_api.rs");
+}

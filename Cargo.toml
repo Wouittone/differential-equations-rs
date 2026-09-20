@@ -61,6 +61,10 @@ stats_alloc = "0.1.10"
 serde_json = "1.0"
 
 [[bench]]
+name = "stepping_costs"
+harness = false
+
+[[bench]]
 name = "solver_performance"
 harness = false
 required-features = ["parallel"]

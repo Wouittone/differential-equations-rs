@@ -78,3 +78,7 @@ mod tests {
         assert_eq!(solve_supported_shapes(), [vec![], vec![2], vec![2, 2]]);
     }
 }
+#[cfg(test)]
+mod new_api {
+    include!("../../new_api.rs");
+}
