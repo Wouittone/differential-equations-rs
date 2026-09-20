@@ -4,6 +4,7 @@ use differential_equations::{
 };
 
 #[path = "../tableau-core/tests/fixtures/numeris_rkv98.rs"]
+#[allow(dead_code)]
 mod numeris_rkv98;
 
 fn tableau() -> differential_equations::tableau::RungeKuttaTableau {
