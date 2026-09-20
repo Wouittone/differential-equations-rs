@@ -5,6 +5,8 @@ use crate::tableau::{RungeKuttaKind, RungeKuttaTableau};
 /// Borrowed results of one explicit Runge--Kutta attempt.
 #[derive(Debug)]
 pub struct StepView<'a> {
+    /// Accepted state before this attempt.
+    pub previous_state: &'a [f64],
     /// Time at the accepted state.
     pub start_time: f64,
     /// Time at the candidate state.
@@ -32,7 +34,7 @@ impl StepView<'_> {
 
 /// Persistent explicit RK workspace borrowing a validated per-instance tableau.
 ///
-/// Construction allocates seven state vectors and one stage-major vector.
+/// Construction allocates six state vectors and one stage-major vector.
 /// Attempt, accept, reject, reset and derivative injection never allocate.
 /// Specialized fitted formulas are rejected; their frequency-dependent weights
 /// require a dedicated kernel. Both embedded error vectors remain exposed so
@@ -239,6 +241,7 @@ impl<'a> ExplicitRungeKuttaStepper<'a> {
         }
         self.pending = Some(step);
         Ok(StepView {
+            previous_state: &self.state,
             start_time: self.time,
             end_time: end,
             candidate: &self.candidate,

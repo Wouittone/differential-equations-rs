@@ -9,6 +9,8 @@ pub type DerivativeHook<'a, E> = dyn FnMut(f64, &[f64], &mut [f64]) -> Result<()
 /// Attempt results distinguishing solved increments from RHS evaluations.
 #[derive(Debug)]
 pub struct RosenbrockStepView<'a> {
+    /// Accepted state before this attempt.
+    pub previous_state: &'a [f64],
     /// Accepted start time.
     pub start_time: f64,
     /// Candidate time.
@@ -322,6 +324,7 @@ impl<'a> RosenbrockStepper<'a> {
         }
         self.pending = Some(step);
         Ok(RosenbrockStepView {
+            previous_state: &self.state,
             start_time: self.time,
             end_time: end,
             candidate: &self.candidate,
