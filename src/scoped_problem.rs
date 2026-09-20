@@ -183,3 +183,8 @@ where
         Ok(outcome)
     }
 }
+
+mod second_order;
+pub use second_order::{
+    RknObservation, ScopedRknFinalizer, ScopedRknObserver, ScopedSecondOrderProblem, integrate_rkn,
+};
