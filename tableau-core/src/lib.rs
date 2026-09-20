@@ -32,7 +32,9 @@ pub use stabilized::{
 
 mod runge_kutta;
 use runge_kutta::evaluate_polynomial;
-pub use runge_kutta::{RungeKuttaCoefficients, parse_numeric_expression, parse_tableau};
+pub use runge_kutta::{
+    LazyDenseStageCoefficients, RungeKuttaCoefficients, parse_numeric_expression, parse_tableau,
+};
 pub(crate) use runge_kutta::{Scalar, approximately_equal, materialize_matrix, materialize_vector};
 use serde::Deserialize;
 use std::{error::Error, fmt, sync::Arc};

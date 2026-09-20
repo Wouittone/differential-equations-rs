@@ -702,3 +702,10 @@ RK and RKN JSON descriptions may be omitted and receive a useful default;
 explicit empty descriptions still fail. Names and kind remain required. Errors
 preserve details such as the missing metadata key, the unsupported kind text or
 `A[row][column]` for a nonfinite coefficient. `$schema` is optional editor metadata.
+Typed RK input also accepts `LazyDenseStageCoefficients`: interpolation-only
+stages retain their sparse causal dependencies while the core tableau remains
+limited to force stages needed for the main step. Exact pinned numeris 0.6.0
+RKV98 (16 core + 5 interpolation stages) and Brahe RKF78 fixtures verify every
+coefficient bit, derived embedded-error weight, matrix layout and dense formula.
+The fixtures preserve original numeric literals/expressions, source hashes and
+MIT notices; no method-name substitution establishes equivalence.

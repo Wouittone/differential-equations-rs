@@ -502,14 +502,24 @@ fn validate_metadata(
     requested_name: &str,
     family: &str,
 ) -> Result<(), TableauError> {
-    if name.trim().is_empty() || name != requested_name {
+    if name.trim().is_empty() {
+        return Err(TableauError::new(format!(
+            "{family} tableau name must not be empty"
+        )));
+    }
+    if name != requested_name {
         return Err(TableauError::name_mismatch(format!(
             "resource method `{name}` does not match requested method `{requested_name}`"
         )));
     }
-    if description.trim().is_empty() || order == 0 {
+    if description.trim().is_empty() {
         return Err(TableauError::new(format!(
-            "{family} tableau requires a description and positive order"
+            "{family} tableau description must not be empty"
+        )));
+    }
+    if order == 0 {
+        return Err(TableauError::new(format!(
+            "{family} tableau order must be positive"
         )));
     }
     Ok(())
