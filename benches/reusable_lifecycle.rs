@@ -71,7 +71,7 @@ fn steady_state(c: &mut Criterion) {
             run_arc(&mut stepper, &mut controller, endpoint);
             b.iter(|| {
                 stepper.reset(0.0, &[1.0]).unwrap();
-                controller.reset(0.1);
+                controller.reset(0.1).unwrap();
                 run_arc(&mut stepper, &mut controller, black_box(endpoint));
                 black_box(stepper.state()[0])
             });
