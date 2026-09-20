@@ -4,7 +4,7 @@
   "title"                : "Runge--Kutta--Nystrom tableau",
   "type"                 : "object",
   "additionalProperties" : false,
-  "required"             : ["name", "description", "kind", "order", "A", "b", "b_velocity", "c"],
+  "required"             : ["name", "kind", "order", "A", "b", "b_velocity", "c"],
   "properties"           : {
     "$schema"             : { "type": ["string", "null"] },
     "name"                : { "type": "string", "minLength": 1 },

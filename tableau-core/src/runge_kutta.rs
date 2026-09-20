@@ -507,6 +507,14 @@ mod tests;
 /// Typed borrowed inputs for constructing an owned tableau without JSON.
 #[derive(Clone, Debug)]
 pub struct RungeKuttaCoefficients<'a> {
+    /// Optional method description and provenance.
+    pub description: Option<&'a str>,
+    /// Stage matrix kind.
+    pub kind: RungeKuttaKind,
+    /// Error-weight interpretation.
+    pub error_estimator: ErrorEstimatorKind,
+    /// Optional second direct error formula.
+    pub second_error: Option<&'a [f64]>,
     /// Required method label.
     pub name: &'a str,
     /// Classical order, not an order-condition proof.
@@ -538,6 +546,10 @@ impl<'a> RungeKuttaCoefficients<'a> {
         c: &'a [f64],
     ) -> Self {
         Self {
+            description: None,
+            kind: RungeKuttaKind::Explicit,
+            error_estimator: ErrorEstimatorKind::EmbeddedDifference,
+            second_error: None,
             name,
             order,
             a,
@@ -558,8 +570,14 @@ impl<'a> RungeKuttaCoefficients<'a> {
         RawTableau {
             _schema: None,
             name: self.name.into(),
-            description: default_description(),
-            kind: RawKind::ExplicitRungeKutta,
+            description: self
+                .description
+                .map(str::to_owned)
+                .unwrap_or_else(default_description),
+            kind: match self.kind {
+                RungeKuttaKind::Explicit => RawKind::ExplicitRungeKutta,
+                RungeKuttaKind::Implicit => RawKind::ImplicitRungeKutta,
+            },
             order: self.order,
             embedded_order: self.embedded_order,
             real_stability_radius: None,
@@ -568,9 +586,9 @@ impl<'a> RungeKuttaCoefficients<'a> {
             b: typed_vector(self.b),
             c: typed_vector(self.c),
             b_hat: self.b_hat.map(typed_vector),
-            error_estimator: ErrorEstimatorKind::EmbeddedDifference,
+            error_estimator: self.error_estimator,
             error: self.error.map(typed_vector),
-            second_error: None,
+            second_error: self.second_error.map(typed_vector),
             dense: self.dense.map(typed_matrix),
             lazy_dense_stages: Vec::new(),
             fitted_weights: Vec::new(),

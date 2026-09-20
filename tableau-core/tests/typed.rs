@@ -103,3 +103,34 @@ fn description_defaults_and_missing_metadata_stays_precise() {
             .contains("invalid")
     );
 }
+#[test]
+fn typed_supports_residual_estimators_and_implicit_matrices() {
+    use differential_equations_tableau_core::{ErrorEstimatorKind, RungeKuttaKind};
+    let mut input = RungeKuttaCoefficients::explicit(
+        "HeunResidual",
+        2,
+        &[&[0., 0.], &[1., 0.]],
+        &[0.5, 0.5],
+        &[0., 1.],
+    );
+    input.embedded_order = Some(1);
+    input.error = Some(&[1., 0.]);
+    input.second_error = Some(&[0., 1.]);
+    input.error_estimator = ErrorEstimatorKind::DirectResidual;
+    input.description = Some("Residual comparison");
+    let method = input.build().unwrap();
+    assert_eq!(
+        method.error_estimator_kind(),
+        ErrorEstimatorKind::DirectResidual
+    );
+    assert_eq!(method.second_error(), Some([0., 1.].as_slice()));
+    let mut input = RungeKuttaCoefficients::explicit(
+        "Trap",
+        2,
+        &[&[0., 0.], &[0.5, 0.5]],
+        &[0.5, 0.5],
+        &[0., 1.],
+    );
+    input.kind = RungeKuttaKind::Implicit;
+    assert_eq!(input.build().unwrap().kind(), RungeKuttaKind::Implicit);
+}
