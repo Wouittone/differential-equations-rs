@@ -60,6 +60,8 @@ where
 /// payload. Requested outputs are exact boundaries; no trajectory is retained.
 /// Rejected attempts keep the accepted state unchanged. Norm/controller failures
 /// reject pending candidates before returning, so the workspace remains reusable.
+/// Methods requiring Richardson estimation are rejected before evaluating forces
+/// or derivative hooks. They remain usable through fixed low-level attempts.
 pub fn integrate_rosenbrock<F, N, O, E>(
     stepper: &mut RosenbrockStepper<'_>,
     controller: &mut AdaptiveController,
@@ -115,6 +117,11 @@ where
                 forced_acceptances: 0,
             });
         }
+    }
+    if stepper.tableau().error_estimator() != crate::tableau::RosenbrockErrorEstimator::Embedded
+        || stepper.tableau().btilde().is_none()
+    {
+        return Err(IntegrationError::MissingErrorEstimate);
     }
     for _ in 0..maximum_attempts {
         let target = requested_times.get(index).copied().unwrap_or(endpoint);

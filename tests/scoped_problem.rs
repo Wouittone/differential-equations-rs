@@ -444,3 +444,100 @@ fn scoped_rkn_accepts_position_only_embedded_formula() {
     assert!((s.position()[0] - 1.0f64.cos()).abs() < 1e-8);
     assert!((s.velocity()[0] + 1.0f64.sin()).abs() < 1e-8);
 }
+
+#[test]
+fn richardson_rosenbrock_rejects_adaptive_before_force_and_hook_calls() {
+    use differential_equations::{
+        scoped_problem::integrate_rosenbrock, solvers::rosenbrock::Ros34Pw1a,
+    };
+    let table = Ros34Pw1a.tableau().unwrap();
+    let mut stepper = RosenbrockStepper::new(table, 0.0, &[1.0]).unwrap();
+    let mut force_calls = 0;
+    let mut jac_calls = 0;
+    let mut partial_calls = 0;
+    let mut norm_calls = 0;
+    {
+        let mut rhs = |_: f64, y: &[f64], dy: &mut [f64]| {
+            force_calls += 1;
+            dy[0] = -y[0];
+            Ok::<_, ForceError>(())
+        };
+        let mut jac = |_: f64, _: &[f64], j: &mut [f64]| {
+            jac_calls += 1;
+            j[0] = -1.0;
+            Ok(())
+        };
+        let mut partial = |_: f64, _: &[f64], f: &mut [f64]| {
+            partial_calls += 1;
+            f[0] = 0.0;
+            Ok(())
+        };
+        let mut norm = |_: &RosenbrockStepView<'_>| {
+            norm_calls += 1;
+            Ok(0.0)
+        };
+        let error = integrate_rosenbrock(
+            &mut stepper,
+            &mut control(),
+            1.0,
+            &[],
+            10,
+            &mut rhs,
+            Some(&mut jac),
+            Some(&mut partial),
+            &mut norm,
+            &mut |_: Observation<'_>| Ok(ObserverAction::Continue),
+        )
+        .unwrap_err();
+        assert!(matches!(error, IntegrationError::MissingErrorEstimate));
+    }
+    assert_eq!(
+        (force_calls, jac_calls, partial_calls, norm_calls),
+        (0, 0, 0, 0)
+    );
+    assert_eq!(stepper.statistics().attempts, 0);
+    let view = stepper
+        .attempt(
+            0.01,
+            &mut |_: f64, y: &[f64], dy: &mut [f64]| {
+                dy[0] = -y[0];
+                Ok::<_, ForceError>(())
+            },
+            None,
+            None,
+        )
+        .unwrap();
+    assert!(view.component_error.is_none());
+    assert!(view.candidate[0] < 1.0);
+    stepper.accept().unwrap();
+}
+#[test]
+fn richardson_rosenbrock_zero_interval_still_observes_without_force_calls() {
+    use differential_equations::{
+        scoped_problem::integrate_rosenbrock, solvers::rosenbrock::Ros34Pw1a,
+    };
+    let mut stepper = RosenbrockStepper::new(Ros34Pw1a.tableau().unwrap(), 0.0, &[1.0]).unwrap();
+    let mut observations = 0;
+    let outcome = integrate_rosenbrock(
+        &mut stepper,
+        &mut control(),
+        0.0,
+        &[0.0],
+        0,
+        &mut |_: f64, _: &[f64], _: &mut [f64]| -> Result<(), ForceError> {
+            panic!("no force expected")
+        },
+        None,
+        None,
+        &mut |_: &RosenbrockStepView<'_>| -> Result<f64, ForceError> { panic!("no norm expected") },
+        &mut |o: Observation<'_>| {
+            observations += 1;
+            assert!(o.endpoint && o.requested);
+            Ok(ObserverAction::Continue)
+        },
+    )
+    .unwrap();
+    assert_eq!(outcome.time, 0.0);
+    assert_eq!(observations, 1);
+    assert_eq!(stepper.statistics().attempts, 0);
+}
