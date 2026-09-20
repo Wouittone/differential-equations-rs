@@ -1,6 +1,6 @@
 [package]
 name = "differential-equations-tableau-macros"
-version = "1.2.0"
+version = "1.3.0"
 edition = "2024"
 rust-version = "1.85"
 description = "Compile-time tableau resources for differential-equations"
@@ -17,7 +17,7 @@ include = ["/src/**/*.rs", "/README.md", "/LICENSE-APACHE", "/LICENSE-MIT"]
 proc-macro = true
 
 [dependencies]
-differential-equations-tableau-core = { version = "=1.2.0", path = "../tableau-core" }
+differential-equations-tableau-core = { version = "=1.3.0", path = "../tableau-core" }
 proc-macro2 = "1.0"
 quote = "1.0"
 syn = "3.0"

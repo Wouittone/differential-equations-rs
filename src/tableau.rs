@@ -46,7 +46,7 @@ pub use differential_equations_tableau_core::{
     LowStorageEndpointEvaluation, LowStorageNodePolicy, LowStoragePidController,
     LowStorageRungeKuttaLayout, LowStorageRungeKuttaTableau, MisTableau, MriTableau,
     RegisterPipelineTableau, Rock2Tableau, Rock4Tableau, RockRecurrence, RockRecurrenceStage,
-    LazyDenseStageCoefficients, RknCoefficients, RosenbrockKind, RosenbrockPairTableau, RosenbrockTableau, RungeKuttaCoefficients, RungeKuttaKind,
+    LazyDenseStageCoefficients, RknCoefficients, RosenbrockErrorEstimator, RosenbrockKind, RosenbrockPairTableau, RosenbrockTableau, RungeKuttaCoefficients, RungeKuttaKind,
     RungeKuttaNystromKind, RungeKuttaNystromTableau, RungeKuttaTableau, Serk2Tableau,
     SymplecticTableau, TableauError, TableauErrorKind, ThreeSTableau, VariableMultistepTableau,
     parse_eserk_tableau, parse_irkn_tableau, parse_low_storage_tableau, parse_mis_tableau,
