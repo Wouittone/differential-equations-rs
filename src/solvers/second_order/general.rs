@@ -10,7 +10,7 @@ pub use algorithms::*;
 pub use callbacks::SecondOrderCallbackSet;
 pub use contract::{SecondOrderOdeAlgorithm, SecondOrderSolveError, solve_second_order};
 pub use problem::SecondOrderOdeProblem;
-pub use solution::SecondOrderSolution;
+pub use solution::{SecondOrderSolution, SecondOrderSolutionData};
 
 use algorithms::Method;
 use callbacks::{

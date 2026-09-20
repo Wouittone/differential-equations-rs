@@ -154,76 +154,60 @@ impl SecondOrderSolution {
         if self.times.is_empty() {
             return Err(InterpolationError::EmptySolution);
         }
-        for (index, &saved_time) in self.times.iter().enumerate().rev() {
-            if time == saved_time {
-                let saved_velocity =
-                    self.velocity(index)
-                        .ok_or(InterpolationError::InvalidSegmentData {
-                            context: "saved second-order velocity",
-                        })?;
-                let saved_position =
-                    self.position(index)
-                        .ok_or(InterpolationError::InvalidSegmentData {
-                            context: "saved second-order position",
-                        })?;
-                velocity.copy_from_slice(saved_velocity);
-                position.copy_from_slice(saved_position);
-                return validate_finite_partitioned_interpolation(
-                    velocity,
-                    position,
-                    "saved second-order state",
-                );
-            }
+        let after = self.saved_partition(time);
+        if after > 0 && self.times[after - 1] == time {
+            velocity.copy_from_slice(self.velocity(after - 1).ok_or(
+                InterpolationError::InvalidSegmentData {
+                    context: "saved second-order velocity",
+                },
+            )?);
+            position.copy_from_slice(self.position(after - 1).ok_or(
+                InterpolationError::InvalidSegmentData {
+                    context: "saved second-order position",
+                },
+            )?);
+            return validate_finite_partitioned_interpolation(
+                velocity,
+                position,
+                "saved second-order state",
+            );
         }
-        for segment in &self.dense_segments {
-            if segment.contains(time) {
-                segment.interpolate(time, velocity, position).ok_or(
-                    InterpolationError::InvalidSegmentData {
-                        context: "second-order dense segment",
-                    },
-                )?;
-                return validate_finite_partitioned_interpolation(
-                    velocity,
-                    position,
-                    "second-order dense segment",
-                );
-            }
+        if let Some(segment) = self.dense_segment_at(time) {
+            segment.interpolate(time, velocity, position).ok_or(
+                InterpolationError::InvalidSegmentData {
+                    context: "second-order dense segment",
+                },
+            )?;
+            return validate_finite_partitioned_interpolation(
+                velocity,
+                position,
+                "second-order dense segment",
+            );
         }
-        for index in 1..self.times.len() {
-            let left = self.times[index - 1];
-            let right = self.times[index];
-            if between(time, left, right) && left != right {
-                let fraction = interpolation_fraction(time, left, right).clamp(0.0, 1.0);
-                interpolate(
-                    self.velocity(index)
-                        .ok_or(InterpolationError::InvalidSegmentData {
-                            context: "saved second-order velocity",
-                        })?,
-                    self.velocity(index - 1)
-                        .ok_or(InterpolationError::InvalidSegmentData {
-                            context: "saved second-order velocity",
-                        })?,
-                    fraction,
-                    velocity,
-                );
-                interpolate(
-                    self.position(index)
-                        .ok_or(InterpolationError::InvalidSegmentData {
-                            context: "saved second-order position",
-                        })?,
-                    self.position(index - 1)
-                        .ok_or(InterpolationError::InvalidSegmentData {
-                            context: "saved second-order position",
-                        })?,
-                    fraction,
-                    position,
-                );
-                return validate_finite_partitioned_interpolation(
-                    velocity,
-                    position,
-                    "saved second-order interpolation",
-                );
-            }
+        if after > 0 && after < self.times.len() {
+            let fraction = interpolation_fraction(time, self.times[after - 1], self.times[after])
+                .clamp(0.0, 1.0);
+            interpolate(
+                self.velocity(after)
+                    .ok_or(InterpolationError::DimensionMismatch)?,
+                self.velocity(after - 1)
+                    .ok_or(InterpolationError::DimensionMismatch)?,
+                fraction,
+                velocity,
+            );
+            interpolate(
+                self.position(after)
+                    .ok_or(InterpolationError::DimensionMismatch)?,
+                self.position(after - 1)
+                    .ok_or(InterpolationError::DimensionMismatch)?,
+                fraction,
+                position,
+            );
+            return validate_finite_partitioned_interpolation(
+                velocity,
+                position,
+                "linear second-order state",
+            );
         }
         Err(InterpolationError::OutsideTimeSpan)
     }
@@ -241,6 +225,7 @@ pub(super) struct PartitionedDenseSegment {
     end_velocity: Vec<f64>,
     start_position: Vec<f64>,
     end_position: Vec<f64>,
+    portable: Option<Box<(crate::PortableDenseSegment, crate::PortableDenseSegment)>>,
 }
 
 impl PartitionedDenseSegment {
@@ -259,6 +244,7 @@ impl PartitionedDenseSegment {
             end_velocity: end_velocity.to_vec(),
             start_position: start_position.to_vec(),
             end_position: end_position.to_vec(),
+            portable: None,
         }
     }
 
@@ -277,6 +263,11 @@ impl PartitionedDenseSegment {
             || position.len() != self.start_position.len()
         {
             return None;
+        }
+        if let Some(pair) = &self.portable {
+            pair.0.interpolate_into(time, velocity).ok()?;
+            pair.1.interpolate_into(time, position).ok()?;
+            return Some(());
         }
         if time == self.start_time {
             velocity.copy_from_slice(&self.start_velocity);
@@ -312,4 +303,234 @@ fn partition(values: &[f64], dimension: usize, index: usize) -> Option<&[f64]> {
     let start = index.checked_mul(dimension)?;
     let end = start.checked_add(dimension)?;
     values.get(start..end)
+}
+
+/// Portable second-order trajectory with separate velocity and position data.
+/// The two partition trajectories must have identical times and logical shapes.
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct SecondOrderSolutionData {
+    /// Schema version, currently one.
+    pub version: u32,
+    /// Velocity trajectory and its actual interpolation quality.
+    pub velocity: crate::SolutionData,
+    /// Position trajectory and its actual interpolation quality.
+    pub position: crate::SolutionData,
+}
+
+impl SecondOrderSolution {
+    /// Exports both partitions, preserving dense coefficients and quality.
+    /// Native RKN retained velocity interpolation is explicitly linear while
+    /// its position interpolation uses cubic Hermite data.
+    pub fn export_data(&self) -> Result<SecondOrderSolutionData, InterpolationError> {
+        let shape = ndarray::Dimension::slice(&self.state_shape).to_vec();
+        let mut velocity = crate::SolutionData {
+            version: 1,
+            times: self.times.clone(),
+            values: self.velocities.clone(),
+            state_shape: shape.clone(),
+            segments: Vec::new(),
+            statistics: self.stats,
+        };
+        let mut position = crate::SolutionData {
+            version: 1,
+            times: self.times.clone(),
+            values: self.positions.clone(),
+            state_shape: shape,
+            segments: Vec::new(),
+            statistics: self.stats,
+        };
+        for segment in &self.dense_segments {
+            let (v, q) = segment.portable()?;
+            velocity.segments.push(v);
+            position.segments.push(q);
+        }
+        Ok(SecondOrderSolutionData {
+            version: 1,
+            velocity,
+            position,
+        })
+    }
+    /// Imports ordered matching partition trajectories with validated dense data.
+    pub fn from_data(data: SecondOrderSolutionData) -> Result<Self, InterpolationError> {
+        if data.version != 1
+            || data.velocity.times != data.position.times
+            || data.velocity.state_shape != data.position.state_shape
+            || data.velocity.segments.len() != data.position.segments.len()
+            || data.velocity.statistics != data.position.statistics
+        {
+            return Err(InterpolationError::InvalidSegmentData {
+                context: "second-order portable partition mismatch or version",
+            });
+        }
+        // The ordinary import applies monotonicity, dimension and segment-domain
+        // checks identically to both partitions, including sparse requested saves.
+        let velocity = crate::Solution::from_data(data.velocity)?;
+        let position = crate::Solution::from_data(data.position)?;
+        let mut solution = Self::from_saved(
+            velocity.times().to_vec(),
+            velocity.values().to_vec(),
+            position.values().to_vec(),
+            velocity.state_shape(),
+            velocity.stats(),
+        )
+        .map_err(|_| InterpolationError::InvalidSegmentData {
+            context: "second-order portable saved states",
+        })?;
+        for (v, q) in velocity
+            .export_dense_segments()?
+            .into_iter()
+            .zip(position.export_dense_segments()?)
+        {
+            if v.time_bounds() != q.time_bounds() {
+                return Err(InterpolationError::InvalidSegmentData {
+                    context: "second-order portable segment boundaries differ",
+                });
+            }
+            let (start, end) = v.time_bounds();
+            let n = v.dimension();
+            let (mut v0, mut v1, mut q0, mut q1) =
+                (vec![0.0; n], vec![0.0; n], vec![0.0; n], vec![0.0; n]);
+            v.interpolate_into(start, &mut v0)?;
+            v.interpolate_into(end, &mut v1)?;
+            q.interpolate_into(start, &mut q0)?;
+            q.interpolate_into(end, &mut q1)?;
+            solution.dense_segments.push(PartitionedDenseSegment {
+                start_time: start,
+                end_time: end,
+                start_velocity: v0,
+                end_velocity: v1,
+                start_position: q0,
+                end_position: q1,
+                portable: Some(Box::new((v, q))),
+            });
+        }
+        Ok(solution)
+    }
+    /// Returns `(velocity quality, position quality)` at a query time.
+    /// Exact callback times report exact saved states for both partitions.
+    pub fn interpolation_quality(
+        &self,
+        time: f64,
+    ) -> Result<(crate::InterpolationQuality, crate::InterpolationQuality), InterpolationError>
+    {
+        use crate::InterpolationQuality as Q;
+        if !time.is_finite() {
+            return Err(InterpolationError::NonFiniteTime);
+        }
+        let after = self.saved_partition(time);
+        if after > 0 && self.times[after - 1] == time {
+            return Ok((Q::ExactSavedState, Q::ExactSavedState));
+        }
+        if let Some(segment) = self.dense_segment_at(time) {
+            return Ok(segment
+                .portable
+                .as_ref()
+                .map_or((Q::Linear, Q::MethodSpecific), |s| {
+                    (s.0.quality(), s.1.quality())
+                }));
+        }
+        if after > 0 && after < self.times.len() {
+            Ok((Q::Linear, Q::Linear))
+        } else {
+            Err(InterpolationError::OutsideTimeSpan)
+        }
+    }
+    /// Requires retained method-quality interpolation for both partitions.
+    /// Current native RKN velocity interpolation is linear and therefore fails
+    /// this requirement between saved states instead of silently downgrading.
+    pub fn try_interpolate_method_into(
+        &self,
+        time: f64,
+        velocity: &mut [f64],
+        position: &mut [f64],
+    ) -> Result<(), InterpolationError> {
+        let (v, q) = self.interpolation_quality(time)?;
+        if v == crate::InterpolationQuality::Linear || q == crate::InterpolationQuality::Linear {
+            return Err(InterpolationError::InvalidSegmentData {
+                context: "method-specific second-order dense output unavailable for a partition",
+            });
+        }
+        self.try_interpolate_into(time, velocity, position)
+    }
+    fn saved_partition(&self, time: f64) -> usize {
+        let forward = self.times.first() <= self.times.last();
+        self.times
+            .partition_point(|&t| if forward { t <= time } else { t >= time })
+    }
+    fn dense_segment_at(&self, time: f64) -> Option<&PartitionedDenseSegment> {
+        let forward =
+            self.dense_segments.first()?.start_time <= self.dense_segments.last()?.end_time;
+        let index = self.dense_segments.partition_point(|s| {
+            if forward {
+                s.end_time < time
+            } else {
+                s.end_time > time
+            }
+        });
+        self.dense_segments.get(index).filter(|s| s.contains(time))
+    }
+}
+impl PartitionedDenseSegment {
+    fn portable(
+        &self,
+    ) -> Result<(crate::PortableDenseSegment, crate::PortableDenseSegment), InterpolationError>
+    {
+        if let Some(pair) = &self.portable {
+            return Ok((pair.0.clone(), pair.1.clone()));
+        }
+        let n = self.start_position.len();
+        let h = self.end_time - self.start_time;
+        let mut vc = vec![0.0; 2 * n];
+        let mut qc = vec![0.0; 4 * n];
+        for i in 0..n {
+            vc[i] = self.start_velocity[i];
+            vc[n + i] = self.end_velocity[i] - self.start_velocity[i];
+            qc[i] = self.start_position[i];
+            qc[n + i] = h * self.start_velocity[i];
+            qc[2 * n + i] = 3.0 * (self.end_position[i] - self.start_position[i])
+                - h * (2.0 * self.start_velocity[i] + self.end_velocity[i]);
+            qc[3 * n + i] = 2.0 * (self.start_position[i] - self.end_position[i])
+                + h * (self.start_velocity[i] + self.end_velocity[i]);
+        }
+        let data = |coefficients, end_state, quality| crate::DenseSegmentData {
+            version: 1,
+            start_time: self.start_time,
+            end_time: self.end_time,
+            bound_time: self.end_time,
+            dimension: n,
+            coefficients,
+            end_state,
+            bound_state: None,
+            quality,
+        };
+        Ok((
+            crate::PortableDenseSegment::from_data(data(
+                vc,
+                self.end_velocity.clone(),
+                crate::InterpolationQuality::Linear,
+            ))?,
+            crate::PortableDenseSegment::from_data(data(
+                qc,
+                self.end_position.clone(),
+                crate::InterpolationQuality::MethodSpecific,
+            ))?,
+        ))
+    }
+}
+#[cfg(feature = "serde")]
+impl serde::Serialize for SecondOrderSolution {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serde::Serialize::serialize(
+            &self.export_data().map_err(serde::ser::Error::custom)?,
+            serializer,
+        )
+    }
+}
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for SecondOrderSolution {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::from_data(SecondOrderSolutionData::deserialize(deserializer)?)
+            .map_err(serde::de::Error::custom)
+    }
 }

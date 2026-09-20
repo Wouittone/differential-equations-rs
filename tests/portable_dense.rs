@@ -277,3 +277,54 @@ fn indexed_saved_lookup_matches_linear_reference_for_irregular_repeated_times() 
         }
     }
 }
+
+#[test]
+fn second_order_export_preserves_partitions_and_reports_linear_velocity() {
+    use differential_equations::solvers::second_order::{
+        Dprkn6, SecondOrderOdeProblem, SecondOrderSolution, solve_second_order,
+    };
+    for span in [(0.0_f64, 1.0), (1.0, 0.0)] {
+        let p = SecondOrderOdeProblem::new(
+            |a: &mut [f64], _: &[f64], q: &[f64], _: &(), _| a[0] = -q[0],
+            [span.0.cos()],
+            [span.0.sin()],
+            span,
+            (),
+        );
+        let s = solve_second_order(
+            &p,
+            Dprkn6,
+            &SolveOptions::default()
+                .with_dense_output(true)
+                .with_tolerances(1e-10, 1e-10),
+        )
+        .unwrap();
+        let restored = SecondOrderSolution::from_data(s.export_data().unwrap()).unwrap();
+        for k in 0..101 {
+            let t = k as f64 / 100.0;
+            let (a, b) = s.try_interpolate(t).unwrap();
+            let (c, d) = restored.try_interpolate(t).unwrap();
+            assert!((a[0] - c[0]).abs() < 2e-14);
+            assert!((b[0] - d[0]).abs() < 2e-14);
+        }
+        let t = (s.times()[0] + s.times()[1]) * 0.5;
+        assert_eq!(
+            s.interpolation_quality(t).unwrap(),
+            (
+                InterpolationQuality::Linear,
+                InterpolationQuality::MethodSpecific
+            )
+        );
+        assert!(
+            s.try_interpolate_method_into(t, &mut [0.0], &mut [0.0])
+                .is_err()
+        );
+        #[cfg(feature = "serde")]
+        {
+            let json = serde_json::to_string(&s).unwrap();
+            let restored: SecondOrderSolution = serde_json::from_str(&json).unwrap();
+            assert_eq!(restored.stats(), s.stats());
+            assert_eq!(restored.times(), s.times());
+        }
+    }
+}
