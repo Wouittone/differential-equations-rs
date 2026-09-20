@@ -14,9 +14,10 @@ pub(crate) use api::{
     validate_finite_partitioned_interpolation, validate_saved_solution,
 };
 pub(crate) use dense::{
-    BorrowedHermiteSegment, BorrowedRungeKuttaSegment, BorrowedStiffSegment, BorrowedTaylorSegment,
-    CollocationSegment, DenseSegment, HermiteSegment, OwnedDenseSegment, RungeKuttaCoefficients,
-    RungeKuttaSegment, StiffSegment, TaylorSegment, interpolate_runge_kutta,
+    BorrowedCollocationSegment, BorrowedHermiteSegment, BorrowedRungeKuttaSegment,
+    BorrowedStiffSegment, BorrowedTaylorSegment, CollocationSegment, DenseSegment, HermiteSegment,
+    OwnedDenseSegment, RungeKuttaCoefficients, RungeKuttaSegment, StiffSegment, TaylorSegment,
+    interpolate_runge_kutta,
 };
 pub(crate) use recorder::TrajectoryRecorder;
 

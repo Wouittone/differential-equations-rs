@@ -1,6 +1,23 @@
 use super::{DenseSegment, validate_dense_query};
 use crate::solution::InterpolationError;
 
+/// Borrowed collocation extension for one accepted step without creating a
+/// temporary owning segment during dense recording.
+pub(crate) struct BorrowedCollocationSegment<'a> {
+    start_time: f64,
+    attempted_time: f64,
+    start_state: &'a [f64],
+    midpoint_state: &'a [f64],
+    endpoint_state: &'a [f64],
+    stages: &'a [f64],
+    first_half_stages: &'a [f64],
+    second_half_stages: &'a [f64],
+    lagrange: &'a [f64],
+    dimension: usize,
+    stage_count: usize,
+    adaptive: bool,
+}
+
 /// Owning dynamic collocation extension used by variable-stage FIRK methods.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct CollocationSegment {
@@ -17,6 +34,140 @@ pub(crate) struct CollocationSegment {
     dimension: usize,
     stage_count: usize,
     adaptive: bool,
+}
+
+impl<'a> BorrowedCollocationSegment<'a> {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn new(
+        start_time: f64,
+        attempted_time: f64,
+        start_state: &'a [f64],
+        midpoint_state: &'a [f64],
+        endpoint_state: &'a [f64],
+        stages: &'a [f64],
+        first_half_stages: &'a [f64],
+        second_half_stages: &'a [f64],
+        lagrange: &'a [f64],
+        stage_count: usize,
+        adaptive: bool,
+    ) -> Result<Self, InterpolationError> {
+        let dimension = start_state.len();
+        if !start_time.is_finite()
+            || !attempted_time.is_finite()
+            || attempted_time == start_time
+            || dimension == 0
+            || endpoint_state.len() != dimension
+            || midpoint_state.len() != dimension
+            || stage_count == 0
+            || lagrange.len() != stage_count * stage_count
+            || stages.len() != stage_count * dimension
+            || first_half_stages.len() != stage_count * dimension
+            || second_half_stages.len() != stage_count * dimension
+        {
+            return Err(InterpolationError::InvalidSegmentData {
+                context: "borrowed collocation segment",
+            });
+        }
+        Ok(Self {
+            start_time,
+            attempted_time,
+            start_state,
+            midpoint_state,
+            endpoint_state,
+            stages,
+            first_half_stages,
+            second_half_stages,
+            lagrange,
+            dimension,
+            stage_count,
+            adaptive,
+        })
+    }
+
+    pub(super) fn contains(&self, time: f64) -> bool {
+        time.is_finite()
+            && if self.start_time < self.attempted_time {
+                (self.start_time..=self.attempted_time).contains(&time)
+            } else {
+                (self.attempted_time..=self.start_time).contains(&time)
+            }
+    }
+}
+
+impl BorrowedCollocationSegment<'_> {
+    fn interpolate_piece(
+        &self,
+        start_time: f64,
+        step: f64,
+        start_state: &[f64],
+        stages: &[f64],
+        time: f64,
+        output: &mut [f64],
+    ) {
+        let theta = ((time - start_time) / step).clamp(0.0, 1.0);
+        output.copy_from_slice(start_state);
+        for stage in 0..self.stage_count {
+            let mut power = theta;
+            let mut weight = 0.0;
+            for degree in 0..self.stage_count {
+                weight +=
+                    self.lagrange[stage * self.stage_count + degree] * power / (degree + 1) as f64;
+                power *= theta;
+            }
+            for component in 0..self.dimension {
+                output[component] += step * weight * stages[stage * self.dimension + component];
+            }
+        }
+    }
+}
+
+impl DenseSegment for BorrowedCollocationSegment<'_> {
+    fn interpolate(&self, time: f64, output: &mut [f64]) -> Result<(), InterpolationError> {
+        validate_dense_query(self.contains(time), output.len(), self.dimension)?;
+        if time == self.attempted_time {
+            output.copy_from_slice(self.endpoint_state);
+            return Ok(());
+        }
+        let step = self.attempted_time - self.start_time;
+        if self.adaptive {
+            let half = 0.5 * step;
+            if step.signum() * (time - (self.start_time + half)) <= 0.0 {
+                self.interpolate_piece(
+                    self.start_time,
+                    half,
+                    self.start_state,
+                    self.first_half_stages,
+                    time,
+                    output,
+                );
+            } else {
+                self.interpolate_piece(
+                    self.start_time + half,
+                    half,
+                    self.midpoint_state,
+                    self.second_half_stages,
+                    time,
+                    output,
+                );
+            }
+        } else {
+            self.interpolate_piece(
+                self.start_time,
+                step,
+                self.start_state,
+                self.stages,
+                time,
+                output,
+            );
+        }
+        output
+            .iter()
+            .all(|value| value.is_finite())
+            .then_some(())
+            .ok_or(InterpolationError::NonFiniteResult {
+                context: "borrowed collocation",
+            })
+    }
 }
 
 impl CollocationSegment {
