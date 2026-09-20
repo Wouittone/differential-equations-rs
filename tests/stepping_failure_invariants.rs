@@ -175,3 +175,20 @@ fn nonfinite_stage_time_is_rejected_before_user_evaluation() {
     assert_eq!(s.time(), 1.);
     assert_eq!(s.state(), &[1.]);
 }
+
+#[test]
+fn caller_output_dimensions_are_checked_before_any_partition_is_written() {
+    let s = MixedRknStepper::new(FineRkn4.tableau().unwrap(), 0., &[1.], &[2.], &[3.]).unwrap();
+    let mut q = [9.];
+    let mut bad_v = [8., 8.];
+    let mut z = [7.];
+    assert_eq!(
+        s.copy_state_into(&mut q, &mut bad_v, &mut z),
+        Err(StepFailure::Dimension)
+    );
+    assert_eq!(q, [9.]);
+    assert_eq!(z, [7.]);
+    let mut v = [0.];
+    s.copy_state_into(&mut q, &mut v, &mut z).unwrap();
+    assert_eq!((q, v, z), ([1.], [2.], [3.]));
+}

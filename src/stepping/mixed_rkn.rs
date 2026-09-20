@@ -212,3 +212,37 @@ impl<'a> MixedRknStepper<'a> {
         Ok(())
     }
 }
+
+impl MixedRknStepper<'_> {
+    /// Endpoint-clamped attempt preserving signed propagation direction.
+    pub fn attempt_to<F, E>(
+        &mut self,
+        endpoint: f64,
+        proposal: f64,
+        rhs: &mut F,
+    ) -> Result<MixedRknStepView<'_>, StepError<E>>
+    where
+        F: FnMut(f64, &[f64], &[f64], &[f64], &mut [f64], &mut [f64]) -> Result<(), E>,
+    {
+        let step = super::endpoint_step(self.time(), endpoint, proposal)?;
+        self.attempt(step, rhs)
+    }
+    /// Copy every accepted partition to correctly sized caller buffers atomically.
+    pub fn copy_state_into(
+        &self,
+        position: &mut [f64],
+        velocity: &mut [f64],
+        auxiliary: &mut [f64],
+    ) -> Result<(), StepFailure> {
+        if auxiliary.len() != self.auxiliary.len() {
+            return Err(StepFailure::Dimension);
+        }
+        self.physical.copy_state_into(position, velocity)?;
+        auxiliary.copy_from_slice(&self.auxiliary);
+        Ok(())
+    }
+    /// Clear joint evaluation counters without discarding caches.
+    pub fn clear_statistics(&mut self) {
+        self.physical.clear_statistics();
+    }
+}

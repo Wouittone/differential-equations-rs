@@ -187,7 +187,7 @@ impl<'a> RosenbrockStepper<'a> {
         if state.len() != self.state.len() {
             return Err(StepFailure::Dimension);
         }
-        finite(&state)?;
+        finite(state)?;
         finite(&[time])?;
         self.state.copy_from_slice(state);
         self.time = time;
@@ -371,5 +371,35 @@ impl<'a> RosenbrockStepper<'a> {
         self.pending.take().ok_or(StepFailure::NoCandidate)?;
         self.stats.rejected_steps += 1;
         Ok(())
+    }
+}
+
+impl RosenbrockStepper<'_> {
+    /// Endpoint-clamped attempt preserving signed propagation direction.
+    pub fn attempt_to<F, E>(
+        &mut self,
+        endpoint: f64,
+        proposal: f64,
+        rhs: &mut F,
+        jacobian: Option<&mut DerivativeHook<'_, E>>,
+        time_partial: Option<&mut DerivativeHook<'_, E>>,
+    ) -> Result<RosenbrockStepView<'_>, StepError<E>>
+    where
+        F: FnMut(f64, &[f64], &mut [f64]) -> Result<(), E>,
+    {
+        let step = super::endpoint_step(self.time, endpoint, proposal)?;
+        self.attempt(step, rhs, jacobian, time_partial)
+    }
+    /// Copy accepted state to an existing correctly sized output buffer.
+    pub fn copy_state_into(&self, output: &mut [f64]) -> Result<(), StepFailure> {
+        if output.len() != self.state.len() {
+            return Err(StepFailure::Dimension);
+        }
+        output.copy_from_slice(&self.state);
+        Ok(())
+    }
+    /// Clear work counters, retaining accepted state and valid caches.
+    pub fn clear_statistics(&mut self) {
+        self.stats = StepStatistics::default();
     }
 }

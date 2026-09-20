@@ -348,3 +348,24 @@ impl RknStepper<'_> {
         })
     }
 }
+
+impl RknStepper<'_> {
+    /// Copy both accepted partitions into caller buffers without resizing either.
+    /// Invalid dimensions leave both output buffers unchanged.
+    pub fn copy_state_into(
+        &self,
+        position: &mut [f64],
+        velocity: &mut [f64],
+    ) -> Result<(), StepFailure> {
+        if position.len() != self.position.len() || velocity.len() != self.velocity.len() {
+            return Err(StepFailure::Dimension);
+        }
+        position.copy_from_slice(&self.position);
+        velocity.copy_from_slice(&self.velocity);
+        Ok(())
+    }
+    /// Clear work counters, retaining accepted state and valid caches.
+    pub fn clear_statistics(&mut self) {
+        self.stats = StepStatistics::default();
+    }
+}
