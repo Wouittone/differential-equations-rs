@@ -50,10 +50,10 @@ Forked replacement experiments broaden the acceptance evidence beyond SatKit and
 Brahe's original migration. These experiments compare native solver paths with
 the merged `1.4.0` backend at commit `a03385a3e427f583573db62b2a716099104ae000`.
 
-- [External `eqsolver` replacement benchmark](https://github.com/Wouittone/differential-equations-rs/issues/36):
+- [External `eqsolver` replacement benchmark](https://github.com/Wouittone/differential-equations-rs/issues/37):
   adaptive Tsit5 improves the adaptive comparison surface but is 11x–19x slower
   than tiny fixed-step RK4 cases; keep fixed-step and adaptive paths distinct.
-- [External `diffeq` backend tradeoffs](https://github.com/Wouittone/differential-equations-rs/issues/37):
+- [External `diffeq` backend tradeoffs](https://github.com/Wouittone/differential-equations-rs/issues/36):
   replacement Tsit5 beats the native explicit Ode4 case in the sampled workload,
   while replacement Rodas5P trails the native stiff baseline; state/callback
   compatibility remains the main adapter barrier.
