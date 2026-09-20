@@ -145,7 +145,7 @@ pub use event::DEFAULT_EVENT_TOLERANCE;
 /// The ndarray version used by shape-aware ODE states.
 pub use ndarray;
 pub use operator_problem::{LieGroupProblem, LinearOperatorProblem};
-pub use problem::{OdeFunction, OdeProblem, OdeProblemBuilder, SplitOdeProblem};
+pub use problem::{MutableFunction, OdeFunction, OdeProblem, OdeProblemBuilder, SplitOdeProblem};
 pub use semilinear::SemilinearOdeProblem;
 pub use solution::{InterpolationError, Solution, SolutionConstructionError, SolverStats};
 pub use solver::{

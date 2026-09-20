@@ -44,6 +44,10 @@ Baseline: crate 1.0.0, commit 31decb9c. The complete acceptance criteria live in
 - [ ] [T17: Compatibility design and release gates](https://github.com/Wouittone/differential-equations-rs/issues/32)
 - [ ] [H06: Benchmark force/reference consistency](https://github.com/Wouittone/differential-equations-rs/issues/15)
 
+## Scope clarification
+
+The user deferred upstream issue fixes (H01–H06). They remain tracked and open, but are excluded from the current implementation waves. Work focuses on this library; final downstream migration and benchmark evaluation remain the acceptance experiment after crate work.
+
 ## Dependencies and execution
 
 Contract review precedes implementation. A owns persistent kernels/controller/output/continuation/Rosenbrock/mixed RKN; B owns norms, closures/errors, borrowing and dense output; C owns typed resources, layout adapters and Gauss–Jackson; D coordinates exports/manifests, independent verification, downstream migrations and exclusive benchmarks. Use isolated worktrees and reviewed commits. T01 establishes the step contract; T02/T03/T04/T07 build on it; T11 enables T12/T13 and Gauss–Jackson history. T05/T06 precede T10. T09/T11 precede production T15. T16 adapter-code completion precedes T14 measurements; T16 final closure consumes those measurements, avoiding a cycle. T17 starts with compatibility design and closes at final acceptance. H01–H06 remain separately attributable host fixes.
