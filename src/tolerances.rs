@@ -155,6 +155,7 @@ impl Tolerances {
     }
     /// Calls a custom reduction with an iterator of nonnegative scaled errors.
     /// The iterator contains only contributing components and allocates nothing.
+    /// With no participating components the result is zero and the hook is not called.
     pub fn custom_norm<F>(
         &self,
         previous: &[f64],
@@ -166,6 +167,9 @@ impl Tolerances {
         F: FnMut(&mut dyn Iterator<Item = f64>) -> f64,
     {
         self.validate_inputs(previous, candidate, error)?;
+        if !self.mask.iter().any(|&enabled| enabled) {
+            return Ok(0.0);
+        }
         let mut values = (0..self.dimension())
             .filter(|&i| self.mask[i])
             .map(|i| self.scaled(i, previous[i], candidate[i], error[i]));
@@ -263,6 +267,12 @@ mod tests {
             Ok(1e300)
         );
         let t = t.with_mask(vec![false; 2]).unwrap();
+        assert_eq!(
+            t.custom_norm(&[0.0; 2], &[0.0; 2], &[0.0; 2], |_| panic!(
+                "empty norms do not call hooks"
+            )),
+            Ok(0.0)
+        );
         assert_eq!(
             t.error_norm(&[0.0; 2], &[0.0; 2], &[0.0; 2], ErrorNorm::Rms),
             Ok(0.0)
