@@ -91,6 +91,10 @@ pub struct SolverStats {
     pub rhs_evaluations: usize,
     /// Number of accepted steps that performed dense-output work.
     pub dense_output_evaluations: usize,
+    /// Number of right-hand-side evaluations used by primary RK stages.
+    pub stage_evaluations: usize,
+    /// Number of interpolation-only RK stage evaluations.
+    pub dense_stage_evaluations: usize,
     /// Number of accepted time steps.
     pub accepted_steps: usize,
     /// Number of rejected time steps.

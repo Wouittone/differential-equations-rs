@@ -12,6 +12,7 @@ fn controller_replay_exports_next_proposal_and_minimum_step_policy() {
         if e > 1. || rejected {
             factor = factor.min(1.);
         }
+
         let d = c.assess(h, e).unwrap();
         assert_eq!(d.accepted, e <= 1.);
         assert!((d.next_step - h * factor).abs() < 1e-14);
@@ -40,6 +41,32 @@ fn controller_replay_exports_next_proposal_and_minimum_step_policy() {
         .unwrap();
     assert!(d.accepted && d.forced);
     assert!(d.next_step < 0.);
+}
+
+#[test]
+fn controller_tracks_acceptance_rejection_and_repeated_rejection_caps() {
+    let mut config = ControllerConfig::proportional(5).unwrap();
+    config.rejection_maximum = 0.8;
+    config.repeated_rejection_maximum = Some(0.5);
+    let mut controller = AdaptiveController::new(config, 1.0).unwrap();
+
+    let accepted = controller.assess(1.0, 0.5).unwrap();
+    assert!(accepted.accepted);
+    assert_eq!(controller.state().consecutive_rejections, 0);
+
+    let rejected = controller.assess(accepted.next_step, 2.0).unwrap();
+    assert!(!rejected.accepted);
+    assert_eq!(controller.state().consecutive_rejections, 1);
+
+    let repeated = controller.assess(rejected.next_step, 2.0).unwrap();
+    assert!(!repeated.accepted);
+    assert_eq!(controller.state().consecutive_rejections, 2);
+    assert!(repeated.next_step.abs() <= rejected.next_step.abs() * 0.5);
+
+    let resumed = controller.assess(repeated.next_step, 0.5).unwrap();
+    assert!(resumed.accepted);
+    assert_eq!(controller.state().consecutive_rejections, 0);
+    assert!(!controller.state().rejected_since_acceptance);
 }
 #[test]
 fn output_free_driver_requested_samples_typed_observer_and_resume() {

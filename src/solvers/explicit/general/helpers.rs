@@ -19,6 +19,36 @@ where
     Ok(())
 }
 
+pub(super) fn evaluate_stage<F, P>(
+    problem: &OdeProblem<F, P>,
+    derivative: &mut [f64],
+    state: &[f64],
+    time: f64,
+    stats: &mut SolverStats,
+) -> Result<(), SolveError>
+where
+    F: crate::OdeFunction<P>,
+{
+    evaluate(problem, derivative, state, time, stats)?;
+    stats.stage_evaluations += 1;
+    Ok(())
+}
+
+pub(super) fn evaluate_dense_stage<F, P>(
+    problem: &OdeProblem<F, P>,
+    derivative: &mut [f64],
+    state: &[f64],
+    time: f64,
+    stats: &mut SolverStats,
+) -> Result<(), SolveError>
+where
+    F: crate::OdeFunction<P>,
+{
+    evaluate(problem, derivative, state, time, stats)?;
+    stats.dense_stage_evaluations += 1;
+    Ok(())
+}
+
 pub(super) fn ensure_finite(values: &[f64]) -> Result<(), SolveError> {
     values
         .iter()
@@ -66,7 +96,7 @@ where
     {
         *trial = value + direction * trial_step * derivative;
     }
-    evaluate(
+    evaluate_stage(
         problem,
         scratch,
         &workspace.temporary,
@@ -126,7 +156,7 @@ where
                 .copy_from_slice(&workspace.temporary);
         }
         let start = stage_index * workspace.dimension;
-        evaluate(
+        evaluate_dense_stage(
             problem,
             &mut workspace.stages[start..start + workspace.dimension],
             &workspace.temporary,
