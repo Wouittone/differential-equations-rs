@@ -15,7 +15,11 @@ for n in range(1, 11):
 d = [sum(c[j] * c[i-j] for j in range(i+1)) for i in range(11)]
 def ordinates(coefficients):
     return [sum(coefficients[i] * (-1)**(8-k) * comb(i, 8-k) for i in range(8-k, 9)) for k in range(9)]
-rows = {'VELOCITY_CORRECTOR': ordinates(c[1:10]),
+def shift_back_four(values):
+    return [sum(F((-1)**k * comb(4,k))*values[i-k] for k in range(min(i,4)+1)) for i in range(9)]
+rows = {'VELOCITY_CENTER': ordinates(shift_back_four(c[1:10])),
+        'POSITION_CENTER': ordinates(shift_back_four(d[2:11])),
+        'VELOCITY_CORRECTOR': ordinates(c[1:10]),
         'POSITION_CORRECTOR': ordinates(d[2:11]),
         'VELOCITY_PREDICTOR': ordinates([sum(c[:i+2]) for i in range(9)]),
         'POSITION_PREDICTOR': ordinates([sum(d[:i+3]) for i in range(9)])}

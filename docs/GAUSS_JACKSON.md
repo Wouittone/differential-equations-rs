@@ -16,7 +16,10 @@ Adams, with force evaluations using both corrected position and velocity.
 No external implementation is wrapped or relabeled as this solver.
 
 Startup uses eight one-sided, tenth-order extrapolated-midpoint steps with
-convergence refinement. No initial evaluation before the supplied epoch is
+convergence refinement. The summation constants are anchored at the center
+of those nine forward samples, then advanced to the latest sample. This keeps
+centered initialization accuracy without evaluating outside the requested arc.
+No initial evaluation before the supplied epoch is
 required. Short arcs remain explicitly counted startup work. Final partial
 intervals use the same high-order extrapolation and clear the fixed-grid history;
 continuation after a tail restarts history. This costs more than a mature GJ step.
@@ -40,7 +43,7 @@ continuation; explicit startup/corrector convergence failures; original user
 errors; dense interpolation and dense preservation after failure.
 
 For q''=-q on [0,20], max position/velocity errors in one focused run were
-1.190e-6 at h=0.4, 5.340e-10 at h=0.2 and 8.7e-14 at h=0.1. This demonstrates at
+5.766e-7 at h=0.4, 3.261e-10 at h=0.2 and 3.014e-13 at h=0.1. This demonstrates at
 least eighth-order convergence before roundoff on that case, not a universal
 superconvergence claim. Startup and endpoint behavior are tested separately.
 The circular two-body test spans 100 normalized time units; the harmonic long
@@ -64,3 +67,21 @@ the generated steady-state arrays; its runtime benchmark comparison is deferred.
 They were evaluated as reference candidates; neither source is incorporated nor
 claimed to have been executed. GROOPS documents the same method family, but its
 application build/runtime is not a lightweight independent unit-test dependency.
+
+
+The eccentric (e=0.6) two-body Kepler test exposed an initialization error
+constant: anchoring the sums at the final startup sample produced 1.75e-6
+position error at h=0.02 over [0,30]. Anchoring at the center of the already
+computed forward samples reduced it to 4.91e-8, and h=0.01 gives 2.70e-11.
+The initial 1e-7 accuracy assertion is retained and now passes; the additional
+refinement assertion checks at least eighth-order behavior before roundoff.
+The independent centered Python reference gives 9.46e-8 and 9.82e-11 at those
+same steps. These are accuracy checks, not runtime benchmark claims.
+
+`export_dense_segment` allocates a portable combined `[position, velocity]`
+polynomial with exact endpoint overrides. Its degree is explicitly queryable;
+round trips and serde round trips preserve forward/backward interpolation.
+Dedicated allocator instrumentation verifies zero allocations/reallocations for
+startup, mature accepted steps, failed-force attempts, interpolation, coefficient
+extraction, restart, and a final partial interval. Construction and portable
+export intentionally allocate and are outside that stepping contract.

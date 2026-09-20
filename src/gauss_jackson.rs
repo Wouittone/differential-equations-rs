@@ -123,6 +123,8 @@ pub struct GaussJackson8 {
     v: Vec<f64>,
     history: Vec<f64>,
     history_len: usize,
+    center_q: Vec<f64>,
+    center_v: Vec<f64>,
     sum: Vec<f64>,
     double_sum: Vec<f64>,
     cq: Vec<f64>,
@@ -163,6 +165,8 @@ impl GaussJackson8 {
             v: velocity.to_vec(),
             history: vec![0.; 9 * n],
             history_len: 0,
+            center_q: vec![0.; n],
+            center_v: vec![0.; n],
             sum: vec![0.; n],
             double_sum: vec![0.; n],
             cq: vec![0.; n],
@@ -322,6 +326,10 @@ impl GaussJackson8 {
             self.history[self.history_len * n..(self.history_len + 1) * n]
                 .copy_from_slice(&self.ca);
             self.history_len += 1;
+            if self.history_len == 5 {
+                self.center_q.copy_from_slice(&self.q);
+                self.center_v.copy_from_slice(&self.v);
+            }
             if self.history_len == 9 {
                 self.initialize_sums();
             }
@@ -351,11 +359,15 @@ impl GaussJackson8 {
             let mut b = 0.;
             let mut a = 0.;
             for k in 0..9 {
-                b += VELOCITY_CORRECTOR[k] * self.history[k * n + i];
-                a += POSITION_CORRECTOR[k] * self.history[k * n + i];
+                b += VELOCITY_CENTER[k] * self.history[k * n + i];
+                a += POSITION_CENTER[k] * self.history[k * n + i];
             }
-            self.sum[i] = self.v[i] - h * b;
-            self.double_sum[i] = self.q[i] - h * h * a;
+            self.sum[i] = self.center_v[i] - h * b;
+            self.double_sum[i] = self.center_q[i] - h * h * a;
+            for k in 5..9 {
+                self.double_sum[i] += h * self.sum[i];
+                self.sum[i] += h * self.history[k * n + i];
+            }
         }
     }
     fn correct<E, F>(
@@ -576,6 +588,59 @@ impl GaussJackson8 {
         }
         Ok((self.dense_start, self.time))
     }
+    /// Polynomial degree of the retained Hermite position interpolation.
+    ///
+    /// Position is quintic and velocity its quartic derivative. This reports
+    /// representation degree, not the eighth-order endpoint method's accuracy.
+    pub const fn dense_polynomial_degree(&self) -> usize {
+        5
+    }
+
+    /// Exports the last accepted interval as a portable owned `[position, velocity]`
+    /// segment. Export allocates; ordinary stepping/interpolation does not.
+    ///
+    /// Quality is `MethodSpecific`: this is the documented quintic Hermite
+    /// extension, not an eighth-order continuous extension. Coefficients are
+    /// degree-major, with all positions followed by all velocities per degree.
+    pub fn export_dense_segment(
+        &self,
+    ) -> Result<crate::PortableDenseSegment, crate::InterpolationError> {
+        if !self.dense_valid {
+            return Err(crate::InterpolationError::InvalidSegmentData {
+                context: "Gauss-Jackson has no accepted dense interval",
+            });
+        }
+        let n = self.q.len();
+        let dimension = 2 * n;
+        let h = self.time - self.dense_start;
+        let mut coefficients = vec![0.0; 6 * dimension];
+        for i in 0..n {
+            let c = self.dense_coefficients(i, h);
+            for degree in 0..6 {
+                coefficients[degree * dimension + i] = c[degree];
+                if degree < 5 {
+                    coefficients[degree * dimension + n + i] =
+                        (degree + 1) as f64 * c[degree + 1] / h;
+                }
+            }
+            coefficients[n + i] = self.dense_v0[i];
+        }
+        let mut end_state = Vec::with_capacity(dimension);
+        end_state.extend_from_slice(&self.q);
+        end_state.extend_from_slice(&self.v);
+        crate::PortableDenseSegment::from_data(crate::DenseSegmentData {
+            version: 1,
+            start_time: self.dense_start,
+            end_time: self.time,
+            bound_time: self.time,
+            dimension,
+            coefficients,
+            end_state,
+            bound_state: None,
+            quality: crate::InterpolationQuality::MethodSpecific,
+        })
+    }
+
     fn dense_coefficients(&self, i: usize, h: f64) -> [f64; 6] {
         let q0 = self.dense_q0[i];
         let v0 = h * self.dense_v0[i];

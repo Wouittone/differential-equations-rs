@@ -261,3 +261,71 @@ fn agrees_with_independent_pinned_gj8_reference() {
     assert!((damped.position()[0] - 0.04978706836819483).abs() < 1e-12);
     assert!((damped.velocity()[0] - (-0.0497870683681613)).abs() < 1e-12);
 }
+#[test]
+fn startup_extrapolation_has_high_order_before_refinement() {
+    let config = GaussJacksonConfig {
+        absolute_tolerance: 1.,
+        relative_tolerance: 0.,
+        max_startup_refinements: 0,
+        ..Default::default()
+    };
+    let mut errors = Vec::new();
+    for h in [1.5, 0.75] {
+        let mut solver = GaussJackson8::new(0., &[1.], &[0.], h, config).unwrap();
+        solver.try_step(&mut harmonic).unwrap();
+        errors.push(
+            (solver.position()[0] - h.cos())
+                .abs()
+                .max((solver.velocity()[0] + h.sin()).abs()),
+        );
+        assert_eq!(solver.statistics().startup_refinements, 0);
+    }
+    assert!(errors[0] / errors[1] > 900., "startup errors={errors:?}");
+}
+#[test]
+fn eccentric_two_body_matches_kepler_reference() {
+    let mut errors = Vec::new();
+    for h in [0.02, 0.01] {
+        let e = 0.6_f64;
+        let mut solver = GaussJackson8::new(
+            0.,
+            &[1. - e, 0.],
+            &[0., ((1. + e) / (1. - e)).sqrt()],
+            h,
+            GaussJacksonConfig::default(),
+        )
+        .unwrap();
+        let mut gravity = |_: f64, q: &[f64], _: &[f64], a: &mut [f64]| {
+            let r = q[0].hypot(q[1]);
+            for i in 0..2 {
+                a[i] = -q[i] / r.powi(3);
+            }
+            Ok::<_, Infallible>(())
+        };
+        let end = 30.;
+        while solver.time() < end {
+            solver.try_step_to(end, &mut gravity).unwrap();
+        }
+        let mean = end.rem_euclid(std::f64::consts::TAU);
+        let mut eccentric = mean;
+        for _ in 0..12 {
+            eccentric -= (eccentric - e * eccentric.sin() - mean) / (1. - e * eccentric.cos());
+        }
+        let q = [eccentric.cos() - e, (1. - e * e).sqrt() * eccentric.sin()];
+        let denominator = 1. - e * eccentric.cos();
+        let v = [
+            -eccentric.sin() / denominator,
+            (1. - e * e).sqrt() * eccentric.cos() / denominator,
+        ];
+        let error = (0..2)
+            .map(|i| {
+                (solver.position()[i] - q[i])
+                    .abs()
+                    .max((solver.velocity()[i] - v[i]).abs())
+            })
+            .fold(0., f64::max);
+        assert!(error < 1e-7, "h={h}, Kepler error={error}");
+        errors.push(error);
+    }
+    assert!(errors[0] / errors[1] > 150., "eccentric errors={errors:?}");
+}
