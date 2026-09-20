@@ -6,7 +6,7 @@ mod runge_kutta;
 mod stiff;
 mod taylor;
 
-pub(crate) use collocation::CollocationSegment;
+pub(crate) use collocation::{BorrowedCollocationSegment, CollocationSegment};
 pub(crate) use hermite::{BorrowedHermiteSegment, HermiteSegment};
 pub(crate) use runge_kutta::{
     BorrowedRungeKuttaSegment, RungeKuttaCoefficients, RungeKuttaSegment, interpolate_runge_kutta,

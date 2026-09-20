@@ -1,9 +1,9 @@
 use crate::integrator::{ControllerConfig, KernelCapabilities, StepEstimate, StepKernel};
 use crate::linear::{factorize, solve_factorized};
-use crate::solution::{CollocationSegment, TrajectoryRecorder};
+use crate::solution::{BorrowedCollocationSegment, CollocationSegment, TrajectoryRecorder};
 use crate::{OdeProblem, SolveError, SolveOptions, SolverStats};
 
-use super::dense::{CollocationAttemptSegment, interpolate_segment};
+use super::dense::interpolate_segment;
 use super::tableau::{Family, Tableau};
 
 const MAX_NEWTON_ITERATIONS: usize = 12;
@@ -439,20 +439,20 @@ where
         recorder: &mut TrajectoryRecorder<'_>,
         _: &mut SolverStats,
     ) -> Result<bool, SolveError> {
-        let segment = CollocationAttemptSegment {
-            tableau: &self.tableau,
-            dimension: self.dimension,
-            start_state: previous_state,
-            midpoint_state: &self.midpoint_state,
-            endpoint_state: state,
-            full_stages: &self.stage_derivatives,
-            first_half_stages: &self.first_half_stages,
-            second_half_stages: &self.second_half_stages,
-            start_time: previous_time,
+        let segment = BorrowedCollocationSegment::new(
+            previous_time,
             attempted_time,
-            bound_time: time,
-            adaptive: self.adaptive_attempt,
-        };
+            previous_state,
+            &self.midpoint_state,
+            state,
+            &self.stage_derivatives,
+            &self.first_half_stages,
+            &self.second_half_stages,
+            &self.tableau.lagrange,
+            self.tableau.stages,
+            self.adaptive_attempt,
+        )
+        .map_err(|_| SolveError::NonFiniteDerivative)?;
         recorder
             .record_step_dense(
                 previous_state,
