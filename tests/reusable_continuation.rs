@@ -99,3 +99,51 @@ fn final_clipped_interval_is_not_the_next_proposal() {
     assert!((c.next_step() - 0.1).abs() < 1e-14);
     assert_ne!(c.next_step(), 0.01);
 }
+
+#[test]
+fn observer_interruption_resumes_without_repeating_requested_outputs() {
+    let mut s = ExplicitRungeKuttaStepper::new(Tsit5.tableau().unwrap(), 0., &[1.]).unwrap();
+    let mut c = AdaptiveController::new(ControllerConfig::proportional(5).unwrap(), 0.1).unwrap();
+    let mut seen = Vec::new();
+    let stopped = integrate_rk(
+        &mut s,
+        &mut c,
+        1.,
+        &[0.3, 0.6],
+        100,
+        &mut rhs,
+        &mut |_: &[f64], _: &[f64], e: &[f64]| Ok(e[0].abs() / 1e-9),
+        &mut |o: Observation<'_>| {
+            if o.requested {
+                seen.push(o.time);
+                return Ok(ObserverAction::Stop);
+            }
+            Ok(ObserverAction::Continue)
+        },
+    )
+    .unwrap();
+    assert!(stopped.interrupted);
+    assert_eq!(stopped.time, 0.3);
+    let mut token = Continuation {
+        stepper: s,
+        controller: c,
+    };
+    integrate_rk(
+        &mut token.stepper,
+        &mut token.controller,
+        1.,
+        &[0.6],
+        100,
+        &mut rhs,
+        &mut |_: &[f64], _: &[f64], e: &[f64]| Ok(e[0].abs() / 1e-9),
+        &mut |o: Observation<'_>| {
+            if o.requested {
+                seen.push(o.time);
+            }
+            Ok(ObserverAction::Continue)
+        },
+    )
+    .unwrap();
+    assert_eq!(seen, [0.3, 0.6]);
+    assert!((token.stepper.state()[0] - std::f64::consts::E).abs() < 1e-8);
+}
