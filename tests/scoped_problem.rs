@@ -400,3 +400,47 @@ fn scoped_rosenbrock_time_partial_and_norm_errors_are_typed_and_reusable() {
         s.reject().unwrap();
     }
 }
+
+#[test]
+fn scoped_rkn_accepts_position_only_embedded_formula() {
+    use differential_equations::ScopedSecondOrderProblem;
+    let table = differential_equations::tableau::parse_rkn_tableau(
+        include_str!("../src/tableau/resources/second_order/erkn5.json"),
+        "Erkn5",
+    )
+    .unwrap();
+    let mut problem = ScopedSecondOrderProblem::new(
+        |_: f64, q: &[f64], _: &[f64], a: &mut [f64]| {
+            a[0] = -q[0];
+            Ok::<_, ForceError>(())
+        },
+        [1.0],
+        [0.0],
+        (0.0, 1.0),
+    );
+    let mut s = RknStepper::new(
+        &table,
+        AccelerationPolicy::VelocityIndependent,
+        0.0,
+        &[1.0],
+        &[0.0],
+    )
+    .unwrap();
+    let mut checked = 0;
+    problem
+        .integrate(
+            &mut s,
+            &mut control(),
+            &[],
+            10000,
+            &mut |view: &RknStepView<'_>| {
+                checked += 1;
+                assert!(view.velocity_error.is_none());
+                Ok(view.position_error.unwrap()[0].abs() / 1e-10)
+            },
+        )
+        .unwrap();
+    assert!(checked > 0);
+    assert!((s.position()[0] - 1.0f64.cos()).abs() < 1e-8);
+    assert!((s.velocity()[0] + 1.0f64.sin()).abs() < 1e-8);
+}

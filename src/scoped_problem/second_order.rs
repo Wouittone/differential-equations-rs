@@ -119,6 +119,8 @@ where
 {
     /// Starts a fresh trajectory in a reusable RKN workspace without saving output.
     /// The norm sees both partitions, their previous values, and embedded errors.
+    /// Position-only embedded methods leave the velocity estimator absent; the
+    /// caller norm chooses how to use the method-provided estimators.
     pub fn integrate<N>(
         &mut self,
         stepper: &mut RknStepper<'_>,
@@ -216,7 +218,7 @@ where
         let target = requested_times.get(index).copied().unwrap_or(endpoint);
         let view = stepper.attempt_to(target, controller.next_step(), acceleration)?;
         let step = view.end_time - view.start_time;
-        if view.position_error.is_none() || view.velocity_error.is_none() {
+        if view.position_error.is_none() && view.velocity_error.is_none() {
             stepper.reject().map_err(StepError::Solver)?;
             return Err(IntegrationError::MissingErrorEstimate);
         }
