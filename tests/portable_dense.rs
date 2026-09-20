@@ -125,3 +125,65 @@ fn serialized_solution_preserves_dense_and_repeated_states() {
             < 1e-14
     );
 }
+
+#[test]
+fn dense_export_can_extend_beyond_requested_saved_times() {
+    for (span, saves) in [
+        ((0.0, 1.0), vec![0.4, 0.6]),
+        ((1.0, 0.0), vec![0.6, 0.4]),
+        ((1.0, 0.0), vec![0.5]),
+    ] {
+        let p = OdeProblem::new(
+            |dy: &mut [f64], _: &[f64], _: &(), _| dy[0] = 1.0,
+            [span.0],
+            span,
+            (),
+        );
+        let s = solve(
+            &p,
+            Tsit5,
+            &SolveOptions::default()
+                .with_dense_output(true)
+                .with_save_at(saves),
+        )
+        .unwrap();
+        let restored = Solution::from_data(s.export_data().unwrap()).unwrap();
+        for t in [0.1, 0.5, 0.9] {
+            assert!((restored.try_interpolate(t).unwrap()[0] - t).abs() < 1e-12);
+        }
+    }
+}
+
+#[test]
+fn callback_jump_keeps_last_saved_state_precedence_after_export() {
+    use differential_equations::{CallbackAction, CallbackSave};
+    for span in [(0.0, 1.0), (1.0, 0.0)] {
+        let p = OdeProblem::new(
+            |dy: &mut [f64], _: &[f64], _: &(), _| dy[0] = 1.0,
+            [span.0],
+            span,
+            (),
+        )
+        .with_preset_time_callback_saving(
+            [0.5],
+            CallbackSave::Both,
+            |state: &mut [f64], _: &(), _| {
+                state[0] += 10.0;
+                CallbackAction::Continue
+            },
+        );
+        let s = solve(&p, Tsit5, &SolveOptions::default().with_dense_output(true)).unwrap();
+        let imported = Solution::from_data(s.export_data().unwrap()).unwrap();
+        assert_eq!(
+            imported.try_interpolate(0.5).unwrap(),
+            s.try_interpolate(0.5).unwrap()
+        );
+        assert!((imported.try_interpolate(0.5).unwrap()[0] - 10.5).abs() < 1e-12);
+        for t in [0.49, 0.51] {
+            assert!(
+                (imported.try_interpolate(t).unwrap()[0] - s.try_interpolate(t).unwrap()[0]).abs()
+                    < 2e-14
+            );
+        }
+    }
+}

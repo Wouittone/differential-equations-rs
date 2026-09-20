@@ -461,21 +461,28 @@ impl Solution {
         })?;
         let start = solution.times[0];
         let end = *solution.times.last().unwrap();
-        let direction = if start <= end { 1.0 } else { -1.0 };
-        let mut previous_end = start;
+        let direction = if start < end {
+            1.0
+        } else if start > end {
+            -1.0
+        } else {
+            data.segments
+                .first()
+                .map_or(1.0, |s| (s.data().end_time - s.data().start_time).signum())
+        };
+        let mut previous_end: Option<f64> = None;
         for segment in data.segments {
             let (left, right) = segment.time_bounds();
             if segment.dimension() != solution.dimension
-                || direction * (left - previous_end) < 0.0
+                || previous_end.is_some_and(|previous| direction * (left - previous) < 0.0)
                 || direction * (right - left) < 0.0
-                || direction * (left - start) < 0.0
-                || direction * (end - right) < 0.0
+                || direction * (segment.data().end_time - segment.data().start_time) <= 0.0
             {
                 return Err(InterpolationError::InvalidSegmentData {
                     context: "portable solution segment order, bounds, or dimensions",
                 });
             }
-            previous_end = right;
+            previous_end = Some(right);
             solution
                 .dense_segments
                 .push(OwnedDenseSegment::Portable(segment));
