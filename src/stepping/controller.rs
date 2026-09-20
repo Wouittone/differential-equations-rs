@@ -111,8 +111,12 @@ impl ControllerConfig {
             || self.maximum_step < self.minimum_step
             || self.initial_error_history.iter().any(|x| *x <= 0.)
             || self.error_history_floor <= 0.
-            || self.rejection_exponent.is_some_and(|x| !x.is_finite() || x <= 0.)
-            || self.repeated_rejection_maximum.is_some_and(|x| !x.is_finite() || x <= 0. || x > 1.)
+            || self
+                .rejection_exponent
+                .is_some_and(|x| !x.is_finite() || x <= 0.)
+            || self
+                .repeated_rejection_maximum
+                .is_some_and(|x| !x.is_finite() || x <= 0. || x > 1.)
         {
             return Err(ControllerError::Configuration);
         }
@@ -221,7 +225,11 @@ impl AdaptiveController {
         if !step.is_finite() || step == 0. || error.is_nan() || error < 0. {
             return Err(ControllerError::Configuration);
         }
-        let within_tolerance = if self.config.accept_equal { error <= 1. } else { error < 1. };
+        let within_tolerance = if self.config.accept_equal {
+            error <= 1.
+        } else {
+            error < 1.
+        };
         let forced = !within_tolerance
             && step.abs() <= self.config.minimum_step
             && self.config.minimum_step_policy == MinimumStepPolicy::ForceAccept;
@@ -245,14 +253,19 @@ impl AdaptiveController {
                 // exponents/history, retaining ordinary arithmetic otherwise.
                 (self.config.safety.ln() - self.config.beta[0] * error.ln()
                     + self.config.beta[1] * self.state.accepted_errors[0].ln()
-                    - self.config.beta[2] * self.state.accepted_errors[1].ln()).exp()
-            } else { raw }
+                    - self.config.beta[2] * self.state.accepted_errors[1].ln())
+                .exp()
+            } else {
+                raw
+            }
         }
         .clamp(self.config.minimum_factor, self.config.maximum_factor);
         if !accepted {
             factor = factor.min(self.config.rejection_maximum);
             if self.state.consecutive_rejections > 0 {
-                if let Some(cap) = self.config.repeated_rejection_maximum { factor = factor.min(cap); }
+                if let Some(cap) = self.config.repeated_rejection_maximum {
+                    factor = factor.min(cap);
+                }
             }
         } else if self.state.rejected_since_acceptance {
             factor = factor.min(self.config.rejected_acceptance_maximum);
@@ -306,21 +319,60 @@ pub fn initial_step(
     if scales.iter().any(|s| *s <= 0.) || direction.abs() != 1. || maximum <= 0. {
         return Err(StepFailure::Direction);
     }
-    let mut d0 = 0.;
-    let mut d1 = 0.;
-    for i in 0..state.len() {
-        d0 += (state[i] / scales[i]).powi(2);
-        d1 += (derivative[i] / scales[i]).powi(2);
+    // Scaled sum-of-squares avoids overflowing merely because components are
+    // larger than sqrt(MAX). A log-domain fallback handles ratios that themselves
+    // overflow although the ratio of the two RMS norms is representable.
+    fn rms(values: &[f64], scales: &[f64]) -> f64 {
+        let mut largest = 0.0_f64;
+        let mut sum = 0.0;
+        for (&value, &scale) in values.iter().zip(scales) {
+            let value = value.abs() / scale;
+            if !value.is_finite() {
+                return f64::INFINITY;
+            }
+            if value == 0.0 {
+                continue;
+            }
+            if value > largest {
+                sum = 1.0 + sum * (largest / value).powi(2);
+                largest = value;
+            } else {
+                sum += (value / largest).powi(2);
+            }
+        }
+        largest * (sum / values.len() as f64).sqrt()
     }
-    d0 = (d0 / state.len() as f64).sqrt();
-    d1 = (d1 / state.len() as f64).sqrt();
+    fn log_rms(values: &[f64], scales: &[f64]) -> f64 {
+        let largest = values
+            .iter()
+            .zip(scales)
+            .map(|(&v, &s)| v.abs().ln() - s.ln())
+            .fold(f64::NEG_INFINITY, f64::max);
+        if largest == f64::NEG_INFINITY {
+            return largest;
+        }
+        let sum: f64 = values
+            .iter()
+            .zip(scales)
+            .map(|(&v, &s)| (2.0 * (v.abs().ln() - s.ln() - largest)).exp())
+            .sum();
+        largest + 0.5 * (sum / values.len() as f64).ln()
+    }
+    let d0 = rms(state, scales);
+    let d1 = rms(derivative, scales);
     let h = if d0 < 1e-5 || d1 < 1e-5 {
         1e-6
+    } else if d0.is_finite() && d1.is_finite() {
+        (0.01 * d0 / d1).min(maximum)
     } else {
-        0.01 * d0 / d1
+        let log_h = 0.01_f64.ln() + log_rms(state, scales) - log_rms(derivative, scales);
+        log_h.min(maximum.ln()).exp()
     };
     if !h.is_finite() {
         return Err(StepFailure::NonFinite);
+    }
+    if h == 0.0 {
+        return Err(StepFailure::TimeResolution);
     }
     Ok(direction * h.min(maximum))
 }
