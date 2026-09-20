@@ -180,6 +180,9 @@ impl Tolerances {
         let scale = self.absolute[i] + self.relative[i] * previous.abs().max(candidate.abs());
         if scale == 0.0 {
             if error == 0.0 { 0.0 } else { f64::INFINITY }
+        } else if scale.is_infinite() {
+            let magnitude = previous.abs().max(candidate.abs());
+            (error.abs() / magnitude) / (self.absolute[i] / magnitude + self.relative[i])
         } else {
             error.abs() / scale
         }
@@ -264,6 +267,14 @@ mod tests {
             t.error_norm(&[0.0; 2], &[0.0; 2], &[0.0; 2], ErrorNorm::Rms),
             Ok(0.0)
         );
+    }
+    #[test]
+    fn finite_overflowing_scales_preserve_ratios() {
+        let t = Tolerances::scalar(1, 1e308, 2.0).unwrap();
+        let value = t
+            .error_norm(&[1e308], &[1e308], &[1e308], ErrorNorm::Max)
+            .unwrap();
+        assert!((value - 1.0 / 3.0).abs() < 1e-15);
     }
     #[test]
     fn rejects_invalid_configuration_and_inputs() {
