@@ -78,7 +78,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     writeln!(
         writer,
-        "round,sample,mode,direction,repeated_times,base_length,saved_states,queries,elapsed_ns,ns_per_query,checksum"
+        "round,sample,backend,mode,direction,repeated_times,base_length,saved_states,queries,elapsed_ns,ns_per_query,checksum"
     )?;
     for round in 0..rounds {
         for length in [1, 16, 256, 4096] {
@@ -95,6 +95,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 }
                             })
                             .collect();
+                        let reference_segments = solution.export_dense_segments()?;
                         let mut output = [0.0];
                         for &time in &queries {
                             solution.try_interpolate_into(time, &mut output)?;
@@ -106,27 +107,47 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             assert!(
                                 (output[0] - expected).abs() <= 1e-12 * expected.abs().max(1.0)
                             );
+                            reference_lookup(&solution, &reference_segments, time, &mut output);
+                            assert!(
+                                (output[0] - expected).abs() <= 1e-12 * expected.abs().max(1.0)
+                            );
                         }
-                        for sample in 0..samples {
-                            let started = Instant::now();
-                            let mut checksum = 0.0;
-                            for &time in &queries {
-                                black_box(&solution).try_interpolate_into(
-                                    black_box(time),
-                                    black_box(&mut output),
+                        for reference in [false, true] {
+                            for sample in 0..samples {
+                                let started = Instant::now();
+                                let mut checksum = 0.0;
+                                for &time in &queries {
+                                    if reference {
+                                        reference_lookup(
+                                            black_box(&solution),
+                                            black_box(&reference_segments),
+                                            black_box(time),
+                                            black_box(&mut output),
+                                        );
+                                    } else {
+                                        black_box(&solution).try_interpolate_into(
+                                            black_box(time),
+                                            black_box(&mut output),
+                                        )?;
+                                    }
+                                    checksum += black_box(output[0]);
+                                }
+                                let elapsed = started.elapsed().as_nanos();
+                                writeln!(
+                                    writer,
+                                    "{round},{sample},{},{},{},{repeats},{length},{},{query_count},{elapsed},{:.6},{:.17e}",
+                                    if reference {
+                                        "reference_scan"
+                                    } else {
+                                        "indexed"
+                                    },
+                                    if dense { "polynomial" } else { "saved_linear" },
+                                    if backward { "backward" } else { "forward" },
+                                    solution.times().len(),
+                                    elapsed as f64 / query_count as f64,
+                                    black_box(checksum)
                                 )?;
-                                checksum += black_box(output[0]);
                             }
-                            let elapsed = started.elapsed().as_nanos();
-                            writeln!(
-                                writer,
-                                "{round},{sample},{},{},{repeats},{length},{},{query_count},{elapsed},{:.6},{:.17e}",
-                                if dense { "polynomial" } else { "saved_linear" },
-                                if backward { "backward" } else { "forward" },
-                                solution.times().len(),
-                                elapsed as f64 / query_count as f64,
-                                black_box(checksum)
-                            )?;
                         }
                     }
                 }
@@ -135,4 +156,36 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     writer.flush()?;
     Ok(())
+}
+
+// Reference lookup reproduces the former saved-time reverse scan, segment scan,
+// then saved-interval scan. Inputs were validated against an analytic oracle;
+// this comparator isolates lookup work while using identical polynomial data.
+fn reference_lookup(
+    solution: &Solution,
+    segments: &[PortableDenseSegment],
+    time: f64,
+    output: &mut [f64],
+) {
+    for (index, &saved) in solution.times().iter().enumerate().rev() {
+        if time == saved {
+            output.copy_from_slice(solution.state(index).unwrap());
+            return;
+        }
+    }
+    for segment in segments {
+        if segment.contains(time) {
+            segment.interpolate_into(time, output).unwrap();
+            return;
+        }
+    }
+    for (index, times) in solution.times().windows(2).enumerate() {
+        if time >= times[0].min(times[1]) && time <= times[0].max(times[1]) {
+            let theta = (time - times[0]) / (times[1] - times[0]);
+            output[0] = solution.state(index).unwrap()[0] * (1.0 - theta)
+                + solution.state(index + 1).unwrap()[0] * theta;
+            return;
+        }
+    }
+    panic!("validated query was not in reference trajectory");
 }
