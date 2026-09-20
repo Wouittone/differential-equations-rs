@@ -116,3 +116,5 @@ pub use driver::{IntegrationError, IntegrationOutcome, Observation, ObserverActi
 
 pub(crate) mod time_difference;
 pub use time_difference::TimeDifferencePolicy;
+mod events;
+pub use events::{RootDirection, RootError, RootOptions, RootOutcome, integrate_rk_until_event};
