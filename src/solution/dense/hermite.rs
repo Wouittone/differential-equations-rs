@@ -27,6 +27,10 @@ pub(crate) struct BorrowedHermiteSegment<'a> {
 }
 
 impl HermiteSegment {
+    pub(super) fn time_bounds(&self) -> (f64, f64) {
+        (self.start_time, self.bound_time)
+    }
+
     #[allow(dead_code)]
     pub(crate) fn new(
         start_time: f64,

@@ -69,6 +69,10 @@ impl<'a> BorrowedTaylorSegment<'a> {
 }
 
 impl TaylorSegment {
+    pub(super) fn time_bounds(&self) -> (f64, f64) {
+        (self.start_time, self.bound_time)
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new_bounded(
         start_time: f64,

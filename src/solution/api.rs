@@ -179,46 +179,52 @@ impl Solution {
         if self.times.is_empty() {
             return Err(InterpolationError::EmptySolution);
         }
-        for (index, &saved_time) in self.times.iter().enumerate().rev() {
-            if time == saved_time {
-                let state = self
-                    .state(index)
-                    .ok_or(InterpolationError::InvalidSegmentData {
-                        context: "saved solution state",
-                    })?;
-                output.copy_from_slice(state);
-                return finite_interpolation(output, "saved solution state");
+        let forward = self.times.first() <= self.times.last();
+        let after = self.times.partition_point(|&saved| {
+            if forward {
+                saved <= time
+            } else {
+                saved >= time
             }
+        });
+        if after > 0 && self.times[after - 1] == time {
+            output.copy_from_slice(self.state(after - 1).ok_or(
+                InterpolationError::InvalidSegmentData {
+                    context: "saved solution state",
+                },
+            )?);
+            return finite_interpolation(output, "saved solution state");
         }
-        for segment in &self.dense_segments {
-            if segment.contains(time) {
-                segment.interpolate(time, output)?;
-                return finite_interpolation(output, "dense output");
-            }
+        let dense_index = self.dense_segments.partition_point(|segment| {
+            let (start, end) = segment.time_bounds();
+            if start <= end { end < time } else { end > time }
+        });
+        if let Some(segment) = self
+            .dense_segments
+            .get(dense_index)
+            .filter(|s| s.contains(time))
+        {
+            segment.interpolate(time, output)?;
+            return finite_interpolation(output, "dense output");
         }
-        for index in 1..self.times.len() {
-            let left = self.times[index - 1];
-            let right = self.times[index];
-            if (left <= right && time <= right && time >= left)
-                || (left >= right && time >= right && time <= left)
-            {
-                let fraction = interpolation_fraction(time, left, right).clamp(0.0, 1.0);
-                let previous =
-                    self.state(index - 1)
-                        .ok_or(InterpolationError::InvalidSegmentData {
-                            context: "saved solution state",
-                        })?;
-                let current = self
-                    .state(index)
-                    .ok_or(InterpolationError::InvalidSegmentData {
-                        context: "saved solution state",
-                    })?;
-                for ((output, &previous), &current) in output.iter_mut().zip(previous).zip(current)
-                {
-                    *output = interpolate_value(previous, current, fraction);
-                }
-                return finite_interpolation(output, "linear");
+        if after > 0 && after < self.times.len() {
+            let left = self.times[after - 1];
+            let right = self.times[after];
+            let fraction = interpolation_fraction(time, left, right).clamp(0.0, 1.0);
+            let previous = self
+                .state(after - 1)
+                .ok_or(InterpolationError::InvalidSegmentData {
+                    context: "saved solution state",
+                })?;
+            let current = self
+                .state(after)
+                .ok_or(InterpolationError::InvalidSegmentData {
+                    context: "saved solution state",
+                })?;
+            for ((output, &previous), &current) in output.iter_mut().zip(previous).zip(current) {
+                *output = interpolate_value(previous, current, fraction);
             }
+            return finite_interpolation(output, "linear");
         }
         Err(InterpolationError::OutsideTimeSpan)
     }

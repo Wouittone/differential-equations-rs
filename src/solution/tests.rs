@@ -127,3 +127,27 @@ fn recorder_uses_accepted_hermite_segment_for_save_at() {
     assert!((solution.values()[0] - 0.015625).abs() < 1.0e-14);
     assert!((solution.values()[1] - 0.421875).abs() < 1.0e-14);
 }
+
+#[test]
+fn indexed_lookup_preserves_duplicate_precedence_in_both_directions() {
+    for times in [vec![0.0, 1.0, 1.0, 2.0], vec![2.0, 1.0, 1.0, 0.0]] {
+        let solution = super::Solution::from_saved(
+            times.clone(),
+            vec![0.0, 10.0, 20.0, 30.0],
+            &[1],
+            super::SolverStats::default(),
+        )
+        .unwrap();
+        assert_eq!(solution.try_interpolate(1.0).unwrap(), [20.0]);
+        assert_eq!(
+            solution.try_interpolate((times[0] + 1.0) / 2.0).unwrap(),
+            [5.0]
+        );
+        assert_eq!(
+            solution.try_interpolate((times[3] + 1.0) / 2.0).unwrap(),
+            [25.0]
+        );
+        assert!(solution.try_interpolate(-1.0).is_err());
+        assert!(solution.try_interpolate(3.0).is_err());
+    }
+}

@@ -31,6 +31,15 @@ pub(crate) enum OwnedDenseSegment {
 }
 
 impl OwnedDenseSegment {
+    pub(super) fn time_bounds(&self) -> (f64, f64) {
+        match self {
+            Self::Hermite(s) => s.time_bounds(),
+            Self::RungeKutta(s) => s.time_bounds(),
+            Self::Stiff(s) => s.time_bounds(),
+            Self::Collocation(s) => s.time_bounds(),
+            Self::Taylor(s) => s.time_bounds(),
+        }
+    }
     pub(super) fn contains(&self, time: f64) -> bool {
         match self {
             Self::Hermite(segment) => segment.contains(time),
