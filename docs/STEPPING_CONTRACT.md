@@ -112,3 +112,16 @@ error. Analytic partials remove both probe calls. Large-epoch stage-time roundin
 still exists because `f64` cannot represent arbitrary sub-ULP times; shifting the
 independent variable to a local epoch is useful when that resolution matters.
 
+
+## Representable intervals at large epochs
+
+All public reusable kernels first compute the finite endpoint `t_end = t + h`,
+then use `h_effective = t_end - t` in their numerical formulas. This aligns the
+advanced state with the returned clock, especially when the requested `h` is not
+representable relative to a large epoch. A nonzero proposal that rounds back to
+`t` fails with `TimeResolution`. The effective interval may differ from the
+proposal by floating-point rounding; external controllers must assess
+`view.end_time - view.start_time`. RK/RKN/Rosenbrock views expose both times, and
+mixed views expose them in their physical partition. The built-in adaptive and
+root drivers already use the effective interval. Initial-step estimation uses
+scaled RMS norms with a log-domain fallback to avoid spurious overflow.

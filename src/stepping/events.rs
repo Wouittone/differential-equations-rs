@@ -186,6 +186,7 @@ where
             stepper.reject().map_err(failure)?;
             return Err(RootError::NonFiniteCondition);
         }
+        let h = stepper.pending_step().expect("successful event attempt");
         let mut trial_controller = controller.clone();
         let decision = match trial_controller.assess(h, error) {
             Ok(d) => d,

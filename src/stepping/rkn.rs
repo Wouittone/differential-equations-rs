@@ -225,6 +225,8 @@ impl<'a> RknStepper<'a> {
             return Err(StepFailure::PendingCandidate.into());
         }
         let end = checked_time(self.time, step)?;
+        // Advance state over the same representable interval as the public clock.
+        let step = end - self.time;
         self.stats.attempts += 1;
         let n = self.position.len();
         let h2 = step * step;

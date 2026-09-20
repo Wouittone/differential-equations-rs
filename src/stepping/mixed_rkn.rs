@@ -126,7 +126,8 @@ impl<'a> MixedRknStepper<'a> {
         if self.pending {
             return Err(StepFailure::PendingCandidate.into());
         }
-        checked_time(self.time(), step)?;
+        let end = checked_time(self.time(), step)?;
+        let step = end - self.time();
         let tableau = self.physical.tableau();
         let m = self.auxiliary.len();
         let mut stage =

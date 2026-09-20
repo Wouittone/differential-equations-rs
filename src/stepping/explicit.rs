@@ -185,6 +185,8 @@ impl<'a> ExplicitRungeKuttaStepper<'a> {
             return Err(StepFailure::PendingCandidate.into());
         }
         let end = checked_time(self.time, step)?;
+        // Advance state over the same representable interval as the public clock.
+        let step = end - self.time;
         self.stats.attempts += 1;
         self.candidate.copy_from_slice(&self.state);
         self.error.fill(0.);
