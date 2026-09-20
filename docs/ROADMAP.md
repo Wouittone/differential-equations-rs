@@ -44,6 +44,31 @@ Baseline: crate 1.0.0, commit 31decb9c. The complete acceptance criteria live in
 - [x] [T17: Compatibility design and release gates](https://github.com/Wouittone/differential-equations-rs/issues/32)
 - [ ] [H06: Benchmark force/reference consistency](https://github.com/Wouittone/differential-equations-rs/issues/15)
 
+## External solver replacement evaluations
+
+Forked replacement experiments broaden the acceptance evidence beyond SatKit and
+Brahe's original migration. These experiments compare native solver paths with
+the merged `1.4.0` backend at commit `a03385a3e427f583573db62b2a716099104ae000`.
+
+- [External `eqsolver` replacement benchmark](https://github.com/Wouittone/differential-equations-rs/issues/36):
+  adaptive Tsit5 improves the adaptive comparison surface but is 11x–19x slower
+  than tiny fixed-step RK4 cases; keep fixed-step and adaptive paths distinct.
+- [External `diffeq` backend tradeoffs](https://github.com/Wouittone/differential-equations-rs/issues/37):
+  replacement Tsit5 beats the native explicit Ode4 case in the sampled workload,
+  while replacement Rodas5P trails the native stiff baseline; state/callback
+  compatibility remains the main adapter barrier.
+- [Brahe solver replacement evaluation](https://github.com/Wouittone/differential-equations-rs/issues/38):
+  68 orbital/STM cases are performance-neutral (geometric mean -0.5% to +1.4%);
+  endpoint differences are zero for RK cases and at most 0.000216 m for RKN1210.
+- [SatKit solver replacement evaluation](https://github.com/Wouittone/differential-equations-rs/issues/40):
+  representative six-hour LEO RKV98 is 1.376x slower with the replacement, with
+  micrometre-scale position and nanometre-per-second velocity deltas.
+- [Portable solver diagnostics](https://github.com/Wouittone/differential-equations-rs/issues/41)
+  is the primary API follow-up: downstream comparisons need stable RHS/Jacobian
+  and accepted/rejected-step counters.
+- [Gauss-Jackson work-versus-error benchmark](https://github.com/Wouittone/differential-equations-rs/issues/42)
+  tracks the remaining solver-specific performance gap.
+
 ## Scope clarification
 
 The user deferred upstream issue fixes (H01–H06). They remain tracked and open, but are excluded from the current implementation waves. Work focuses on this library; final downstream migration and benchmark evaluation remain the acceptance experiment after crate work.
