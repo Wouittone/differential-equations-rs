@@ -188,3 +188,6 @@ mod second_order;
 pub use second_order::{
     RknObservation, ScopedRknFinalizer, ScopedRknObserver, ScopedSecondOrderProblem, integrate_rkn,
 };
+
+mod rosenbrock;
+pub use rosenbrock::integrate_rosenbrock;

@@ -284,3 +284,119 @@ fn scoped_jacobian_error_propagates_from_real_rosenbrock_attempt() {
     assert_eq!(stepper.time(), 0.0);
     assert_eq!(stepper.state(), &[1.0]);
 }
+
+#[test]
+fn scoped_rosenbrock_uses_borrowed_time_partials_and_finalizers() {
+    use differential_equations::{
+        solvers::rosenbrock::Rodas4,
+        tolerances::{ErrorNorm, Tolerances},
+    };
+    let tolerance = Tolerances::scalar(1, 1e-10, 1e-10).unwrap();
+    for span in [(0.0_f64, 1.0), (1.0, 0.0)] {
+        let mut partial_calls = 0;
+        let mut final_time = None;
+        let mut times = Vec::new();
+        let mut s =
+            RosenbrockStepper::new(Rodas4.tableau().unwrap(), span.0, &[span.0.powi(3)]).unwrap();
+        {
+            let mut p = ScopedOdeProblem::new(
+                |t: f64, _: &[f64], dy: &mut [f64]| {
+                    dy[0] = 3.0 * t * t;
+                    Ok::<_, ForceError>(())
+                },
+                [span.0.powi(3)],
+                span,
+            )
+            .with_jacobian(|_: f64, _: &[f64], j: &mut [f64]| {
+                j[0] = 0.0;
+                Ok(())
+            })
+            .with_observer(|o: Observation<'_>| {
+                if o.requested {
+                    times.push(o.time);
+                }
+                Ok(ObserverAction::Continue)
+            })
+            .with_finalizer(|o, _: &[f64]| {
+                final_time = Some(o.time);
+                Ok(())
+            });
+            let mut ft = |t: f64, _: &[f64], dy: &mut [f64]| {
+                partial_calls += 1;
+                dy[0] = 6.0 * t;
+                Ok(())
+            };
+            let mut c = AdaptiveController::new(
+                ControllerConfig::proportional(4).unwrap(),
+                0.1 * (span.1 - span.0),
+            )
+            .unwrap();
+            p.integrate_rosenbrock(
+                &mut s,
+                &mut c,
+                &[span.0, 0.5, span.1],
+                1000,
+                Some(&mut ft),
+                &mut |v: &RosenbrockStepView<'_>| {
+                    Ok(tolerance
+                        .error_norm(
+                            v.previous_state,
+                            v.candidate,
+                            v.component_error.unwrap(),
+                            ErrorNorm::Max,
+                        )
+                        .unwrap())
+                },
+            )
+            .unwrap();
+        }
+        assert!((s.state()[0] - span.1.powi(3)).abs() < 1e-9);
+        assert!(partial_calls > 0);
+        assert_eq!(final_time, Some(span.1));
+        assert_eq!(times, vec![span.0, 0.5, span.1]);
+    }
+}
+#[test]
+fn scoped_rosenbrock_time_partial_and_norm_errors_are_typed_and_reusable() {
+    use differential_equations::solvers::rosenbrock::Rodas4;
+    for fail_partial in [true, false] {
+        let mut p = ScopedOdeProblem::new(
+            |_: f64, _: &[f64], dy: &mut [f64]| {
+                dy[0] = 1.0;
+                Ok::<_, ForceError>(())
+            },
+            [0.0],
+            (0.0, 1.0),
+        )
+        .with_jacobian(|_: f64, _: &[f64], j: &mut [f64]| {
+            j[0] = 0.0;
+            Ok(())
+        });
+        let mut s = RosenbrockStepper::new(Rodas4.tableau().unwrap(), 0.0, &[0.0]).unwrap();
+        let mut ft = |_: f64, _: &[f64], dy: &mut [f64]| {
+            if fail_partial {
+                return Err(failure(81));
+            }
+            dy[0] = 0.0;
+            Ok(())
+        };
+        let error = p
+            .integrate_rosenbrock(
+                &mut s,
+                &mut control(),
+                &[],
+                10,
+                Some(&mut ft),
+                &mut |_: &RosenbrockStepView<'_>| Err(failure(82)),
+            )
+            .unwrap_err();
+        assert!(matches!(
+            error,
+            IntegrationError::Step(StepError::User(ForceError { code: 81 | 82, .. }))
+        ));
+        let (rhs, jac) = p.functions_mut();
+        s.invalidate_derivative();
+        s.attempt(0.1, rhs, Some(jac.unwrap()), None).unwrap();
+        s.reject().unwrap();
+    }
+}
