@@ -113,3 +113,6 @@ pub use controller::{
 
 mod driver;
 pub use driver::{IntegrationError, IntegrationOutcome, Observation, ObserverAction, integrate_rk};
+
+pub(crate) mod time_difference;
+pub use time_difference::TimeDifferencePolicy;

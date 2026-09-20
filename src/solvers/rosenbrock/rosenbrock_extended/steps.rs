@@ -466,7 +466,7 @@ where
     F: crate::OdeFunction<P>,
 {
     if !workspace.differentiation_valid {
-        differentiate(problem, state, time, workspace, stats)?;
+        differentiate(problem, state, time, step, workspace, stats)?;
         workspace.differentiation_valid = true;
     }
     let dimension = state.len();
@@ -489,6 +489,7 @@ fn differentiate<F, P>(
     problem: &OdeProblem<F, P>,
     state: &[f64],
     time: f64,
+    step: f64,
     workspace: &mut Workspace,
     stats: &mut SolverStats,
 ) -> Result<(), SolveError>
@@ -518,18 +519,36 @@ where
         }
         ensure_finite(&workspace.jacobian)?;
     }
-    let time_perturbation = f64::EPSILON.sqrt() * time.abs().max(1.0);
+    let (first, second) = crate::stepping::TimeDifferencePolicy::default()
+        .probes(time, step)
+        .map_err(|_| SolveError::NonFiniteDerivative)?;
     evaluate_unchecked(
         problem,
         &mut workspace.perturbed_derivative,
         state,
-        time + time_perturbation,
+        first,
         stats,
     )?;
+    workspace
+        .time_derivative
+        .copy_from_slice(&workspace.perturbed_derivative);
+    if let Some(second) = second {
+        evaluate_unchecked(
+            problem,
+            &mut workspace.perturbed_derivative,
+            state,
+            second,
+            stats,
+        )?;
+    }
     for component in 0..dimension {
-        workspace.time_derivative[component] = (workspace.perturbed_derivative[component]
-            - workspace.current_derivative[component])
-            / time_perturbation;
+        workspace.time_derivative[component] = crate::stepping::time_difference::partial(
+            workspace.current_derivative[component],
+            workspace.time_derivative[component],
+            second.map(|_| workspace.perturbed_derivative[component]),
+            first - time,
+            second.map(|t| t - time),
+        );
     }
     ensure_finite(&workspace.time_derivative)?;
     stats.jacobian_evaluations += 1;
