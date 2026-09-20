@@ -122,6 +122,7 @@ pub mod callbacks;
 mod ensemble;
 mod error;
 mod event;
+pub mod gauss_jackson;
 mod integrator;
 mod linear;
 mod operator_problem;
@@ -150,7 +151,8 @@ pub use ndarray;
 pub use operator_problem::{LieGroupProblem, LinearOperatorProblem};
 pub use problem::{MutableFunction, OdeFunction, OdeProblem, OdeProblemBuilder, SplitOdeProblem};
 pub use semilinear::SemilinearOdeProblem;
-pub use scoped_problem::ScopedOdeProblem;
+pub use scoped_problem::{ScopedOdeProblem, ScopedSecondOrderProblem};
+pub use gauss_jackson::{GaussJackson8, GaussJacksonConfig, GaussJacksonError, GaussJacksonStatistics, GaussJacksonStep};
 pub use solution::{DenseSegmentData, PortableDenseSegment, SolutionData, InterpolationQuality,
     InterpolationError, Solution, SolutionConstructionError, SolverStats};
 pub use solver::{
