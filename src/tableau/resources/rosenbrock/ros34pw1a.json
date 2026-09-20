@@ -1,8 +1,10 @@
 {
+  "$schema"     : "../rosenbrock-schema.json",
   "name"        : "Ros34Pw1a",
   "description" : "Ros34Pw1a: SciML OrdinaryDiffEq Rosenbrock tableau at 211142263781255a9aa2f910f6760b9f18ec29c8.",
   "kind"        : "rosenbrock",
   "order"       : 3,
+  "error_estimator": { "kind": "richardson-step-doubling", "method_order": 3 },
   "gamma"       : 0.435866521508459,
   "A"           : [
     [0, 0, 0, 0],

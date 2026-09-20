@@ -709,3 +709,20 @@ RKV98 (16 core + 5 interpolation stages) and Brahe RKF78 fixtures verify every
 coefficient bit, derived embedded-error weight, matrix layout and dense formula.
 The fixtures preserve original numeric literals/expressions, source hashes and
 MIT notices; no method-name substitution establishes equivalence.
+
+Rosenbrock resources declare `error_estimator` explicitly when their adaptive
+strategy differs from the default `{"kind":"embedded"}`. The tagged value
+`{"kind":"richardson-step-doubling","method_order":3}` requires a positive
+order equal to the tableau order and transformed `rosenbrock` kind. Ros34Pw1a
+uses this declaration because its raw embedded combination can cancel on scalar
+linear problems. The parser validates this metadata; it does not prove accuracy.
+The canonical representation is described by `rosenbrock-schema.json`.
+
+The low-level Rosenbrock stepper still computes the fixed-step formula for these
+resources and exposes its solved stages and original coefficient weights. It
+returns no usable `component_error` for a Richardson requirement, so a generic
+adaptive driver cannot silently use the unsuitable embedded weights. Use the
+native Ros34Pw1a algorithm for its step-doubling adaptive strategy. Rodas5Pr's
+additional residual control belongs to its algorithm wrapper: it shares the
+Rodas5P coefficient resource, so that control cannot be inferred from a raw
+Rodas5P tableau and is not provided by the raw-tableau driver.

@@ -54,6 +54,9 @@ impl RosenbrockStepView<'_> {
 /// factorizes once and solves once per stage. Accepted state, derivatives and
 /// matrices are reusable; accepted state can be owned or borrowed. Hooks are
 /// borrowed only for the duration of an attempt.
+/// Tableaus requiring Richardson estimation remain usable for fixed steps, but
+/// expose no component error. Algorithm wrappers such as Rodas5Pr's residual
+/// control cannot be inferred from its shared Rodas5P tableau and are not applied.
 #[derive(Debug)]
 pub struct RosenbrockStepper<'a> {
     tableau: &'a RosenbrockTableau,
@@ -348,7 +351,12 @@ impl<'a> RosenbrockStepper<'a> {
             start_time: self.time,
             end_time: end,
             candidate: &self.candidate,
-            component_error: self.tableau.btilde().map(|_| self.error.as_slice()),
+            component_error: match self.tableau.error_estimator() {
+                differential_equations_tableau_core::RosenbrockErrorEstimator::Embedded => {
+                    self.tableau.btilde().map(|_| self.error.as_slice())
+                }
+                _ => None,
+            },
             solved_stages: if step == 0. { &[] } else { &self.stages },
             stage_derivatives: if step == 0. { &[] } else { &self.rhs_stages },
             jacobian: if step == 0. { &[] } else { &self.jacobian },

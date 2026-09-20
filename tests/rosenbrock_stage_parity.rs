@@ -75,6 +75,16 @@ fn ros34pw1a_raw_embedded_error_has_scalar_linear_blind_spot() {
     let view = stepper
         .attempt(0.5, &mut f, Some(&mut jac), Some(&mut time))
         .unwrap();
-    assert!(view.component_error.unwrap()[0].abs() < 1e-14);
+    assert!(view.component_error.is_none());
+    let raw_error: f64 = Ros34Pw1a
+        .tableau()
+        .unwrap()
+        .btilde()
+        .unwrap()
+        .iter()
+        .zip(view.solved_stages)
+        .map(|(weight, stage)| weight * stage)
+        .sum();
+    assert!(raw_error.abs() < 1e-14);
     assert!((view.candidate[0] - (-0.5_f64).exp()).abs() > 1e-5);
 }

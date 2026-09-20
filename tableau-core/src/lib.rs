@@ -9,7 +9,9 @@ pub use variable_multistep::{VariableMultistepTableau, parse_variable_multistep_
 mod mri;
 pub use mri::{MisTableau, MriTableau, parse_mis_tableau, parse_mri_tableau};
 mod rosenbrock;
-pub use rosenbrock::{RosenbrockKind, RosenbrockTableau, parse_rosenbrock_tableau};
+pub use rosenbrock::{
+    RosenbrockErrorEstimator, RosenbrockKind, RosenbrockTableau, parse_rosenbrock_tableau,
+};
 mod rosenbrock_pair;
 pub use rosenbrock_pair::{RosenbrockPairTableau, parse_rosenbrock_pair_tableau};
 mod second_order;
