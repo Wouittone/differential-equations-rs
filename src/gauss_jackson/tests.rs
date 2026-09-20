@@ -358,3 +358,63 @@ fn large_epoch_steps_match_accepted_time_and_restart_across_binades() {
     }
     assert!(GaussJackson8::new(1e12, &[0.], &[1.], 1e-10, GaussJacksonConfig::default()).is_err());
 }
+
+#[test]
+fn extreme_step_dense_output_remains_finite() {
+    let mut solver =
+        GaussJackson8::new(0., &[1.], &[0.], 1e200, GaussJacksonConfig::default()).unwrap();
+    let mut force = |_: f64, _: &[f64], _: &[f64], a: &mut [f64]| {
+        a[0] = 0.;
+        Ok::<_, Infallible>(())
+    };
+    for _ in 0..12 {
+        let start = solver.time();
+        solver.try_step(&mut force).unwrap();
+        let mut q = [0.];
+        let mut v = [0.];
+        solver
+            .interpolate_into(start + (solver.time() - start) / 2., &mut q, &mut v)
+            .unwrap();
+        assert_eq!(q, [1.]);
+        assert_eq!(v, [0.]);
+        let mut coefficients = [0.; 6];
+        solver.dense_coefficients_into(&mut coefficients).unwrap();
+        assert!(coefficients.iter().all(|value| value.is_finite()));
+        solver.export_dense_segment().unwrap();
+    }
+    // Finite endpoints do not guarantee representable Hermite coefficients.
+    solver.q[0] = 1e308;
+    assert!(matches!(
+        solver.dense_coefficients_into(&mut [0.; 6]),
+        Err(GaussJacksonError::NonFinite)
+    ));
+    assert!(matches!(
+        solver.interpolate_into(
+            solver.dense_start + (solver.time - solver.dense_start) / 2.,
+            &mut [0.],
+            &mut [0.]
+        ),
+        Err(GaussJacksonError::NonFinite)
+    ));
+}
+
+#[test]
+fn full_step_rejects_later_stationary_time() {
+    let mut solver = GaussJackson8::new(
+        2f64.powi(53) - 1.,
+        &[1.],
+        &[0.],
+        1.,
+        GaussJacksonConfig::default(),
+    )
+    .unwrap();
+    let mut force = |_: f64, _: &[f64], _: &[f64], a: &mut [f64]| {
+        a[0] = 0.;
+        Ok::<_, Infallible>(())
+    };
+    solver.try_step(&mut force).unwrap();
+    let calls = solver.statistics().acceleration_evaluations;
+    assert!(solver.try_step(&mut force).is_err());
+    assert_eq!(solver.statistics().acceleration_evaluations, calls);
+    solver.try_step_to(solver.time(), &mut force).unwrap();
+}

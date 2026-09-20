@@ -246,7 +246,11 @@ impl GaussJackson8 {
     where
         F: FnMut(f64, &[f64], &[f64], &mut [f64]) -> Result<(), E>,
     {
-        self.try_step_to(self.time + self.step, acceleration)
+        let end = self.time + self.step;
+        if end == self.time {
+            return Err(GaussJacksonError::InvalidInput("step cannot advance time"));
+        }
+        self.try_step_to(end, acceleration)
     }
     /// Advances at most one interval toward `end`, landing exactly on short ends.
     /// A short interval uses high-order startup and clears the fixed-grid history.
@@ -381,7 +385,7 @@ impl GaussJackson8 {
                 a += POSITION_CENTER[k] * self.history[k * n + i];
             }
             self.sum[i] = self.center_v[i] - h * b;
-            self.double_sum[i] = self.center_q[i] - h * h * a;
+            self.double_sum[i] = self.center_q[i] - h * (h * a);
             for k in 5..9 {
                 self.double_sum[i] += h * self.sum[i];
                 self.sum[i] += h * self.history[k * n + i];
@@ -411,9 +415,9 @@ impl GaussJackson8 {
                 ac += POSITION_CORRECTOR[k] * self.history[(k + 1) * n + i];
                 bc += VELOCITY_CORRECTOR[k] * self.history[(k + 1) * n + i];
             }
-            self.cq[i] = self.double_sum[i] + h * self.sum[i] + h * h * a;
+            self.cq[i] = self.double_sum[i] + h * self.sum[i] + h * (h * a);
             self.cv[i] = self.sum[i] + h * b;
-            self.fixed_q[i] = self.double_sum[i] + h * self.sum[i] + h * h * ac;
+            self.fixed_q[i] = self.double_sum[i] + h * self.sum[i] + h * (h * ac);
             self.fixed_v[i] = self.sum[i] + h * bc;
         }
         eval(
@@ -427,7 +431,7 @@ impl GaussJackson8 {
         for _ in 0..self.config.max_corrector_iterations {
             let mut converged = true;
             for i in 0..n {
-                let q = self.fixed_q[i] + h * h * POSITION_CORRECTOR[8] * self.ca[i];
+                let q = self.fixed_q[i] + h * (h * (POSITION_CORRECTOR[8] * self.ca[i]));
                 let v = self.fixed_v[i] + h * (1. + VELOCITY_CORRECTOR[8]) * self.ca[i];
                 converged &= close(q, self.cq[i], self.config) && close(v, self.cv[i], self.config);
                 self.cq[i] = q;
@@ -582,6 +586,9 @@ impl GaussJackson8 {
             position[i] = c[0] + x * (c[1] + x * (c[2] + x * (c[3] + x * (c[4] + x * c[5]))));
             velocity[i] =
                 (c[1] + x * (2. * c[2] + x * (3. * c[3] + x * (4. * c[4] + x * 5. * c[5])))) / h;
+            if !position[i].is_finite() || !velocity[i].is_finite() {
+                return Err(GaussJacksonError::NonFinite);
+            }
         }
         Ok(())
     }
@@ -600,6 +607,9 @@ impl GaussJackson8 {
         let h = self.time - self.dense_start;
         for i in 0..n {
             let c = self.dense_coefficients(i, h);
+            if c.iter().any(|value| !value.is_finite()) {
+                return Err(GaussJacksonError::NonFinite);
+            }
             for degree in 0..6 {
                 output[degree * n + i] = c[degree];
             }
@@ -662,10 +672,10 @@ impl GaussJackson8 {
     fn dense_coefficients(&self, i: usize, h: f64) -> [f64; 6] {
         let q0 = self.dense_q0[i];
         let v0 = h * self.dense_v0[i];
-        let a0 = h * h * self.dense_a0[i];
+        let a0 = h * (h * self.dense_a0[i]);
         let dq = self.q[i] - q0;
         let v1 = h * self.v[i];
-        let a1 = h * h * self.dense_a1[i];
+        let a1 = h * (h * self.dense_a1[i]);
         [
             q0,
             v0,
