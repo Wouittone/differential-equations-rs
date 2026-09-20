@@ -217,7 +217,11 @@ impl TaylorSegment {
             dimension: n,
             coefficients: c,
             end_state: self.end_state.clone(),
-            bound_state: Some(self.end_state.clone()),
+            bound_state: if self.bound_time == self.start_time {
+                None
+            } else {
+                Some(self.end_state.clone())
+            },
             quality: crate::InterpolationQuality::MethodSpecific,
         })
     }

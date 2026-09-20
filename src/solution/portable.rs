@@ -193,6 +193,17 @@ mod tests {
         CollocationSegment, DenseSegment, HermiteSegment, StiffSegment, TaylorSegment,
     };
     #[test]
+    fn zero_length_taylor_clip_keeps_start_state_precedence() {
+        let native =
+            TaylorSegment::new_bounded(0.0, 1.0, 0.0, &[1.0], &[2.0], &[1.0, 1.0], 1).unwrap();
+        let portable = native.portable().unwrap();
+        let (mut expected, mut actual) = ([0.0], [0.0]);
+        native.interpolate(0.0, &mut expected).unwrap();
+        portable.interpolate_into(0.0, &mut actual).unwrap();
+        assert_eq!(actual, expected);
+        assert_eq!(actual, [1.0]);
+    }
+    #[test]
     fn all_native_polynomial_exports_preserve_values() {
         for (start, end, bound) in [(0.0, 2.0, 1.5), (2.0, 0.0, 0.5)] {
             let hermite = HermiteSegment::new_bounded(
