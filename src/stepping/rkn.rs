@@ -218,9 +218,11 @@ impl<'a> RknStepper<'a> {
                     }
                     finite(&self.stage_position)?;
                     finite(&self.stage_velocity)?;
+                    let stage_time = self.time + step * self.tableau.c()[i];
+                    finite(&[stage_time])?;
                     self.stats.rhs_evaluations += 1;
                     rhs(
-                        self.time + step * self.tableau.c()[i],
+                        stage_time,
                         &self.stage_position,
                         &self.stage_velocity,
                         &mut self.stages[start..start + n],

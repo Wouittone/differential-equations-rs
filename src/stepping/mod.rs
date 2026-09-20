@@ -103,3 +103,12 @@ pub fn endpoint_step(time: f64, endpoint: f64, proposal: f64) -> Result<f64, Ste
 
 mod rkn;
 pub use rkn::{AccelerationPolicy, RknStepView, RknStepper};
+
+mod controller;
+pub use controller::{
+    AdaptiveController, Continuation, ControllerConfig, ControllerError, ControllerState,
+    MinimumStepPolicy, StepDecision, initial_step,
+};
+
+mod driver;
+pub use driver::{IntegrationError, IntegrationOutcome, Observation, ObserverAction, integrate_rk};

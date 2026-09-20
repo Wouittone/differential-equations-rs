@@ -31,7 +31,7 @@ impl StepView<'_> {
 
 /// Persistent explicit RK workspace borrowing a validated per-instance tableau.
 ///
-/// Construction allocates five state vectors and one stage-major vector.
+/// Construction allocates seven state vectors and one stage-major vector.
 /// Attempt, accept, reject, reset and derivative injection never allocate.
 /// Specialized fitted formulas are rejected; their frequency-dependent weights
 /// require a dedicated kernel. Both embedded error vectors remain exposed so
@@ -187,9 +187,11 @@ impl<'a> ExplicitRungeKuttaStepper<'a> {
                         }
                     }
                     finite(&self.temporary)?;
+                    let stage_time = self.time + self.tableau.c()[i] * step;
+                    finite(&[stage_time])?;
                     self.stats.rhs_evaluations += 1;
                     rhs(
-                        self.time + self.tableau.c()[i] * step,
+                        stage_time,
                         &self.temporary,
                         &mut self.stages[start..start + n],
                     )
@@ -249,6 +251,43 @@ impl<'a> ExplicitRungeKuttaStepper<'a> {
     pub fn reject(&mut self) -> Result<(), StepFailure> {
         self.pending.take().ok_or(StepFailure::NoCandidate)?;
         self.stats.rejected_steps += 1;
+        Ok(())
+    }
+}
+
+impl ExplicitRungeKuttaStepper<'_> {
+    pub(super) fn pending_step(&self) -> Option<f64> {
+        self.pending
+    }
+    pub(super) fn attempt_with_norm<F, N, E>(
+        &mut self,
+        endpoint: f64,
+        proposal: f64,
+        rhs: &mut F,
+        norm: &mut N,
+    ) -> Result<f64, super::IntegrationError<E>>
+    where
+        F: FnMut(f64, &[f64], &mut [f64]) -> Result<(), E>,
+        N: FnMut(&[f64], &[f64], &[f64]) -> Result<f64, E>,
+    {
+        if self.tableau.error().is_none() {
+            return Err(super::IntegrationError::MissingErrorEstimate);
+        }
+        self.attempt_to(endpoint, proposal, rhs)?;
+        match norm(&self.state, &self.candidate, &self.error) {
+            Ok(e) => Ok(e),
+            Err(e) => {
+                self.pending = None;
+                Err(StepError::User(e).into())
+            }
+        }
+    }
+    /// Copy the final accepted state into a same-sized caller buffer, without resizing.
+    pub fn copy_state_into(&self, output: &mut [f64]) -> Result<(), StepFailure> {
+        if output.len() != self.state.len() {
+            return Err(StepFailure::Dimension);
+        }
+        output.copy_from_slice(&self.state);
         Ok(())
     }
 }
