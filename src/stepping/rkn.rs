@@ -1,5 +1,6 @@
 use super::{StepError, StepFailure, StepStatistics, checked_time, endpoint_step, finite};
 use crate::tableau::RungeKuttaNystromTableau;
+use super::state_buffer::StateBuffer;
 
 /// Explicit acceleration dependence contract for RKN formulas.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -46,8 +47,8 @@ pub struct RknStepper<'a> {
     tableau: &'a RungeKuttaNystromTableau,
     policy: AccelerationPolicy,
     time: f64,
-    position: Vec<f64>,
-    velocity: Vec<f64>,
+    position: StateBuffer<'a>,
+    velocity: StateBuffer<'a>,
     next_position: Vec<f64>,
     next_velocity: Vec<f64>,
     position_error: Vec<f64>,
@@ -69,12 +70,38 @@ impl<'a> RknStepper<'a> {
         position: &[f64],
         velocity: &[f64],
     ) -> Result<Self, StepFailure> {
+        Self::with_storage(tableau, policy, time,
+            StateBuffer::Owned(position.to_vec()), StateBuffer::Owned(velocity.to_vec()))
+    }
+    /// Borrow position and velocity buffers without copying or allocating them.
+    ///
+    /// Scratch storage is allocated once. Accept copies the candidate into
+    /// these buffers; rejection and failed attempts leave them unchanged.
+    /// Arrays and dynamic slices use the same path. Both exclusive borrows
+    /// remain active until the stepper is dropped; dimensions cannot resize.
+    pub fn from_buffers(
+        tableau: &'a RungeKuttaNystromTableau,
+        policy: AccelerationPolicy,
+        time: f64,
+        position: &'a mut [f64],
+        velocity: &'a mut [f64],
+    ) -> Result<Self, StepFailure> {
+        Self::with_storage(tableau, policy, time,
+            StateBuffer::Borrowed(position), StateBuffer::Borrowed(velocity))
+    }
+    fn with_storage(
+        tableau: &'a RungeKuttaNystromTableau,
+        policy: AccelerationPolicy,
+        time: f64,
+        position: StateBuffer<'a>,
+        velocity: StateBuffer<'a>,
+    ) -> Result<Self, StepFailure> {
         let n = position.len();
         if n == 0 || n != velocity.len() {
             return Err(StepFailure::Dimension);
         }
-        finite(position)?;
-        finite(velocity)?;
+        finite(&position)?;
+        finite(&velocity)?;
         finite(&[time])?;
         if policy == AccelerationPolicy::VelocityDependent && tableau.a_velocity().is_none() {
             return Err(StepFailure::UnsupportedTableau);
@@ -86,8 +113,8 @@ impl<'a> RknStepper<'a> {
             tableau,
             policy,
             time,
-            position: position.to_vec(),
-            velocity: velocity.to_vec(),
+            position,
+            velocity,
             next_position: vec![0.; n],
             next_velocity: vec![0.; n],
             position_error: vec![0.; n],

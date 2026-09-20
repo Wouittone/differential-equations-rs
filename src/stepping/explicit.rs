@@ -1,5 +1,6 @@
 use super::{StepError, StepFailure, StepStatistics, checked_time, endpoint_step, finite};
 use crate::tableau::{RungeKuttaKind, RungeKuttaTableau};
+use super::state_buffer::StateBuffer;
 
 /// Borrowed results of one explicit Runge--Kutta attempt.
 #[derive(Debug)]
@@ -40,7 +41,7 @@ impl StepView<'_> {
 pub struct ExplicitRungeKuttaStepper<'a> {
     tableau: &'a RungeKuttaTableau,
     time: f64,
-    state: Vec<f64>,
+    state: StateBuffer<'a>,
     candidate: Vec<f64>,
     error: Vec<f64>,
     second_error: Vec<f64>,
@@ -58,10 +59,31 @@ impl<'a> ExplicitRungeKuttaStepper<'a> {
         time: f64,
         state: &[f64],
     ) -> Result<Self, StepFailure> {
+        Self::with_storage(tableau, time, StateBuffer::Owned(state.to_vec()))
+    }
+    /// Borrow caller-owned accepted state, including a const-sized array.
+    ///
+    /// The state is neither copied nor allocated at construction. Scratch
+    /// storage is allocated once. Successful acceptance copies the candidate
+    /// into this buffer; rejection and failed attempts leave it unchanged.
+    /// The exclusive borrow lasts until the stepper is dropped. No state
+    /// resizing is allowed; use `reset` for another state of the same length.
+    pub fn from_buffer(
+        tableau: &'a RungeKuttaTableau,
+        time: f64,
+        state: &'a mut [f64],
+    ) -> Result<Self, StepFailure> {
+        Self::with_storage(tableau, time, StateBuffer::Borrowed(state))
+    }
+    fn with_storage(
+        tableau: &'a RungeKuttaTableau,
+        time: f64,
+        state: StateBuffer<'a>,
+    ) -> Result<Self, StepFailure> {
         if state.is_empty() {
             return Err(StepFailure::Dimension);
         }
-        finite(state)?;
+        finite(&state)?;
         finite(&[time])?;
         if tableau.kind() != RungeKuttaKind::Explicit || !tableau.fitted_weights().is_empty() {
             return Err(StepFailure::UnsupportedTableau);
@@ -73,7 +95,7 @@ impl<'a> ExplicitRungeKuttaStepper<'a> {
         Ok(Self {
             tableau,
             time,
-            state: state.to_vec(),
+            state,
             candidate: vec![0.; n],
             error: vec![0.; n],
             second_error: vec![0.; n],

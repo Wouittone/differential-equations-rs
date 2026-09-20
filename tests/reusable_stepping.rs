@@ -31,7 +31,7 @@ fn reusable_rk_lifecycle_fsal_and_signed_endpoints() {
     assert!((stepper.state()[0] - 0.1_f64.exp()).abs() < 1e-10);
     stepper.attempt(-0.1, &mut rhs).unwrap();
     stepper.accept().unwrap();
-    assert!(stepper.state()[0] - 1. < 1e-9);
+    assert!((stepper.state()[0] - 1.).abs() < 1e-9);
     stepper.attempt(0., &mut rhs).unwrap();
     stepper.accept().unwrap();
     assert_eq!(calls, 4 * (tableau.stages() - 1));

@@ -6,6 +6,7 @@
 //! invalidating any cached derivative. See `docs/STEPPING_CONTRACT.md`.
 
 mod explicit;
+mod state_buffer;
 pub use explicit::{ExplicitRungeKuttaStepper, StepView};
 
 /// A lifecycle or numerical input violation, independent of application errors.
