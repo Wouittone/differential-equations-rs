@@ -55,13 +55,14 @@ Workspace construction and coefficient parsing are setup costs. For dimension
 | Borrowed explicit RK | `(s + 5) n` | caller owns `n` state elements |
 | Owned RKN | `(s + 9) n` | small scalar state |
 | Borrowed RKN | `(s + 7) n` | caller owns `2n` state elements |
-| Rosenbrock | `2 n² + (2s + 9) n` | `n` LU pivot indices |
+| Owned Rosenbrock | `2 n² + (2s + 9) n` | `n` LU pivot indices |
+| Borrowed Rosenbrock | `2 n² + (2s + 8) n` | caller owns `n` state elements; `n` pivots |
 | Mixed RKN | owned RKN plus `(s + 4) m` | small scalar state |
 
 Each vector allocates once during construction. Dimension overflow is checked;
 changing shape requires constructing a new workspace. Reset requires the existing
 shape and never resizes. Coefficients are borrowed from a validated tableau and
-are not copied into the workspace. Fixed arrays coerce to the borrowed RK/RKN
+are not copied into the workspace. Fixed arrays coerce to the borrowed RK/RKN/Rosenbrock
 constructors (`from_buffer`/`from_buffers`). Acceptance copies the candidate into
 the accepted-state buffer; it never constructs a solution/trajectory object.
 
@@ -110,3 +111,4 @@ the previous one-probe policy, in exchange for removing the epoch-sized probe
 error. Analytic partials remove both probe calls. Large-epoch stage-time rounding
 still exists because `f64` cannot represent arbitrary sub-ULP times; shifting the
 independent variable to a local epoch is useful when that resolution matters.
+

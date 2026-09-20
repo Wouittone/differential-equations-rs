@@ -124,3 +124,36 @@ fn autonomous_fourth_order_convergence_and_backward() {
         assert!(e1 / e2 > 12., "{e1} {e2}");
     }
 }
+
+#[test]
+fn nonsymmetric_row_major_jacobian_and_borrowed_storage() {
+    let mut buffer = [0., 1.];
+    let ptr = buffer.as_ptr();
+    {
+        let mut s =
+            RosenbrockStepper::from_buffer(Rodas4.tableau().unwrap(), 0., &mut buffer).unwrap();
+        assert_eq!(s.state().as_ptr(), ptr);
+        for _ in 0..100 {
+            s.attempt(
+                0.01,
+                &mut |_: f64, y: &[f64], d: &mut [f64]| {
+                    d[0] = -y[0] + 2. * y[1];
+                    d[1] = -2. * y[1];
+                    Ok::<_, Infallible>(())
+                },
+                Some(&mut |_, _, j| {
+                    j.copy_from_slice(&[-1., 2., 0., -2.]);
+                    Ok(())
+                }),
+                Some(&mut |_, _, d| {
+                    d.fill(0.);
+                    Ok(())
+                }),
+            )
+            .unwrap();
+            s.accept().unwrap();
+        }
+    }
+    assert!((buffer[0] - 2. * ((-1_f64).exp() - (-2_f64).exp())).abs() < 1e-9);
+    assert!((buffer[1] - (-2_f64).exp()).abs() < 1e-9);
+}

@@ -1,3 +1,4 @@
+use super::state_buffer::StateBuffer;
 use super::{StepError, StepFailure, StepStatistics, TimeDifferencePolicy, checked_time, finite};
 use crate::linear::{factorize, solve_factorized};
 use crate::tableau::{RosenbrockKind, RosenbrockTableau};
@@ -51,12 +52,13 @@ impl RosenbrockStepView<'_> {
 /// Hybrid implicit/explicit tableaus and specialized low-storage pairs require
 /// their existing solver kernels and are rejected by this type. Each attempt
 /// factorizes once and solves once per stage. Accepted state, derivatives and
-/// matrices are owned; hooks are borrowed only for the duration of an attempt.
+/// matrices are reusable; accepted state can be owned or borrowed. Hooks are
+/// borrowed only for the duration of an attempt.
 #[derive(Debug)]
 pub struct RosenbrockStepper<'a> {
     tableau: &'a RosenbrockTableau,
     time: f64,
-    state: Vec<f64>,
+    state: StateBuffer<'a>,
     candidate: Vec<f64>,
     error: Vec<f64>,
     stages: Vec<f64>,
@@ -83,10 +85,26 @@ impl<'a> RosenbrockStepper<'a> {
         time: f64,
         state: &[f64],
     ) -> Result<Self, StepFailure> {
+        Self::with_storage(tableau, time, StateBuffer::Owned(state.to_vec()))
+    }
+    /// Borrow caller-owned accepted state; only scratch/matrix storage is allocated.
+    /// Acceptance updates this buffer, while failed/rejected attempts leave it unchanged.
+    pub fn from_buffer(
+        tableau: &'a RosenbrockTableau,
+        time: f64,
+        state: &'a mut [f64],
+    ) -> Result<Self, StepFailure> {
+        Self::with_storage(tableau, time, StateBuffer::Borrowed(state))
+    }
+    fn with_storage(
+        tableau: &'a RosenbrockTableau,
+        time: f64,
+        state: StateBuffer<'a>,
+    ) -> Result<Self, StepFailure> {
         if state.is_empty() {
             return Err(StepFailure::Dimension);
         }
-        finite(state)?;
+        finite(&state)?;
         finite(&[time])?;
         if tableau.kind() != RosenbrockKind::Rosenbrock {
             return Err(StepFailure::UnsupportedTableau);
@@ -99,7 +117,7 @@ impl<'a> RosenbrockStepper<'a> {
         Ok(Self {
             tableau,
             time,
-            state: state.to_vec(),
+            state,
             candidate: vec![0.; n],
             error: vec![0.; n],
             stages: vec![0.; sn],
@@ -169,7 +187,7 @@ impl<'a> RosenbrockStepper<'a> {
         if state.len() != self.state.len() {
             return Err(StepFailure::Dimension);
         }
-        finite(state)?;
+        finite(&state)?;
         finite(&[time])?;
         self.state.copy_from_slice(state);
         self.time = time;
