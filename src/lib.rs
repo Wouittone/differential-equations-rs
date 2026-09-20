@@ -131,6 +131,7 @@ mod solution;
 mod solver;
 pub mod solvers;
 pub mod tableau;
+pub mod tolerances;
 
 pub use callback::{CallbackAction, CallbackSave, CallbackSet, EventCrossing, EventDirection};
 pub use ensemble::{
