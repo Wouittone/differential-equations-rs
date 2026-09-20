@@ -36,6 +36,7 @@ struct RawTableau {
     #[serde(rename = "$schema", default)]
     _schema: Option<String>,
     name: String,
+    #[serde(default = "default_description")]
     description: String,
     kind: RawKind,
     order: usize,
@@ -106,6 +107,9 @@ impl Scalar {
     }
 }
 
+fn default_description() -> String {
+    "User-supplied Runge-Kutta method".into()
+}
 impl RawTableau {
     fn materialize(self) -> Result<RungeKuttaTableau, TableauError> {
         if self.description.trim().is_empty() {
@@ -499,3 +503,85 @@ pub fn parse_numeric_expression(source: &str) -> Result<f64, TableauError> {
 
 #[cfg(test)]
 mod tests;
+
+/// Typed borrowed inputs for constructing an owned tableau without JSON.
+#[derive(Clone, Debug)]
+pub struct RungeKuttaCoefficients<'a> {
+    /// Required method label.
+    pub name: &'a str,
+    /// Classical order, not an order-condition proof.
+    pub order: usize,
+    /// Full square stage matrix rows.
+    pub a: &'a [&'a [f64]],
+    /// Primary weights.
+    pub b: &'a [f64],
+    /// Stage nodes.
+    pub c: &'a [f64],
+    /// Embedded companion order.
+    pub embedded_order: Option<usize>,
+    /// Embedded companion weights.
+    pub b_hat: Option<&'a [f64]>,
+    /// Direct error weights, exclusive with b_hat.
+    pub error: Option<&'a [f64]>,
+    /// Continuous extension in ascending powers.
+    pub dense: Option<&'a [&'a [f64]]>,
+    /// First-same-as-last property.
+    pub fsal: bool,
+}
+impl<'a> RungeKuttaCoefficients<'a> {
+    /// Minimal explicit fixed-step coefficients. Construction copies once.
+    pub fn explicit(
+        name: &'a str,
+        order: usize,
+        a: &'a [&'a [f64]],
+        b: &'a [f64],
+        c: &'a [f64],
+    ) -> Self {
+        Self {
+            name,
+            order,
+            a,
+            b,
+            c,
+            embedded_order: None,
+            b_hat: None,
+            error: None,
+            dense: None,
+            fsal: false,
+        }
+    }
+    /// Uses the same coefficient validation as JSON resources without parsing.
+    pub fn build(self) -> Result<RungeKuttaTableau, TableauError> {
+        if self.name.trim().is_empty() {
+            return Err(TableauError::new("tableau name must not be empty"));
+        }
+        RawTableau {
+            _schema: None,
+            name: self.name.into(),
+            description: default_description(),
+            kind: RawKind::ExplicitRungeKutta,
+            order: self.order,
+            embedded_order: self.embedded_order,
+            real_stability_radius: None,
+            fsal: self.fsal,
+            a: typed_matrix(self.a),
+            b: typed_vector(self.b),
+            c: typed_vector(self.c),
+            b_hat: self.b_hat.map(typed_vector),
+            error_estimator: ErrorEstimatorKind::EmbeddedDifference,
+            error: self.error.map(typed_vector),
+            second_error: None,
+            dense: self.dense.map(typed_matrix),
+            lazy_dense_stages: Vec::new(),
+            fitted_weights: Vec::new(),
+            stage_predictors: Vec::new(),
+        }
+        .materialize()
+    }
+}
+pub(crate) fn typed_vector(values: &[f64]) -> Vec<Scalar> {
+    values.iter().copied().map(Scalar::Float).collect()
+}
+pub(crate) fn typed_matrix(rows: &[&[f64]]) -> Vec<Vec<Scalar>> {
+    rows.iter().map(|row| typed_vector(row)).collect()
+}

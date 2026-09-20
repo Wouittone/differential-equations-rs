@@ -14,8 +14,8 @@ mod rosenbrock_pair;
 pub use rosenbrock_pair::{RosenbrockPairTableau, parse_rosenbrock_pair_tableau};
 mod second_order;
 pub use second_order::{
-    IrknBootstrapSeed, IrknTableau, RungeKuttaNystromKind, RungeKuttaNystromTableau,
-    parse_irkn_tableau, parse_rkn_tableau,
+    IrknBootstrapSeed, IrknTableau, RknCoefficients, RungeKuttaNystromKind,
+    RungeKuttaNystromTableau, parse_irkn_tableau, parse_rkn_tableau,
 };
 mod low_storage;
 pub use low_storage::{
@@ -32,8 +32,8 @@ pub use stabilized::{
 
 mod runge_kutta;
 use runge_kutta::evaluate_polynomial;
+pub use runge_kutta::{RungeKuttaCoefficients, parse_numeric_expression, parse_tableau};
 pub(crate) use runge_kutta::{Scalar, approximately_equal, materialize_matrix, materialize_vector};
-pub use runge_kutta::{parse_numeric_expression, parse_tableau};
 use serde::Deserialize;
 use std::{error::Error, fmt, sync::Arc};
 
