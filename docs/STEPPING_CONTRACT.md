@@ -43,3 +43,70 @@ method/state token interchange; moving it preserves caches and proposal exactly.
 No implicit cloning, serialization, recording, callbacks, or allocations occur
 inside attempt/accept/reject. Retained output and dense-export allocations are
 separate explicit operations.
+
+## Storage and allocation accounting
+
+Workspace construction and coefficient parsing are setup costs. For dimension
+`n`, stages `s`, and auxiliary dimension `m`, the current persistent storage is:
+
+| Workspace | f64 elements (excluding coefficients) | Other storage |
+|---|---:|---|
+| Owned explicit RK | `(s + 6) n` | small scalar state |
+| Borrowed explicit RK | `(s + 5) n` | caller owns `n` state elements |
+| Owned RKN | `(s + 9) n` | small scalar state |
+| Borrowed RKN | `(s + 7) n` | caller owns `2n` state elements |
+| Rosenbrock | `2 n² + (2s + 9) n` | `n` LU pivot indices |
+| Mixed RKN | owned RKN plus `(s + 4) m` | small scalar state |
+
+Each vector allocates once during construction. Dimension overflow is checked;
+changing shape requires constructing a new workspace. Reset requires the existing
+shape and never resizes. Coefficients are borrowed from a validated tableau and
+are not copied into the workspace. Fixed arrays coerce to the borrowed RK/RKN
+constructors (`from_buffer`/`from_buffers`). Acceptance copies the candidate into
+the accepted-state buffer; it never constructs a solution/trajectory object.
+
+The allocation tests instrument accepted and rejected attempts, numerical
+Rosenbrock differentiation, mixed STM propagation and reset after setup. These
+paths perform zero allocator calls. RHS, derivative hooks, norms and observers
+are user code and may allocate themselves; this is outside the kernel guarantee.
+Recording output, building owned dense segments, cloning a tableau, serializing
+results, formatting errors, and resizing caller output collections are explicit
+additional costs. The output-free driver itself retains no trajectory and
+`copy_state_into` requires a correctly sized destination (it does not resize).
+
+## Continuation and cache validity
+
+`Continuation<S>` moves the entire workspace and controller, retaining method
+identity, dimensions, accepted state, cached derivatives, accepted-error history
+and `next_step`. The last interval is not a substitute for the next proposal.
+Moving a continuation never allocates and cannot accidentally apply a cache to a
+different tableau. It is an in-memory ownership token, not a serialization format.
+
+Every cached derivative includes all terms supplied by the RHS, including control.
+Rejection preserves the derivative at the unchanged accepted state. RK acceptance
+retains the final stage only for an FSAL method; RKN and Rosenbrock do not assume
+FSAL. After parameter/control changes, call `invalidate_derivative`; after state
+changes, call `reset`. After a discontinuity, also reset controller history.
+Hooks may have observable side effects. If an evaluation fails after earlier
+stages succeeded, the accepted-state derivative may remain cached; invalidate it
+before retrying if the failed application operation changed the mathematical RHS.
+
+## Rosenbrock conventions and finite differences
+
+`RosenbrockStepView::solved_stages` contains scaled solved increments, whereas
+`stage_derivatives` contains unscaled physical RHS evaluations. Their counters
+are separate. The Jacobian is row-major `J[row*n+column] = ∂f_row/∂y_column`.
+The time hook returns the explicit partial `∂f/∂t` while holding `y` fixed, never
+the total derivative `∂f/∂t + J f`. Analytic hooks preserve arbitrary application
+errors and avoid numerical probe calls. The matrix factorization is shared by
+all stages of an attempt; differentiation is reused after rejection.
+
+Numerical time differentiation now uses two direction-following probes within
+the attempted interval, a physical time scale independent of the absolute epoch,
+and optional smooth-domain bounds. Three-point one-sided differentiation is
+quadratic-exact and uses actual representable offsets. If only one probe is
+representable, it falls back to a first difference. This adds one RHS call versus
+the previous one-probe policy, in exchange for removing the epoch-sized probe
+error. Analytic partials remove both probe calls. Large-epoch stage-time rounding
+still exists because `f64` cannot represent arbitrary sub-ULP times; shifting the
+independent variable to a local epoch is useful when that resolution matters.
