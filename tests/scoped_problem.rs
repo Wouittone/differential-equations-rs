@@ -255,3 +255,32 @@ fn scoped_rkn_borrowed_lifecycle_and_error_paths() {
         IntegrationError::Step(StepError::User(ForceError { code: 71, .. }))
     ));
 }
+
+#[test]
+fn scoped_jacobian_error_propagates_from_real_rosenbrock_attempt() {
+    use differential_equations::solvers::rosenbrock::Rodas4;
+    let original_code = 99;
+    let mut problem = ScopedOdeProblem::new(
+        |_: f64, y: &[f64], dy: &mut [f64]| {
+            dy[0] = -y[0];
+            Ok::<_, ForceError>(())
+        },
+        [1.0],
+        (0.0, 1.0),
+    )
+    .with_jacobian(|_: f64, _: &[f64], _: &mut [f64]| Err(failure(original_code)));
+    let mut stepper = RosenbrockStepper::new(Rodas4.tableau().unwrap(), 0.0, &[1.0]).unwrap();
+    let (rhs, jac) = problem.functions_mut();
+    let error = stepper
+        .attempt(0.01, rhs, Some(jac.unwrap()), None)
+        .unwrap_err();
+    match error {
+        StepError::User(error) => {
+            assert_eq!(error.code, 99);
+            assert_eq!(error.source().unwrap().to_string(), "original cause");
+        }
+        other => panic!("unexpected {other:?}"),
+    }
+    assert_eq!(stepper.time(), 0.0);
+    assert_eq!(stepper.state(), &[1.0]);
+}
