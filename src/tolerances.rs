@@ -186,7 +186,8 @@ impl Tolerances {
             if error == 0.0 { 0.0 } else { f64::INFINITY }
         } else if scale.is_infinite() {
             let magnitude = previous.abs().max(candidate.abs());
-            (error.abs() / magnitude) / (self.absolute[i] / magnitude + self.relative[i])
+            let unit = self.absolute[i].max(self.relative[i]);
+            (error.abs() / unit) / (self.absolute[i] / unit + (self.relative[i] / unit) * magnitude)
         } else {
             error.abs() / scale
         }
@@ -285,6 +286,15 @@ mod tests {
             .error_norm(&[1e308], &[1e308], &[1e308], ErrorNorm::Max)
             .unwrap();
         assert!((value - 1.0 / 3.0).abs() < 1e-15);
+        let t = Tolerances::scalar(1, 1e308, 1e308).unwrap();
+        assert_eq!(
+            t.error_norm(&[1.0], &[1.0], &[1e308], ErrorNorm::Max),
+            Ok(0.5)
+        );
+        let value = t
+            .error_norm(&[1.1], &[1.1], &[1e308], ErrorNorm::Max)
+            .unwrap();
+        assert!((value - 1.0 / 2.1).abs() < 1e-15);
     }
     #[test]
     fn rejects_invalid_configuration_and_inputs() {
