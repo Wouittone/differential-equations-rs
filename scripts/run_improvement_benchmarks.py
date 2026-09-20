@@ -12,7 +12,11 @@ import json
 from pathlib import Path
 import subprocess
 import sys
-import tomllib
+
+try:
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover - Python < 3.11 compatibility
+    import tomli as tomllib
 
 
 def git(root, *args):
@@ -34,15 +38,46 @@ def snapshot(root):
     return {"commit": git(root, "rev-parse", "HEAD").decode().strip(), "files_sha256": hashes}
 
 
+def iter_dependency_entries(manifest):
+    sections = ["dependencies", "dev-dependencies", "build-dependencies"]
+    for section in sections:
+        table = manifest.get(section)
+        if isinstance(table, dict):
+            for key, value in table.items():
+                yield section, key, value
+    workspace = manifest.get("workspace")
+    if isinstance(workspace, dict):
+        for section in sections:
+            table = workspace.get(section)
+            if isinstance(table, dict):
+                for key, value in table.items():
+                    yield "workspace." + section, key, value
+    target = manifest.get("target")
+    if isinstance(target, dict):
+        for target_table in target.values():
+            if not isinstance(target_table, dict):
+                continue
+            for section in sections:
+                table = target_table.get(section)
+                if isinstance(table, dict):
+                    for key, value in table.items():
+                        yield f"target.{section}", key, value
+
+
 def validate_library_dependency(host, library):
     manifest = tomllib.loads((host / "Cargo.toml").read_text(encoding="utf-8"))
     expected = tomllib.loads((library / "Cargo.toml").read_text(encoding="utf-8"))["package"]["version"]
-    dependencies = [value for key, value in manifest.get("dependencies", {}).items()
-                    if key == "differential-equations-rs" or
-                    isinstance(value, dict) and value.get("package") == "differential-equations-rs"]
+    dependencies = []
+    for _, key, value in iter_dependency_entries(manifest):
+        if key == "differential-equations-rs":
+            dependencies.append(value)
+        elif isinstance(value, dict) and value.get("package") == "differential-equations-rs":
+            dependencies.append(value)
     if len(dependencies) != 1 or not isinstance(dependencies[0], dict):
         raise RuntimeError(f"{host} must explicitly depend on the candidate library")
     dependency = dependencies[0]
+    if dependency.get("workspace") is True:
+        raise RuntimeError(f"{host} must pin the candidate library path instead of workspace inheritance")
     if not dependency.get("path") or (host / dependency["path"]).resolve() != library:
         raise RuntimeError(f"{host} does not use the frozen local library path")
     if dependency.get("version") != "=" + expected:
