@@ -130,6 +130,7 @@ where
                 .as_mut()
                 .map(|f| &mut **f as &mut DerivativeHook<'_, E>),
         )?;
+        let step = view.end_time - view.start_time;
         if view.component_error.is_none() {
             stepper.reject().map_err(StepError::Solver)?;
             return Err(IntegrationError::MissingErrorEstimate);
