@@ -124,3 +124,6 @@ pub use events::{RootDirection, RootError, RootOptions, RootOutcome, integrate_r
 
 mod rosenbrock;
 pub use rosenbrock::{DerivativeHook, RosenbrockStepView, RosenbrockStepper};
+
+mod mixed_rkn;
+pub use mixed_rkn::{MixedRknStepView, MixedRknStepper};

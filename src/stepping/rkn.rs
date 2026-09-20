@@ -1,6 +1,6 @@
+use super::state_buffer::StateBuffer;
 use super::{StepError, StepFailure, StepStatistics, checked_time, endpoint_step, finite};
 use crate::tableau::RungeKuttaNystromTableau;
-use super::state_buffer::StateBuffer;
 
 /// Explicit acceleration dependence contract for RKN formulas.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -15,6 +15,10 @@ pub enum AccelerationPolicy {
 /// Borrowed RKN candidate and unscaled acceleration stages.
 #[derive(Debug)]
 pub struct RknStepView<'a> {
+    /// Accepted position before this attempt.
+    pub previous_position: &'a [f64],
+    /// Accepted velocity before this attempt.
+    pub previous_velocity: &'a [f64],
     /// Accepted start time.
     pub start_time: f64,
     /// Candidate time.
@@ -70,8 +74,13 @@ impl<'a> RknStepper<'a> {
         position: &[f64],
         velocity: &[f64],
     ) -> Result<Self, StepFailure> {
-        Self::with_storage(tableau, policy, time,
-            StateBuffer::Owned(position.to_vec()), StateBuffer::Owned(velocity.to_vec()))
+        Self::with_storage(
+            tableau,
+            policy,
+            time,
+            StateBuffer::Owned(position.to_vec()),
+            StateBuffer::Owned(velocity.to_vec()),
+        )
     }
     /// Borrow position and velocity buffers without copying or allocating them.
     ///
@@ -86,8 +95,13 @@ impl<'a> RknStepper<'a> {
         position: &'a mut [f64],
         velocity: &'a mut [f64],
     ) -> Result<Self, StepFailure> {
-        Self::with_storage(tableau, policy, time,
-            StateBuffer::Borrowed(position), StateBuffer::Borrowed(velocity))
+        Self::with_storage(
+            tableau,
+            policy,
+            time,
+            StateBuffer::Borrowed(position),
+            StateBuffer::Borrowed(velocity),
+        )
     }
     fn with_storage(
         tableau: &'a RungeKuttaNystromTableau,
@@ -277,6 +291,8 @@ impl<'a> RknStepper<'a> {
         finite(&self.velocity_error)?;
         self.pending = Some(step);
         Ok(RknStepView {
+            previous_position: &self.position,
+            previous_velocity: &self.velocity,
             start_time: self.time,
             end_time: end,
             position: &self.next_position,
@@ -308,5 +324,27 @@ impl<'a> RknStepper<'a> {
         self.pending.take().ok_or(StepFailure::NoCandidate)?;
         self.stats.rejected_steps += 1;
         Ok(())
+    }
+}
+
+impl RknStepper<'_> {
+    pub(super) fn pending_view(&self) -> Option<RknStepView<'_>> {
+        let step = self.pending?;
+        Some(RknStepView {
+            previous_position: &self.position,
+            previous_velocity: &self.velocity,
+            start_time: self.time,
+            end_time: self.time + step,
+            position: &self.next_position,
+            velocity: &self.next_velocity,
+            position_error: self.tableau.error().map(|_| self.position_error.as_slice()),
+            velocity_error: self
+                .tableau
+                .velocity_error()
+                .map(|_| self.velocity_error.as_slice()),
+            accelerations: if step == 0. { &[] } else { &self.stages },
+            statistics: self.stats,
+            dimension: self.position.len(),
+        })
     }
 }

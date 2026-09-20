@@ -1,6 +1,6 @@
+use super::state_buffer::StateBuffer;
 use super::{StepError, StepFailure, StepStatistics, checked_time, endpoint_step, finite};
 use crate::tableau::{RungeKuttaKind, RungeKuttaTableau};
-use super::state_buffer::StateBuffer;
 
 /// Borrowed results of one explicit Runge--Kutta attempt.
 #[derive(Debug)]
