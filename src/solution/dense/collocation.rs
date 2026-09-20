@@ -163,3 +163,86 @@ impl DenseSegment for CollocationSegment {
             })
     }
 }
+
+impl CollocationSegment {
+    pub(crate) fn portable(&self) -> Result<Vec<crate::PortableDenseSegment>, InterpolationError> {
+        let h = self.attempted_time - self.start_time;
+        let midpoint = self.start_time + 0.5 * h;
+        let mut output = Vec::new();
+        if self.adaptive {
+            let bound = if h.signum() * (self.bound_time - midpoint) <= 0.0 {
+                self.bound_time
+            } else {
+                midpoint
+            };
+            output.push(self.portable_piece(
+                self.start_time,
+                midpoint,
+                bound,
+                &self.start_state,
+                &self.first_half_stages,
+            )?);
+            if h.signum() * (self.bound_time - midpoint) > 0.0 {
+                output.push(self.portable_piece(
+                    midpoint,
+                    self.attempted_time,
+                    self.bound_time,
+                    &self.midpoint_state,
+                    &self.second_half_stages,
+                )?);
+            }
+        } else {
+            output.push(self.portable_piece(
+                self.start_time,
+                self.attempted_time,
+                self.bound_time,
+                &self.start_state,
+                &self.stages,
+            )?);
+        }
+        Ok(output)
+    }
+    fn portable_piece(
+        &self,
+        start: f64,
+        end: f64,
+        bound: f64,
+        state: &[f64],
+        stages: &[f64],
+    ) -> Result<crate::PortableDenseSegment, InterpolationError> {
+        let n = self.dimension;
+        let mut c = vec![0.0; (self.stage_count + 1) * n];
+        c[..n].copy_from_slice(state);
+        for stage in 0..self.stage_count {
+            for degree in 0..self.stage_count {
+                let weight = (end - start) * self.lagrange[stage * self.stage_count + degree]
+                    / (degree + 1) as f64;
+                for i in 0..n {
+                    c[(degree + 1) * n + i] += weight * stages[stage * n + i];
+                }
+            }
+        }
+        let mut end_state = vec![0.0; n];
+        for row in c.chunks_exact(n) {
+            for (out, &v) in end_state.iter_mut().zip(row) {
+                *out += v;
+            }
+        }
+        let bound_state = if bound == self.bound_time {
+            Some(self.endpoint_state.clone())
+        } else {
+            None
+        };
+        crate::PortableDenseSegment::from_data(crate::DenseSegmentData {
+            version: 1,
+            start_time: start,
+            end_time: end,
+            bound_time: bound,
+            dimension: n,
+            coefficients: c,
+            end_state,
+            bound_state,
+            quality: crate::InterpolationQuality::MethodSpecific,
+        })
+    }
+}

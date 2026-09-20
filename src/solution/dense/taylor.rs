@@ -203,3 +203,22 @@ fn interpolate_taylor(
         .then_some(())
         .ok_or(InterpolationError::NonFiniteResult { context: "Taylor" })
 }
+
+impl TaylorSegment {
+    pub(crate) fn portable(&self) -> Result<crate::PortableDenseSegment, InterpolationError> {
+        let n = self.dimension;
+        let mut c = self.coefficients[..(self.order + 1) * n].to_vec();
+        c[..n].copy_from_slice(&self.start_state);
+        crate::PortableDenseSegment::from_data(crate::DenseSegmentData {
+            version: 1,
+            start_time: self.start_time,
+            end_time: self.end_time,
+            bound_time: self.bound_time,
+            dimension: n,
+            coefficients: c,
+            end_state: self.end_state.clone(),
+            bound_state: Some(self.end_state.clone()),
+            quality: crate::InterpolationQuality::MethodSpecific,
+        })
+    }
+}

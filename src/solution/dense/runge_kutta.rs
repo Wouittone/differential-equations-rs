@@ -250,3 +250,31 @@ pub(crate) fn interpolate_runge_kutta(
     }
     Ok(())
 }
+
+impl RungeKuttaSegment {
+    pub(crate) fn portable(&self) -> Result<crate::PortableDenseSegment, InterpolationError> {
+        let n = self.dimension;
+        let rows = self.coefficients.0.iter().map(Vec::len).max().unwrap_or(0) + 1;
+        let mut c = vec![0.0; rows * n];
+        c[..n].copy_from_slice(&self.start_state);
+        let h = self.end_time - self.start_time;
+        for (stage, row) in self.coefficients.0.iter().enumerate() {
+            for (degree, &weight) in row.iter().enumerate() {
+                for i in 0..n {
+                    c[(degree + 1) * n + i] += h * weight * self.stages[stage * n + i];
+                }
+            }
+        }
+        crate::PortableDenseSegment::from_data(crate::DenseSegmentData {
+            version: 1,
+            start_time: self.start_time,
+            end_time: self.end_time,
+            bound_time: self.bound_time,
+            dimension: n,
+            coefficients: c,
+            end_state: self.end_state.clone(),
+            bound_state: None,
+            quality: crate::InterpolationQuality::MethodSpecific,
+        })
+    }
+}

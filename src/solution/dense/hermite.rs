@@ -231,3 +231,30 @@ fn interpolate_hermite(
     }
     Ok(())
 }
+
+impl HermiteSegment {
+    pub(crate) fn portable(&self) -> Result<crate::PortableDenseSegment, InterpolationError> {
+        let n = self.start_state.len();
+        let h = self.end_time - self.start_time;
+        let mut c = vec![0.0; 4 * n];
+        for i in 0..n {
+            c[i] = self.start_state[i];
+            c[n + i] = h * self.start_derivative[i];
+            c[2 * n + i] = 3.0 * (self.end_state[i] - self.start_state[i])
+                - h * (2.0 * self.start_derivative[i] + self.end_derivative[i]);
+            c[3 * n + i] = 2.0 * (self.start_state[i] - self.end_state[i])
+                + h * (self.start_derivative[i] + self.end_derivative[i]);
+        }
+        crate::PortableDenseSegment::from_data(crate::DenseSegmentData {
+            version: 1,
+            start_time: self.start_time,
+            end_time: self.end_time,
+            bound_time: self.bound_time,
+            dimension: n,
+            coefficients: c,
+            end_state: self.end_state.clone(),
+            bound_state: None,
+            quality: crate::InterpolationQuality::MethodSpecific,
+        })
+    }
+}

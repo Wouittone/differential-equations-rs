@@ -4,7 +4,9 @@ use crate::solvers::automatic::AutomaticBranch;
 
 mod api;
 mod dense;
+mod portable;
 mod recorder;
+pub use portable::{DenseSegmentData, InterpolationQuality, PortableDenseSegment, SolutionData};
 
 pub use api::Solution;
 pub(crate) use api::{

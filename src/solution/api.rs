@@ -369,3 +369,117 @@ pub(crate) fn validate_finite_partitioned_interpolation(
         .then_some(())
         .ok_or(InterpolationError::NonFiniteResult { context })
 }
+
+impl Solution {
+    /// Exports method-specific dense segments as validated portable polynomials.
+    ///
+    /// Export allocates; interpolation of the resulting segments does not.
+    /// Polynomial coefficient regrouping can change final rounding by a few ulps.
+    pub fn export_dense_segments(
+        &self,
+    ) -> Result<Vec<crate::PortableDenseSegment>, InterpolationError> {
+        let mut segments = Vec::new();
+        for segment in &self.dense_segments {
+            segments.extend(segment.portable()?);
+        }
+        Ok(segments)
+    }
+    /// Reports the actual interpolation quality at the requested time.
+    pub fn interpolation_quality(
+        &self,
+        time: f64,
+    ) -> Result<crate::InterpolationQuality, InterpolationError> {
+        use crate::InterpolationQuality;
+        if !time.is_finite() {
+            return Err(InterpolationError::NonFiniteTime);
+        }
+        let forward = self.times.first() <= self.times.last();
+        let after = self.times.partition_point(|&saved| {
+            if forward {
+                saved <= time
+            } else {
+                saved >= time
+            }
+        });
+        if after > 0 && self.times[after - 1] == time {
+            return Ok(InterpolationQuality::ExactSavedState);
+        }
+        let index = self.dense_segments.partition_point(|s| {
+            let (start, end) = s.time_bounds();
+            if start <= end { end < time } else { end > time }
+        });
+        if let Some(segment) = self.dense_segments.get(index).filter(|s| s.contains(time)) {
+            return Ok(segment.quality());
+        }
+        if after > 0 && after < self.times.len() {
+            Ok(InterpolationQuality::Linear)
+        } else {
+            Err(InterpolationError::OutsideTimeSpan)
+        }
+    }
+    /// Interpolates only if the query has method-specific dense output or an exact saved state.
+    pub fn try_interpolate_method_into(
+        &self,
+        time: f64,
+        output: &mut [f64],
+    ) -> Result<(), InterpolationError> {
+        if self.interpolation_quality(time)? == crate::InterpolationQuality::Linear {
+            return Err(InterpolationError::InvalidSegmentData {
+                context: "method-specific dense output is unavailable",
+            });
+        }
+        self.try_interpolate_into(time, output)
+    }
+}
+
+impl Solution {
+    /// Exports a versioned trajectory and portable dense output.
+    pub fn export_data(&self) -> Result<crate::SolutionData, InterpolationError> {
+        Ok(crate::SolutionData {
+            version: 1,
+            times: self.times.clone(),
+            values: self.values.clone(),
+            state_shape: self.state_shape().to_vec(),
+            segments: self.export_dense_segments()?,
+        })
+    }
+    /// Imports a validated trajectory; work counters start at their defaults.
+    pub fn from_data(data: crate::SolutionData) -> Result<Self, InterpolationError> {
+        if data.version != 1 {
+            return Err(InterpolationError::InvalidSegmentData {
+                context: "unsupported solution schema version",
+            });
+        }
+        let mut solution = Self::from_saved(
+            data.times,
+            data.values,
+            &data.state_shape,
+            SolverStats::default(),
+        )
+        .map_err(|_| InterpolationError::InvalidSegmentData {
+            context: "portable solution saved states",
+        })?;
+        let start = solution.times[0];
+        let end = *solution.times.last().unwrap();
+        let direction = if start <= end { 1.0 } else { -1.0 };
+        let mut previous_end = start;
+        for segment in data.segments {
+            let (left, right) = segment.time_bounds();
+            if segment.dimension() != solution.dimension
+                || direction * (left - previous_end) < 0.0
+                || direction * (right - left) < 0.0
+                || direction * (left - start) < 0.0
+                || direction * (end - right) < 0.0
+            {
+                return Err(InterpolationError::InvalidSegmentData {
+                    context: "portable solution segment order, bounds, or dimensions",
+                });
+            }
+            previous_end = right;
+            solution
+                .dense_segments
+                .push(OwnedDenseSegment::Portable(segment));
+        }
+        Ok(solution)
+    }
+}
