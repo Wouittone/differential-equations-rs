@@ -1,7 +1,10 @@
 //! Construction, accepted/rejected attempts, and output costs measured separately.
 //! Run timing and allocation-metrics binaries separately; each emits raw CSV.
 use differential_equations::solvers::explicit::Tsit5;
-use differential_equations::stepping::ExplicitRungeKuttaStepper;
+use differential_equations::stepping::{
+    AdaptiveController, ControllerConfig, ExplicitRungeKuttaStepper, MinimumStepPolicy,
+};
+use differential_equations::tableau::{LazyDenseStageCoefficients, RungeKuttaCoefficients};
 use differential_equations::{OdeProblem, SaveMode, SolveOptions, solve};
 #[cfg(feature = "allocation-metrics")]
 use stats_alloc::{INSTRUMENTED_SYSTEM, Region, StatsAlloc};
@@ -14,7 +17,49 @@ fn rhs(_: f64, y: &[f64], out: &mut [f64]) -> Result<(), Infallible> {
     for (d, v) in out.iter_mut().zip(y) {
         *d = -*v;
     }
+
     Ok(())
+}
+
+#[path = "../tableau-core/tests/fixtures/numeris_rkv98.rs"]
+mod numeris_rkv98;
+
+fn rkv98() -> differential_equations::tableau::RungeKuttaTableau {
+    let rows: Vec<&[f64]> = numeris_rkv98::A[..16]
+        .iter()
+        .map(|row| &row[..16])
+        .collect();
+    let dense: Vec<&[f64]> = numeris_rkv98::BI.iter().map(|row| row.as_slice()).collect();
+    let sparse: Vec<Vec<(usize, f64)>> = numeris_rkv98::A[16..]
+        .iter()
+        .map(|row| {
+            row.iter()
+                .enumerate()
+                .filter(|(_, value)| **value != 0.0)
+                .map(|(index, &value)| (index, value))
+                .collect()
+        })
+        .collect();
+    let lazy: Vec<_> = sparse
+        .iter()
+        .enumerate()
+        .map(|(index, row)| LazyDenseStageCoefficients {
+            node: numeris_rkv98::C[16 + index],
+            coefficients: row,
+        })
+        .collect();
+    let mut coefficients = RungeKuttaCoefficients::explicit(
+        "numeris 0.6.0 RKV98 benchmark",
+        9,
+        &rows,
+        &numeris_rkv98::B[..16],
+        &numeris_rkv98::C[..16],
+    );
+    coefficients.embedded_order = Some(8);
+    coefficients.b_hat = Some(&numeris_rkv98::BHAT[..16]);
+    coefficients.dense = Some(&dense);
+    coefficients.lazy_dense_stages = &lazy;
+    coefficients.build().expect("RKV98 fixture must validate")
 }
 fn measure(name: &str, n: usize, operations: usize, mut run: impl FnMut() -> f64) {
     // Warm-up excluded. This harness reports warm-cache construction separately.
@@ -121,4 +166,56 @@ fn main() {
             sum
         });
     }
+    benchmark_rkv98_controller_and_stages();
+}
+
+fn benchmark_rkv98_controller_and_stages() {
+    let tableau = rkv98();
+    let state = vec![1.0; 16];
+    let mut stepper = ExplicitRungeKuttaStepper::new(&tableau, 0.0, &state).unwrap();
+    let mut controller = AdaptiveController::new(
+        ControllerConfig {
+            rejection_exponent: Some(0.14),
+            repeated_rejection_maximum: Some(0.5),
+            minimum_step_policy: MinimumStepPolicy::ForceAccept,
+            ..ControllerConfig::proportional(8).unwrap()
+        },
+        1.0e-3,
+    )
+    .unwrap();
+    let mut rhs_calls = 0usize;
+    let mut accepted = 0usize;
+    let mut rejected = 0usize;
+    let stage_start = Instant::now();
+    for attempt in 0..256 {
+        let view = stepper
+            .attempt(1.0e-3, &mut |_: f64, y: &[f64], out: &mut [f64]| {
+                rhs_calls += 1;
+                rhs(0.0, y, out)
+            })
+            .unwrap();
+        black_box(view.candidate[0]);
+        let error = if attempt % 17 == 0 { 2.0 } else { 0.2 };
+        if error <= 1.0 {
+            stepper.accept().unwrap();
+            accepted += 1;
+        } else {
+            stepper.reject().unwrap();
+            rejected += 1;
+        }
+    }
+    let stage_nanoseconds = stage_start.elapsed().as_nanos();
+    controller.reset(1.0e-3).unwrap();
+    let controller_start = Instant::now();
+    let mut proposal = 1.0e-3;
+    for attempt in 0..256 {
+        let error = if attempt % 17 == 0 { 2.0 } else { 0.2 };
+        proposal = controller.assess(proposal, error).unwrap().next_step;
+    }
+    let controller_nanoseconds = controller_start.elapsed().as_nanos();
+    let inclusive_nanoseconds = stage_nanoseconds + controller_nanoseconds;
+    println!(
+        "rkv98_controller_stage_loop,16,256,{inclusive_nanoseconds},{rhs_calls},{accepted},{rejected},{};stage_ns={stage_nanoseconds};controller_ns={controller_nanoseconds};proposal={proposal:.17e}",
+        tableau.lazy_dense_stages().len()
+    );
 }

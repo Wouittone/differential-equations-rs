@@ -11,7 +11,7 @@ use crate::{OdeProblem, Solution, SolveError, SolveOptions, SolverStats};
 
 use super::helpers::{
     endpoint_stage_stiffness_estimate, ensure_finite, error_norm, estimate_initial_step, evaluate,
-    perform_lazy_dense_stages, perform_step,
+    evaluate_stage, perform_lazy_dense_stages, perform_step,
 };
 use super::tableau_access::{ResourceTableau, TableauAccess};
 use super::workspace::Workspace;
@@ -100,7 +100,7 @@ where
         time: f64,
         stats: &mut SolverStats,
     ) -> Result<(), SolveError> {
-        evaluate(
+        evaluate_stage(
             problem,
             &mut self.workspace.stages[..self.workspace.dimension],
             state,
@@ -145,7 +145,7 @@ where
         stats: &mut SolverStats,
     ) -> Result<StepEstimate, SolveError> {
         if !self.stage_zero_is_current {
-            evaluate(
+            evaluate_stage(
                 problem,
                 &mut self.workspace.stages[..self.workspace.dimension],
                 state,
