@@ -68,6 +68,7 @@ pub struct IntegrationOutcome {
 /// resumed. Parameter/control changes between calls require cache invalidation.
 /// This lightweight driver intentionally leaves event root finding to hosts;
 /// an observer can stop at scheduled boundaries and restart after event effects.
+#[allow(clippy::too_many_arguments)]
 pub fn integrate_rk<F, N, O, E>(
     stepper: &mut ExplicitRungeKuttaStepper<'_>,
     controller: &mut AdaptiveController,

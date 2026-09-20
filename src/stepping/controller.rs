@@ -241,8 +241,8 @@ impl AdaptiveController {
             self.config.maximum_factor
         } else if error.is_infinite() {
             self.config.minimum_factor
-        } else if !accepted && self.config.rejection_exponent.is_some() {
-            self.config.safety * error.powf(-self.config.rejection_exponent.unwrap())
+        } else if let Some(exponent) = self.config.rejection_exponent.filter(|_| !accepted) {
+            self.config.safety * error.powf(-exponent)
         } else {
             let raw = self.config.safety
                 * error.powf(-self.config.beta[0])

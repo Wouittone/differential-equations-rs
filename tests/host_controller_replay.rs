@@ -29,7 +29,7 @@ fn satkit_pid_accept_reject_history_and_next_proposal_match() {
                 rejections += 1;
                 let raw = error.powf(0.7 / 5.0) / 0.9;
                 if rejections > 1 {
-                    raw.max(2.0).min(5.0)
+                    raw.clamp(2.0, 5.0)
                 } else {
                     raw.min(5.0)
                 }

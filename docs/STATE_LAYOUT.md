@@ -8,11 +8,11 @@ is `c * rows + r`. Never reinterpret a nonsymmetric matrix slice without an
 explicit order. Padded views and transposes retain strides; `to_rows` supports
 fixed rectangular arrays.
 
-The standalone `benches/layout.rs` measures a 6x7 sensitivity matrix conversion
+The `benches/layout.rs` target measures a 6x7 sensitivity matrix conversion
 with black-box input/output and counts global allocator calls. On the development
 Windows host (rustc optimized build), 1,000,000 conversions took 11,283,200 ns
 and made zero allocations. This is a smoke measurement, not a stable speedup or
-cross-host benchmark. Repeat it with `rustc -O --edition 2024 benches/layout.rs`.
+cross-host benchmark. Repeat it with `cargo bench --locked --bench layout`.
 
 General scalar parameterization is deferred, rather than silently narrowing a
 claimed generic interface. At this baseline 143 source files mention f64; the

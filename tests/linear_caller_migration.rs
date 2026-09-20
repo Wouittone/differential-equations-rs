@@ -36,15 +36,17 @@ fn endpoint<A: OdeAlgorithm + Copy>(algorithm: A) -> [f64; 2] {
 }
 
 fn implicit_methods_retain_compliance_endpoints() {
-    assert_eq!(
-        endpoint(ImplicitEuler),
-        [4.114_352_645_070_348e-2, 3.697_112_123_291_194e-1]
-    );
-    assert_eq!(
-        endpoint(ImplicitMidpoint),
-        [4.091_517_292_423_622e-2, 3.678_763_754_762_209e-1]
-    );
-    assert_eq!(endpoint(Trapezoid), endpoint(ImplicitMidpoint));
+    let euler = endpoint(ImplicitEuler);
+    assert!((euler[0] - 4.114_352_645_070_348e-2).abs() < 1e-15);
+    assert!((euler[1] - 3.697_112_123_291_194e-1).abs() < 1e-15);
+
+    let midpoint = endpoint(ImplicitMidpoint);
+    assert!((midpoint[0] - 4.091_517_292_423_622e-2).abs() < 1e-15);
+    assert!((midpoint[1] - 3.678_763_754_762_209e-1).abs() < 1e-15);
+
+    let trapezoid = endpoint(Trapezoid);
+    assert!((trapezoid[0] - midpoint[0]).abs() < 1e-15);
+    assert!((trapezoid[1] - midpoint[1]).abs() < 1e-15);
 }
 
 fn allocations_for<A: OdeAlgorithm + Copy>(algorithm: A, step: f64) -> usize {

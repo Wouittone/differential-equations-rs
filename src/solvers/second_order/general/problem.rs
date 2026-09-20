@@ -371,6 +371,7 @@ where
 }
 impl<P> SecondOrderOdeProblem<(), P> {
     /// Creates a problem from a mutable infallible acceleration closure.
+    #[allow(clippy::type_complexity)] // Keep the concrete closure without dynamic dispatch.
     pub fn new_mut<F>(
         mut acceleration: F,
         initial_velocity: impl Into<Vec<f64>>,

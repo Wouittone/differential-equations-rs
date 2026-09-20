@@ -876,6 +876,7 @@ where
 
 impl<P> OdeProblem<(), P> {
     /// Creates a problem directly from a mutable infallible closure.
+    #[allow(clippy::type_complexity)] // The opaque adapter preserves the caller's concrete closure.
     pub fn new_mut<F>(
         mut rhs: F,
         initial_state: impl Into<Vec<f64>>,

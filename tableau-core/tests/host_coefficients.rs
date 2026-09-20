@@ -48,14 +48,14 @@ fn numeris_core_embedded_and_lazy_dense_coefficients_are_exact() {
             (numeris::B[stage] - numeris::BHAT[stage]).to_bits()
         );
     }
-    for stage in 0..5 {
+    for (stage, sparse_row) in sparse.iter().enumerate() {
         assert_eq!(
             method.lazy_dense_stages()[stage].node().to_bits(),
             numeris::C[16 + stage].to_bits()
         );
         assert_eq!(
             method.lazy_dense_stages()[stage].coefficients(),
-            sparse[stage]
+            sparse_row.as_slice()
         );
     }
     for stage in 0..21 {

@@ -159,6 +159,7 @@ where
 /// On a norm or controller error the pending attempt is rejected, permitting reuse.
 /// Root finding and state-changing callbacks are handled by host-controlled
 /// attempts; this observer is read-only and may request an early stop.
+#[allow(clippy::too_many_arguments)]
 pub fn integrate_rkn<F, N, O, E>(
     stepper: &mut RknStepper<'_>,
     controller: &mut AdaptiveController,

@@ -89,7 +89,7 @@ fn hooks_preserve_payload_and_policy_respects_domain() {
         ..TimeDifferencePolicy::default()
     };
     let (a, b) = policy.probes(1e12, -0.1).unwrap();
-    assert!(a <= 1e12 && a >= 1e12 - 0.1);
+    assert!((1e12 - 0.1..=1e12).contains(&a));
     assert!(b.unwrap() >= 1e12 - 0.1);
     assert!(policy.probes(1e12, 0.1).is_err());
 }

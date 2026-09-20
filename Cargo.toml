@@ -65,6 +65,10 @@ stats_alloc = "0.1.10"
 serde_json = "1.0"
 
 [[bench]]
+name = "layout"
+harness = false
+
+[[bench]]
 name = "stepping_costs"
 harness = false
 

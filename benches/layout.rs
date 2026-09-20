@@ -1,7 +1,5 @@
-//! Standalone conversion/allocation microbenchmark: rustc -O benches/layout.rs.
-#[path = "../src/state_layout.rs"]
-mod state_layout;
-use state_layout::{MatrixOrder, MatrixView};
+//! Conversion/allocation microbenchmark: cargo bench --bench layout.
+use differential_equations::state_layout::{MatrixOrder, MatrixView};
 use std::{
     alloc::{GlobalAlloc, Layout, System},
     hint::black_box,
@@ -22,11 +20,16 @@ unsafe impl GlobalAlloc for Count {
 #[global_allocator]
 static ALLOC: Count = Count;
 fn main() {
+    let copies = if std::env::args().any(|arg| arg == "--test") {
+        2
+    } else {
+        1_000_000
+    };
     let state = [1.0; 42];
     let mut output = [0.0; 42];
     let start_alloc = ALLOCATIONS.load(Ordering::Relaxed);
     let start = Instant::now();
-    for _ in 0..1_000_000 {
+    for _ in 0..copies {
         let view = MatrixView::new(black_box(&state), 6, 7, MatrixOrder::ColumnMajor).unwrap();
         view.flatten_into(black_box(&mut output), MatrixOrder::RowMajor)
             .unwrap();
@@ -35,5 +38,5 @@ fn main() {
     let nanos = start.elapsed().as_nanos();
     let allocations = ALLOCATIONS.load(Ordering::Relaxed) - start_alloc;
     assert_eq!(allocations, 0);
-    println!("6x7 column-to-row: {nanos} ns / 1000000 copies; {allocations} allocations");
+    println!("6x7 column-to-row: {nanos} ns / {copies} copies; {allocations} allocations");
 }

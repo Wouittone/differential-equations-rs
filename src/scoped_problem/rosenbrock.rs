@@ -62,6 +62,7 @@ where
 /// reject pending candidates before returning, so the workspace remains reusable.
 /// Methods requiring Richardson estimation are rejected before evaluating forces
 /// or derivative hooks. They remain usable through fixed low-level attempts.
+#[allow(clippy::too_many_arguments)]
 pub fn integrate_rosenbrock<F, N, O, E>(
     stepper: &mut RosenbrockStepper<'_>,
     controller: &mut AdaptiveController,

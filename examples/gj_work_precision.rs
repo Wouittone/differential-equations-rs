@@ -102,6 +102,7 @@ fn options(tol: f64) -> SolveOptions {
         .with_max_step(0.4)
         .with_save(SaveMode::Endpoints)
 }
+#[allow(clippy::too_many_arguments)] // One explicit value for each CSV metric.
 fn row(
     case: Case,
     method: &str,
