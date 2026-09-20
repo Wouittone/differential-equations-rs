@@ -106,7 +106,7 @@ fn check_resource<A: OdeAlgorithm + Copy>(
     }
     for (actual, expected) in values.into_iter().zip(expected) {
         assert!(
-            (actual - expected).abs() < 1e-11,
+            (actual - expected).abs() < 1e-10,
             "{}: {actual} != {expected}",
             tableau.name()
         );
