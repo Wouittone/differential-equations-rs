@@ -22,11 +22,26 @@ pub enum LayoutError {
     /// Shape or stride arithmetic overflowed `usize`.
     Overflow,
     /// Storage is too short for the requested shape and strides.
-    StorageTooShort { required: usize, actual: usize },
+    StorageTooShort {
+        /// Minimum backing storage length.
+        required: usize,
+        /// Supplied backing storage length.
+        actual: usize,
+    },
     /// A flatten/unflatten output has the wrong length.
-    LengthMismatch { expected: usize, actual: usize },
+    LengthMismatch {
+        /// Required transfer length.
+        expected: usize,
+        /// Supplied transfer length.
+        actual: usize,
+    },
     /// A logical index lies outside the view.
-    IndexOutOfBounds { row: usize, column: usize },
+    IndexOutOfBounds {
+        /// Requested zero-based row.
+        row: usize,
+        /// Requested zero-based column.
+        column: usize,
+    },
 }
 impl fmt::Display for LayoutError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

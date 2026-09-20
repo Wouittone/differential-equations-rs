@@ -746,7 +746,7 @@ pub struct RknCoefficients<'a> {
     pub velocity_dense: Option<&'a [&'a [f64]]>,
 }
 impl<'a> RknCoefficients<'a> {
-    /// Minimal fixed velocity-independent formula; copies once at build time.
+    /// Minimal fixed velocity-independent formula; materializes owned coefficients at build time.
     pub fn fixed(
         name: &'a str,
         order: usize,

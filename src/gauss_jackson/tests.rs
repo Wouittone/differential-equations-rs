@@ -1,0 +1,263 @@
+use super::*;
+use std::convert::Infallible;
+fn harmonic(_: f64, q: &[f64], _: &[f64], a: &mut [f64]) -> Result<(), Infallible> {
+    for (a, q) in a.iter_mut().zip(q) {
+        *a = -q;
+    }
+    Ok(())
+}
+fn propagate(h: f64, end: f64) -> GaussJackson8 {
+    let mut solver =
+        GaussJackson8::new(0., &[1.], &[0.], h, GaussJacksonConfig::default()).unwrap();
+    while (end - solver.time()) * h > 0. {
+        solver.try_step_to(end, &mut harmonic).unwrap();
+    }
+    solver
+}
+#[test]
+fn harmonic_order_and_long_arc() {
+    let mut errors = Vec::new();
+    for h in [0.4, 0.2, 0.1] {
+        let solver = propagate(h, 20.);
+        let err = (solver.position()[0] - 20f64.cos())
+            .abs()
+            .max((solver.velocity()[0] + 20f64.sin()).abs());
+        eprintln!("h={h}: error={err:.16e}, stats={:?}", solver.statistics());
+        errors.push(err);
+        assert!(solver.statistics().accepted_steps > solver.statistics().startup_steps);
+    }
+    assert!(errors[0] / errors[1] > 150., "errors={errors:?}");
+    assert!(errors[1] < 1e-7);
+    let solver = propagate(0.05, 200.);
+    assert!((solver.position()[0] - 200f64.cos()).abs() < 1e-9);
+}
+#[test]
+fn velocity_dependent_forces_backward_and_partial_end() {
+    // q = exp(-t), q'' = -q - 2q'.
+    for h in [0.1, -0.1] {
+        let end = if h > 0. { 3.037 } else { -3.037 };
+        let mut solver =
+            GaussJackson8::new(0., &[1.], &[-1.], h, GaussJacksonConfig::default()).unwrap();
+        let mut f = |_: f64, q: &[f64], v: &[f64], a: &mut [f64]| {
+            a[0] = -q[0] - 2. * v[0];
+            Ok::<_, Infallible>(())
+        };
+        while (end - solver.time()) * h > 0. {
+            solver.try_step_to(end, &mut f).unwrap();
+        }
+        assert_eq!(solver.time(), end);
+        assert!((solver.position()[0] - (-end).exp()).abs() < 2e-9);
+        assert!((solver.velocity()[0] + (-end).exp()).abs() < 2e-9);
+        assert_eq!(solver.history_len(), 0);
+    }
+}
+#[test]
+fn startup_short_intervals_and_domain_are_accurate() {
+    let mut solver = GaussJackson8::new(
+        2.,
+        &[2f64.cos()],
+        &[-2f64.sin()],
+        0.2,
+        GaussJacksonConfig::default(),
+    )
+    .unwrap();
+    let mut f = |t: f64, q: &[f64], _: &[f64], a: &mut [f64]| {
+        assert!((2.0..=2.03).contains(&t));
+        a[0] = -q[0];
+        Ok::<_, Infallible>(())
+    };
+    solver.try_step_to(2.03, &mut f).unwrap();
+    assert!((solver.position()[0] - 2.03f64.cos()).abs() < 1e-14);
+    assert!((solver.velocity()[0] + 2.03f64.sin()).abs() < 1e-14);
+    assert_eq!(solver.statistics().startup_steps, 1);
+}
+#[test]
+fn continuation_clone_and_restart() {
+    let mut original = propagate(0.1, 2.);
+    let mut clone = original.clone();
+    for _ in 0..10 {
+        original.try_step(&mut harmonic).unwrap();
+        clone.try_step(&mut harmonic).unwrap();
+    }
+    assert_eq!(original.position(), clone.position());
+    assert_eq!(original.statistics(), clone.statistics());
+    clone.restart(0., &[2.], &[0.], 0.1).unwrap();
+    assert_eq!(clone.history_len(), 0);
+    clone.try_step(&mut harmonic).unwrap();
+    assert!((clone.position()[0] - 2. * 0.1f64.cos()).abs() < 1e-13);
+}
+#[test]
+fn errors_preserve_accepted_state_and_payload() {
+    let mut solver = propagate(0.1, 2.);
+    let before = solver.clone();
+    let mut bad = |_: f64, _: &[f64], _: &[f64], _: &mut [f64]| Err::<(), _>(1234);
+    assert!(matches!(
+        solver.try_step(&mut bad),
+        Err(GaussJacksonError::Acceleration(1234))
+    ));
+    assert_eq!(solver.time(), before.time());
+    assert_eq!(solver.position(), before.position());
+    assert_eq!(solver.history, before.history);
+    solver.try_step(&mut harmonic).unwrap();
+    let mut expected = before;
+    expected.try_step(&mut harmonic).unwrap();
+    assert_eq!(solver.position(), expected.position());
+}
+#[test]
+fn dense_quintic_has_exact_endpoints_and_consistent_velocity() {
+    let solver = propagate(0.1, 2.);
+    let mut q = [0.];
+    let mut v = [0.];
+    solver
+        .interpolate_into(solver.time(), &mut q, &mut v)
+        .unwrap();
+    assert_eq!(q.as_slice(), solver.position());
+    assert_eq!(v.as_slice(), solver.velocity());
+    let mid = (solver.dense_start + solver.time()) / 2.;
+    solver.interpolate_into(mid, &mut q, &mut v).unwrap();
+    assert!((q[0] - mid.cos()).abs() < 1e-9);
+    assert!((v[0] + mid.sin()).abs() < 1e-8);
+}
+#[test]
+fn validates_zero_steps_invalid_config_and_noop() {
+    assert!(GaussJackson8::new(0., &[1.], &[0.], 0., GaussJacksonConfig::default()).is_err());
+    let mut solver =
+        GaussJackson8::new(0., &[1.], &[0.], 0.1, GaussJacksonConfig::default()).unwrap();
+    solver.try_step_to(0., &mut harmonic).unwrap();
+    assert_eq!(solver.statistics().acceleration_evaluations, 0);
+    assert!(solver.try_step_to(-1., &mut harmonic).is_err());
+}
+#[test]
+fn corrector_and_startup_failures_are_explicit_and_transactional() {
+    let mut solver =
+        GaussJackson8::new(0., &[1.], &[0.], 0.2, GaussJacksonConfig::default()).unwrap();
+    for _ in 0..8 {
+        solver.try_step(&mut harmonic).unwrap();
+    }
+    let before = solver.clone();
+    solver.config.max_corrector_iterations = 1;
+    assert!(matches!(
+        solver.try_step(&mut harmonic),
+        Err(GaussJacksonError::CorrectorConvergence { iterations: 1 })
+    ));
+    assert_eq!(solver.q, before.q);
+    assert_eq!(solver.v, before.v);
+    assert_eq!(solver.history, before.history);
+    assert_eq!(solver.sum, before.sum);
+    assert_eq!(solver.double_sum, before.double_sum);
+    let mut q = [0.];
+    let mut v = [0.];
+    let mut expected_q = [0.];
+    let mut expected_v = [0.];
+    solver.interpolate_into(1.55, &mut q, &mut v).unwrap();
+    before
+        .interpolate_into(1.55, &mut expected_q, &mut expected_v)
+        .unwrap();
+    assert_eq!(q, expected_q);
+    assert_eq!(v, expected_v);
+    let config = GaussJacksonConfig {
+        absolute_tolerance: 1e-30,
+        relative_tolerance: 0.,
+        max_startup_refinements: 0,
+        ..Default::default()
+    };
+    let mut startup = GaussJackson8::new(0., &[1.], &[0.], 1., config).unwrap();
+    assert!(matches!(
+        startup.try_step(&mut harmonic),
+        Err(GaussJacksonError::StartupConvergence { refinements: 0 })
+    ));
+    assert_eq!(startup.time(), 0.);
+    assert_eq!(startup.history_len(), 0);
+    assert_eq!(startup.position(), &[1.]);
+}
+#[test]
+fn polynomial_acceleration_and_scaled_units() {
+    // q=t^8 + 3t + 2, v=8t^7+3. Exactness of the ordinate formula
+    // tests coefficient moments independently of oscillatory superconvergence.
+    for h in [0.05, -0.05] {
+        let end = if h > 0. { 2. } else { -2. };
+        let mut solver =
+            GaussJackson8::new(0., &[2.], &[3.], h, GaussJacksonConfig::default()).unwrap();
+        let mut f = |t: f64, _: &[f64], _: &[f64], a: &mut [f64]| {
+            a[0] = 56. * t.powi(6);
+            Ok::<_, Infallible>(())
+        };
+        while (end - solver.time()) * h > 0. {
+            solver.try_step_to(end, &mut f).unwrap();
+        }
+        assert!((solver.position()[0] - (end.powi(8) + 3. * end + 2.)).abs() < 1e-9);
+        assert!((solver.velocity()[0] - (8. * end.powi(7) + 3.)).abs() < 1e-9);
+    }
+}
+#[test]
+fn two_body_circular_orbit_and_energy_long_arc() {
+    let mut solver = GaussJackson8::new(
+        0.,
+        &[1., 0.],
+        &[0., 1.],
+        0.04,
+        GaussJacksonConfig::default(),
+    )
+    .unwrap();
+    let mut gravity = |_: f64, q: &[f64], _: &[f64], a: &mut [f64]| {
+        let r = q[0].hypot(q[1]);
+        a[0] = -q[0] / r.powi(3);
+        a[1] = -q[1] / r.powi(3);
+        Ok::<_, Infallible>(())
+    };
+    let end = 100.;
+    while solver.time() < end {
+        solver.try_step_to(end, &mut gravity).unwrap();
+    }
+    assert!((solver.position()[0] - end.cos()).abs() < 1e-8);
+    assert!((solver.position()[1] - end.sin()).abs() < 1e-8);
+    let q = solver.position();
+    let v = solver.velocity();
+    let energy = 0.5 * (v[0] * v[0] + v[1] * v[1]) - 1. / q[0].hypot(q[1]);
+    assert!((energy + 0.5).abs() < 1e-10);
+}
+#[test]
+fn dense_coefficients_round_trip_and_failed_force_preserves_dense() {
+    let mut solver = propagate(0.1, 2.);
+    let mut coefficients = [0.; 6];
+    let (start, end) = solver.dense_coefficients_into(&mut coefficients).unwrap();
+    let time = (start + end) / 2.;
+    let mut q = [0.];
+    let mut v = [0.];
+    solver.interpolate_into(time, &mut q, &mut v).unwrap();
+    let poly = coefficients.iter().rev().fold(0., |a, c| a * 0.5 + c);
+    assert!((poly - q[0]).abs() < 1e-15);
+    let mut calls = 0;
+    let mut broken = |_: f64, q: &[f64], _: &[f64], a: &mut [f64]| {
+        calls += 1;
+        if calls == 2 {
+            Err(42)
+        } else {
+            a[0] = -q[0];
+            Ok(())
+        }
+    };
+    assert!(solver.try_step(&mut broken).is_err());
+    let mut after = [0.; 6];
+    solver.dense_coefficients_into(&mut after).unwrap();
+    assert_eq!(coefficients, after);
+}
+#[test]
+fn agrees_with_independent_pinned_gj8_reference() {
+    // BSD reference b0115763, fixture reproduced by scripts/gauss_jackson_reference.py.
+    // Its centered startup differs from ours, so compare at converged step sizes.
+    let solver = propagate(0.1, 20.);
+    assert!((solver.position()[0] - 0.4080820618135249).abs() < 1e-12);
+    assert!((solver.velocity()[0] - (-0.9129452507272791)).abs() < 1e-12);
+    let mut damped =
+        GaussJackson8::new(0., &[1.], &[-1.], 0.1, GaussJacksonConfig::default()).unwrap();
+    let mut f = |_: f64, q: &[f64], v: &[f64], a: &mut [f64]| {
+        a[0] = -q[0] - 2. * v[0];
+        Ok::<_, Infallible>(())
+    };
+    while damped.time() < 3. {
+        damped.try_step_to(3., &mut f).unwrap();
+    }
+    assert!((damped.position()[0] - 0.04978706836819483).abs() < 1e-12);
+    assert!((damped.velocity()[0] - (-0.0497870683681613)).abs() < 1e-12);
+}

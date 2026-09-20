@@ -529,7 +529,7 @@ pub struct RungeKuttaCoefficients<'a> {
     pub fsal: bool,
 }
 impl<'a> RungeKuttaCoefficients<'a> {
-    /// Minimal explicit fixed-step coefficients. Construction copies once.
+    /// Minimal explicit fixed-step coefficients. Construction materializes owned coefficient storage.
     pub fn explicit(
         name: &'a str,
         order: usize,
