@@ -304,6 +304,7 @@ where
         stats: &mut SolverStats,
     ) -> Result<bool, SolveError> {
         if let Some(coefficients) = self.tableau.dense_coefficients() {
+            stats.dense_output_evaluations += 1;
             if !self.dense_stages_prepared && self.tableau.lazy_stage_count() != 0 {
                 perform_lazy_dense_stages(
                     problem,
@@ -353,6 +354,7 @@ where
                 self.dense_endpoint_prepared = false;
                 return Ok(false);
             }
+            stats.dense_output_evaluations += 1;
             if !self.dense_endpoint_prepared {
                 self.dense_endpoint_state.copy_from_slice(state);
                 evaluate(
