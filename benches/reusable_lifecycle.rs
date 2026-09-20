@@ -46,11 +46,9 @@ fn setup(c: &mut Criterion) {
         b.iter(|| {
             let tableau = Tsit5.tableau().expect("Tsit5 tableau");
             let mut state = [black_box(1.0)];
-            let stepper =
-                ExplicitRungeKuttaStepper::from_buffer(tableau, 0.0, &mut state).unwrap();
+            let stepper = ExplicitRungeKuttaStepper::from_buffer(tableau, 0.0, &mut state).unwrap();
             let controller =
-                AdaptiveController::new(ControllerConfig::proportional(5).unwrap(), 0.1)
-                    .unwrap();
+                AdaptiveController::new(ControllerConfig::proportional(5).unwrap(), 0.1).unwrap();
             black_box((stepper, controller));
         });
     });
@@ -66,8 +64,7 @@ fn steady_state(c: &mut Criterion) {
             let mut stepper =
                 ExplicitRungeKuttaStepper::from_buffer(tableau, 0.0, &mut state).unwrap();
             let mut controller =
-                AdaptiveController::new(ControllerConfig::proportional(5).unwrap(), 0.1)
-                    .unwrap();
+                AdaptiveController::new(ControllerConfig::proportional(5).unwrap(), 0.1).unwrap();
             run_arc(&mut stepper, &mut controller, endpoint);
             b.iter(|| {
                 stepper.reset(0.0, &[1.0]).unwrap();

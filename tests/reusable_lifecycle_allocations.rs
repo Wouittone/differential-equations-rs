@@ -17,8 +17,7 @@ fn measure_arc(endpoint: f64) -> (usize, usize) {
     let mut stepper = ExplicitRungeKuttaStepper::from_buffer(tableau, 0.0, &mut state).unwrap();
     let mut controller =
         AdaptiveController::new(ControllerConfig::proportional(5).unwrap(), 0.1).unwrap();
-    let run = |stepper: &mut ExplicitRungeKuttaStepper<'_>,
-               controller: &mut AdaptiveController| {
+    let run = |stepper: &mut ExplicitRungeKuttaStepper<'_>, controller: &mut AdaptiveController| {
         integrate_rk(
             stepper,
             controller,
@@ -43,7 +42,10 @@ fn measure_arc(endpoint: f64) -> (usize, usize) {
     let region = Region::new(GLOBAL);
     run(&mut stepper, &mut controller);
     let change = region.change();
-    (change.allocations + change.reallocations, change.bytes_allocated)
+    (
+        change.allocations + change.reallocations,
+        change.bytes_allocated,
+    )
 }
 
 fn minimum_measurement(endpoint: f64) -> (usize, usize) {
