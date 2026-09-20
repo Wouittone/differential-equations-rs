@@ -129,13 +129,13 @@ mod integrator;
 mod linear;
 mod operator_problem;
 mod problem;
-mod semilinear;
 pub mod scoped_problem;
+mod semilinear;
 mod solution;
 mod solver;
+pub mod solvers;
 pub mod state_layout;
 pub mod stepping;
-pub mod solvers;
 pub mod tableau;
 pub mod tolerances;
 
@@ -148,15 +148,19 @@ pub use ensemble::{
 pub use ensemble::{solve_batch_parallel, solve_ensemble_parallel};
 pub use error::ConfigurationError;
 pub use event::DEFAULT_EVENT_TOLERANCE;
+pub use gauss_jackson::{
+    GaussJackson8, GaussJacksonConfig, GaussJacksonError, GaussJacksonStatistics, GaussJacksonStep,
+};
 /// The ndarray version used by shape-aware ODE states.
 pub use ndarray;
 pub use operator_problem::{LieGroupProblem, LinearOperatorProblem};
 pub use problem::{MutableFunction, OdeFunction, OdeProblem, OdeProblemBuilder, SplitOdeProblem};
-pub use semilinear::SemilinearOdeProblem;
 pub use scoped_problem::{ScopedOdeProblem, ScopedSecondOrderProblem};
-pub use gauss_jackson::{GaussJackson8, GaussJacksonConfig, GaussJacksonError, GaussJacksonStatistics, GaussJacksonStep};
-pub use solution::{DenseSegmentData, PortableDenseSegment, SolutionData, InterpolationQuality,
-    InterpolationError, Solution, SolutionConstructionError, SolverStats};
+pub use semilinear::SemilinearOdeProblem;
+pub use solution::{
+    DenseSegmentData, InterpolationError, InterpolationQuality, PortableDenseSegment, Solution,
+    SolutionConstructionError, SolutionData, SolverStats,
+};
 pub use solver::{
     AutomaticPairIncompatibility, OdeAlgorithm, SaveMode, SolveError, SolveOptions, solve,
 };

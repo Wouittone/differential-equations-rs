@@ -180,4 +180,3 @@ fn epoch_roundoff_root_uses_actual_interval_for_next_proposal() {
     assert_eq!(c.next_step(), 2. * (s.time() - origin));
     assert!((s.state()[0] - (target - origin)).abs() < 1e-15);
 }
-

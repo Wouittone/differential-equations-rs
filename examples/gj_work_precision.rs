@@ -118,7 +118,9 @@ fn row(
         Ok(e) => (format!("{e:.17e}"), "ok".to_owned()),
         Err(e) => (String::new(), e.replace([',', '\n', '\r'], ";")),
     };
-    let round = std::env::var("GJ_BENCH_ROUND").map(|s|s.parse::<usize>().expect("numeric round")).unwrap_or(0);
+    let round = std::env::var("GJ_BENCH_ROUND")
+        .map(|s| s.parse::<usize>().expect("numeric round"))
+        .unwrap_or(0);
     println!(
         "{},{method},{round},{rep},{h:.17e},{tol:.17e},{calls},{accepted},{startup},{elapsed},,{err},{status}",
         case.name()

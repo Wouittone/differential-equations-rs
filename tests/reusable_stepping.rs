@@ -112,4 +112,3 @@ fn rkn_drag_stages_backward_and_rejection_cache() {
     assert!(s.position()[0].abs() < 5e-8);
     assert!((s.velocity()[0] - 1.).abs() < 5e-8);
 }
-
