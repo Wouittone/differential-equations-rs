@@ -10,8 +10,8 @@ pub enum MinimumStepPolicy {
 }
 /// Public controller coefficients, expressed as error exponents.
 ///
-/// The raw ratio is `safety * error^(-beta[0]) * previous_error^(beta[1])
-/// * older_error^(-beta[2])`. Rejected errors never advance accepted history.
+/// The raw ratio is `safety * error^(-beta\[0\]) * previous_error^(beta\[1\])
+/// * older_error^(-beta\[2\])`. Rejected errors never advance accepted history.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ControllerConfig {
     /// P, PI or PID exponents including the method's error-order scaling.
