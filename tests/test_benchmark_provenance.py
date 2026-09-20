@@ -23,12 +23,16 @@ class CandidateDependencyTests(unittest.TestCase):
                 '{version="=1.4.1",path="../other"}',
                 '{version="=1.0.0",path="../library"}',
                 '{version="1.4",path="../library"}',
+                '{workspace=true}',
             ]:
                 (host / "Cargo.toml").write_text('[dependencies]\ndifferential-equations-rs=' + dependency, encoding="utf-8")
                 with self.subTest(dependency=dependency), self.assertRaises(RuntimeError):
                     provenance.validate_library_dependency(host, library)
             (host / "Cargo.toml").write_text(
                 '[dependencies]\nrenamed={package="differential-equations-rs",version="=1.4.1",path="../library"}', encoding="utf-8")
+            provenance.validate_library_dependency(host, library)
+            (host / "Cargo.toml").write_text(
+                '[workspace.dependencies]\nrenamed={package="differential-equations-rs",version="=1.4.1",path="../library"}', encoding="utf-8")
             provenance.validate_library_dependency(host, library)
 
 
