@@ -119,6 +119,7 @@ fn serialized_solution_preserves_dense_and_repeated_states() {
     let restored = Solution::from_data(data).unwrap();
     assert_eq!(restored.times(), solution.times());
     assert_eq!(restored.values(), solution.values());
+    assert_eq!(restored.stats(), solution.stats());
     assert!(
         (restored.try_interpolate(0.37).unwrap()[0] - solution.try_interpolate(0.37).unwrap()[0])
             .abs()
@@ -186,4 +187,17 @@ fn callback_jump_keeps_last_saved_state_precedence_after_export() {
             );
         }
     }
+}
+
+#[cfg(feature = "serde")]
+#[test]
+fn direct_solution_serde_rejects_invalid_versions_and_saved_dimensions() {
+    let s = Solution::from_saved(vec![0.0, 1.0], vec![1.0, 2.0], &[1], Default::default()).unwrap();
+    let json = serde_json::to_string(&s).unwrap();
+    let restored: Solution = serde_json::from_str(&json).unwrap();
+    assert_eq!(s, restored);
+    let wrong_version = json.replace("\"version\":1", "\"version\":0");
+    assert!(serde_json::from_str::<Solution>(&wrong_version).is_err());
+    let wrong_shape = json.replace("\"state_shape\":[1]", "\"state_shape\":[2]");
+    assert!(serde_json::from_str::<Solution>(&wrong_shape).is_err());
 }

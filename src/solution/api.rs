@@ -441,24 +441,22 @@ impl Solution {
             values: self.values.clone(),
             state_shape: self.state_shape().to_vec(),
             segments: self.export_dense_segments()?,
+            statistics: self.stats,
         })
     }
-    /// Imports a validated trajectory; work counters start at their defaults.
+    /// Imports a validated trajectory, preserving original work statistics.
     pub fn from_data(data: crate::SolutionData) -> Result<Self, InterpolationError> {
         if data.version != 1 {
             return Err(InterpolationError::InvalidSegmentData {
                 context: "unsupported solution schema version",
             });
         }
-        let mut solution = Self::from_saved(
-            data.times,
-            data.values,
-            &data.state_shape,
-            SolverStats::default(),
-        )
-        .map_err(|_| InterpolationError::InvalidSegmentData {
-            context: "portable solution saved states",
-        })?;
+        let mut solution =
+            Self::from_saved(data.times, data.values, &data.state_shape, data.statistics).map_err(
+                |_| InterpolationError::InvalidSegmentData {
+                    context: "portable solution saved states",
+                },
+            )?;
         let start = solution.times[0];
         let end = *solution.times.last().unwrap();
         let direction = if start < end {
@@ -488,5 +486,20 @@ impl Solution {
                 .push(OwnedDenseSegment::Portable(segment));
         }
         Ok(solution)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl serde::Serialize for Solution {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let data = self.export_data().map_err(serde::ser::Error::custom)?;
+        serde::Serialize::serialize(&data, serializer)
+    }
+}
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for Solution {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let data = crate::SolutionData::deserialize(deserializer)?;
+        Self::from_data(data).map_err(serde::de::Error::custom)
     }
 }

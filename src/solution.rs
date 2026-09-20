@@ -83,6 +83,7 @@ pub enum InterpolationError {
 
 /// Work performed by an ODE solver.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[non_exhaustive]
 pub struct SolverStats {
     /// Number of right-hand-side evaluations, including callback checks.

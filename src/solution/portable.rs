@@ -167,8 +167,7 @@ impl PortableDenseSegment {
 }
 
 /// Versioned trajectory interchange including logical state shape and dense output.
-/// Solver work counters are deliberately excluded: imported trajectories have
-/// default statistics and do not represent a new integration run.
+/// Work statistics describe the original integration and are preserved.
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct SolutionData {
@@ -182,6 +181,9 @@ pub struct SolutionData {
     pub state_shape: Vec<usize>,
     /// Ordered non-overlapping dense segments.
     pub segments: Vec<PortableDenseSegment>,
+    /// Work counters from the original integration.
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub statistics: crate::SolverStats,
 }
 
 #[cfg(test)]
