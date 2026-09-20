@@ -201,3 +201,79 @@ fn direct_solution_serde_rejects_invalid_versions_and_saved_dimensions() {
     let wrong_shape = json.replace("\"state_shape\":[1]", "\"state_shape\":[2]");
     assert!(serde_json::from_str::<Solution>(&wrong_shape).is_err());
 }
+
+#[test]
+fn zero_length_clipped_backward_segments_do_not_break_indexing() {
+    let mut data = Solution::from_saved(vec![2.0, 0.0], vec![0.0, 0.0], &[1], Default::default())
+        .unwrap()
+        .export_data()
+        .unwrap();
+    for (start, end, bound, value) in [
+        (2.0, 1.0, 1.0, 10.0),
+        (1.0, 0.0, 1.0, 20.0),
+        (1.0, 0.0, 0.0, 30.0),
+    ] {
+        data.segments.push(
+            PortableDenseSegment::from_data(DenseSegmentData {
+                version: 1,
+                start_time: start,
+                end_time: end,
+                bound_time: bound,
+                dimension: 1,
+                coefficients: vec![value],
+                end_state: vec![value],
+                bound_state: None,
+                quality: InterpolationQuality::MethodSpecific,
+            })
+            .unwrap(),
+        );
+    }
+    let solution = Solution::from_data(data).unwrap();
+    assert_eq!(solution.try_interpolate(0.5).unwrap(), [30.0]);
+    assert_eq!(
+        solution.interpolation_quality(0.5).unwrap(),
+        InterpolationQuality::MethodSpecific
+    );
+    assert_eq!(solution.try_interpolate(1.0).unwrap(), [10.0]);
+}
+#[test]
+fn indexed_saved_lookup_matches_linear_reference_for_irregular_repeated_times() {
+    for n in [1, 2, 3, 17, 1024] {
+        for backward in [false, true] {
+            let mut times = Vec::new();
+            let mut values = Vec::new();
+            let mut t = 0.0;
+            for i in 0..n {
+                if i % 7 != 0 {
+                    t += (i % 5 + 1) as f64 * 0.1;
+                }
+                times.push(if backward { -t } else { t });
+                values.push((i % 13) as f64);
+            }
+            let solution =
+                Solution::from_saved(times.clone(), values.clone(), &[1], Default::default())
+                    .unwrap();
+            for i in 0..=3 * n {
+                let query = if i == 3 * n {
+                    times[n - 1]
+                } else {
+                    times[0] + (times[n - 1] - times[0]) * i as f64 / (3 * n) as f64
+                };
+                let exact = times.iter().rposition(|&t| t == query);
+                let expected = if let Some(j) = exact {
+                    values[j]
+                } else {
+                    let j = (1..n)
+                        .find(|&j| {
+                            query >= times[j - 1].min(times[j])
+                                && query <= times[j - 1].max(times[j])
+                        })
+                        .unwrap();
+                    let theta = (query - times[j - 1]) / (times[j] - times[j - 1]);
+                    values[j - 1] * (1.0 - theta) + values[j] * theta
+                };
+                assert!((solution.try_interpolate(query).unwrap()[0] - expected).abs() < 1e-12);
+            }
+        }
+    }
+}

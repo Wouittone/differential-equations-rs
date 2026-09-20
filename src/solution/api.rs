@@ -195,15 +195,7 @@ impl Solution {
             )?);
             return finite_interpolation(output, "saved solution state");
         }
-        let dense_index = self.dense_segments.partition_point(|segment| {
-            let (start, end) = segment.time_bounds();
-            if start <= end { end < time } else { end > time }
-        });
-        if let Some(segment) = self
-            .dense_segments
-            .get(dense_index)
-            .filter(|s| s.contains(time))
-        {
+        if let Some(segment) = self.dense_segment_at(time) {
             segment.interpolate(time, output)?;
             return finite_interpolation(output, "dense output");
         }
@@ -371,6 +363,21 @@ pub(crate) fn validate_finite_partitioned_interpolation(
 }
 
 impl Solution {
+    // Use the trajectory direction, not each clipped segment's interval. An
+    // event may clip a backward segment to zero length, which has no local
+    // direction but must retain a monotonic binary-search predicate.
+    fn dense_segment_at(&self, time: f64) -> Option<&OwnedDenseSegment> {
+        let first = self.dense_segments.first()?;
+        let last = self.dense_segments.last()?;
+        let forward = first.time_bounds().0 <= last.time_bounds().1;
+        let index = self.dense_segments.partition_point(|segment| {
+            let end = segment.time_bounds().1;
+            if forward { end < time } else { end > time }
+        });
+        self.dense_segments
+            .get(index)
+            .filter(|segment| segment.contains(time))
+    }
     /// Exports method-specific dense segments as validated portable polynomials.
     ///
     /// Export allocates; interpolation of the resulting segments does not.
@@ -404,11 +411,7 @@ impl Solution {
         if after > 0 && self.times[after - 1] == time {
             return Ok(InterpolationQuality::ExactSavedState);
         }
-        let index = self.dense_segments.partition_point(|s| {
-            let (start, end) = s.time_bounds();
-            if start <= end { end < time } else { end > time }
-        });
-        if let Some(segment) = self.dense_segments.get(index).filter(|s| s.contains(time)) {
+        if let Some(segment) = self.dense_segment_at(time) {
             return Ok(segment.quality());
         }
         if after > 0 && after < self.times.len() {
