@@ -253,7 +253,7 @@ mod tests {
                 .unwrap()
                 .flatten_array::<0>(MatrixOrder::RowMajor)
                 .unwrap(),
-            []
+            [0.0_f64; 0]
         );
     }
 }
