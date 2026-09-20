@@ -149,7 +149,8 @@ pub use ndarray;
 pub use operator_problem::{LieGroupProblem, LinearOperatorProblem};
 pub use problem::{MutableFunction, OdeFunction, OdeProblem, OdeProblemBuilder, SplitOdeProblem};
 pub use semilinear::SemilinearOdeProblem;
-pub use solution::{InterpolationError, Solution, SolutionConstructionError, SolverStats};
+pub use solution::{DenseSegmentData, PortableDenseSegment, SolutionData, InterpolationQuality,
+    InterpolationError, Solution, SolutionConstructionError, SolverStats};
 pub use solver::{
     AutomaticPairIncompatibility, OdeAlgorithm, SaveMode, SolveError, SolveOptions, solve,
 };

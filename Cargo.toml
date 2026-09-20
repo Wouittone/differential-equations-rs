@@ -45,6 +45,7 @@ default = ["parallel"]
 parallel = ["dep:rayon"]
 # Repository benchmark instrumentation; not intended for application code.
 allocation-metrics = []
+serde = ["dep:serde"]
 
 [dependencies]
 differential-equations-tableau-macros = { version = "=1.0.0", path = "tableau-macros" }
@@ -52,6 +53,7 @@ differential-equations-tableau-core = { version = "=1.0.0", path = "tableau-core
 ndarray = "0.17.2"
 rayon = { version = "1.11.0", optional = true }
 thiserror = "2.0.20"
+serde = { version = "1", optional = true, features = ["derive"] }
 
 [dev-dependencies]
 criterion = { package = "codspeed-criterion-compat", version = "5.0.0", default-features = false, features = ["cargo_bench_support"] }
