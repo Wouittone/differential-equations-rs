@@ -129,6 +129,7 @@ mod problem;
 mod semilinear;
 mod solution;
 mod solver;
+pub mod state_layout;
 pub mod stepping;
 pub mod solvers;
 pub mod tableau;
