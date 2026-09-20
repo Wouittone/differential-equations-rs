@@ -127,6 +127,7 @@ mod linear;
 mod operator_problem;
 mod problem;
 mod semilinear;
+pub mod scoped_problem;
 mod solution;
 mod solver;
 pub mod state_layout;
@@ -149,6 +150,7 @@ pub use ndarray;
 pub use operator_problem::{LieGroupProblem, LinearOperatorProblem};
 pub use problem::{MutableFunction, OdeFunction, OdeProblem, OdeProblemBuilder, SplitOdeProblem};
 pub use semilinear::SemilinearOdeProblem;
+pub use scoped_problem::ScopedOdeProblem;
 pub use solution::{DenseSegmentData, PortableDenseSegment, SolutionData, InterpolationQuality,
     InterpolationError, Solution, SolutionConstructionError, SolverStats};
 pub use solver::{
