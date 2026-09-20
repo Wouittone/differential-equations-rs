@@ -4,6 +4,6 @@ mod function;
 mod general;
 pub mod symplectic;
 
-pub use function::SecondOrderFunction;
+pub use function::{MutableAcceleration, SecondOrderFunction};
 pub use general::*;
 pub use symplectic::*;

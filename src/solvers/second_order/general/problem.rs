@@ -347,3 +347,54 @@ impl<F, P> SecondOrderOdeProblem<F, P> {
         })
     }
 }
+
+impl<F, P> SecondOrderOdeProblem<super::super::function::MutableAcceleration<F>, P>
+where
+    F: FnMut(&mut [f64], &[f64], &[f64], &P, f64) -> Result<(), SolveError>,
+{
+    /// Creates a problem from a mutable fallible acceleration closure.
+    pub fn new_fallible(
+        acceleration: F,
+        initial_velocity: impl Into<Vec<f64>>,
+        initial_position: impl Into<Vec<f64>>,
+        time_span: (f64, f64),
+        parameters: P,
+    ) -> Self {
+        Self::new(
+            super::super::function::MutableAcceleration::new(acceleration),
+            initial_velocity,
+            initial_position,
+            time_span,
+            parameters,
+        )
+    }
+}
+impl<P> SecondOrderOdeProblem<(), P> {
+    /// Creates a problem from a mutable infallible acceleration closure.
+    pub fn new_mut<F>(
+        mut acceleration: F,
+        initial_velocity: impl Into<Vec<f64>>,
+        initial_position: impl Into<Vec<f64>>,
+        time_span: (f64, f64),
+        parameters: P,
+    ) -> SecondOrderOdeProblem<
+        super::super::function::MutableAcceleration<
+            impl FnMut(&mut [f64], &[f64], &[f64], &P, f64) -> Result<(), SolveError>,
+        >,
+        P,
+    >
+    where
+        F: FnMut(&mut [f64], &[f64], &[f64], &P, f64),
+    {
+        SecondOrderOdeProblem::new_fallible(
+            move |a: &mut [f64], v: &[f64], q: &[f64], p: &P, t: f64| {
+                acceleration(a, v, q, p, t);
+                Ok(())
+            },
+            initial_velocity,
+            initial_position,
+            time_span,
+            parameters,
+        )
+    }
+}

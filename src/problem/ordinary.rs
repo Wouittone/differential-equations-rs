@@ -850,3 +850,54 @@ impl<F, P> OdeProblem<F, P> {
         })
     }
 }
+
+impl<F, P> OdeProblem<super::function::MutableFunction<F>, P>
+where
+    F: FnMut(&mut [f64], &[f64], &P, f64) -> Result<(), SolveError>,
+{
+    /// Creates a problem directly from a mutable fallible closure.
+    ///
+    /// Errors stop the solve immediately. Mutable captures may borrow local
+    /// data; no user-written interior-mutability adapter is required.
+    pub fn new_fallible(
+        rhs: F,
+        initial_state: impl Into<Vec<f64>>,
+        time_span: (f64, f64),
+        parameters: P,
+    ) -> Self {
+        Self::new(
+            super::function::MutableFunction::new(rhs),
+            initial_state,
+            time_span,
+            parameters,
+        )
+    }
+}
+
+impl<P> OdeProblem<(), P> {
+    /// Creates a problem directly from a mutable infallible closure.
+    pub fn new_mut<F>(
+        mut rhs: F,
+        initial_state: impl Into<Vec<f64>>,
+        time_span: (f64, f64),
+        parameters: P,
+    ) -> OdeProblem<
+        super::function::MutableFunction<
+            impl FnMut(&mut [f64], &[f64], &P, f64) -> Result<(), SolveError>,
+        >,
+        P,
+    >
+    where
+        F: FnMut(&mut [f64], &[f64], &P, f64),
+    {
+        OdeProblem::new_fallible(
+            move |du: &mut [f64], u: &[f64], p: &P, t: f64| {
+                rhs(du, u, p, t);
+                Ok(())
+            },
+            initial_state,
+            time_span,
+            parameters,
+        )
+    }
+}

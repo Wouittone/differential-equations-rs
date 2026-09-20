@@ -70,3 +70,38 @@ where
         Ok(())
     }
 }
+
+/// Sequential adapter for a mutable, fallible in-place right-hand side.
+///
+/// Construct with [`OdeProblem::new_fallible`](crate::OdeProblem::new_fallible).
+/// The adapter owns the interior mutability required by the existing shared
+/// problem solve interface; callers can capture ordinary mutable references.
+/// It is `Send` when `F` is `Send`, but is deliberately not `Sync`.
+/// Use independent problems per worker, or the reusable stepper for direct
+/// exclusive closure access without interior mutability.
+pub struct MutableFunction<F>(std::cell::RefCell<F>);
+
+impl<F> MutableFunction<F> {
+    pub(crate) fn new(function: F) -> Self {
+        Self(std::cell::RefCell::new(function))
+    }
+    /// Returns the closure, including any accumulated mutable state.
+    pub fn into_inner(self) -> F {
+        self.0.into_inner()
+    }
+}
+
+impl<F, P> OdeFunction<P> for MutableFunction<F>
+where
+    F: FnMut(&mut [f64], &[f64], &P, f64) -> Result<(), SolveError>,
+{
+    fn evaluate(
+        &self,
+        derivative: &mut [f64],
+        state: &[f64],
+        parameters: &P,
+        time: f64,
+    ) -> Result<(), SolveError> {
+        (self.0.borrow_mut())(derivative, state, parameters, time)
+    }
+}

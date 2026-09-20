@@ -14,7 +14,7 @@ use crate::callback::{
     Callback, InitializationHook, LifecycleHook, PredictiveDomainPolicy, StepGuard,
 };
 pub use builder::OdeProblemBuilder;
-pub use function::OdeFunction;
+pub use function::{MutableFunction, OdeFunction};
 #[allow(unused_imports)] // Preserve the existing crate-internal facade path.
 pub(crate) use jacobian::JacobianProvider;
 use ndarray::IxDyn;
