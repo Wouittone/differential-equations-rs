@@ -1,11 +1,11 @@
 use differential_equations::{
     solvers::explicit::{Tsit5, Vern9},
     stepping::{
-        integrate_rk, AdaptiveController, ControllerConfig, ExplicitRungeKuttaStepper,
-        ObserverAction,
+        AdaptiveController, ControllerConfig, ExplicitRungeKuttaStepper, ObserverAction,
+        integrate_rk,
     },
 };
-use stats_alloc::{Region, StatsAlloc, INSTRUMENTED_SYSTEM};
+use stats_alloc::{INSTRUMENTED_SYSTEM, Region, StatsAlloc};
 use std::{alloc::System, convert::Infallible, hint::black_box};
 
 #[global_allocator]

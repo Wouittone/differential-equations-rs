@@ -4,12 +4,12 @@
 //! Run with `cargo bench --bench reusable_lifecycle`. The setup cases include
 //! tableau/workspace construction; the steady-state cases construct once and
 //! reuse the same stepper and controller for every measured arc.
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use differential_equations::{
     solvers::explicit::{Tsit5, Vern9},
     stepping::{
-        integrate_rk, AdaptiveController, ControllerConfig, ExplicitRungeKuttaStepper,
-        ObserverAction,
+        AdaptiveController, ControllerConfig, ExplicitRungeKuttaStepper, ObserverAction,
+        integrate_rk,
     },
 };
 use std::convert::Infallible;
