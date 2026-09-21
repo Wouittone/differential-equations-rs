@@ -42,8 +42,7 @@ fn measure_scalar_arc(tableau: &differential_equations::tableau::RungeKuttaTable
     let mut stepper = ExplicitRungeKuttaStepper::from_buffer(tableau, 0.0, &mut state).unwrap();
     let mut controller =
         AdaptiveController::new(ControllerConfig::proportional(5).unwrap(), 0.1).unwrap();
-    let run = |stepper: &mut ExplicitRungeKuttaStepper<'_>,
-               controller: &mut AdaptiveController| {
+    let run = |stepper: &mut ExplicitRungeKuttaStepper<'_>, controller: &mut AdaptiveController| {
         integrate_rk(
             stepper,
             controller,
@@ -63,7 +62,10 @@ fn measure_scalar_arc(tableau: &differential_equations::tableau::RungeKuttaTable
     let region = Region::new(GLOBAL);
     run(&mut stepper, &mut controller);
     let change = region.change();
-    (change.allocations + change.reallocations, change.bytes_allocated)
+    (
+        change.allocations + change.reallocations,
+        change.bytes_allocated,
+    )
 }
 
 fn measure_orbit_arc(tableau: &differential_equations::tableau::RungeKuttaTableau, endpoint: f64) -> (usize, usize) {

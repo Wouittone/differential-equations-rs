@@ -271,7 +271,8 @@ impl<'a> ExplicitRungeKuttaStepper<'a> {
                 let stage_start = self.stages_offset + start;
                 if i == 0 && self.tableau.c()[0] == 0.0 && self.derivative_valid {
                     for k in 0..n {
-                        self.workspace[stage_start + k] = self.workspace[self.derivative_offset + k];
+                        self.workspace[stage_start + k] =
+                            self.workspace[self.derivative_offset + k];
                     }
                 } else {
                     for k in 0..n {
@@ -291,7 +292,8 @@ impl<'a> ExplicitRungeKuttaStepper<'a> {
                             }
                         }
                     }
-                    let temporary = &self.workspace[self.temporary_offset..self.temporary_offset + n];
+                    let temporary =
+                        &self.workspace[self.temporary_offset..self.temporary_offset + n];
                     finite(temporary)?;
                     let stage_time = self.time + self.tableau.c()[i] * step;
                     finite(&[stage_time])?;
@@ -341,7 +343,11 @@ impl<'a> ExplicitRungeKuttaStepper<'a> {
                 .tableau
                 .second_error()
                 .map(|_| self.second_error_slice().expect("allocated when present")),
-            stage_derivatives: if step == 0.0 { &[] } else { self.stages_slice() },
+            stage_derivatives: if step == 0.0 {
+                &[]
+            } else {
+                self.stages_slice()
+            },
             statistics: self.stats,
             dimension: n,
         })

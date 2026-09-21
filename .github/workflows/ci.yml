@@ -96,14 +96,14 @@ jobs:
       - name: Check root library against the frozen API
         uses: obi1kenobi/cargo-semver-checks-action@6b69fcf40e9b5fb17adeb57e4b6ecd020649a239 # v2.9
         with:
-          baseline-rev: api-freeze-v1
+          baseline-rev: v1.4.1
           feature-group: all-features
           package: differential-equations-rs
           release-type: patch
       - name: Check tableau core against the frozen API
         uses: obi1kenobi/cargo-semver-checks-action@6b69fcf40e9b5fb17adeb57e4b6ecd020649a239 # v2.9
         with:
-          baseline-rev: api-freeze-v1
+          baseline-rev: v1.4.1
           feature-group: all-features
           package: differential-equations-tableau-core
           release-type: patch
@@ -198,4 +198,3 @@ jobs:
           rust-version: "1.85"
           command: check
           arguments: --all-features
-
