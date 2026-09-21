@@ -22,7 +22,6 @@ use std::{alloc::System, convert::Infallible, time::Instant};
 static GLOBAL: &StatsAlloc<System> = &INSTRUMENTED_SYSTEM;
 
 const CONTROLLER_TOLERANCE: f64 = 1.0e-10;
-const OUTPUT_POLICY: &str = "endpoint_and_sampled";
 
 /// Compiler version captured by invoking the toolchain reported at build
 /// time (falling back to `rustc` on `PATH`); environment variables such as
@@ -38,16 +37,69 @@ fn compiler_version() -> String {
         .unwrap_or_else(|| "unknown".to_string())
 }
 
-fn benchmark_metadata() -> String {
+/// Best-effort CPU model/identifier, tried through the mechanism available
+/// on each platform, with an explicit `unknown` fallback rather than an
+/// empty or misleading value when none of them succeed.
+fn cpu_identifier() -> String {
+    #[cfg(target_os = "linux")]
+    {
+        if let Ok(contents) = std::fs::read_to_string("/proc/cpuinfo") {
+            if let Some(model) = contents
+                .lines()
+                .find(|line| line.starts_with("model name"))
+                .and_then(|line| line.split_once(':'))
+                .map(|(_, value)| value.trim().to_string())
+                .filter(|value| !value.is_empty())
+            {
+                return model;
+            }
+        }
+    }
+    #[cfg(target_os = "macos")]
+    {
+        if let Ok(output) = std::process::Command::new("sysctl")
+            .args(["-n", "machdep.cpu.brand_string"])
+            .output()
+        {
+            if output.status.success() {
+                if let Some(model) = String::from_utf8(output.stdout)
+                    .ok()
+                    .map(|value| value.trim().to_string())
+                    .filter(|value| !value.is_empty())
+                {
+                    return model;
+                }
+            }
+        }
+    }
+    #[cfg(target_os = "windows")]
+    {
+        if let Some(identifier) = std::env::var("PROCESSOR_IDENTIFIER")
+            .ok()
+            .filter(|value| !value.is_empty())
+        {
+            return identifier;
+        }
+    }
+    "unknown".to_string()
+}
+
+/// Metadata printed once per benchmarked configuration. `output_policy`
+/// documents that lane's own retention behavior rather than a single
+/// process-wide constant, since the suite intentionally exercises several
+/// different output policies (endpoint-only, endpoint-and-sampled, and
+/// every-accepted-step retention).
+fn benchmark_metadata(output_policy: &str) -> String {
     format!(
-        "reusable_lifecycle crate={} version={} target={}-{} compiler={} tolerance={} controller=proportional(5) output={}",
+        "reusable_lifecycle crate={} version={} target={}-{} cpu={} compiler={} tolerance={} controller=proportional(5) output={}",
         env!("CARGO_PKG_NAME"),
         env!("CARGO_PKG_VERSION"),
         std::env::consts::ARCH,
         std::env::consts::OS,
+        cpu_identifier(),
         compiler_version(),
         CONTROLLER_TOLERANCE,
-        OUTPUT_POLICY,
+        output_policy,
     )
 }
 
@@ -112,8 +164,11 @@ fn run_arc<F, N>(
 }
 
 /// Six-state initial condition shared by the orbit-workload lanes so setup
-/// costs stay comparable across solver families.
-const ORBIT_INITIAL_STATE: [f64; 6] = [1.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+/// costs stay comparable across solver families. With `gravitational_parameter
+/// = 1.0` and unit radius, the nonzero tangential velocity component
+/// (`vy = 1.0`) makes this a genuine (drag-decaying) circular orbit rather
+/// than radial free-fall.
+const ORBIT_INITIAL_STATE: [f64; 6] = [1.0, 0.0, 0.0, 0.0, 1.0, 0.0];
 
 /// High-accuracy reference endpoint for the velocity-coupled orbit, computed
 /// once with a much tighter tolerance than the measured lanes. Diagnostics
@@ -142,25 +197,31 @@ fn reference_orbit_endpoint(
 }
 
 fn setup(c: &mut Criterion) {
-    println!("{}", benchmark_metadata());
+    println!("{}", benchmark_metadata("none"));
     let mut group = c.benchmark_group("reusable_lifecycle/setup");
+    // `tableau()` is a lazily parsed, process-cached accessor: resolve it
+    // once outside the timed loop so this lane measures workspace
+    // construction (`from_buffer` + controller setup) rather than a cache
+    // lookup that only pays a real parsing cost on its very first call.
     // Both lanes construct the same six-component state so the reported
     // timings reflect solver-family setup cost, not differing workspace size.
+    let tsit5_tableau = Tsit5.tableau().expect("Tsit5 tableau");
     group.bench_function("tsit5/stepper_and_controller", |b| {
         b.iter(|| {
-            let tableau = Tsit5.tableau().expect("Tsit5 tableau");
             let mut state = ORBIT_INITIAL_STATE.map(black_box);
-            let stepper = ExplicitRungeKuttaStepper::from_buffer(tableau, 0.0, &mut state).unwrap();
+            let stepper =
+                ExplicitRungeKuttaStepper::from_buffer(tsit5_tableau, 0.0, &mut state).unwrap();
             let controller =
                 AdaptiveController::new(ControllerConfig::proportional(5).unwrap(), 0.1).unwrap();
             black_box((stepper, controller));
         });
     });
+    let vern9_tableau = Vern9.tableau().expect("Vern9 tableau");
     group.bench_function("vern9/stepper_and_controller", |b| {
         b.iter(|| {
-            let tableau = Vern9.tableau().expect("Vern9 tableau");
             let mut state = ORBIT_INITIAL_STATE.map(black_box);
-            let stepper = ExplicitRungeKuttaStepper::from_buffer(tableau, 0.0, &mut state).unwrap();
+            let stepper =
+                ExplicitRungeKuttaStepper::from_buffer(vern9_tableau, 0.0, &mut state).unwrap();
             let controller =
                 AdaptiveController::new(ControllerConfig::proportional(5).unwrap(), 0.1).unwrap();
             black_box((stepper, controller));
@@ -170,7 +231,7 @@ fn setup(c: &mut Criterion) {
 }
 
 fn steady_state(c: &mut Criterion) {
-    println!("{}", benchmark_metadata());
+    println!("{}", benchmark_metadata("endpoint_only"));
     let mut group = c.benchmark_group("reusable_lifecycle/steady_state");
 
     for (name, endpoint) in [
@@ -254,6 +315,7 @@ fn steady_state(c: &mut Criterion) {
 /// solution. Printed once per configuration before the group's own timed
 /// warm loop runs, so it never perturbs Criterion's statistics.
 fn diagnostics(c: &mut Criterion) {
+    println!("{}", benchmark_metadata("endpoint_only"));
     let mut group = c.benchmark_group("reusable_lifecycle/diagnostics");
 
     for (name, endpoint) in [("tsit5/scalar", 1.0), ("vern9/scalar", 1.0)] {
@@ -377,6 +439,7 @@ fn diagnostics(c: &mut Criterion) {
 }
 
 fn output_retention(c: &mut Criterion) {
+    println!("{}", benchmark_metadata("endpoint_and_sampled"));
     let mut group = c.benchmark_group("reusable_lifecycle/output");
     let sample_times: Vec<f64> = (0..64).map(|index| index as f64 / 64.0).collect();
     for name in ["tsit5/endpoint_and_sampled", "vern9/endpoint_and_sampled"] {
@@ -417,22 +480,33 @@ fn output_retention(c: &mut Criterion) {
                     },
                 )
                 .expect("output retention benchmark must solve");
-                black_box(stored.len())
+                // Fold every retained component through black_box (not just
+                // the count) so the optimizer cannot dead-store-eliminate the
+                // `to_vec()` payloads this lane is measuring the cost of.
+                let checksum = stored
+                    .iter()
+                    .flat_map(|state| state.iter().copied())
+                    .fold(0.0_f64, |sum, value| sum + black_box(value));
+                black_box((stored.len(), checksum))
             });
         });
     }
     group.finish();
 }
 
-/// This reusable layer has no polynomial dense-interpolation coefficients to
-/// export; the closest equivalent cost a downstream host can incur is
-/// retaining every accepted step's state, which is what a stepper-level
-/// dense/continuous output reconstruction would need as raw material. This
-/// lane measures exactly that, separately from the sampled `output` lane
+/// This reusable layer exposes no public dense/polynomial interpolation
+/// coefficients (the continuous-extension machinery in
+/// `solution::dense::runge_kutta` is crate-private), so a genuine dense-export
+/// lane cannot be constructed from this workload alone. What downstream code
+/// building its own dense output *would* need as raw material is every
+/// accepted step's state, so this lane measures the cost of retaining that —
+/// named for what it does rather than for the (unavailable) interpolation it
+/// would ultimately feed, and kept separate from the sampled `output` lane
 /// above, whose cost scales with the number of requested samples instead of
 /// the number of accepted steps.
-fn dense_export(c: &mut Criterion) {
-    let mut group = c.benchmark_group("reusable_lifecycle/dense_export");
+fn full_trajectory_retention(c: &mut Criterion) {
+    println!("{}", benchmark_metadata("every_accepted_step"));
+    let mut group = c.benchmark_group("reusable_lifecycle/full_trajectory_retention");
     for name in ["tsit5/every_accepted_step", "vern9/every_accepted_step"] {
         group.bench_function(name, |b| {
             let tableau = if name.starts_with("tsit5") {
@@ -464,8 +538,12 @@ fn dense_export(c: &mut Criterion) {
                         Ok::<_, Infallible>(ObserverAction::Continue)
                     },
                 )
-                .expect("dense export benchmark must solve");
-                black_box(stored.len())
+                .expect("full trajectory retention benchmark must solve");
+                let checksum = stored
+                    .iter()
+                    .flat_map(|state| state.iter().copied())
+                    .fold(0.0_f64, |sum, value| sum + black_box(value));
+                black_box((stored.len(), checksum))
             });
         });
     }
@@ -478,6 +556,6 @@ criterion_group!(
     steady_state,
     diagnostics,
     output_retention,
-    dense_export
+    full_trajectory_retention
 );
 criterion_main!(benches);

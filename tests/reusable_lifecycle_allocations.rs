@@ -84,7 +84,10 @@ fn measure_orbit_arc(
     tableau: &differential_equations::tableau::RungeKuttaTableau,
     endpoint: f64,
 ) -> (usize, usize) {
-    let mut state = [1.0, 0.0, 0.0, 0.0, 0.0, 0.0];
+    // Matches the benchmark's ORBIT_INITIAL_STATE: unit radius with a
+    // tangential velocity component so this exercises a genuine (drag-decaying)
+    // orbit rather than radial free-fall.
+    let mut state = [1.0, 0.0, 0.0, 0.0, 1.0, 0.0];
     let mut stepper = ExplicitRungeKuttaStepper::from_buffer(tableau, 0.0, &mut state).unwrap();
     let mut controller =
         AdaptiveController::new(ControllerConfig::proportional(5).unwrap(), 0.1).unwrap();
@@ -103,7 +106,7 @@ fn measure_orbit_arc(
         black_box(stepper.state()[0] + stepper.state()[3]);
     };
     run(&mut stepper, &mut controller);
-    stepper.reset(0.0, &[1.0, 0.0, 0.0, 0.0, 0.0, 0.0]).unwrap();
+    stepper.reset(0.0, &[1.0, 0.0, 0.0, 0.0, 1.0, 0.0]).unwrap();
     controller.reset(0.1).unwrap();
     let region = Region::new(GLOBAL);
     run(&mut stepper, &mut controller);
