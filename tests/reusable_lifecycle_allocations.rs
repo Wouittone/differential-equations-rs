@@ -20,21 +20,30 @@ fn scalar_norm(_: &[f64], _: &[f64], error: &[f64]) -> Result<f64, Infallible> {
     Ok(error[0].abs() / 1.0e-10)
 }
 
+/// Velocity-coupled orbital acceleration: gravity plus a drag term that
+/// depends on speed, matching the benchmark's workload so this regression
+/// exercises the same state/velocity-dependent RHS shape.
 fn orbit_rhs(_: f64, state: &[f64], derivative: &mut [f64]) -> Result<(), Infallible> {
     let (x, y, z, vx, vy, vz) = (state[0], state[1], state[2], state[3], state[4], state[5]);
     let radius = (x * x + y * y + z * z).sqrt().max(1.0e-12);
     let scale = 1.0 / (radius * radius * radius);
+    let speed = (vx * vx + vy * vy + vz * vz).sqrt();
+    let drag = 0.1;
     derivative[0] = vx;
     derivative[1] = vy;
     derivative[2] = vz;
-    derivative[3] = -scale * x;
-    derivative[4] = -scale * y;
-    derivative[5] = -scale * z;
+    derivative[3] = -scale * x - drag * speed * vx;
+    derivative[4] = -scale * y - drag * speed * vy;
+    derivative[5] = -scale * z - drag * speed * vz;
     Ok(())
 }
 
 fn orbit_norm(_: &[f64], _: &[f64], error: &[f64]) -> Result<f64, Infallible> {
-    Ok(error.iter().copied().fold(0.0, f64::max) / 1.0e-10)
+    Ok(error
+        .iter()
+        .copied()
+        .fold(0.0_f64, |worst, component| worst.max(component.abs()))
+        / 1.0e-10)
 }
 
 fn measure_scalar_arc(
