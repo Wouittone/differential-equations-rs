@@ -199,12 +199,28 @@ fn reference_orbit_endpoint(
 fn setup(c: &mut Criterion) {
     println!("{}", benchmark_metadata("none"));
     let mut group = c.benchmark_group("reusable_lifecycle/setup");
-    // `tableau()` is a lazily parsed, process-cached accessor: resolve it
-    // once outside the timed loop so this lane measures workspace
-    // construction (`from_buffer` + controller setup) rather than a cache
-    // lookup that only pays a real parsing cost on its very first call.
-    // Both lanes construct the same six-component state so the reported
-    // timings reflect solver-family setup cost, not differing workspace size.
+    // `tableau()` is a lazily parsed, process-cached accessor: its true
+    // one-time JSON-parsing cost is paid only by the very first call in the
+    // whole benchmark binary (this group runs first in `criterion_group!`),
+    // and every call after that is a cache lookup. Report both explicitly
+    // as separate lanes instead of silently excluding parsing: the
+    // `tableau_parse` lanes below capture the cold-parse-then-cached-lookup
+    // accessor cost, while `stepper_and_controller` resolves the tableau
+    // once up front so it isolates workspace construction cost. Both lanes
+    // construct the same six-component state so the reported
+    // `stepper_and_controller` timings reflect solver-family setup cost,
+    // not differing workspace size.
+    group.bench_function("tsit5/tableau_parse", |b| {
+        b.iter(|| {
+            black_box(Tsit5.tableau().expect("Tsit5 tableau"));
+        });
+    });
+    group.bench_function("vern9/tableau_parse", |b| {
+        b.iter(|| {
+            black_box(Vern9.tableau().expect("Vern9 tableau"));
+        });
+    });
+
     let tsit5_tableau = Tsit5.tableau().expect("Tsit5 tableau");
     group.bench_function("tsit5/stepper_and_controller", |b| {
         b.iter(|| {
