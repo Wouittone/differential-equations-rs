@@ -18,6 +18,7 @@ use differential_equations::{
         AdaptiveController, ControllerConfig, ExplicitRungeKuttaStepper, ObserverAction,
         integrate_rk,
     },
+    tableau::parse_tableau,
 };
 use std::convert::Infallible;
 
@@ -28,28 +29,43 @@ use support::{
     scalar_rhs,
 };
 
+/// Raw JSON resources backing the `Tsit5`/`Vern9` tableaus, embedded
+/// independently of the crate's own cached `LazyLock` accessors so this
+/// binary can call the public, uncached [`parse_tableau`] on every
+/// iteration and measure genuine cold parsing rather than a cache lookup.
+const TSIT5_TABLEAU_JSON: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/src/tableau/resources/explicit/tsit5.json"
+));
+const VERN9_TABLEAU_JSON: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/src/tableau/resources/explicit/vern9.json"
+));
+
 fn setup(c: &mut Criterion) {
     println!("{}", benchmark_metadata("none"));
     let mut group = c.benchmark_group("reusable_lifecycle/setup");
-    // `tableau()` is a lazily parsed, process-cached accessor: its true
-    // one-time JSON-parsing cost is paid only by the very first call in the
-    // whole benchmark binary (this group runs first in `criterion_group!`),
-    // and every call after that is a cache lookup. Report both explicitly
-    // as separate lanes instead of silently excluding parsing: the
-    // `tableau_parse` lanes below capture the cold-parse-then-cached-lookup
-    // accessor cost, while `stepper_and_controller` resolves the tableau
-    // once up front so it isolates workspace construction cost. Both lanes
-    // construct the same six-component state so the reported
-    // `stepper_and_controller` timings reflect solver-family setup cost,
-    // not differing workspace size.
+    // `Tsit5.tableau()`/`Vern9.tableau()` are backed by process-cached
+    // `LazyLock`s: Criterion's warm-up always runs the closure before any
+    // timed sample, so even the very first timed `b.iter` call only ever
+    // observes the cached value, never a genuine cold parse. To measure
+    // real parsing cost, these lanes instead call the public, uncached
+    // `parse_tableau` directly against the same embedded JSON on every
+    // iteration, so every sample re-parses from scratch. The
+    // `stepper_and_controller` lanes below resolve the cached tableau once
+    // up front so they isolate workspace-construction cost specifically.
     group.bench_function("tsit5/tableau_parse", |b| {
         b.iter(|| {
-            black_box(Tsit5.tableau().expect("Tsit5 tableau"));
+            black_box(
+                parse_tableau(black_box(TSIT5_TABLEAU_JSON), "Tsit5").expect("Tsit5 tableau"),
+            );
         });
     });
     group.bench_function("vern9/tableau_parse", |b| {
         b.iter(|| {
-            black_box(Vern9.tableau().expect("Vern9 tableau"));
+            black_box(
+                parse_tableau(black_box(VERN9_TABLEAU_JSON), "Vern9").expect("Vern9 tableau"),
+            );
         });
     });
 
