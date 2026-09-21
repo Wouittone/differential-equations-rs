@@ -1,11 +1,11 @@
 use differential_equations::{
     solvers::explicit::{Tsit5, Vern9},
     stepping::{
-        AdaptiveController, ControllerConfig, ExplicitRungeKuttaStepper, ObserverAction,
-        integrate_rk,
+        integrate_rk, AdaptiveController, ControllerConfig, ExplicitRungeKuttaStepper,
+        ObserverAction,
     },
 };
-use stats_alloc::{INSTRUMENTED_SYSTEM, Region, StatsAlloc};
+use stats_alloc::{Region, StatsAlloc, INSTRUMENTED_SYSTEM};
 use std::{alloc::System, convert::Infallible, hint::black_box};
 
 #[global_allocator]
@@ -37,7 +37,10 @@ fn orbit_norm(_: &[f64], _: &[f64], error: &[f64]) -> Result<f64, Infallible> {
     Ok(error.iter().copied().fold(0.0, f64::max) / 1.0e-10)
 }
 
-fn measure_scalar_arc(tableau: &differential_equations::tableau::RungeKuttaTableau, endpoint: f64) -> (usize, usize) {
+fn measure_scalar_arc(
+    tableau: &differential_equations::tableau::RungeKuttaTableau,
+    endpoint: f64,
+) -> (usize, usize) {
     let mut state = [1.0];
     let mut stepper = ExplicitRungeKuttaStepper::from_buffer(tableau, 0.0, &mut state).unwrap();
     let mut controller =
@@ -68,13 +71,15 @@ fn measure_scalar_arc(tableau: &differential_equations::tableau::RungeKuttaTable
     )
 }
 
-fn measure_orbit_arc(tableau: &differential_equations::tableau::RungeKuttaTableau, endpoint: f64) -> (usize, usize) {
+fn measure_orbit_arc(
+    tableau: &differential_equations::tableau::RungeKuttaTableau,
+    endpoint: f64,
+) -> (usize, usize) {
     let mut state = [1.0, 0.0, 0.0, 0.0, 0.0, 0.0];
     let mut stepper = ExplicitRungeKuttaStepper::from_buffer(tableau, 0.0, &mut state).unwrap();
     let mut controller =
         AdaptiveController::new(ControllerConfig::proportional(5).unwrap(), 0.1).unwrap();
-    let run = |stepper: &mut ExplicitRungeKuttaStepper<'_>,
-               controller: &mut AdaptiveController| {
+    let run = |stepper: &mut ExplicitRungeKuttaStepper<'_>, controller: &mut AdaptiveController| {
         integrate_rk(
             stepper,
             controller,
@@ -94,10 +99,17 @@ fn measure_orbit_arc(tableau: &differential_equations::tableau::RungeKuttaTablea
     let region = Region::new(GLOBAL);
     run(&mut stepper, &mut controller);
     let change = region.change();
-    (change.allocations + change.reallocations, change.bytes_allocated)
+    (
+        change.allocations + change.reallocations,
+        change.bytes_allocated,
+    )
 }
 
-fn minimum_measurement(endpoint: f64, measure: impl Fn(&differential_equations::tableau::RungeKuttaTableau, f64) -> (usize, usize), tableau: &differential_equations::tableau::RungeKuttaTableau) -> (usize, usize) {
+fn minimum_measurement(
+    endpoint: f64,
+    measure: impl Fn(&differential_equations::tableau::RungeKuttaTableau, f64) -> (usize, usize),
+    tableau: &differential_equations::tableau::RungeKuttaTableau,
+) -> (usize, usize) {
     (0..3)
         .map(|_| measure(tableau, endpoint))
         .min_by_key(|&(allocations, bytes)| (allocations, bytes))

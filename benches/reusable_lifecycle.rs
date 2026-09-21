@@ -4,12 +4,12 @@
 //! Run with `cargo bench --bench reusable_lifecycle`. The setup cases include
 //! tableau/workspace construction; the steady-state cases construct once and
 //! reuse the same stepper and controller for every measured arc.
-use criterion::{Criterion, black_box, criterion_group, criterion_main};
+use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use differential_equations::{
     solvers::explicit::{Tsit5, Vern9},
     stepping::{
-        AdaptiveController, ControllerConfig, ExplicitRungeKuttaStepper, ObserverAction,
-        integrate_rk,
+        integrate_rk, AdaptiveController, ControllerConfig, ExplicitRungeKuttaStepper,
+        ObserverAction,
     },
 };
 use std::convert::Infallible;
@@ -99,8 +99,7 @@ fn setup(c: &mut Criterion) {
             let mut state = [black_box(1.0)];
             let stepper = ExplicitRungeKuttaStepper::from_buffer(tableau, 0.0, &mut state).unwrap();
             let controller =
-                AdaptiveController::new(ControllerConfig::proportional(5).unwrap(), 0.1)
-                    .unwrap();
+                AdaptiveController::new(ControllerConfig::proportional(5).unwrap(), 0.1).unwrap();
             black_box((stepper, controller));
         });
     });
@@ -117,8 +116,7 @@ fn setup(c: &mut Criterion) {
             ];
             let stepper = ExplicitRungeKuttaStepper::from_buffer(tableau, 0.0, &mut state).unwrap();
             let controller =
-                AdaptiveController::new(ControllerConfig::proportional(5).unwrap(), 0.1)
-                    .unwrap();
+                AdaptiveController::new(ControllerConfig::proportional(5).unwrap(), 0.1).unwrap();
             black_box((stepper, controller));
         });
     });
@@ -145,8 +143,7 @@ fn steady_state(c: &mut Criterion) {
             let mut stepper =
                 ExplicitRungeKuttaStepper::from_buffer(tableau, 0.0, &mut state).unwrap();
             let mut controller =
-                AdaptiveController::new(ControllerConfig::proportional(5).unwrap(), 0.1)
-                    .unwrap();
+                AdaptiveController::new(ControllerConfig::proportional(5).unwrap(), 0.1).unwrap();
             let mut rhs = scalar_rhs;
             let mut norm = scalar_norm;
             run_arc(&mut stepper, &mut controller, endpoint, &mut rhs, &mut norm);
@@ -155,15 +152,33 @@ fn steady_state(c: &mut Criterion) {
                 controller.reset(0.1).unwrap();
                 let mut rhs = scalar_rhs;
                 let mut norm = scalar_norm;
-                run_arc(&mut stepper, &mut controller, black_box(endpoint), &mut rhs, &mut norm);
+                run_arc(
+                    &mut stepper,
+                    &mut controller,
+                    black_box(endpoint),
+                    &mut rhs,
+                    &mut norm,
+                );
                 black_box(stepper.state()[0])
             });
         });
     }
 
     for (name, endpoint, initial_state, gravitational_parameter, drag) in [
-        ("tsit5/orbit/short_arc", 1.0, [1.0, 0.0, 0.0, 0.0, 0.0, 0.0], 1.0, 0.1),
-        ("vern9/orbit/short_arc", 1.0, [1.0, 0.0, 0.0, 0.0, 0.0, 0.0], 1.0, 0.1),
+        (
+            "tsit5/orbit/short_arc",
+            1.0,
+            [1.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            1.0,
+            0.1,
+        ),
+        (
+            "vern9/orbit/short_arc",
+            1.0,
+            [1.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            1.0,
+            0.1,
+        ),
     ] {
         group.bench_function(name, |b| {
             let tableau = if name.starts_with("tsit5") {
@@ -175,8 +190,7 @@ fn steady_state(c: &mut Criterion) {
             let mut stepper =
                 ExplicitRungeKuttaStepper::from_buffer(tableau, 0.0, &mut state).unwrap();
             let mut controller =
-                AdaptiveController::new(ControllerConfig::proportional(5).unwrap(), 0.1)
-                    .unwrap();
+                AdaptiveController::new(ControllerConfig::proportional(5).unwrap(), 0.1).unwrap();
             let mut rhs = orbit_velocity_rhs(gravitational_parameter, drag);
             let mut norm = orbit_norm;
             run_arc(&mut stepper, &mut controller, endpoint, &mut rhs, &mut norm);
@@ -185,7 +199,13 @@ fn steady_state(c: &mut Criterion) {
                 controller.reset(0.1).unwrap();
                 let mut rhs = orbit_velocity_rhs(gravitational_parameter, drag);
                 let mut norm = orbit_norm;
-                run_arc(&mut stepper, &mut controller, black_box(endpoint), &mut rhs, &mut norm);
+                run_arc(
+                    &mut stepper,
+                    &mut controller,
+                    black_box(endpoint),
+                    &mut rhs,
+                    &mut norm,
+                );
                 black_box(stepper.state()[0])
             });
         });
@@ -208,8 +228,7 @@ fn output_retention(c: &mut Criterion) {
             let mut stepper =
                 ExplicitRungeKuttaStepper::from_buffer(tableau, 0.0, &mut state).unwrap();
             let mut controller =
-                AdaptiveController::new(ControllerConfig::proportional(5).unwrap(), 0.1)
-                    .unwrap();
+                AdaptiveController::new(ControllerConfig::proportional(5).unwrap(), 0.1).unwrap();
             b.iter(|| {
                 let mut stored = Vec::new();
                 let mut rhs = orbit_velocity_rhs(1.0, 0.1);
