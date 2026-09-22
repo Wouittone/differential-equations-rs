@@ -49,6 +49,12 @@ pub fn define_multistep_tableau_from_file(input: TokenStream) -> TokenStream {
     static_tableaus::define_multistep_tableau_from_file(input)
 }
 
+/// Defines a lazy Gauss-Jackson tableau from a JSON resource.
+#[proc_macro]
+pub fn define_gauss_jackson_tableau_from_file(input: TokenStream) -> TokenStream {
+    static_tableaus::define_gauss_jackson_tableau_from_file(input)
+}
+
 /// Defines a lazy variable-step two-step tableau from a JSON resource.
 ///
 /// Coefficient functions, the startup formula, and the local-defect estimator

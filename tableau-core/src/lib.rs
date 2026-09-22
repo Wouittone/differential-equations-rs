@@ -4,6 +4,10 @@ mod symplectic;
 pub use symplectic::{SymplecticTableau, parse_symplectic_tableau};
 mod multistep;
 pub use multistep::{LinearMultistepTableau, parse_multistep_tableau};
+mod gauss_jackson;
+pub use gauss_jackson::{
+    GaussJacksonPhaseCoefficients, GaussJacksonTableau, parse_gauss_jackson_tableau,
+};
 mod variable_multistep;
 pub use variable_multistep::{VariableMultistepTableau, parse_variable_multistep_tableau};
 mod mri;

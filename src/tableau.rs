@@ -40,17 +40,18 @@ use thiserror::Error;
 
 #[doc(inline)]
 pub use differential_equations_tableau_core::{
-    AlternatingTwoNTableau, ErrorEstimatorKind, EserkTableau, FittedWeight, IrknBootstrapSeed,
-    IrknTableau, LazyDenseStage as ParsedLazyDenseStage, LazyDenseStageCoefficients,
-    LinearMultistepTableau, LowStorageAbcTableau, LowStorageAdaptiveController,
-    LowStorageEmbeddedTableau, LowStorageEndpointEvaluation, LowStorageNodePolicy,
-    LowStoragePidController, LowStorageRungeKuttaLayout, LowStorageRungeKuttaTableau, MisTableau,
-    MriTableau, RegisterPipelineTableau, RknCoefficients, Rock2Tableau, Rock4Tableau,
-    RockRecurrence, RockRecurrenceStage, RosenbrockErrorEstimator, RosenbrockKind,
-    RosenbrockPairTableau, RosenbrockTableau, RungeKuttaCoefficients, RungeKuttaKind,
-    RungeKuttaNystromKind, RungeKuttaNystromTableau, RungeKuttaTableau, Serk2Tableau,
-    SymplecticTableau, TableauError, TableauErrorKind, ThreeSTableau, VariableMultistepTableau,
-    parse_eserk_tableau, parse_irkn_tableau, parse_low_storage_tableau, parse_mis_tableau,
+    AlternatingTwoNTableau, ErrorEstimatorKind, EserkTableau, FittedWeight,
+    GaussJacksonPhaseCoefficients, GaussJacksonTableau, IrknBootstrapSeed, IrknTableau,
+    LazyDenseStage as ParsedLazyDenseStage, LazyDenseStageCoefficients, LinearMultistepTableau,
+    LowStorageAbcTableau, LowStorageAdaptiveController, LowStorageEmbeddedTableau,
+    LowStorageEndpointEvaluation, LowStorageNodePolicy, LowStoragePidController,
+    LowStorageRungeKuttaLayout, LowStorageRungeKuttaTableau, MisTableau, MriTableau,
+    RegisterPipelineTableau, RknCoefficients, Rock2Tableau, Rock4Tableau, RockRecurrence,
+    RockRecurrenceStage, RosenbrockErrorEstimator, RosenbrockKind, RosenbrockPairTableau,
+    RosenbrockTableau, RungeKuttaCoefficients, RungeKuttaKind, RungeKuttaNystromKind,
+    RungeKuttaNystromTableau, RungeKuttaTableau, Serk2Tableau, SymplecticTableau, TableauError,
+    TableauErrorKind, ThreeSTableau, VariableMultistepTableau, parse_eserk_tableau,
+    parse_gauss_jackson_tableau, parse_irkn_tableau, parse_low_storage_tableau, parse_mis_tableau,
     parse_mri_tableau, parse_multistep_tableau, parse_rkn_tableau, parse_rock2_tableau,
     parse_rock4_tableau, parse_rosenbrock_pair_tableau, parse_rosenbrock_tableau,
     parse_serk2_tableau, parse_symplectic_tableau, parse_tableau, parse_variable_multistep_tableau,
@@ -111,6 +112,9 @@ pub type LazySymplecticTableau = LazyLock<Result<SymplecticTableau, TableauError
 /// A lazily initialized, validated constant-step linear multistep formula.
 pub type LazyMultistepTableau = LazyLock<Result<LinearMultistepTableau, TableauError>>;
 
+/// A lazily initialized, validated Gauss-Jackson tableau.
+pub type LazyGaussJacksonTableau = LazyLock<Result<GaussJacksonTableau, TableauError>>;
+
 /// A lazily initialized, validated variable-step two-step formula.
 pub type LazyVariableMultistepTableau = LazyLock<Result<VariableMultistepTableau, TableauError>>;
 
@@ -164,6 +168,8 @@ pub use crate::solvers::explicit::ResourceExplicitRungeKutta;
 pub use differential_equations_tableau_macros::define_eserk_tableau_from_file;
 #[doc(inline)]
 pub use differential_equations_tableau_macros::define_explicit_rk_from_file;
+#[doc(inline)]
+pub use differential_equations_tableau_macros::define_gauss_jackson_tableau_from_file;
 #[doc(inline)]
 pub use differential_equations_tableau_macros::define_irkn_tableau_from_file;
 #[doc(inline)]

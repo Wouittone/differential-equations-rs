@@ -124,7 +124,6 @@ pub mod callbacks;
 mod ensemble;
 mod error;
 mod event;
-pub mod gauss_jackson;
 mod integrator;
 mod linear;
 mod operator_problem;
@@ -148,9 +147,6 @@ pub use ensemble::{
 pub use ensemble::{solve_batch_parallel, solve_ensemble_parallel};
 pub use error::ConfigurationError;
 pub use event::DEFAULT_EVENT_TOLERANCE;
-pub use gauss_jackson::{
-    GaussJackson8, GaussJacksonConfig, GaussJacksonError, GaussJacksonStatistics, GaussJacksonStep,
-};
 /// The ndarray version used by shape-aware ODE states.
 pub use ndarray;
 pub use operator_problem::{LieGroupProblem, LinearOperatorProblem};
@@ -163,4 +159,7 @@ pub use solution::{
 };
 pub use solver::{
     AutomaticPairIncompatibility, OdeAlgorithm, SaveMode, SolveError, SolveOptions, solve,
+};
+pub use solvers::multistep::{
+    GaussJackson8, GaussJacksonConfig, GaussJacksonError, GaussJacksonStatistics, GaussJacksonStep,
 };

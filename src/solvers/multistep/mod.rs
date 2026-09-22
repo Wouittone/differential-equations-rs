@@ -4,6 +4,8 @@ pub mod abdf2;
 /// Fixed and variable-order Adams methods.
 pub mod adams;
 pub mod bdf;
+/// Fixed-step Gauss–Jackson predictor-corrector solver.
+pub mod gauss_jackson;
 /// Split implicit--explicit multistep methods.
 pub mod imex_multistep;
 /// Modified extended backward differentiation formula.
@@ -21,6 +23,9 @@ pub mod variable_adams;
 pub use abdf2::Abdf2;
 pub use adams::{Ab3, Ab4, Ab5, Abm32, Abm43, Abm54};
 pub use bdf::{FBDF, Fbdf, QBDF, QNDF, Qbdf, Qndf};
+pub use gauss_jackson::{
+    GaussJackson8, GaussJacksonConfig, GaussJacksonError, GaussJacksonStatistics, GaussJacksonStep,
+};
 pub use imex_multistep::*;
 pub use mebdf2::Mebdf2;
 pub use nordsieck::{AN5, JVODE, JVODE_Adams, JVODE_BDF, JvodeAdams, JvodeBdf, JvodeMethod};
