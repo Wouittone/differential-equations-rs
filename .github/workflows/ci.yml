@@ -110,6 +110,8 @@ jobs:
 
   julia-compliance:
     name: Pinned Julia SciML comparisons
+    # Long-running Julia/SciML certification: runs only on merges to main, not on PRs.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     permissions:
