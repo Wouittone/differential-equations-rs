@@ -6,18 +6,16 @@ This repository uses a human-in-the-loop PR workflow for agent edits:
   a repo-local git identity (`user.name`/`user.email` in `.git/config`), so
   every commit the agent makes is authored as `Mistral Vibe <vibe@mistral.ai>`.
   The human owner's global git config is never modified.
-- The agent works on `vibe/<topic>` branches cut from `origin/main`, pushes the
-  branch, and opens a pull request against `main` using the repository account
-  (the only write-capable credential available to the agent).
-- `main` is protected: direct pushes are blocked and the CI status checks are
-  required. The agent never merges its own pull requests. The human owner
-  reviews every agent PR — commits are visibly authored by the agent — and
-  merges with their own account once CI is green.
+- The agent works on `vibe/<topic>` branches cut from `origin/main` and pushes
+  them with the repository credentials.
+- Pull requests are opened by the **orskit-copilot GitHub App**
+  (`orskit-copilot[bot]`), installed on this repository with `contents: write`
+  and `pull_requests: write`. Because the PR author is the app bot and not the
+  owner, the owner can review and **approve** every agent PR with their own
+  account (GitHub blocks self-approval).
+- `main` is protected: direct pushes are blocked, the CI status checks are
+  required, and one approving review is required. The agent never merges its
+  own pull requests; the owner merges once CI is green and the PR is approved.
 - Machine-local editor configuration (`.vscode/`) is gitignored and never
   committed. Review instructions for the GitHub App live in
   `.github/github-app.yml`.
-
-Note: GitHub does not allow a PR author to approve their own PR, and agent PRs
-are opened with the owner's account, so the review gate is procedural (the
-agent never self-merges) rather than enforced by a required-review rule on
-`main`.
