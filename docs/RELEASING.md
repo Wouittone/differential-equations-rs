@@ -32,7 +32,7 @@ cargo test --locked --workspace --all-targets --all-features
 cargo test --locked --workspace --all-targets --no-default-features
 cargo test --locked --workspace --doc --all-features
 cargo doc --locked --workspace --no-deps --all-features
-cargo deny check --all-features
+cargo deny check
 ```
 
 Run `cargo-semver-checks` against the latest stable tag for both library
