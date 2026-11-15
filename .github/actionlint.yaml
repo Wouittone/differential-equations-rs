@@ -1,0 +1,6 @@
+# Configuration variables defined at the repository level
+# (Settings -> Secrets and variables -> Actions -> Variables tab).
+# Listing them here lets actionlint-based checkers resolve `vars.*`
+# references instead of reporting "context access might be invalid".
+config-variables:
+  - CODSPEED_ENABLED
