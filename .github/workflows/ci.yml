@@ -110,6 +110,8 @@ jobs:
 
   julia-compliance:
     name: Pinned Julia SciML comparisons
+    # Disabled: the pinned Julia environment exceeds the acceptable CI duration.
+    if: ${{ false }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     permissions:
