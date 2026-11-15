@@ -145,7 +145,8 @@ failure thresholds. Shared-runner noise makes cross-language speed gates
 unstable, and the implementations account for finite-difference and Jacobian
 work differently. CodSpeed remains the regression gate for Rust timing. CI
 runs this matched-matrix certification with one repetition and one Julia
-thread as a correctness smoke test; release comparisons should use the 20
+thread as a correctness smoke test on merges to `main` (not on pull
+requests); release comparisons should use the 20
 repetitions shown above on an otherwise idle machine.
 
 Benchmark commands write CSV to standard output. Results are machine- and

@@ -1,9 +1,10 @@
 name: Performance
 
 on:
-  push:
-    branches: [main]
+  # Automatic runs only on PRs targeting main; "CodSpeed regression benchmarks"
+  # is a required status check on main, so a failure blocks the merge.
   pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
