@@ -8,11 +8,11 @@ This repository uses a human-in-the-loop PR workflow for agent edits:
   The human owner's global git config is never modified.
 - The agent works on `vibe/<topic>` branches cut from `origin/main` and pushes
   them with the repository credentials.
-- Pull requests are opened by the **orskit-copilot GitHub App**
-  (`orskit-copilot[bot]`), installed on this repository with `contents: write`
-  and `pull_requests: write`. Because the PR author is the app bot and not the
-  owner, the owner can review and **approve** every agent PR with their own
-  account (GitHub blocks self-approval).
+- Pull requests are opened by the **differential-equation-rs-gh-warden GitHub
+  App** (`differential-equation-rs-gh-warden[bot]`), installed on this
+  repository with write access to contents and pull requests. Because the PR
+  author is the app bot and not the owner, the owner can review and **approve**
+  every agent PR with their own account (GitHub blocks self-approval).
 - `main` is protected: direct pushes are blocked, the CI status checks are
   required, and one approving review is required. The agent never merges its
   own pull requests; the owner merges once CI is green and the PR is approved.
