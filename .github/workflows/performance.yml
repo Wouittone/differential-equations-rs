@@ -16,7 +16,7 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
-  RUSTUP_TOOLCHAIN: "1.85"
+  RUSTUP_TOOLCHAIN: "1.97"
 
 jobs:
   codspeed:
