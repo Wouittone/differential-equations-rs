@@ -18,6 +18,12 @@ env:
   CARGO_TERM_COLOR: always
   RUSTUP_TOOLCHAIN: "1.85"
 
+# Declared here so static workflow checkers can resolve vars.CODSPEED_ENABLED
+# instead of reporting "context access might be invalid". The empty default
+# keeps CodSpeed uploads disabled until CODSPEED_ENABLED is set to 'true'.
+vars:
+  CODSPEED_ENABLED: ''
+
 jobs:
   codspeed:
     name: CodSpeed regression benchmarks
